@@ -1,0 +1,51 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "Nothing needs you" [level=1]
+  - text: The assistants are behaving.
+  - heading "Your assistants" [level=2]
+  - link "steward":
+    - /url: /agent/steward
+  - text: nothing today · sees 6 of 6 notes · last seen never
+  - button "Read-only"
+  - button "Pause"
+  - link "planner":
+    - /url: /agent/planner
+  - text: nothing today · sees 3 of 6 notes · last seen never
+  - button "Read-only"
+  - button "Pause"
+  - link "gardener":
+    - /url: /agent/gardener
+  - text: nothing today · sees 6 of 6 notes · last seen never
+  - button "Read-only"
+  - button "Pause"
+  - link "helper":
+    - /url: /agent/helper
+  - text: nothing today · sees 3 of 6 notes · last seen never
+  - button "Read-only"
+  - button "Pause"
+  - heading "Real-use bar" [level=2]
+  - text: "Day 0 of 14 with daily use and no hand fix last break 2026-10-14: no agent read the brain No hand fix logged yet to do Restore drill: not run yet pocketbrain drill"
+  - group: Activity and your weekly numbers

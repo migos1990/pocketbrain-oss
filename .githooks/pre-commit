@@ -1,0 +1,24 @@
+#!/bin/sh
+# Git pre-commit for pocketBrain (enabled by `bun install`, which sets core.hooksPath=.githooks).
+# Blocks: commits on main outside a merge, a denylisted personal term in a staged file, and
+# secrets gitleaks can see. Escape hatch for Louis only: PB_ALLOW_MAIN=1 git commit ...
+set -e
+branch=$(git symbolic-ref --short -q HEAD || echo detached)
+if [ "$branch" = "main" ] && [ -z "$PB_ALLOW_MAIN" ] && [ ! -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
+  echo "pre-commit: commits on main are blocked; branch first (git switch -c claude/<name>)." >&2
+  exit 1
+fi
+for f in "$PB_DENYLIST" "$HOME/.config/pocketbrain/denylist.txt" /mnt/project-files/pocketbrain/denylist.txt; do
+  [ -n "$f" ] && [ -f "$f" ] && LIST=$f && break
+done
+if [ -n "$LIST" ]; then
+  if git diff --cached --name-only -z --diff-filter=ACM | xargs -0 -r git grep --cached -niIFf "$LIST" --; then
+    echo "pre-commit: personal terms above (denylist $LIST); scrub them." >&2
+    exit 1
+  fi
+else
+  echo "pre-commit: no private denylist found; skipping the personal-term check." >&2
+fi
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --no-banner --redact
+fi

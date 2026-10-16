@@ -1,0 +1,14 @@
+- main:
+  - heading "What changed" [level=1]
+  - paragraph: "Since your last visit (TIMESTAMP): 0 note(s)."
+  - paragraph:
+    - text: "Look further back:"
+    - link "Last 7 days":
+      - /url: /b/changes?since=TIMESTAMP
+    - text: ·
+    - link "Last 30 days":
+      - /url: /b/changes?since=TIMESTAMP
+    - text: . Each note also shows the day it was last updated.
+  - paragraph:
+    - link "Back to the start page":
+      - /url: /b

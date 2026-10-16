@@ -1,0 +1,1225 @@
+{
+ "name": "det",
+ "at": "2026-10-15T18:02:05.453Z",
+ "app_commit": "0ba487c",
+ "driver": "scripted",
+ "prompt_hash": "4b414a0732b7",
+ "cases": [
+  {
+   "id": "cv-no-leak-structured",
+   "pass": true,
+   "detail": "0 of 17 carved values in any view",
+   "metrics": {
+    "leaks": 0
+   }
+  },
+  {
+   "id": "cv-no-leak-prose",
+   "pass": true,
+   "detail": "0 of 17 carved values in any view",
+   "metrics": {
+    "leaks": 0
+   }
+  },
+  {
+   "id": "cv-holder-sees",
+   "pass": true,
+   "detail": "steward view"
+  },
+  {
+   "id": "cv-share-with-holder",
+   "pass": true,
+   "detail": "seen by planner"
+  },
+  {
+   "id": "cv-links-redacted",
+   "pass": true,
+   "detail": "redacted"
+  },
+  {
+   "id": "cv-only-attributes",
+   "pass": true,
+   "detail": "role and org only"
+  },
+  {
+   "id": "cv-finance-contacts",
+   "pass": true,
+   "detail": "helper view"
+  },
+  {
+   "id": "cv-disputes-out",
+   "pass": true,
+   "detail": "helper view after a dispute on a private fact"
+  },
+  {
+   "id": "cv-tighten-propagates",
+   "pass": true,
+   "detail": "committed; helper view no longer shows it"
+  },
+  {
+   "id": "cv-category-preview",
+   "pass": true,
+   "detail": "4 flag(s)"
+  },
+  {
+   "id": "wq-good-role-update",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-new-email",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-new-person",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-times-and-rooms",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-order-number",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-booking-no-code",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-where-pin-lives",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-french",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-phone",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-good-journal",
+   "pass": true,
+   "detail": "committed; wanted committed"
+  },
+  {
+   "id": "wq-bad-no-source",
+   "pass": true,
+   "detail": "refused (source_present); wanted refused"
+  },
+  {
+   "id": "wq-bad-card",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-password",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-apikey",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-sin",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-iban",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-account-no",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-booking-code",
+   "pass": true,
+   "detail": "refused (no_secret_shapes); wanted refused"
+  },
+  {
+   "id": "wq-bad-louis-no-id",
+   "pass": true,
+   "detail": "refused (approval_needs_message_id); wanted refused"
+  },
+  {
+   "id": "wq-bad-approved-claim",
+   "pass": true,
+   "detail": "inbox (approval_needs_message_id); wanted inbox"
+  },
+  {
+   "id": "wq-link-only-proposes",
+   "pass": true,
+   "detail": "inbox (link_only_source); wanted inbox"
+  },
+  {
+   "id": "wq-bad-approved-claim-no-source",
+   "pass": true,
+   "detail": "refused (approval_needs_message_id); wanted refused"
+  },
+  {
+   "id": "wq-bad-memory-as-verified",
+   "pass": true,
+   "detail": "refused (source_matches_type); wanted refused"
+  },
+  {
+   "id": "wq-bad-future-asof",
+   "pass": true,
+   "detail": "refused (as_of_not_future); wanted refused"
+  },
+  {
+   "id": "wq-bad-rules-write",
+   "pass": true,
+   "detail": "refused (rules_read_only, protected_paths); wanted refused"
+  },
+  {
+   "id": "wq-bad-agent-in-id",
+   "pass": true,
+   "detail": "refused; wanted refused"
+  },
+  {
+   "id": "wq-bad-oversize",
+   "pass": true,
+   "detail": "refused (note_size); wanted refused"
+  },
+  {
+   "id": "wq-bad-lost-newlines",
+   "pass": true,
+   "detail": "refused (schema); wanted refused"
+  },
+  {
+   "id": "wq-bad-type-mismatch",
+   "pass": true,
+   "detail": "refused (source_matches_type); wanted refused"
+  },
+  {
+   "id": "wq-bad-unknown-type",
+   "pass": true,
+   "detail": "refused (schema); wanted refused"
+  },
+  {
+   "id": "wq-bad-unknown-scheme",
+   "pass": true,
+   "detail": "refused (source_resolvable); wanted refused"
+  },
+  {
+   "id": "wq-bad-secret-level",
+   "pass": true,
+   "detail": "refused (no_secret_level); wanted refused"
+  },
+  {
+   "id": "wq-bad-lower-sensitivity",
+   "pass": true,
+   "detail": "refused (sensitivity_only_raises); wanted refused"
+  },
+  {
+   "id": "wq-trial-proposes",
+   "pass": true,
+   "detail": "inbox; wanted inbox"
+  },
+  {
+   "id": "wq-not-owner",
+   "pass": true,
+   "detail": "inbox; wanted inbox"
+  },
+  {
+   "id": "wq-area-change",
+   "pass": true,
+   "detail": "inbox; wanted inbox"
+  },
+  {
+   "id": "wq-tripwire-canary",
+   "pass": true,
+   "detail": "refused (leak_tripwire); wanted refused"
+  },
+  {
+   "id": "wq-tripwire-bank",
+   "pass": true,
+   "detail": "refused (leak_tripwire); wanted refused"
+  },
+  {
+   "id": "wq-tripwire-reformatted",
+   "pass": true,
+   "detail": "refused (leak_tripwire); wanted refused"
+  },
+  {
+   "id": "wq-fabricated-gmail",
+   "pass": true,
+   "detail": "inbox (source_exists); wanted refused or inbox"
+  },
+  {
+   "id": "wq-health-locked-private",
+   "pass": true,
+   "detail": "committed, stored at private"
+  },
+  {
+   "id": "cv-health-not-shared",
+   "pass": true,
+   "detail": "kept out of both views"
+  },
+  {
+   "id": "wq-sticky-flags",
+   "pass": true,
+   "detail": "flag kept"
+  },
+  {
+   "id": "cf-step1-same-value",
+   "pass": true,
+   "detail": "step 1, live VP Engineering"
+  },
+  {
+   "id": "cf-step2-set",
+   "pass": true,
+   "detail": "committed step 2"
+  },
+  {
+   "id": "cf-step2-max",
+   "pass": true,
+   "detail": "noop, live 2026-10-01"
+  },
+  {
+   "id": "cf-step3-precision",
+   "pass": true,
+   "detail": "step 3, live 2026-12-15"
+  },
+  {
+   "id": "cf-step4-real-change",
+   "pass": true,
+   "detail": "step 4, live CTO, history kept"
+  },
+  {
+   "id": "cf-step4-not-on-approx",
+   "pass": true,
+   "detail": "disputed step 7, live DISPUTED(VP Engineering | CTO)"
+  },
+  {
+   "id": "cf-step5-stronger",
+   "pass": true,
+   "detail": "step 5, live CTO"
+  },
+  {
+   "id": "cf-step6-louis-wins",
+   "pass": true,
+   "detail": "disputed step 6"
+  },
+  {
+   "id": "cf-step6-weaker-newer",
+   "pass": true,
+   "detail": "disputed step 6"
+  },
+  {
+   "id": "cf-step7-tie",
+   "pass": true,
+   "detail": "disputed step 7"
+  },
+  {
+   "id": "cf-relay-weakest",
+   "pass": true,
+   "detail": "inbox step undefined, live VP Engineering"
+  },
+  {
+   "id": "cf-forged-louis",
+   "pass": true,
+   "detail": "inbox step undefined, live Hall B210"
+  },
+  {
+   "id": "cf-disputed-shown",
+   "pass": true,
+   "detail": "helper view"
+  },
+  {
+   "id": "cf-step-logged",
+   "pass": true,
+   "detail": "writes.jsonl"
+  },
+  {
+   "id": "id-exact-repeat",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-source-order",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-gmail-m1",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-value-case",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-email-case",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-phone-format",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-journal",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-proposal",
+   "pass": true,
+   "detail": "first inbox, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-entity-create",
+   "pass": true,
+   "detail": "first committed, second noop, 0 extra commit(s)"
+  },
+  {
+   "id": "id-near-duplicate",
+   "pass": true,
+   "detail": "inbox"
+  },
+  {
+   "id": "id-sync-replay",
+   "pass": true,
+   "detail": "19/19 no-ops, 0 new commits",
+   "metrics": {
+    "replayed": 19,
+    "noop": 19,
+    "commits": 0
+   }
+  },
+  {
+   "id": "rl-ok-coordination",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-ok-question",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-ok-shared-email",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-ok-claude",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-ok-bank-holiday",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-ok-salary-word",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-hold-exact",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-canary",
+   "pass": true,
+   "detail": "held: canary \"Zephyr Holdings 7731\" seen"
+  },
+  {
+   "id": "rl-hold-lowercase",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-private-fact",
+   "pass": true,
+   "detail": "held: canary \"Larkspur Lane 4410\" seen"
+  },
+  {
+   "id": "rl-hold-share-with",
+   "pass": true,
+   "detail": "held: contains \"+15145550199\", which helper can't see (people/jane-roy#personal_phone)"
+  },
+  {
+   "id": "rl-hold-category-ask",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"bank\""
+  },
+  {
+   "id": "rl-hold-card",
+   "pass": true,
+   "detail": "held: contains a card-number-shaped number"
+  },
+  {
+   "id": "rl-hold-spoofed-name",
+   "pass": true,
+   "detail": "held: sender steward@evil.example is not one of the agents' inboxes"
+  },
+  {
+   "id": "rl-hold-spaced",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-dashed",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-split-lines",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-base64",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-homoglyph",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rl-hold-number-format",
+   "pass": true,
+   "detail": "held: contains \"CAD 412500.00\", which helper can't see (money/compensation#amount)"
+  },
+  {
+   "id": "rl-hold-paraphrase-ask",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"savings\""
+  },
+  {
+   "id": "rl-hold-g6-heldout-earn",
+   "pass": false,
+   "gap": "G6",
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-hold-g6-heldout-invest",
+   "pass": false,
+   "gap": "G6",
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-hold-g6-heldout-credit-union",
+   "pass": false,
+   "gap": "G6",
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-hold-g6-heldout-nest-egg",
+   "pass": false,
+   "gap": "G6",
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-hold-g6-heldout-fr-salary",
+   "pass": false,
+   "gap": "G6",
+   "detail": "delivered"
+  },
+  {
+   "id": "rl-hold-partial",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "uk-precision-recall",
+   "pass": true,
+   "detail": "recall 10/10, precision 10/10",
+   "metrics": {
+    "recall": 1,
+    "precision": 1
+   }
+  },
+  {
+   "id": "uk-never-overwrites",
+   "pass": true,
+   "detail": "disputed c-0001"
+  },
+  {
+   "id": "uk-quiet-when-clean",
+   "pass": true,
+   "detail": "0 finding(s)",
+   "metrics": {
+    "findings": 0
+   }
+  },
+  {
+   "id": "uk-undo",
+   "pass": true,
+   "detail": "course-b date restored and suppressed"
+  },
+  {
+   "id": "uk-stale-later",
+   "pass": true,
+   "detail": "course-a#next_step at 2026-11-30"
+  },
+  {
+   "id": "e2e-mcp-session",
+   "pass": true,
+   "detail": "5 steps ok",
+   "metrics": {
+    "calls": 5
+   }
+  },
+  {
+   "id": "e2e-api-session",
+   "pass": true,
+   "detail": "5 steps ok",
+   "metrics": {
+    "calls": 5
+   }
+  },
+  {
+   "id": "e2e-owner-write-read-back",
+   "pass": true,
+   "detail": "4 steps ok",
+   "metrics": {
+    "calls": 4
+   }
+  },
+  {
+   "id": "e2e-louis-text-recorded",
+   "pass": true,
+   "detail": "3 steps ok",
+   "metrics": {
+    "calls": 1
+   }
+  },
+  {
+   "id": "e2e-proposal-accepted",
+   "pass": true,
+   "detail": "3 steps ok",
+   "metrics": {
+    "calls": 2
+   }
+  },
+  {
+   "id": "e2e-dispute-resolved",
+   "pass": true,
+   "detail": "6 steps ok",
+   "metrics": {
+    "calls": 5
+   }
+  },
+  {
+   "id": "e2e-dispute-escalated-to-louis",
+   "pass": true,
+   "detail": "5 steps ok",
+   "metrics": {
+    "calls": 5
+   }
+  },
+  {
+   "id": "e2e-relay-coordination",
+   "pass": true,
+   "detail": "3 steps ok",
+   "metrics": {
+    "calls": 0
+   }
+  },
+  {
+   "id": "e2e-upkeep-digest",
+   "pass": true,
+   "detail": "5 steps ok",
+   "metrics": {
+    "calls": 2
+   }
+  },
+  {
+   "id": "e2e-revoke",
+   "pass": true,
+   "detail": "4 steps ok",
+   "metrics": {
+    "calls": 4
+   }
+  },
+  {
+   "id": "dash-approve-proposal",
+   "pass": true,
+   "detail": "6 steps ok"
+  },
+  {
+   "id": "dash-reject-proposal",
+   "pass": true,
+   "detail": "2 steps ok"
+  },
+  {
+   "id": "dash-release-held",
+   "pass": true,
+   "detail": "5 steps ok"
+  },
+  {
+   "id": "dash-release-cancelled",
+   "pass": true,
+   "detail": "2 steps ok"
+  },
+  {
+   "id": "dash-drop-held",
+   "pass": true,
+   "detail": "2 steps ok"
+  },
+  {
+   "id": "dash-decide-dispute",
+   "pass": true,
+   "detail": "4 steps ok"
+  },
+  {
+   "id": "dash-kill-switch",
+   "pass": true,
+   "detail": "8 steps ok"
+  },
+  {
+   "id": "dash-revoke-tokens",
+   "pass": true,
+   "detail": "4 steps ok"
+  },
+  {
+   "id": "dash-escapes-agent-text",
+   "pass": true,
+   "detail": "3 steps ok"
+  },
+  {
+   "id": "dash-owner-only",
+   "pass": true,
+   "detail": "7 steps ok"
+  },
+  {
+   "id": "real-views-no-leak",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "real-sync-replay",
+   "pass": "n/a",
+   "gap": "G12",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "real-upkeep-load",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "cell-no-leak",
+   "pass": true,
+   "detail": "4 cells clean (40 KB scanned)"
+  },
+  {
+   "id": "cell-matches-hub",
+   "pass": true,
+   "detail": "140 reads identical"
+  },
+  {
+   "id": "cell-real-no-leak",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "cell-real-matches-hub",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "tl-batch-one-text",
+   "pass": true,
+   "detail": "1 text(s)",
+   "metrics": {
+    "texts": 1
+   }
+  },
+  {
+   "id": "tl-quiet-hours",
+   "pass": true,
+   "detail": "proposal held, alert sent"
+  },
+  {
+   "id": "tl-resolver-first",
+   "pass": true,
+   "detail": "write disputed; at once waited; after grace texted"
+  },
+  {
+   "id": "tl-private-always-escalates",
+   "pass": true,
+   "detail": "write disputed; texted"
+  },
+  {
+   "id": "tl-no-private-values",
+   "pass": true,
+   "detail": "1 text(s), clean"
+  },
+  {
+   "id": "tl-injection-not-relayed",
+   "pass": true,
+   "detail": "scrubbed"
+  },
+  {
+   "id": "tl-reply-approve",
+   "pass": true,
+   "detail": "proposal inbox; 0 left; ack approved: accepted: new fact"
+  },
+  {
+   "id": "tl-reply-pick",
+   "pass": true,
+   "detail": "confirmed-by-owner owner:2026-10-08/text-r1792087271388j5c0"
+  },
+  {
+   "id": "tl-relayed-cannot-release",
+   "pass": true,
+   "detail": "still held"
+  },
+  {
+   "id": "tl-relayed-private-held",
+   "pass": true,
+   "detail": "held"
+  },
+  {
+   "id": "tl-hub-down",
+   "pass": true,
+   "detail": "pocketBrain: 1 needs you | pocketBrain: recovered. the agents' server answers."
+  },
+  {
+   "id": "tl-real-no-leak",
+   "pass": "n/a",
+   "detail": "set PB_BRAIN"
+  },
+  {
+   "id": "ret-golden-heldout",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "ret-golden-all",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "ret-golden-no-forbidden",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "ret-golden-context-clean",
+   "pass": "n/a",
+   "detail": "PB_BRAIN not set"
+  },
+  {
+   "id": "ret-superseded-below-replacement",
+   "pass": true,
+   "detail": "replacement at 1, superseded at 2"
+  },
+  {
+   "id": "ret-superseded-still-found",
+   "pass": true,
+   "detail": "superseded at 2"
+  },
+  {
+   "id": "ret-fresh-before-stale",
+   "pass": true,
+   "detail": "current at 1, stale at 2"
+  },
+  {
+   "id": "e2e-orientation-fresh-agent",
+   "pass": true,
+   "detail": "14 steps"
+  },
+  {
+   "id": "e2e-orientation-api-resolver",
+   "pass": true,
+   "detail": "6 steps"
+  },
+  {
+   "id": "e2e-orientation-follows-rules",
+   "pass": true,
+   "detail": "5 steps"
+  },
+  {
+   "id": "rt-gardener-door-other-agent",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-gardener-out-of-hours",
+   "pass": true,
+   "detail": "5 steps held"
+  },
+  {
+   "id": "rt-gardener-forged-owner",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-relay-trial-asks-round-trip",
+   "pass": true,
+   "detail": "6 steps held"
+  },
+  {
+   "id": "rt-relay-subject-injection",
+   "pass": true,
+   "detail": "held: the message tells the reader to ignore its instructions"
+  },
+  {
+   "id": "rt-relay-fullwidth-injection",
+   "pass": true,
+   "detail": "held: the message tells the reader to ignore its instructions"
+  },
+  {
+   "id": "rt-relay-zero-width-value",
+   "pass": true,
+   "detail": "held: contains \"Maple Trust Bank\", which helper can't see (money/main-bank#bank)"
+  },
+  {
+   "id": "rt-relay-lookalike-sender",
+   "pass": true,
+   "detail": "held: sender planner@pocketbrain.example.evil.example is not one of the agents' inboxes"
+  },
+  {
+   "id": "rt-relay-recipient-not-agent",
+   "pass": true,
+   "detail": "held: no known recipient (address it to relay+<agent>@…)"
+  },
+  {
+   "id": "rt-relay-display-name-injection",
+   "pass": true,
+   "detail": "delivered, display name dropped"
+  },
+  {
+   "id": "rt-cat-financial-institution",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"financial institution\""
+  },
+  {
+   "id": "rt-cat-net-worth",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"net worth\""
+  },
+  {
+   "id": "rt-cat-broker",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"broker\""
+  },
+  {
+   "id": "rt-cat-french",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"épargne\""
+  },
+  {
+   "id": "rt-cat-paycheck",
+   "pass": true,
+   "detail": "held: money is withheld from helper and the message mentions \"paycheck\""
+  },
+  {
+   "id": "rt-cat-plain-money",
+   "pass": false,
+   "gap": "G6",
+   "detail": "delivered"
+  },
+  {
+   "id": "rt-cat-benign-reading-list",
+   "pass": true,
+   "detail": "delivered"
+  },
+  {
+   "id": "rt-inj-fullwidth",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-inj-zero-width",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-inj-source-ref",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-inj-email-display-name",
+   "pass": true,
+   "detail": "1 steps held"
+  },
+  {
+   "id": "rt-inj-journal-body",
+   "pass": true,
+   "detail": "1 steps held"
+  },
+  {
+   "id": "rt-inj-new-note-title",
+   "pass": true,
+   "detail": "1 steps held"
+  },
+  {
+   "id": "rt-inj-markup-in-list",
+   "pass": true,
+   "detail": "1 steps held"
+  },
+  {
+   "id": "rt-forged-louis-scheme",
+   "pass": true,
+   "detail": "1 steps held"
+  },
+  {
+   "id": "rt-forged-approval-in-text",
+   "pass": true,
+   "detail": "1 steps held"
+  },
+  {
+   "id": "rt-forged-body-identity",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-forged-text-channel",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-token-path-after-revoke",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-token-reissue",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-token-agent-removed",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-token-forms",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-paused-every-door",
+   "pass": true,
+   "detail": "6 steps held"
+  },
+  {
+   "id": "rt-readonly-writes",
+   "pass": true,
+   "detail": "7 steps held"
+  },
+  {
+   "id": "rt-readonly-resolver",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-paused-relay",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-log-injection-held",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-log-fullwidth-injection-held",
+   "pass": true,
+   "detail": "held"
+  },
+  {
+   "id": "rt-log-readonly-refused",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-log-other-agent",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-log-carved-word-held",
+   "pass": true,
+   "detail": "held"
+  },
+  {
+   "id": "rt-hub-unsigned-op",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-hub-stranger-op",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-hub-op-in-other-replica-folder",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-hub-op-impersonates-agent",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-hub-op-for-paused-agent",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-hub-op-into-rules",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-dash-public-bind",
+   "pass": true,
+   "detail": "refused 3 public addresses"
+  },
+  {
+   "id": "rt-dash-foreign-host",
+   "pass": true,
+   "detail": "statuses 421"
+  },
+  {
+   "id": "rt-dash-forged-action",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-dash-via-agent-server",
+   "pass": true,
+   "detail": "statuses 404,404,404,404"
+  },
+  {
+   "id": "rt-owner-tools-not-served",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-retire-hidden-note",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-retire-hidden-fact",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-search-side-channel",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-launder-plain",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-launder-dashed",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-launder-amount",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-launder-spaced",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-steward-token-private-read",
+   "pass": false,
+   "gap": "G18",
+   "detail": "context holds the health detail"
+  },
+  {
+   "id": "rt-steward-token-forges-louis",
+   "pass": false,
+   "gap": "G18",
+   "detail": "committed"
+  },
+  {
+   "id": "rt-resolver-packet-private-values",
+   "pass": false,
+   "gap": "G18",
+   "detail": "packet shows the private values"
+  },
+  {
+   "id": "usage-invisible",
+   "pass": true,
+   "detail": "74 agent-facing responses identical with the cap blown; cells clean"
+  },
+  {
+   "id": "usage-model-only",
+   "pass": true,
+   "detail": "agent session left no usage lines; one model call recorded (1101 tokens, $0.0153), chain intact"
+  },
+  {
+   "id": "usage-cap-holds",
+   "pass": true,
+   "detail": "reads 200, write committed, model paused, owner escalated"
+  },
+  {
+   "id": "rt-onboard-no-everything",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-onboard-no-takeover",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-onboard-always-trial",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-onboard-window-owner-only",
+   "pass": true,
+   "detail": "3 steps held"
+  },
+  {
+   "id": "rt-onboard-window-once",
+   "pass": true,
+   "detail": "4 steps held"
+  },
+  {
+   "id": "rt-onboard-window-expires",
+   "pass": true,
+   "detail": "2 steps held"
+  },
+  {
+   "id": "rt-onboard-request-flood",
+   "pass": true,
+   "detail": "10 listed"
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+relay_address: relay@brain.example
+owner_address: robin@kestrel.example
+agents:
+  steward: steward@brain.example
+  claude: claude@brain.example
+  town: town@brain.example
+  claude-code: claude-code@brain.example
+  alice: alice@brain.example
+canaries: [Zephyr Holdings 7731]

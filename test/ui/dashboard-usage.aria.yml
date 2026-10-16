@@ -1,0 +1,38 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "Model spend, 2026-10" [level=1]
+  - paragraph: "What the brain's own model steps cost you: sleep, the duplicate judge, capture and Ask. Reads and writes are never metered or capped. Agents never see this page or the cap."
+  - text: $0.00 this month, no cap set Past the cap, model steps pause and say so in the morning note; everything else keeps working. Monthly cap
+  - textbox "Monthly cap"
+  - text: USD
+  - button "Set"
+  - text: 0 model calls this month 0 tokens 0.0 s model time 0 failed calls
+  - heading "By step" [level=2]
+  - text: No model calls this month.
+  - heading "By day" [level=2]
+  - text: Nothing yet.
+  - heading "Prices" [level=2]
+  - text: Tokens are priced at each model's list price (src/pricing.ts; a local model costs 0). Each call keeps the price it ran at.

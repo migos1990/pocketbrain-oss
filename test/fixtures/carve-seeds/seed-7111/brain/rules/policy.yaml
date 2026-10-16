@@ -1,0 +1,31 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: core
+    slices:
+      - s1
+      - area:home
+  bex:
+    tier: trial
+    slices:
+      - s1
+      - area:side
+      - s2
+  cyd:
+    tier: trial
+    slices:
+      - area:home
+      - s3
+      - s1
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  work: {}
+  home: {}
+  side: {}

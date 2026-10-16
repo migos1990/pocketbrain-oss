@@ -1,0 +1,11 @@
+# What the gardener does in the night scripts/video-reset.ts replays (03:40 the night before
+# the take, inside its hours), all through the hub's door as the gardener, so the same rules
+# apply: it reads Robin's brain, runs upkeep (which finds the two notes of the same exec staff
+# meeting), proposes one fix and one fact to retire. It is on trial, so each change becomes a
+# proposal in Needs you. Then its token is used again in the afternoon, outside its hours, and
+# the hub refuses it and pauses it.
+upkeep: true
+proposals:
+  - { id: projects/board-prep, attribute: next_step, value: "Board meeting Thursday 9 am; Maya sends the deck Monday, a day early", sources: ["gmail:f000000000000006"], reason: "a newer email moves the deck up" }
+retire:
+  - { id: notes/hiring-freeze, attribute: decision, as_of: "@D-21@", sources: ["gmail:f000000000000007"], reason: "the VP Sales search opened three weeks ago, so the freeze is over" }

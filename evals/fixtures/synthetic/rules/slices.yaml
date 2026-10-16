@@ -1,0 +1,11 @@
+# Named cuts of the brain (architecture 0.7). Every area also gets a ready-made
+# slice `area:<name>`, and `all` selects everything up to the agent's ceiling.
+slices:
+  contacts-basic:
+    types: [people, orgs]
+    only_attributes: [org, role]      # name is the title; no phone, email, relationship or prose
+    exclude_tags: [finance]           # advisors and bank contacts stay out
+    max_sensitivity: personal
+  money:
+    types: [money]
+    announce: true                    # views say "money: not shared" when it's withheld

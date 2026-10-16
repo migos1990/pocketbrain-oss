@@ -1,0 +1,19 @@
+# Who sees what and who owns what. Only Robin edits this file (architecture 0.6, 0.7).
+# Defaults set by the prototype build on 2026-10-08; change any line.
+agents:
+  steward: { tier: core, transport: api, aliases: [Steward], slices: [all] }
+  planner: { tier: core, transport: mcp, aliases: [Planner, Planbot, "Planbot / Planner"], slices: [area:work, area:oc, contacts-basic], exclude_types: [money] }
+  claude: { tier: core, transport: mcp, aliases: [Claude], slices: [area:work, area:side, contacts-basic], exclude_types: [money] }
+  helper: { tier: trial, transport: mcp, aliases: [Helper], slices: [area:work, contacts-basic], exclude_types: [money] }
+  reflect: { tier: core, inside_wall: true }
+tiers:
+  core: { max_sensitivity: private, writes: direct }
+  trial: { max_sensitivity: personal, writes: propose }
+areas:
+  personal: { owner: steward }
+  work: { owner: planner }
+  side: { owner: claude }
+  client: { owner: steward }
+  oc: { owner: planner }
+  home: { owner: steward }
+resolver: steward

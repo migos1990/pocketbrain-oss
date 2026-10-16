@@ -1,0 +1,74 @@
+name: release
+# A release is cut with `bun scripts/release.ts cut` (a dated CHANGELOG section and package.json's
+# version, merged into main). Pushing main is enough: when main's version is dated and untagged,
+# this workflow runs the whole CI on that commit, and only when it passes makes the tag vX.Y.Z,
+# the GitHub release from the CHANGELOG section, and moves the `release` branch to it. Cloud
+# sessions can push branches but not tags, so CI makes the tag; a tag pushed by hand (Louis) still
+# works. The Mac hub follows the `release` branch (scripts/deploy.ts), so a release that fails CI
+# never reaches it. See docs/release.md.
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  due:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.due.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: is a release due on this commit?
+        id: due
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then tag="$GITHUB_REF_NAME"; else tag="$(bun scripts/release.ts due)"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release due: ${tag:-none}"
+  ci:
+    needs: due
+    if: needs.due.outputs.tag != ''
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+  publish:
+    needs: [due, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ needs.due.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: the tag matches package.json and a dated CHANGELOG section
+        run: bun scripts/release.ts verify-tag "$TAG"
+      - name: the commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: make the tag (unless it was pushed by hand)
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then echo "$TAG exists"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bun scripts/release.ts notes "$TAG" | git tag -a "$TAG" "$GITHUB_SHA" -F -
+          git push origin "refs/tags/$TAG"
+      - name: GitHub release from the CHANGELOG section
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bun scripts/release.ts notes "$TAG" > notes.md
+          gh release create "$TAG" --verify-tag --title "pocketBrain ${TAG#v}" --notes-file notes.md
+      # Fast-forward only: a release older than the one deployed is refused here, not on the Mac.
+      - name: move the release branch to the tag (the Mac follows it)
+        run: git push origin "$GITHUB_SHA:refs/heads/release"

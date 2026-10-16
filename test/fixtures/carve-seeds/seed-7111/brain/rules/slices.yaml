@@ -1,0 +1,19 @@
+slices:
+  s3:
+    types:
+      - people
+      - projects
+      - notes
+      - orgs
+      - decisions
+  s2:
+    tags:
+      - beta
+    max_sensitivity: secret
+    only_attributes:
+      - contact
+      - split
+      - place
+  s1:
+    exclude_attributes:
+      - code

@@ -1,0 +1,35 @@
+{
+ "seed": 7149,
+ "why": "list fact: a later item's share_with leaves dax out, carve reads only the first item's (fixed by claude/settle-share; this seed now guards the fix)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "handoff ava -> bex about decisions/mimyl-bykymer: ho-20261016044256-12cu"
+ ]
+}

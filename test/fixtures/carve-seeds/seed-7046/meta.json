@@ -1,0 +1,29 @@
+{
+ "seed": 7046,
+ "gap": "G151",
+ "why": "merge of a note bex excludes by id hands its facts to the kept note bex sees (open, claude/person-merge)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "merge money/roner-kuner -> money/govar-pityman: ok",
+  "handoff ava -> bex about projects/sumath-puzasox: ho-20261016044300-n6m2"
+ ]
+}

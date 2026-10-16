@@ -1,0 +1,42 @@
+# Enforced write checks and per-type attribute settings (memory-shape.md section 7).
+checks: [schema, rules_read_only, no_agent_in_ids, source_present, source_resolvable,
+         source_matches_type, approval_needs_message_id, no_secret_shapes, no_secret_level,
+         as_of_not_future, note_size, third_party_sensitive]
+# Words that make the carve preview flag a granted note when a category is withheld.
+categories:
+  money: [bank, banque, credit card, carte de crédit, TFSA, CELI, RRSP, REER, RoboInvest, IG Wealth, Investors Group, salary, salaire, compensation, RSU, mortgage, hypothèque]
+types:
+  person:
+    sensitivity: personal
+    attributes:
+      role:         { merge: replace, normalize: text, shelf_life: 180d }
+      org:          { merge: replace, normalize: link, shelf_life: 180d }
+      relationship: { merge: replace, normalize: text, shelf_life: 365d }
+      emails:       { merge: set, normalize: email, shelf_life: 730d }
+      phones:       { merge: set, normalize: e164, shelf_life: 730d }
+      last_contact: { merge: max, normalize: date }
+  org:
+    attributes:
+      kind:    { merge: replace }
+      website: { merge: replace }
+  project:
+    attributes:
+      status:           { merge: replace, shelf_life: 30d }
+      next_step:        { merge: replace, shelf_life: 14d }
+      due:              { merge: replace, normalize: date }
+      schedule_changes: { merge: set, item_key: session, shelf_life: until_date }
+  decision:
+    attributes:
+      outcome: { merge: replace }
+  money:
+    sensitivity: private
+    attributes:
+      balance: { merge: replace, normalize: money, shelf_life: 30d }
+      amount:  { merge: replace, normalize: money }
+      due:     { merge: replace, normalize: date }
+      status:  { merge: replace, shelf_life: 30d }
+  capability:
+    attributes:
+      status:   { merge: replace, shelf_life: 90d }
+      schedule: { merge: replace, shelf_life: 90d }
+      tools:    { merge: set, shelf_life: 90d }

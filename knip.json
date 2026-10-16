@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "evals/cases/*.ts",
+    "evals/lib/browser-mcp.ts",
+    "evals/lib/api-mcp.ts",
+    "scripts/**/*.ts",
+    ".claude/hooks/*.ts",
+    "test/**/*.test.ts",
+    "conformance/run.ts",
+    "conformance/reference-server.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "evals/**/*.ts",
+    "scripts/**/*.ts",
+    ".claude/hooks/*.ts",
+    "test/**/*.ts",
+    "conformance/**/*.ts"
+  ],
+  "ignoreDependencies": [
+    "bun-types",
+    "@xterm/xterm",
+    "@xterm/addon-fit"
+  ]
+}

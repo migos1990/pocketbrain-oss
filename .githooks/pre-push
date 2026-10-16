@@ -1,0 +1,9 @@
+#!/bin/sh
+# Git pre-push for pocketBrain: the merge gate's deterministic half. CI runs the same again.
+set -e
+# Git exports these to hooks; test fixtures that run git would otherwise write into this repo.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+bun test
+bunx tsc --noEmit
+bun run deadcode
+bun evals/run.ts --ci

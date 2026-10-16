@@ -1,0 +1,80 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - link "Brain":
+    - /url: /brain
+  - text: /
+  - link "People":
+    - /url: /brain?kind=people
+  - heading "Jane Roy" [level=1]
+  - text: Person · work · updated 7 days ago by planner ·
+  - link "History":
+    - /url: /history/people/jane-roy
+  - button "Forget"
+  - text: "Who can see this:"
+  - link "steward":
+    - /url: /agent/steward
+  - link "planner":
+    - /url: /agent/planner
+  - link "gardener":
+    - /url: /agent/gardener
+  - link "helper":
+    - /url: /agent/helper
+  - group: Change who can see it
+  - textbox "What changed?"
+  - button "Suggest"
+  - text: Role
+  - link "Where from":
+    - /url: /why/people/jane-roy?fact=role
+  - link "Course coordinator":
+    - /url: /note/people/jane-roy?edit=role#f-role
+  - text: from an email · checked against a source · added by planner · dated 37 days ago Phones
+  - link "Where from":
+    - /url: /why/people/jane-roy?fact=phones
+  - text: +15145550100 from an email · checked against a source · added by planner · dated 37 days ago
+  - link "+ Add to phones":
+    - /url: /note/people/jane-roy?edit=phones#f-phones
+  - link "+ Add a fact":
+    - /url: /note/people/jane-roy?edit=_new#b-facts
+  - heading "Notes" [level=2]
+  - button "Edit the notes":
+    - text: Coordinates
+    - link "Course A":
+      - /url: /note/projects/course-a
+    - text: . Her number is in the phones fact.
+  - heading "Connections" [level=2]
+  - heading "Where it came from" [level=3]
+  - link "An email":
+    - /url: https://mail.google.com/mail/u/0/#all/f000000000000001
+  - text: dated 1 Sep 2026 Gave
+  - link "role":
+    - /url: "#f-role"
+  - text: ","
+  - link "phones":
+    - /url: "#f-phones"
+  - heading "Links to" [level=3]
+  - link "Course A Projects":
+    - /url: /note/projects/course-a
+  - group: Edit file

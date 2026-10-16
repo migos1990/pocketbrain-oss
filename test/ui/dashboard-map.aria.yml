@@ -1,0 +1,101 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "Who sees what" [level=1]
+  - paragraph: "Every note against every assistant, from the same rules that answer them. the whole note · part of it, some facts cut · outside its slice: it can only ask you for one read, and you decide each time · empty: never offered, it doesn't exist for that assistant. Click an assistant to see the brain as it does. Updates by itself."
+  - table:
+    - rowgroup:
+      - row "Note planner no key gardener no key helper no key":
+        - cell "Note"
+        - cell "planner no key":
+          - link "planner":
+            - /url: /map?as=planner
+          - text: no key
+        - cell "gardener no key":
+          - link "gardener":
+            - /url: /map?as=gardener
+          - text: no key
+        - cell "helper no key":
+          - link "helper":
+            - /url: /map?as=helper
+          - text: no key
+    - rowgroup:
+      - row "decisions":
+        - cell "decisions"
+      - row "Pick a bank private":
+        - cell "Pick a bank private":
+          - link "Pick a bank":
+            - /url: /note/decisions/2026-09-01-pick-bank
+          - text: private
+        - cell
+        - cell
+        - cell
+      - row "money":
+        - cell "money"
+      - row "Main bank private":
+        - cell "Main bank private":
+          - link "Main bank":
+            - /url: /note/money/main-bank
+          - text: private
+        - cell
+        - cell
+        - cell
+      - row "people":
+        - cell "people"
+      - row "Jane Roy":
+        - cell "Jane Roy":
+          - link "Jane Roy":
+            - /url: /note/people/jane-roy
+        - cell
+        - cell
+        - cell
+      - row "Paul Advisor":
+        - cell "Paul Advisor":
+          - link "Paul Advisor":
+            - /url: /note/people/paul-advisor
+        - cell
+        - cell
+        - cell
+      - row "projects":
+        - cell "projects"
+      - row "Course A":
+        - cell "Course A":
+          - link "Course A":
+            - /url: /note/projects/course-a
+        - cell
+        - cell
+        - cell
+      - row "Course B":
+        - cell "Course B":
+          - link "Course B":
+            - /url: /note/projects/course-b
+        - cell
+        - cell
+        - cell
+      - row "Notes it can read 0 0 0":
+        - cell "Notes it can read"
+        - cell "0"
+        - cell "0"
+        - cell "0"

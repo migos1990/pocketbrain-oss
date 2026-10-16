@@ -1,0 +1,132 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "planner active" [level=1]
+  - paragraph:
+    - text: Sees 3 of 6 notes and 3 facts. Hasn't connected yet.
+    - link "4 things to check":
+      - /url: "#check"
+  - term: Trust
+  - definition: trusted
+  - term: Connects as
+  - definition: pasted notes
+  - term: Sees
+  - definition: work notes, contacts basic · up to private notes
+  - term: Not shared
+  - definition: money
+  - term: Last seen
+  - definition: never
+  - term: Budget
+  - definition: counted by the hub (pocketbrain start), not by this dashboard on its own
+  - button "Read-only"
+  - button "Pause"
+  - heading "What is planner for?" [level=2]
+  - paragraph: Say it in one sentence. You get the slice it would see, with examples, before anything changes.
+  - textbox "What is planner for?":
+    - /placeholder: Handles family logistics
+  - button "Propose"
+  - heading "What planner sees" [level=2]
+  - group: Show the summary as the code writes it
+  - paragraph:
+    - link "Open the exact view planner gets":
+      - /url: /agent/planner/view
+    - text: (exactly the text it is given). See
+    - link "what it looked for":
+      - /url: "#looked-for"
+    - text: .
+  - heading "Left out" [level=3]
+  - text: outside granted slices (2) type money not shared (1)
+  - heading "Facts held back" [level=3]
+  - text: None.
+  - heading "Check these" [level=3]
+  - text: "links to a hidden noteCourse A prose links to Main bank (shown as [[redacted]]) mentions a private kind of detailCourse A mentions \"bank\" (money is not shared) mentions a hidden valueCourse B mentions \"Maple Trust Bank\", which is carved out (Main bank: bank) mentions a private kind of detailCourse B mentions \"Bank\" (money is not shared)"
+  - heading "What it looked for" [level=2]
+  - heading "Searches" [level=3]
+  - text: No searches yet.
+  - heading "Asked for and didn't get" [level=3]
+  - text: Nothing refused.
+  - heading "What it read, day by day" [level=3]
+  - text: Nothing read in the last 7 days.
+  - paragraph:
+    - text: "Also from the command line:"
+    - code: pocketbrain reads planner
+    - text: .
+  - heading "Memory exam" [level=2]
+  - paragraph:
+    - text: Its own memory against your brain, last 7 days, from the logs.
+    - code: pocketbrain exam
+    - text: runs it weekly; fix drift with
+    - code: pocketbrain memsync list
+    - text: .
+  - term: Grade
+  - definition: no data
+  - term: Memory in sync
+  - definition: 0 of 0 answers
+  - term: Read before writing
+  - definition: n/a of 0 writes
+  - term: Refused for the source
+  - definition: "0"
+  - term: Outside its view
+  - definition: 0 asks, 0 leak alerts
+  - heading "Notes in the slice" [level=2]
+  - heading "people (1)" [level=3]
+  - table:
+    - rowgroup:
+      - row "Note Sensitivity Facts shown Text":
+        - cell "Note"
+        - cell "Sensitivity"
+        - cell "Facts shown"
+        - cell "Text"
+    - rowgroup:
+      - row "Jane Roy personal 2/2 yes":
+        - cell "Jane Roy"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+  - heading "projects (2)" [level=3]
+  - table:
+    - rowgroup:
+      - row "Note Sensitivity Facts shown Text":
+        - cell "Note"
+        - cell "Sensitivity"
+        - cell "Facts shown"
+        - cell "Text"
+    - rowgroup:
+      - row "Course A personal 1/1 yes":
+        - cell "Course A"
+        - cell "personal"
+        - cell "1/1"
+        - cell "yes"
+      - row "Course B personal 0/0 yes":
+        - cell "Course B"
+        - cell "personal"
+        - cell "0/0"
+        - cell "yes"
+  - heading "Most read" [level=2]
+  - text: No reads yet.
+  - heading "Recent reads" [level=2]
+  - text: No reads yet.
+  - heading "Recent writes" [level=2]
+  - text: No writes yet.

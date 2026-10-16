@@ -1,0 +1,36 @@
+{
+ "seed": 7067,
+ "gap": "G254",
+ "why": "a handoff names a note the recipient can't see by title and id; the handoff gate checks fact values only",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "handoff ava -> bex about decisions/sanebin-fozitix: ho-20261016044301-4g14"
+ ]
+}

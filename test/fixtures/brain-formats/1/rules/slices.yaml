@@ -1,0 +1,6 @@
+slices:
+  contacts-basic:
+    types: [people, orgs]
+    only_attributes: [org, role]
+    exclude_tags: [finance]
+    max_sensitivity: personal

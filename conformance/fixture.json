@@ -1,0 +1,177 @@
+{
+  "about": "Memory Passport conformance fixture 0.2: a fictional owner's memory, two agents, and the probes the suite uses. Load it into the server under test, give each agent a credential, and run conformance/run.ts. pocketBrain's copy is examples/brain plus people/sam-lee (test/conformance.test.ts adds it).",
+  "owner": "Robin",
+  "today": "2026-10-08",
+  "notes": [
+    {
+      "id": "projects/course-a",
+      "type": "project",
+      "title": "Course A",
+      "area": "work",
+      "facts": {
+        "next_step": {
+          "value": "Grade the midterm",
+          "as_of": "2026-10-01",
+          "sources": [
+            "gmail:f000000000000003"
+          ]
+        }
+      },
+      "body": "Course logistics. Budget questions go to [[money/main-bank]]."
+    },
+    {
+      "id": "projects/course-b",
+      "type": "project",
+      "title": "Course B",
+      "area": "work",
+      "facts": {},
+      "body": "Paid through Maple Trust Bank, per the contract."
+    },
+    {
+      "id": "people/jane-roy",
+      "type": "person",
+      "title": "Jane Roy",
+      "aliases": [
+        "Jane"
+      ],
+      "area": "work",
+      "facts": {
+        "role": {
+          "value": "Course coordinator",
+          "as_of": "2026-09-01",
+          "sources": [
+            "gmail:f000000000000001"
+          ]
+        },
+        "phones": {
+          "value": "+15145550100",
+          "as_of": "2026-09-01",
+          "sources": [
+            "gmail:f000000000000001"
+          ]
+        }
+      },
+      "body": "Coordinates [[projects/course-a]]. Her number is in the phones fact."
+    },
+    {
+      "id": "people/paul-advisor",
+      "type": "person",
+      "title": "Paul Advisor",
+      "area": "personal",
+      "facts": {
+        "role": {
+          "value": "Financial advisor",
+          "as_of": "2026-09-01",
+          "sources": [
+            "imsg:2026-09-01"
+          ]
+        }
+      },
+      "body": ""
+    },
+    {
+      "id": "people/sam-lee",
+      "type": "person",
+      "title": "Sam Lee",
+      "area": "personal",
+      "facts": {
+        "role": {
+          "value": "Lab technician",
+          "as_of": "2026-09-15",
+          "sources": [
+            "gmail:f00000000000000a"
+          ]
+        },
+        "phones": {
+          "value": "+15145550199",
+          "as_of": "2026-09-15",
+          "sources": [
+            "gmail:f00000000000000a"
+          ]
+        }
+      },
+      "body": ""
+    },
+    {
+      "id": "money/main-bank",
+      "type": "money",
+      "title": "Main bank",
+      "area": "personal",
+      "facts": {
+        "bank": {
+          "value": "Maple Trust Bank",
+          "as_of": "2026-10-04",
+          "sources": [
+            "imsg:phonemsg-01FAKE0000000000000000000T"
+          ]
+        }
+      },
+      "body": ""
+    },
+    {
+      "id": "decisions/2026-09-01-pick-bank",
+      "type": "decision",
+      "title": "Pick a bank",
+      "area": "personal",
+      "facts": {},
+      "body": "Chose the bank."
+    }
+  ],
+  "agents": {
+    "full": {
+      "name": "steward",
+      "sees": "all",
+      "writes": "direct"
+    },
+    "limited": {
+      "name": "helper",
+      "sees": [
+        "projects/course-a",
+        "projects/course-b",
+        "people/jane-roy",
+        "people/sam-lee"
+      ],
+      "hidden_attributes": {
+        "people/sam-lee": [
+          "phones"
+        ]
+      },
+      "writes": "propose"
+    }
+  },
+  "probes": {
+    "visible_note": "projects/course-a",
+    "visible_fact": {
+      "attribute": "next_step",
+      "value": "Grade the midterm"
+    },
+    "hidden_note": "money/main-bank",
+    "missing_note": "people/nobody-here",
+    "partly_hidden_note": "people/sam-lee",
+    "hidden_attribute": "phones",
+    "missing_attribute": "pager",
+    "hidden_values": [
+      "Maple Trust Bank",
+      "+15145550199",
+      "Financial advisor"
+    ],
+    "redacted_note": "projects/course-b",
+    "search_visible": {
+      "q": "course",
+      "expect": "projects/course-a"
+    },
+    "search_hidden": {
+      "q": "Maple",
+      "expect_full": "money/main-bank"
+    },
+    "write": {
+      "attribute": "room",
+      "value": "B-201",
+      "as_of": "2026-10-01",
+      "sources": [
+        "gmail:f000000000000009"
+      ]
+    },
+    "full_write_note": "people/paul-advisor"
+  }
+}

@@ -1,0 +1,43 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "Activity" [level=1]
+  - text: Reads and writes per assistant per day steward planner gardener helper
+  - img "Reads and writes per assistant per day": 0 1 2 10-09 10-10 10-11 10-12 10-13 10-14 10-15
+  - group: Table
+  - combobox:
+    - option "All agents" [selected]
+    - option "steward"
+    - option "planner"
+    - option "gardener"
+    - option "helper"
+  - combobox:
+    - option "All reads" [selected]
+  - heading "Reads (0)" [level=2]
+  - text: No reads yet.
+  - heading "Writes" [level=2]
+  - text: No writes yet.
+  - heading "Mail between assistants, through the relay" [level=2]
+  - text: No relayed mail yet.

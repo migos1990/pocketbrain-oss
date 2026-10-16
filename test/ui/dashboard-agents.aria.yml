@@ -1,0 +1,108 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "Assistants" [level=1]
+  - paragraph: Pause cuts an assistant off completely (server and relay). Read-only lets it read its slice but refuses every write. Revoke access deletes its keys, so it has to be connected again. Every change is recorded in your brain's history.
+  - table:
+    - rowgroup:
+      - row "Assistant Status Trust Holds Last 24 h Last seen Access keys Memory exam":
+        - cell "Assistant"
+        - cell "Status"
+        - cell "Trust"
+        - cell "Holds"
+        - cell "Last 24 h"
+        - cell "Last seen"
+        - cell "Access keys"
+        - cell "Memory exam"
+        - cell
+    - rowgroup:
+      - row "steward · pasted notes · settles conflicts active · trusted · 6 notes · 6 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
+        - cell "steward · pasted notes · settles conflicts":
+          - link "steward":
+            - /url: /agent/steward
+          - text: · pasted notes · settles conflicts
+        - cell "active"
+        - cell "· trusted"
+        - cell "· 6 notes · 6 facts"
+        - cell "· 0 reads · 0 writes"
+        - cell "· last seen never"
+        - cell "· access none"
+        - cell "· memory exam no data"
+        - cell "Read-only Pause":
+          - button "Read-only"
+          - button "Pause"
+      - row "planner · pasted notes active · trusted · 3 notes · 3 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
+        - cell "planner · pasted notes":
+          - link "planner":
+            - /url: /agent/planner
+          - text: · pasted notes
+        - cell "active"
+        - cell "· trusted"
+        - cell "· 3 notes · 3 facts"
+        - cell "· 0 reads · 0 writes"
+        - cell "· last seen never"
+        - cell "· access none"
+        - cell "· memory exam no data"
+        - cell "Read-only Pause":
+          - button "Read-only"
+          - button "Pause"
+      - row "gardener · pasted notes active · on trial · 6 notes · 6 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
+        - cell "gardener · pasted notes":
+          - link "gardener":
+            - /url: /agent/gardener
+          - text: · pasted notes
+        - cell "active"
+        - cell "· on trial"
+        - cell "· 6 notes · 6 facts"
+        - cell "· 0 reads · 0 writes"
+        - cell "· last seen never"
+        - cell "· access none"
+        - cell "· memory exam no data"
+        - cell "Read-only Pause":
+          - button "Read-only"
+          - button "Pause"
+      - row "helper · pasted notes active · on trial · 3 notes · 3 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
+        - cell "helper · pasted notes":
+          - link "helper":
+            - /url: /agent/helper
+          - text: · pasted notes
+        - cell "active"
+        - cell "· on trial"
+        - cell "· 3 notes · 3 facts"
+        - cell "· 0 reads · 0 writes"
+        - cell "· last seen never"
+        - cell "· access none"
+        - cell "· memory exam no data"
+        - cell "Read-only Pause":
+          - button "Read-only"
+          - button "Pause"
+  - heading "Your editor" [level=2]
+  - text: No editor. Every assistant's write that isn't its own area goes to your inbox. You can name one assistant (for example the one you talk to most) to edit on your behalf.
+  - combobox "editor":
+    - option "steward" [selected]
+    - option "planner"
+    - option "gardener"
+    - option "helper"
+  - button "Make it my editor"

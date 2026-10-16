@@ -1,0 +1,16 @@
+slices:
+  s2:
+    tags:
+      - beta
+  s1:
+    types:
+      - notes
+      - orgs
+      - decisions
+      - money
+    max_sensitivity: private
+    only_attributes:
+      - amount
+      - place
+      - contact
+      - detail

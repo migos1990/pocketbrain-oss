@@ -1,0 +1,37 @@
+# Robin's brain for the hackathon video (examples/video). Written by scripts/video-reset.ts on
+# every take. Robin is the President of Kestrel Labs, a fictional company, and shares parts of
+# their knowledge base with the exec team's assistants. Nothing here is real.
+owner: { name: Robin, timezone: America/Toronto }
+agents:
+  # Robin's own desk assistant: settles conflicts, never on camera.
+  steward: { label: "Robin's desk assistant", tier: core, slices: [all] }
+  # Robin's own agents are operators for one task each, with their own key and slice, and receipts
+  # of what each one read. This one builds the board deck; it too has to ask for the board feedback.
+  robin: { label: "Robin's board-deck agent", tier: core, transport: mcp, slices: [board-deck], exclude_types: [money] }
+  # Maya's claude.ai (VP Strategy), through the Auth0 door: strategy and board prep, basic contacts.
+  claude: { label: "Maya's claude.ai", tier: trial, transport: mcp, slices: [area:strategy, contacts-basic], exclude_types: [money] }
+  # Theo's Claude Code (VP People), pasted token: org and hiring, basic contacts. Never compensation.
+  town: { label: "Theo's Claude Code", tier: trial, transport: mcp, slices: [area:org, contacts-basic], exclude_types: [money] }
+  # Priya's Claude Code (CTO), pasted token: the technical roadmap only.
+  claude-code: { label: "Priya's Claude Code", tier: core, transport: mcp, slices: [area:tech], exclude_types: [money] }
+  # Keeps Robin's brain in order (docs/gardener.md): reads everything, only proposes, only in its hours.
+  gardener: { label: Gardener, tier: trial, transport: mcp, role: gardener, max_sensitivity: private, slices: [all], max_proposals_per_day: 13, windows: ["daily 03:25-05:00", "sun 09:55-12:00"] }
+  # Alice, the new VP of Partnerships: her own assistant, signed in through Auth0 as Alice, sees the Q4 launch only.
+  alice: { label: Alice, tier: trial, transport: mcp, slices: [q4-launch], exclude_types: [money] }
+tiers:
+  core: { max_sensitivity: personal, writes: direct }
+  trial: { max_sensitivity: personal, writes: propose }
+areas:
+  strategy: { owner: steward }
+  org: { owner: steward }
+  # Priya's Claude Code owns the tech area, so its writes there land at once and Jev checks them.
+  tech: { owner: claude-code }
+  deals: { owner: steward }
+resolver: steward
+# Ask to see (docs/ask-to-see.md): compensation and deals are never asked for. The reset adds the
+# Guardian settings from ~/pocketbrain-video/keep/ask-to-see.yaml when present, and raises
+# max_per_day for retakes.
+ask_to_see: { never: [money, deals], push_title: true }
+# Jev (docs/aftercheck.md): every write that lands is checked by TypeSafe's classifier, which can
+# only raise it. Needs TYPESAFE_API_KEY in ~/pocketbrain-video/config/keys; without it, nothing runs.
+aftercheck: { classify: true }

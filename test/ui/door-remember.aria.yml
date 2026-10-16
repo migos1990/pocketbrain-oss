@@ -1,0 +1,27 @@
+- main:
+  - heading "Remember a fact" [level=1]
+  - paragraph: "One fact per form, with its source. Same checks as anywhere else: outside your own area it waits for the owner."
+  - text: Note id (e.g. people/jane-roy; leave empty for a new note)
+  - textbox "Note id (e.g. people/jane-roy; leave empty for a new note)"
+  - text: Title (new note only)
+  - textbox "Title (new note only)"
+  - text: Type (new note only)
+  - textbox "Type (new note only)"
+  - text: Area (new note only)
+  - textbox "Area (new note only)"
+  - text: Attribute
+  - textbox "Attribute"
+  - text: Value
+  - textbox "Value"
+  - text: As of (YYYY-MM-DD; today here is 2026-10-08, never later)
+  - textbox "As of (YYYY-MM-DD; today here is 2026-10-08, never later)": 2026-10-08
+  - text: Sources (one per line, e.g. gmail:<message id>)
+  - textbox "Sources (one per line, e.g. gmail:<message id>)"
+  - text: Verification (optional)
+  - textbox "Verification (optional)"
+  - text: Sensitivity (optional)
+  - textbox "Sensitivity (optional)"
+  - button "Remember"
+  - paragraph:
+    - link "Back to the start page":
+      - /url: /b

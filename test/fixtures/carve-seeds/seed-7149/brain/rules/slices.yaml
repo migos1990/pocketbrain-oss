@@ -1,0 +1,10 @@
+slices:
+  s2:
+    tags:
+      - beta
+    exclude:
+      - people/tezor-ditugun
+  s1:
+    exclude_tags:
+      - beta
+    max_sensitivity: personal

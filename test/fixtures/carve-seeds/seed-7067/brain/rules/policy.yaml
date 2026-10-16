@@ -1,0 +1,48 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: core
+    slices:
+      - area:home
+      - all
+      - area:side
+      - s2
+    exclude_types:
+      - people
+    max_sensitivity: personal
+    exclude:
+      - decisions/lugudeth-vofokil
+  bex:
+    tier: core
+    slices:
+      - area:client
+      - area:side
+      - s1
+    exclude_types:
+      - decisions
+  cyd:
+    tier: core
+    slices:
+      - all
+      - area:personal
+  dax:
+    tier: core
+    slices:
+      - area:personal
+      - area:side
+    exclude_types:
+      - decisions
+    max_sensitivity: secret
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  home: {}
+  personal: {}
+  side: {}
+  client: {}

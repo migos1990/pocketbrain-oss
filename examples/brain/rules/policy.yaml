@@ -1,0 +1,14 @@
+owner: { name: Robin }
+agents:
+  steward: { tier: core, slices: [all] }
+  planner: { tier: core, aliases: [Planbot], slices: [area:work, contacts-basic], exclude_types: [money] }
+  # Keeps the brain in order (docs/gardener.md): reads everything, only proposes, only in its hours.
+  gardener: { tier: trial, role: gardener, max_sensitivity: private, slices: [all], max_proposals_per_day: 13, windows: ["daily 03:25-05:00", "sun 09:55-12:00"] }
+  helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }
+tiers:
+  core: { max_sensitivity: private, writes: direct }
+  trial: { max_sensitivity: personal, writes: propose }
+areas:
+  personal: { owner: steward }
+  work: { owner: planner }
+resolver: steward

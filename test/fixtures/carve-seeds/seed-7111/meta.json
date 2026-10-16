@@ -1,0 +1,27 @@
+{
+ "seed": 7111,
+ "why": "merge dispute: the second candidate's share_with leaves ava and bex out, carve reads only the first candidate's (fixed by claude/settle-share; this seed now guards the fix)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "merge notes/vevil-paquryl -> notes/nyrimer-qovototh: ok"
+ ]
+}

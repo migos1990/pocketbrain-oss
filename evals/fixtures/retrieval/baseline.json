@@ -1,0 +1,60 @@
+{
+  "note": "recall@5 on questions.yaml through core.search, word map off (plain) and on (lexicon); written by bun scripts/retrieval-baseline.ts",
+  "recall5": {
+    "plain": {
+      "direct": 1,
+      "heldout": 0.733,
+      "dev2": 0.433,
+      "direct2": 1,
+      "blind2": 0.175
+    },
+    "lexicon": {
+      "direct": 1,
+      "heldout": 1,
+      "dev2": 1,
+      "direct2": 1,
+      "blind2": 0.5
+    }
+  },
+  "misses": {
+    "plain": {
+      "direct": [],
+      "heldout": [
+        "h03(none)",
+        "h07(none)",
+        "h13(none)",
+        "h14(none)",
+        "h15(none)",
+        "h23(none)",
+        "h26(none)",
+        "h28(none)"
+      ],
+      "dev2": [
+        "b01(none)",
+        "b02(none)",
+        "b06(8)",
+        "b07(none)",
+        "b09(none)",
+        "b10(none)",
+        "b11(12)",
+        "b12(none)",
+        "b17(none)",
+        "b19(none)",
+        "b21(none)",
+        "b22(none)",
+        "b25(none)",
+        "b27(none)",
+        "b28(none)",
+        "b29(none)",
+        "b30(none)"
+      ],
+      "direct2": []
+    },
+    "lexicon": {
+      "direct": [],
+      "heldout": [],
+      "dev2": [],
+      "direct2": []
+    }
+  }
+}

@@ -1,0 +1,14 @@
+slices:
+  contacts-basic:
+    types: [people, orgs]
+    only_attributes: [org, role]
+    exclude_tags: [finance]
+    max_sensitivity: personal
+  # What Robin shares with Alice, the new VP of Partnerships: the Q4 launch and nothing else.
+  q4-launch:
+    tags: [q4-launch]
+    max_sensitivity: personal
+  # Robin's own board-deck agent: an operator for one task, the board deck, and nothing else.
+  board-deck:
+    tags: [board-deck]
+    max_sensitivity: personal

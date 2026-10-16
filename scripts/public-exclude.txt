@@ -1,0 +1,10 @@
+# Paths left out of the public repo by scripts/public-export.sh: one tracked file or folder
+# (ending in /) per line. They stay in the private repo, where the hackathon film still uses them.
+docs/video-kit.md
+scripts/film/
+scripts/video-montage.ts
+scripts/video-take.ts
+examples/video/film/
+test/video-montage.test.ts
+# The contributor agreement is still under legal review; it joins the public repo once settled.
+CLA.md

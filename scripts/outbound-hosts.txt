@@ -1,0 +1,20 @@
+# Every host the app's own code (src/) names in a URL, and why. test/outbound.test.ts fails when
+# src/ names a host missing here (a new outbound destination needs the owner's yes) and when a
+# host here is no longer named in src/ (stale entry). Comment lines in src/ are not scanned.
+# Loopback and example hosts (127.0.0.1, localhost, *.example) are always allowed.
+api.anthropic.com                  # model adapter, owner's own key (src/model.ts)
+api.openai.com                     # model adapter, owner's own key
+generativelanguage.googleapis.com  # model adapter, owner's own key
+api.typesafe.ai                    # judge provider, owner's own key
+api.agentmail.to                   # mail relay and capture mailbox, owner's own account
+api.twilio.com                     # text channel transport (kept, unused)
+api.us1.fga.dev                    # OpenFGA second lock, owner's own store
+fga.us.auth0.com                   # OpenFGA token endpoint
+mail.google.com                    # dashboard link the owner clicks; no request is made
+www.apple.com                      # plist DTD identifier; no request is made
+www.w3.org                         # SVG namespace identifier; no request is made
+gmail.googleapis.com               # Gmail source pull, read-only, owner's consent line (src/google.ts)
+www.googleapis.com                 # Calendar source pull and OAuth scope names, read-only (src/google.ts)
+accounts.google.com                # Google sign-in page for `sources connect`, opened by the owner
+oauth2.googleapis.com              # Google token refresh for the read-only sources
+discord.com                        # Discord source pull, read-only bot, GET only (src/feeds.ts)

@@ -1,0 +1,164 @@
+# Synthetic retrieval golden set (backlog 241). Fictional notes in this folder, laid over
+# evals/fixtures/synthetic; no real data. Written in one pass before any score was seen, and
+# never tuned against the ranker afterwards: "heldout" questions paraphrase, switch language or use
+# a nickname, "direct" ones reuse a note's own words. as: asks as that agent (default steward);
+# forbid: notes that agent must never get back. Today is 2026-10-08 (evals/lib/sandbox.ts).
+questions:
+  # direct: the note's own words
+  - { id: d01, kind: direct, q: "Geneviève Bélanger", want: [people/genevieve-belanger] }
+  - { id: d02, kind: direct, q: "plombier", want: [people/francois-ouellet] }
+  - { id: d03, kind: direct, q: "rénovation de la cuisine comptoir", want: [projects/renovation-cuisine] }
+  - { id: d04, kind: direct, q: "SecDays talk slides", want: [projects/secdays-talk] }
+  - { id: d05, kind: direct, q: "potager ail", want: [projects/potager] }
+  - { id: d06, kind: direct, q: "marathon training long run", want: [projects/marathon] }
+  - { id: d07, kind: direct, q: "habit tracker streak widget", want: [projects/habit-app] }
+  - { id: d08, kind: direct, q: "horaire session d'hiver", want: [projects/winter-schedule, notes/2026-10-07-appel-genevieve] }
+  - { id: d09, kind: direct, q: "hire Chloé TA winter", want: [decisions/2026-10-02-hire-ta] }
+  - { id: d10, kind: direct, q: "maison de campagne Noël Saint-Sauveur", want: [decisions/2026-10-05-campagne-noel] }
+  - { id: d11, kind: direct, q: "forfait cellulaire", want: [decisions/2026-09-20-forfait-cellulaire] }
+  - { id: d12, kind: direct, q: "manuel du cours de sécurité", want: [decisions/2026-10-06-manuel-cours] }
+  - { id: d13, kind: direct, q: "electric car", want: [decisions/2026-08-15-voiture] }
+  - { id: d14, kind: direct, q: "parent-teacher meeting", want: [notes/2026-10-01-parent-teacher] }
+  - { id: d15, kind: direct, q: "Hydro-Québec facture", want: [orgs/hydro] }
+  - { id: d16, kind: direct, q: "Kevin Singh recruiter", want: [people/kevin-singh] }
+  - { id: d17, kind: direct, q: "landlord lease", want: [people/david-cohen] }
+  - { id: d18, kind: direct, q: "coach de soccer", want: [people/beatrice-nguyen] }
+  - { id: d19, kind: direct, q: "impôts 2026 remboursement", want: [money/impots-2026] }
+  - { id: d20, kind: direct, q: "mortgage rate", want: [money/mortgage] }
+  - { id: d21, kind: direct, q: "mémoire threat modeling", want: [projects/memoire-chloe] }
+  - { id: d22, kind: direct, q: "instructions de la maison de campagne clé", want: [notes/2026-09-15-maison-campagne] }
+  - { id: d23, kind: direct, q: "Amélie Roy anniversaire", want: [people/amelie-roy] }
+  - { id: d24, kind: direct, q: "comptable déclaration de revenus", want: [people/olivier-gagnon] }
+  - { id: d25, kind: direct, q: "SecDays Québec conference", want: [orgs/secdays, projects/secdays-talk] }
+  - { id: d26, kind: direct, q: "office hours labs", want: [people/chloe-martin] }
+  - { id: d27, kind: direct, q: "appel Geneviève lundi soir", want: [notes/2026-10-07-appel-genevieve, projects/winter-schedule] }
+  - { id: d28, kind: direct, q: "Caisse du Plateau hypothèque", want: [orgs/caisse-plateau, money/mortgage] }
+  - { id: d29, kind: direct, q: "OWASP Testing Guide", want: [decisions/2026-10-06-manuel-cours] }
+  - { id: d30, kind: direct, q: "Chloé Martin", want: [people/chloe-martin] }
+  # heldout: unaccented, other language, nickname, paraphrase, relative date
+  - { id: h01, kind: heldout, q: "genevieve belanger", want: [people/genevieve-belanger] }
+  - { id: h02, kind: heldout, q: "Gen", want: [people/genevieve-belanger] }
+  - { id: h03, kind: heldout, q: "who is the plumber", want: [people/francois-ouellet] }
+  - { id: h04, kind: heldout, q: "Frank", want: [people/francois-ouellet] }
+  - { id: h05, kind: heldout, q: "kitchen renovation countertop", want: [projects/renovation-cuisine] }
+  - { id: h06, kind: heldout, q: "quand planter l'ail", want: [projects/potager] }
+  - { id: h07, kind: heldout, q: "garden garlic", want: [projects/potager] }
+  - { id: h08, kind: heldout, q: "Bea soccer practice", want: [people/beatrice-nguyen] }
+  - { id: h09, kind: heldout, q: "Coco", want: [people/chloe-martin] }
+  - { id: h10, kind: heldout, q: "who grades the labs", want: [people/chloe-martin] }
+  - { id: h11, kind: heldout, q: "Dave apartment", want: [people/david-cohen] }
+  - { id: h12, kind: heldout, q: "Mimi", want: [people/amelie-roy] }
+  - { id: h13, kind: heldout, q: "my sister's birthday", want: [people/amelie-roy] }
+  - { id: h14, kind: heldout, q: "Christmas cottage booking", want: [decisions/2026-10-05-campagne-noel] }
+  - { id: h15, kind: heldout, q: "phone plan", want: [decisions/2026-09-20-forfait-cellulaire] }
+  - { id: h16, kind: heldout, q: "textbook for the security course", want: [decisions/2026-10-06-manuel-cours] }
+  - { id: h17, kind: heldout, q: "voiture électrique", want: [decisions/2026-08-15-voiture] }
+  - { id: h18, kind: heldout, q: "rencontre parents enseignants", want: [notes/2026-10-01-parent-teacher] }
+  - { id: h19, kind: heldout, q: "electricity bill", want: [orgs/hydro] }
+  - { id: h20, kind: heldout, q: "Hydro", want: [orgs/hydro] }
+  - { id: h21, kind: heldout, q: "Brightwave job opening", want: [people/kevin-singh] }
+  - { id: h22, kind: heldout, q: "tax refund", want: [money/impots-2026] }
+  - { id: h23, kind: heldout, q: "taux hypothécaire", want: [money/mortgage] }
+  - { id: h24, kind: heldout, q: "Oli accountant", want: [people/olivier-gagnon] }
+  - { id: h25, kind: heldout, q: "Chloé's master's thesis", want: [projects/memoire-chloe] }
+  - { id: h26, kind: heldout, q: "conference presentation deadline", want: [projects/secdays-talk] }
+  - { id: h27, kind: heldout, q: "running plan Montreal", want: [projects/marathon] }
+  - { id: h28, kind: heldout, q: "call with Gen yesterday", want: [notes/2026-10-07-appel-genevieve] }
+  - { id: h29, kind: heldout, q: "winter teaching schedule Monday evening", want: [projects/winter-schedule, notes/2026-10-07-appel-genevieve] }
+  - { id: h30, kind: heldout, q: "side project Swift app", want: [projects/habit-app] }
+  # direct, on the notes added with the blind set
+  - { id: d31, kind: direct, q: "vétérinaire du chat", want: [people/lucie-pelletier] }
+  - { id: d32, kind: direct, q: "research grant budget section", want: [projects/grant-application] }
+  - { id: d33, kind: direct, q: "voyage au Portugal billets", want: [projects/voyage-portugal] }
+  - { id: d34, kind: direct, q: "assurance habitation franchise", want: [decisions/2026-09-25-assurance-habitation] }
+  - { id: d35, kind: direct, q: "piano teacher", want: [people/tom-baker] }
+  - { id: d36, kind: direct, q: "réunion de département", want: [notes/2026-10-04-reunion-departement] }
+  # dev2: written with their notes on 2026-10-16 before any fix for G172, but by the same session
+  # that then wrote src/lexicon.ts, so they are not blind. The G172 gate is measured on blind2.
+  - { id: b01, kind: dev2, q: "the cat's vet", want: [people/lucie-pelletier] }
+  - { id: b02, kind: dev2, q: "who has our spare key", want: [people/martine-leblanc] }
+  - { id: b03, kind: dev2, q: "neighbour who waters the plants", want: [people/martine-leblanc] }
+  - { id: b04, kind: dev2, q: "directeur du département", want: [people/samir-haddad] }
+  - { id: b05, kind: dev2, q: "cours de piano des enfants", want: [people/tom-baker] }
+  - { id: b06, kind: dev2, q: "standing desk for the home office", want: [projects/demenagement-bureau] }
+  - { id: b07, kind: dev2, q: "demande de subvention de recherche", want: [projects/grant-application] }
+  - { id: b08, kind: dev2, q: "trip to Lisbon", want: [projects/voyage-portugal] }
+  - { id: b09, kind: dev2, q: "plane tickets for April", want: [projects/voyage-portugal] }
+  - { id: b10, kind: dev2, q: "réparer le vélo freins", want: [projects/bike-repair] }
+  - { id: b11, kind: dev2, q: "home insurance deductible", want: [decisions/2026-09-25-assurance-habitation] }
+  - { id: b12, kind: dev2, q: "courriels du travail la fin de semaine", want: [decisions/2026-10-03-no-weekend-email] }
+  - { id: b13, kind: dev2, q: "department meeting new courses vote", want: [notes/2026-10-04-reunion-departement] }
+  - { id: b14, kind: dev2, q: "shopping list this week", want: [notes/2026-09-29-grocery-list] }
+  - { id: b15, kind: dev2, q: "cat vaccines", want: [people/lucie-pelletier] }
+  - { id: b16, kind: dev2, q: "director of studies", want: [people/genevieve-belanger] }
+  - { id: b17, kind: dev2, q: "kitchen counter deadline", want: [projects/renovation-cuisine] }
+  - { id: b18, kind: dev2, q: "assistante d'enseignement", want: [people/chloe-martin, decisions/2026-10-02-hire-ta] }
+  - { id: b19, kind: dev2, q: "propriétaire de l'appartement", want: [people/david-cohen] }
+  - { id: b20, kind: dev2, q: "children's soccer coach", want: [people/beatrice-nguyen] }
+  - { id: b21, kind: dev2, q: "Christmas holidays cottage", want: [decisions/2026-10-05-campagne-noel] }
+  - { id: b22, kind: dev2, q: "cell phone plan price", want: [decisions/2026-09-20-forfait-cellulaire] }
+  - { id: b23, kind: dev2, q: "lecture obligatoire du cours", want: [decisions/2026-10-06-manuel-cours] }
+  - { id: b24, kind: dev2, q: "voiture électrique borne de recharge", want: [decisions/2026-08-15-voiture] }
+  - { id: b25, kind: dev2, q: "devoirs de mathématiques", want: [notes/2026-10-01-parent-teacher] }
+  - { id: b26, kind: dev2, q: "électricité paiement", want: [orgs/hydro] }
+  - { id: b27, kind: dev2, q: "embauche d'un auxiliaire", want: [decisions/2026-10-02-hire-ta] }
+  - { id: b28, kind: dev2, q: "vegetable garden", want: [projects/potager] }
+  - { id: b29, kind: dev2, q: "conférence sécurité diapositives", want: [projects/secdays-talk] }
+  - { id: b30, kind: dev2, q: "plumbing under the sink", want: [people/francois-ouellet, projects/renovation-cuisine] }
+  # blind2 and direct2: notes and questions written by a separate writer that never saw
+  # src/lexicon.ts or the questions above. The G172 gate is measured on blind2.
+  - {"id": "x01", "kind": "blind2", "q": "Qui est le directeur du département d'informatique?", "want": ["people/rachid-benali"]}
+  - {"id": "x02", "kind": "blind2", "q": "Who has to okay it if I want fewer classes?", "want": ["people/rachid-benali"]}
+  - {"id": "x03", "kind": "blind2", "q": "Which neighbour holds a spare set of our house keys?", "want": ["people/marguerite-tremblay"]}
+  - {"id": "x04", "kind": "blind2", "q": "Who takes care of watering our greenery when we travel?", "want": ["people/marguerite-tremblay"]}
+  - {"id": "x05", "kind": "blind2", "q": "What do I know about Margot?", "want": ["people/marguerite-tremblay"]}
+  - {"id": "x06", "kind": "blind2", "q": "Who stops the pucks in my weeknight league?", "want": ["people/owen-fitzgerald"]}
+  - {"id": "x07", "kind": "blind2", "q": "Qui me ramène en voiture à la patinoire?", "want": ["people/owen-fitzgerald"]}
+  - {"id": "x08", "kind": "blind2", "q": "Who's our kids' doctor?", "want": ["people/sophie-gagnon"]}
+  - {"id": "x09", "kind": "blind2", "q": "Are my daughter's shots up to date?", "want": ["people/sophie-gagnon"]}
+  - {"id": "x10", "kind": "blind2", "q": "Where does Fifi practice?", "want": ["people/sophie-gagnon"]}
+  - {"id": "x11", "kind": "blind2", "q": "Qui est le doctorant que je dirige?", "want": ["people/daniel-okafor"]}
+  - {"id": "x12", "kind": "blind2", "q": "Which of my grad researchers works on automated bug-finding with random inputs?", "want": ["people/daniel-okafor"]}
+  - {"id": "x13", "kind": "blind2", "q": "Pour qui dois-je relire un chapitre de thèse?", "want": ["people/daniel-okafor"]}
+  - {"id": "x14", "kind": "blind2", "q": "What time does the little one's daycare open in the morning?", "want": ["orgs/garderie-les-lucioles"]}
+  - {"id": "x15", "kind": "blind2", "q": "Is the childcare centre closed during March break?", "want": ["orgs/garderie-les-lucioles"]}
+  - {"id": "x16", "kind": "blind2", "q": "Which bike shop is fixing my bicycle?", "want": ["orgs/atelier-roue-libre"]}
+  - {"id": "x17", "kind": "blind2", "q": "Where did I drop off my bike to get the brakes done?", "want": ["orgs/atelier-roue-libre"]}
+  - {"id": "x18", "kind": "blind2", "q": "Quelle maison d'édition publie mon manuel?", "want": ["orgs/maple-grove-press"]}
+  - {"id": "x19", "kind": "blind2", "q": "Quand dois-je remettre le texte complet de mon livre?", "want": ["orgs/maple-grove-press"]}
+  - {"id": "x20", "kind": "blind2", "q": "Who is putting out my book on writing safe code?", "want": ["orgs/maple-grove-press"]}
+  - {"id": "x21", "kind": "blind2", "q": "Where are we with the basement reno?", "want": ["projects/renovation-sous-sol"]}
+  - {"id": "x22", "kind": "blind2", "q": "Which contractor are we hiring for insulation?", "want": ["projects/renovation-sous-sol"]}
+  - {"id": "x23", "kind": "blind2", "q": "Damp downstairs every spring, did we get quotes to fix it?", "want": ["projects/renovation-sous-sol"]}
+  - {"id": "x24", "kind": "blind2", "q": "Où en est mon entraînement pour la course de 42 km?", "want": ["projects/marathon-training"]}
+  - {"id": "x25", "kind": "blind2", "q": "Qu'est-ce que je dois faire pour mon genou blessé?", "want": ["projects/marathon-training"]}
+  - {"id": "x26", "kind": "blind2", "q": "What's my plan for the 42-kilometre event in the capital?", "want": ["projects/marathon-training"]}
+  - {"id": "x27", "kind": "blind2", "q": "What's the status of the new encryption class I'm designing?", "want": ["projects/cours-intro-crypto"]}
+  - {"id": "x28", "kind": "blind2", "q": "What do I still need to send to the curriculum committee?", "want": ["projects/cours-intro-crypto"]}
+  - {"id": "x29", "kind": "blind2", "q": "Quand vais-je enseigner la sécurité des messages codés?", "want": ["projects/cours-intro-crypto"]}
+  - {"id": "x30", "kind": "blind2", "q": "Did we sign our daughter up for music lessons on weekends?", "want": ["decisions/2026-08-20-lecons-piano"]}
+  - {"id": "x31", "kind": "blind2", "q": "Quel jour ma fille a-t-elle son cours de clavier?", "want": ["decisions/2026-08-20-lecons-piano"]}
+  - {"id": "x32", "kind": "blind2", "q": "Est-ce que mon congé sabbatique a été reporté?", "want": ["decisions/2026-09-15-sabbatical-postponed"]}
+  - {"id": "x33", "kind": "blind2", "q": "When will my research break from teaching happen now?", "want": ["decisions/2026-09-15-sabbatical-postponed"]}
+  - {"id": "x34", "kind": "blind2", "q": "Did we decide to lease an EV?", "want": ["decisions/2026-09-30-voiture-electrique"]}
+  - {"id": "x35", "kind": "blind2", "q": "When is the new SUV being delivered?", "want": ["decisions/2026-09-30-voiture-electrique"]}
+  - {"id": "x36", "kind": "blind2", "q": "Qu'est-ce qu'on fait de notre ancienne auto?", "want": ["decisions/2026-09-30-voiture-electrique"]}
+  - {"id": "x37", "kind": "blind2", "q": "What did the teacher say about my daughter being chatty during school?", "want": ["notes/2026-10-01-rencontre-parents"]}
+  - {"id": "x38", "kind": "blind2", "q": "Should we read aloud more with our girl at bedtime?", "want": ["notes/2026-10-01-rencontre-parents"]}
+  - {"id": "x39", "kind": "blind2", "q": "Which colleague is hoping to submit a funding proposal together with me?", "want": ["notes/2026-10-06-lunch-priya"]}
+  - {"id": "x40", "kind": "blind2", "q": "Qui écrit la partie sur l'approche de recherche dans notre demande?", "want": ["notes/2026-10-06-lunch-priya"]}
+  - {"id": "y01", "kind": "direct2", "q": "Chair of the computer science department", "want": ["people/rachid-benali"]}
+  - {"id": "y02", "kind": "direct2", "q": "voisine qui garde un double des clés", "want": ["people/marguerite-tremblay"]}
+  - {"id": "y03", "kind": "direct2", "q": "PhD student thesis on fuzzing", "want": ["people/daniel-okafor"]}
+  - {"id": "y04", "kind": "direct2", "q": "Garderie Les Lucioles heures d'ouverture", "want": ["orgs/garderie-les-lucioles"]}
+  - {"id": "y05", "kind": "direct2", "q": "Rénovation du sous-sol, choisir l'entrepreneur pour l'isolation", "want": ["projects/renovation-sous-sol"]}
+  - {"id": "y06", "kind": "direct2", "q": "Marathon training for the Ottawa race", "want": ["projects/marathon-training"]}
+  - {"id": "y07", "kind": "direct2", "q": "Location voiture électrique livraison en novembre", "want": ["decisions/2026-09-30-voiture-electrique"]}
+  - {"id": "y08", "kind": "direct2", "q": "Lunch avec Priya sur la subvention conjointe", "want": ["notes/2026-10-06-lunch-priya"]}
+  # carve: asked as an agent that must not get these notes back
+  - { id: c01, kind: carve, as: helper, q: "impôts remboursement comptable", want: [], forbid: [money/impots-2026, people/olivier-gagnon] }
+  - { id: c02, kind: carve, as: planner, q: "mortgage rate Caisse du Plateau", want: [], forbid: [money/mortgage, orgs/caisse-plateau] }
+  - { id: c03, kind: carve, as: helper, q: "Oli", want: [], forbid: [people/olivier-gagnon] }
+  - { id: c04, kind: carve, as: claude, q: "tax refund 2026", want: [], forbid: [money/impots-2026] }
+  - { id: c05, kind: carve, as: helper, q: "maison de campagne Noël", want: [], forbid: [decisions/2026-10-05-campagne-noel, notes/2026-09-15-maison-campagne] }
+  - { id: c06, kind: carve, as: helper, q: "Chloé TA", want: [decisions/2026-10-02-hire-ta, people/chloe-martin], forbid: [money/impots-2026] }

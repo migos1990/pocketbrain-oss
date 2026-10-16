@@ -1,0 +1,5 @@
+# Robin's real message ids in the synthetic world (fixture).
+messages:
+  - { id: "imsg:phonemsg-01X0EXAMPLEL0VISTEXT0001", added: 2026-10-04 }
+  - { id: "imsg:phonemsg-01X0EXAMPLEL0VISTEXT0002", added: 2026-10-04 }
+  - { id: "imsg:phonemsg-01X0EXAMPLEL0VISTEXT0003", added: 2026-10-04 }

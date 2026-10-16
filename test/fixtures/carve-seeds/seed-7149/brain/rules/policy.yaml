@@ -1,0 +1,45 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: trial
+    slices:
+      - s2
+      - area:home
+  bex:
+    tier: core
+    slices:
+      - s2
+      - area:side
+    exclude_types:
+      - people
+    max_sensitivity: secret
+    exclude:
+      - orgs/tevegyth-taquzon
+  cyd:
+    tier: trial
+    slices:
+      - s2
+    exclude_types:
+      - decisions
+    exclude:
+      - decisions/ruryth-tumuth
+  dax:
+    tier: trial
+    slices:
+      - area:side
+      - area:home
+    max_sensitivity: private
+    exclude:
+      - notes/gusyx-golex
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  side: {}
+  work: {}
+  home: {}

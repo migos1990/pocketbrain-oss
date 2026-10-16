@@ -1,0 +1,21 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//EN
+BEGIN:VEVENT
+UID:evt-0001@example.com
+DTSTART:20260915T140000Z
+SUMMARY:Course A sync
+ORGANIZER;CN=Alex Doe:mailto:alex.doe@example.com
+ATTENDEE;CN="Omar Haddad";PARTSTAT=ACCEPTED:mailto:omar.haddad@northfield.example
+ATTENDEE;CN=Alex Doe:mailto:alex.doe@example.com
+ATTENDEE;CN=Room 204:mailto:c_1888@resource.calendar.google.com
+END:VEVENT
+BEGIN:VEVENT
+UID:evt-0002@example.com
+DTSTART:20261201T140000Z
+SUMMARY:Future thing
+ORGANIZER;CN=Alex Doe:mailto:alex.doe@example.com
+ATTENDEE;CN=Priya Natarajan:mailto:priya@
+ bigco.example
+END:VEVENT
+END:VCALENDAR

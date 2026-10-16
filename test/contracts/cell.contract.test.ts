@@ -1,0 +1,206 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Contract for src/cell.ts: an agent's cell holds its carved slice and nothing else, and reads
+// through it answer like the hub. A bug fixed in cell.ts adds a row here.
+import { test, expect, afterEach, spyOn } from "bun:test";
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, dirname, relative } from "node:path";
+import { makeBrain } from "../fixture";
+import { loadBrain } from "../../src/brain";
+import { loadRules } from "../../src/rules";
+import * as rulesModule from "../../src/rules";
+const realLoadRules = rulesModule.loadRules;
+import { carve, grantFor } from "../../src/carve";
+import { useCells, buildCell, buildCells, cellDir, cellsDir, cellInfo, cellGeneration, freshCell } from "../../src/cell";
+import * as core from "../../src/core";
+import { handle } from "../../src/server";
+import { issueToken, revokeTokens } from "../../src/auth";
+
+afterEach(() => useCells(false));
+
+const SRC = `sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-01`;
+function note(root: string, id: string, fm: string, facts = "", body = "") {
+  const p = join(root, `${id}.md`);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, `---\nid: ${id}\ntitle: ${id}\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\n${fm}\n${facts ? `facts:\n${facts}\n` : ""}---\n${body}\n`);
+}
+const git = (root: string, args: string[]) => Bun.spawnSync(["git", ...args], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
+const policy = (root: string, from: string, to: string) => {
+  const p = join(root, "rules/policy.yaml");
+  writeFileSync(p, readFileSync(p, "utf8").replace(from, to));
+};
+const files = (dir: string) => readdirSync(dir, { withFileTypes: true, recursive: true }).filter((e) => e.isFile()).map((e) => relative(dir, join(e.parentPath, e.name))).sort();
+const cellText = (root: string, agent: string) => files(cellDir(root, agent)).map((f) => f + "\n" + readFileSync(join(cellDir(root, agent), f), "utf8")).join("\n");
+
+// The fixture plus a note that carries every kind of thing a cell must strip.
+function brain() {
+  const root = makeBrain();
+  note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active\nsuperseded_by: money/main-bank",
+    `  next_step: { value: Book the room, as_of: 2026-10-01, share_with: [planner, helper, steward], ${SRC} }\n` +
+    `  room_code: { value: Door 4417, as_of: 2026-10-01, sensitivity: private, ${SRC} }`,
+    "Pay via Maple Trust Bank, see [[money/main-bank]] and [[projects/course-a]].");
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "course-c"]);
+  return root;
+}
+
+test("contract cell: a cell holds exactly the agent's carve, note for note (invariant 10)", () => {
+  const root = brain();
+  buildCells(root);
+  const rules = loadRules(root), notes = loadBrain(root);
+  for (const agent of ["steward", "planner", "helper", "gardener"]) {
+    const want = [...carve(notes, rules, grantFor(rules, agent)).visible.keys()].map((id) => `${id}.md`).sort();
+    const held = files(cellDir(root, agent)).filter((f) => !f.startsWith("rules/") && f !== "cell.json");
+    expect(held, agent).toEqual(want);
+  }
+});
+
+test("contract cell: a cell names no other agent and holds nothing carved (invariant 10)", () => {
+  const root = brain();
+  buildCells(root);
+  const helper = cellText(root, "helper");
+  const rows: [pattern: RegExp, present: boolean][] = [
+    [/\b(steward|planner|gardener)\b/i, false], // fact `by`, share_with and policy name only helper
+    [/^by:/m, false],
+    [/share_with:\s*\[?\s*-?\s*helper\s*\]?/, true],
+    [/money\/main-bank|money\//, false], // links and superseded_by to hidden notes
+    [/superseded_by: redacted/, true],
+    [/Pay via \[withheld\], see \[\[redacted\]\] and \[\[projects\/course-a\]\]/, true],
+    [/Maple Trust Bank|Door 4417|room_code/, false], // carved values and hidden facts
+    [/history:|legacy:/, false],
+  ];
+  for (const [p, present] of rows) expect(p.test(helper), String(p)).toBe(present);
+  // The cell's own policy: this agent alone, at its own ceiling, owning no areas.
+  const pol = readFileSync(join(cellDir(root, "helper"), "rules/policy.yaml"), "utf8");
+  expect(pol).toContain("max_sensitivity: personal");
+  expect(pol).toMatch(/areas: \{\}/);
+  expect(readFileSync(join(cellsDir(root), ".gitignore"), "utf8")).toBe("*\n"); // derived, never committed
+});
+
+test("contract cell: through the cell a hidden note answers like a missing one, as on the hub (invariant 3)", () => {
+  const root = brain();
+  const read = (id: string) => { try { core.readNote(root, "helper", id); return "found"; } catch (e) { return (e as Error).message; } };
+  const rows: [hidden: string, missing: string][] = [
+    ["money/main-bank", "money/no-such"],
+    ["decisions/2026-09-01-pick-bank", "decisions/2026-09-02-no-such"],
+    ["people/paul-advisor", "people/no-such"],
+  ];
+  for (const on of [false, true]) {
+    useCells(on);
+    for (const [hidden, missing] of rows) {
+      expect(read(hidden), `${on} ${hidden}`).not.toBe("found");
+      expect(read(hidden).replace(hidden, "X"), `${on} ${hidden}`).toBe(read(missing).replace(missing, "X"));
+    }
+  }
+});
+
+test("contract cell: kill switches and missing grants hold with cells on (invariant 8)", () => {
+  const root = brain();
+  useCells(true);
+  core.contextPack(root, "helper"); // the cell exists
+  policy(root, "helper: { tier: trial,", "helper: { status: paused, tier: trial,");
+  const rows: [what: string, fn: () => unknown, err: string][] = [
+    ["paused agent reads its built cell", () => core.readNote(root, "helper", "projects/course-a"), "paused"],
+    ["paused agent searches", () => core.search(root, "helper", "course"), "paused"],
+    ["unknown agent gets no cell", () => buildCell(root, "nobody"), "nobody has no grant"],
+  ];
+  for (const [what, fn, err] of rows) expect(fn, what).toThrow(err);
+});
+
+test("contract cell: a stale cell is rebuilt before it's read, a current one is not", () => {
+  const root = brain();
+  freshCell(root, "planner");
+  const rows: [what: string, change: () => void, slices: string[] | undefined, rebuilt: boolean][] = [
+    ["nothing changed", () => {}, undefined, false],
+    ["brain committed", () => { note(root, "projects/course-d", "type: project\narea: work\nsensitivity: personal\nstatus: active"); git(root, ["add", "-A"]); git(root, ["commit", "-qm", "d"]); }, undefined, true],
+    ["slices narrowed (OpenFGA)", () => {}, ["contacts-basic"], true],
+  ];
+  // "Rebuilt" means brought up to date: after a commit the cell may be updated in place
+  // (affectedBy), so the test reads the cell's build number and commit, not a wiped directory.
+  for (const [what, change, slices, rebuilt] of rows) {
+    change();
+    const gen = cellGeneration(cellDir(root, "planner"));
+    const { info } = freshCell(root, "planner", slices);
+    expect(cellGeneration(cellDir(root, "planner")) !== gen, what).toBe(rebuilt);
+    expect(info.brain_commit, what).toBe(git(root, ["rev-parse", "--short", "HEAD"]).stdout.toString().trim());
+    if (slices) expect(info.slices, what).toEqual(slices);
+  }
+});
+
+// Narrowings that take the full-rebuild path (slice audit of claude/read-after-write): after each,
+// the narrowed note is gone from the cell, a read answers exactly as for a missing id, and the
+// cell is byte for byte what a fresh build makes.
+test("contract cell: a narrowing (by-name exclude, a sensitivity raise) leaves the cell as a fresh build would", () => {
+  const read = (root: string, id: string) => { try { core.readNote(root, "helper", id); return "found"; } catch (e) { return (e as Error).message.replaceAll(id, "<id>"); } };
+  const rows: [what: string, narrow: (root: string) => void][] = [
+    ["by-name exclude", (root) => policy(root, "helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }", "helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money], exclude: [people/jane-roy] }")],
+    ["sensitivity raised to secret", (root) => { const p = join(root, "people/jane-roy.md"); writeFileSync(p, readFileSync(p, "utf8").replace("sensitivity: personal", "sensitivity: secret")); }],
+  ];
+  for (const [what, narrow] of rows) {
+    const root = brain();
+    useCells(true);
+    buildCells(root);
+    expect(existsSync(join(cellDir(root, "helper"), "people/jane-roy.md")), what).toBe(true);
+    expect(read(root, "people/jane-roy"), what).toBe("found");
+    narrow(root);
+    git(root, ["add", "-A"]); git(root, ["commit", "-qm", "louis: narrow"]);
+    buildCell(root, "helper");
+    expect(existsSync(join(cellDir(root, "helper"), "people/jane-roy.md")), what).toBe(false);
+    expect(read(root, "people/jane-roy"), what).toBe(read(root, "people/no-such-person"));
+    const updated = cellText(root, "helper");
+    buildCells(root);
+    expect(updated, what).toBe(cellText(root, "helper"));
+    useCells(false);
+  }
+});
+
+test("contract cell: a revoked agent's cell stays until it leaves the policy, but no token reaches it", async () => {
+  const root = brain();
+  useCells(true);
+  const tok = issueToken(root, "helper");
+  const get = async () => (await handle(root, new Request("http://pb/v1/notes/projects%2Fcourse-a", { headers: { authorization: `Bearer ${tok}` } }))).status;
+  expect(await get()).toBe(200);
+  revokeTokens(root, "helper");
+  buildCells(root);
+  expect(await get()).toBe(401);
+});
+
+test("contract cell: removing an agent from policy removes its cell", () => {
+  const root = brain();
+  buildCells(root);
+  expect(cellInfo(root, "helper")?.agent).toBe("helper");
+  policy(root, "  helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }\n", "");
+  buildCells(root);
+  expect(cellInfo(root, "helper")).toBeUndefined();
+  expect(existsSync(cellDir(root, "helper"))).toBe(false);
+});
+
+test("contract cell: a rules edit during a build never leaves the cell stamped as current (G106)", () => {
+  const root = makeBrain();
+  useCells(true);
+  const p = join(root, "rules", "policy.yaml");
+  const before = readFileSync(p, "utf8");
+  const after = before.replace("exclude_types: [money] }\n  # Keeps", "exclude_types: [money], exclude: [projects/course-a] }\n  # Keeps");
+  expect(after).not.toBe(before);
+  // The owner's editor saves rules/ right after the build has read them.
+  const spy = spyOn(rulesModule, "loadRules").mockImplementation((r: string) => { const out = realLoadRules(r); writeFileSync(p, after); return out; });
+  try { buildCell(root, "planner"); } finally { spy.mockRestore(); }
+  // The cell was carved from the old rules, so the next read must rebuild it and apply the exclude.
+  const outcome = () => { try { core.readNote(root, "planner", "projects/course-a"); return "served"; } catch (e) { return (e as Error).message; } };
+  expect(outcome()).not.toBe("served");
+});
+
+test("contract cell: an uncommitted fact-level exclude vanishes after two builds and comes back on revert", () => {
+  const root = brain();
+  useCells(true);
+  buildCell(root, "planner");
+  expect(cellText(root, "planner")).toContain("Book the room");
+  const p = join(root, "rules", "policy.yaml");
+  const orig = readFileSync(p, "utf8");
+  const edited = orig.replace("exclude_types: [money] }\n  # Keeps", "exclude_types: [money], exclude: [projects/course-c#next_step] }\n  # Keeps");
+  expect(edited).not.toBe(orig);
+  writeFileSync(p, edited);
+  freshCell(root, "planner"); freshCell(root, "planner");
+  expect(cellText(root, "planner")).not.toContain("Book the room");
+  writeFileSync(p, orig);
+  freshCell(root, "planner");
+  expect(cellText(root, "planner")).toContain("Book the room");
+});

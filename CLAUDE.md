@@ -1,0 +1,227 @@
+# pocketBrain: notes for agents working on this repo
+
+pocketBrain is Louis's second brain, shared by several AI assistants (Instinct, Town, Muse, Claude). Each assistant sees only the slice ("carve") that Louis grants it. This repo is the **tool**. The **brain** itself is a separate private git repo of Markdown notes. Read this file first; it should save you the search.
+
+## The two repos, and what never mixes
+
+| | Where | Rule |
+|---|---|---|
+| Code (this repo) | local working copy, mirrored to `/mnt/project-files/pocketbrain-app` | Public (AGPL-3.0). No real brain data here, ever. Tests use `examples/brain`, the fictional sample brain, through `test/fixture.ts`. Personal config (e.g. Notion area hints) goes in the brain's `rules/`, not in code. |
+| Brain | `/mnt/project-files/pocketbrain-brain` | Private. Never pushed to GitHub. Test against a `git clone` in a temp dir, never against the original. |
+| Design docs | `/mnt/project-files/pocketbrain/*.md` (originals) | `docs/` holds scrubbed public copies; never copy the originals over them. `sh scripts/check-public.sh <private denylist>` must pass before anything is published. The public repo is made with `sh scripts/public-export.sh <empty folder> <private denylist>` (HEAD minus `scripts/public-exclude.txt`, fresh history). |
+
+`docs/` describes today's code; `docs/history/` holds the 2026-10-08 design records, kept as written. `docs/history/architecture.md` section 0 is the agreed v1 and overrides the rest of that file; `docs/history/memory-shape.md` is the original note format spec (the code wins where they differ). Files left out of the public repo are listed in `scripts/public-exclude.txt`.
+
+## Commands
+
+```sh
+bun install
+bun test                     # all tests, ~15s; must stay green, no skips; needs ssh-keygen, age, ffmpeg and Playwright Chromium (test/tools.ts names what's missing)
+bunx tsc --noEmit            # typecheck (src, test, scripts)
+bun run deadcode             # unused files and dependencies (knip.json); bun run check runs everything
+bun run demo [--brain <p>]   # end-to-end story on a throwaway copy
+bun run smoke <url> <token>  # outside-in check of a running hub
+bun run perf                 # 10k-note synthetic brain against latency budgets (docs/perf.md)
+bun run crash                # kill -9 the hub mid-write, mid-sleep, mid-backup; check nothing is lost
+PB_BRAIN=<brain> bun src/cli.ts help   # every CLI command
+```
+
+## Where things are
+
+| You want… | Look in |
+|---|---|
+| Note types, parse/save, `today()` (honours `PB_TODAY`) | `src/brain.ts` |
+| `rules/` loading (policy, slices, checks, RULES.md); co-owners for shared areas (`checkCoOwners`, `coOwnerOf`), see `docs/household.md` | `src/rules.ts` |
+| Who sees what: `carve`, `grantFor`, hidden-fact reasons, preview leak flags | `src/carve.ts` |
+| The waiting session on the OAuth door: an owner sign-in not yet approved gets only `request_access` (name, purpose, slices it would like), stored on its waiting entry for the dashboard card; nothing from the brain. See `docs/add-an-agent.md` | `src/access-request.ts` |
+| A new agent in one step (`pocketbrain add`, the dashboard's new-agent card): always trial, never the all slice, money out by default; the preview is the server's own carve. See `docs/add-an-agent.md` | `src/addagent.ts` |
+| Consent in plain words (`pocketbrain consent`, the dashboard's "What is it for?" box): a sentence becomes a proposed slice with examples; a model may propose, `checkChoice` decides (known slices and kinds only, never all, money out unless asked); applying is one owner commit. See `docs/consent.md` | `src/consent.ts`, `src/dashboard/html-consent.ts` |
+| One-time invite codes (`pocketbrain invite`, `POST /v1/enroll`, hashes in `rules/invites.yaml`, rate-limited guesses) and the discovery document `/.well-known/pocketbrain`, also at `/.well-known/memory-passport` (in `src/server.ts`). See `docs/spec/agent-onboarding.md`; the open door spec is `docs/spec/memory-passport.md`, its conformance suite and reference server are in `conformance/` (run by `test/conformance.test.ts`) | `src/invite.ts` |
+| Slice sharing for a collaborator (`pocketbrain share add|list|extend|end`): a person's assistant reads a slice, read-only, until a date; personal at most, no money, no all, no ask to see, enforced in `loadRules`. See `docs/share.md` | `src/share.ts` |
+| What an agent receives (Markdown view, `renderNote`, `[withheld]` and `[[redacted]]`) | `src/view.ts` |
+| Write checks (schema, secrets, injection, protected paths), always-on list `ALWAYS_ON` | `src/checks.ts` |
+| The one write function: tripwire, entity resolution, tier/owner routing, conflict steps 1–7, inbox, disputes | `src/write.ts` |
+| Source refs, ranks, ref extraction from text | `src/sources.ts` |
+| Live server logic per agent (context, search, read, remember, dispute endpoints) | `src/core.ts` |
+| Per-agent cells: each agent's reads come from a directory holding only its slice | `src/cell.ts` |
+| HTTP adapters: MCP (`/mcp`), JSON API (`/v1`), OpenAPI | `src/server.ts` |
+| The browser door (`/b`): a sign-in form a vault can fill, a session cookie, HTML pages for orientation, changes, context, search, notes and remember; off unless `browser: true` in policy.yaml (`connect <agent> --browser`). See `docs/browser-door.md` | `src/browser.ts` |
+| The logo favicon (bar near-black on light tabs, white on dark), shared by the dashboard and the browser door | `src/favicon.ts` |
+| What an agent is told on connect (MCP `instructions`, `orientation` tool, `GET /v1`, `GET /v1/orientation`), generated per agent from policy.yaml and its carve | `src/orientation.ts` |
+| Per-agent tokens (hashes in `rules/tokens.yaml`), each with an optional role (`token --role reader\|resolver`, eval gap G18) | `src/auth.ts` |
+| Token roles at request time: the server runs each request under its token's role; `grantFor` caps a reader at personal, the write path skips owner-id auto-registration for it, resolver routes are `/v1/disputes` and `/v1/owner/` only. No role = as before | `src/tokenrole.ts` |
+| The OAuth door for OAuth-only assistants (Muse): `/mcp/oauth`, its resource metadata, JWT checks against the hosted AS, client-to-agent bindings in `rules/oauth.yaml`, waiting clients in `.oauth/` (lapse after a day, capped per hour), the owner's one-client approval window (`oauth expect`), a reconnect replacing the agent's old client (`replaced`, `oauth cleanup`). See `docs/oauth.md` | `src/oauth.ts` |
+| Owner dashboard (loopback only, login link + cookie + CSRF): reads in `data.ts`, Louis's buttons in `actions.ts`; Ask and model-proposed edits in `ask.ts`, in-place edits, the editor, Forget and Bring back (`git rm` in one owner commit with a `Forgot:` trailer; Bring back trusts only an owner-authored forget of a content note), "It was never right" (`ended_by.correction`) and who-can-see (by-name `exclude` in policy.yaml, note level) in `edit.ts`, their pages in `html-brain.ts`; the Who matters page (standing suggestions and the owner's list, `setStanding` per click) in `people.ts` | `src/dashboard/` |
+| AgentMail relay (checks, hold/forward, comms record); the request check (step 3c, model step `relay.flag`, holds only, off unless `relay: { classify: true }` in policy.yaml until gap G26 is fixed) in `relayTick`, which `start` runs; `relay --check` for other channels (`relayCheck`). See `docs/relay.md` | `src/relay.ts` |
+| Handoffs between assistants: `hand_off` / `handoff_done` (MCP), `/v1/handoffs`, relay checks against the recipient's slice, trial agents held, kept in `handoffs/` (never in a view), shown first by whats_new; `pocketbrain handoff`. See `docs/handoffs.md` | `src/handoff.ts` |
+| Per-agent request budget on every door: requests a minute and writes an hour per token role, 429 with Retry-After, one alert a day (`budget:` in policy.yaml). See `docs/hub.md` | `src/budget.ts` |
+| Agent logs: intake (`log_session`, `/v1/logs`), holds, read-back by the author only, Louis's search, retention; vendor export parsers. See `docs/agent-logs.md` | `src/logs.ts`, `src/import/logs.ts` |
+| Upkeep agent "reflect" (rule-only fixes and findings) | `src/upkeep.ts` |
+| Model-judged steps; bring-your-own model adapter; routing by role (executors on a cheaper model, a `review` role with no step; `steps:` lines pick a step's model, `roles:` and `routing: off` in models.yaml; `pocketbrain models`) | `src/judge.ts`, `src/model.ts` |
+| Checks after an agent write: the quick gardener (`write.conflicts`, Needs-you alert) and the second-opinion classifier (`write.classify`, raise-only, off unless `aftercheck.classify` in policy.yaml); queue in `log/aftercheck.jsonl`, retried nightly. See `docs/aftercheck.md` | `src/aftercheck.ts` |
+| Nightly sleep pass: forget unused facts (`retired`, never `valid_to`), journal lines -> inbox proposals, judge, morning note. See `docs/sleep-and-explain.md` | `src/sleep.ts` |
+| Louis's merge of two duplicate notes (never picks a winner, flags only tighten) | `src/merge.ts` |
+| `explain <agent> [topic]`: in/out and why per note and fact, who was handed it. Louis-only, never served | `src/explain.ts` |
+| Provenance of one fact (`pocketbrain why <id#attr>`, dashboard Where from, `why` tool / `GET /v1/why`): sources and their strength, earlier values and every logged write for the owner; an agent gets only a fact in its view, no history, committed writes only, other agents unnamed. See `docs/why.md` | `src/why.ts` |
+| Read log (`log/reads.jsonl`), hash-chained; use signal for forgetting | `src/readlog.ts` |
+| Who read what (`pocketbrain reads <agent>`, the agent page's "What it read, day by day"): per day the notes an agent was handed and its searches, and an "unusual" line when most of a day is outside the areas it read in the 28 days before. Owner only, never served. See `docs/sleep-and-explain.md` | `src/whoread.ts` |
+| Live Google sources (Gmail, Calendar, Drive): read-only OAuth (`sources connect`), history cursor, sync tokens and per-folder modifiedTime, one item for `verify_source` | `src/google.ts` |
+| Live Discord (read-only bot, GET only), texts (the Mac's Messages database, read only) and Granola (local cache) for source pulls | `src/feeds.ts` |
+| Daily digest | `src/digest.ts` |
+| The digest's one-line scorecard: latest memory exam pass count and switch-day score (from `evals/history/switchday.jsonl`), each with its day. See `docs/memory-sync.md` | `src/scorecard.ts` |
+| The decision deck: cards from everything that needs the owner (`openItems`) plus stale facts, Later, stats, and the hub letting an outside assistant's unanswered proposal expire (`runAuto`, each tick of the text channel; conflicts never, nor private, money, health, legal or the owner's word), undo, `pocketbrain deck`. Page `src/dashboard/html-deck.ts` on the contract `src/dashboard/deck-types.ts`. See `docs/decision-deck.md` | `src/deck.ts` |
+| First-week numbers: re-explanations, owner minutes, freshness served, texts, `week` scorecard and verdicts; hand fixes (`pocketbrain fix`, plus hand edits, hand restarts and repair commands the hub detects: `handEdits`, `noteStart`, `recordRepair`), the real-use bar (`pocketbrain bar`, the digest, an Overview card) and the owner's hand tasks (`pocketbrain task`). See `docs/real-use-bar.md` | `src/measure.ts` |
+| `start`: server + dashboard + text channel + relay + nightly upkeep/sleep + digest in one process; launchd plists | `src/start.ts` |
+| The night pass's housekeeping: `git gc --auto` (commits never run git's own gc), hub launchd logs rotated at 10 MB x 3, `.git` against its budget (`PB_GIT_MAX_MB`). See `docs/perf.md` | `src/growth.ts` |
+| The Mac menu-bar app's logic: `pocketbrain menubar` (hub up, day N of the bar, agents, dashboard link; install or restart the hub under launchd; `menubar setup` is the first-run window: init + install + the first agent's token) and `pocketbrain agent pause|read-only|revoke` (tighten only; resume is the dashboard's), `menubar open-dashboard` (the login link is never printed). The SwiftUI app in `macos/PocketBrainBar/` only draws its JSON. See `docs/menubar.md` | `src/menubar.ts` |
+| A lock between processes on one brain (`withFileLock`: O_EXCL file in `.git/` with pid and time, stale after the process dies or 10 min, never waits), taken by the deck's auto-decide step so the hub and `deck auto` never decide at once. See `docs/decision-deck.md` | `src/filelock.ts` |
+| Shared helpers: `sha256`, `escapeRe`, `hasWord`, `readJsonl`/`appendJsonl`, `alert` | `src/util.ts` |
+| Text channel to Louis: 5-minute poller, `rules/escalation.yaml`, one-word replies, transport Instinct only by Louis's choice (Twilio, iMessage, fake kept, unused), Instinct's `/v1/louis/` routes. See `docs/text-channel.md` | `src/textline/` |
+| Notion import and its text repairs (`cleanText`) | `src/import/notion.ts` |
+| New brain from nothing (`init`): plain-text seed format, Gmail .mbox / .ics export, interview; owner named in `policy.yaml` `owner.name` | `src/init.ts`, `docs/quickstart.md`, `examples/seed/` |
+| Install: today `git clone` + `bun link`; npm package `pocketbrain` prepared but unpublished (`files` in package.json; `test/init.test.ts` checks what ships), `install.sh` (Bun if missing, then `bun add -g`); `init` remembers the brain in `~/.config/pocketbrain/brain` (`PB_CONFIG_DIR` in tests) unless one is already remembered, used when no `--brain`, `$PB_BRAIN` or brain cwd; it gives area ownership only for the area its agent reads | `package.json`, `install.sh`, `brainRoot()` in `src/cli.ts` |
+| Full handover to a person (owned by the portability thread) | `src/handover.ts` |
+| Export and import (`pocketbrain export [--agent]`, `pocketbrain import <bundle> --into <dir>`): the brain as a Memory Passport bundle (notes and the rules a carve reads; no tokens, logs, inbox or secrets) or one agent's slice as its reads answer; a brain bundle imports into a fresh folder with the same carve per agent. See `docs/export.md` | `src/passport.ts` |
+| Capture channels: agent route (`captureFromAgent` in core.ts), mailbox (AgentMail or Maildir), phone drop folder, `intakeTick`. Store, hold, dedupe and extract in `src/capture.ts`. See `docs/capture.md` | `src/intake.ts` |
+| Voice notes: the owner's transcriber from `rules/models.yaml` step `capture.transcribe` (a local command, or an OpenAI-compatible API with a key), off by default; audio never enters the brain. See `docs/capture.md` | `src/transcribe.ts` |
+| Words quoted from a source wait beside an open proposal, outside git (`.git/pb-quotes/`), for the owner's text and card, and are swept when it is decided (`putQuote`, `getQuote`, `sweepQuotes`). Never in a proposal file, decided copy, commit, digest or log. See `docs/sources-pull.md` | `src/quotes.ts` |
+| Is the brain filling? Per source: capture proposals kept, dropped and open, pull re-confirmations, owner minutes, graded against 50 a week, 85% kept, 2 minutes a day (`pocketbrain fill`). See `docs/sources-pull.md` | `src/fill.ts` |
+| Source pulls: the hub reads the sources listed in `rules/sources.yaml` (mail, calendar, Discord, texts, Granola, Drive; owner `consent:` line required), distils facts through the capture pipeline, `verify_source` for the gardener (`pocketbrain sources`). See `docs/sources-pull.md` | `src/pull.ts` |
+| The owner's rules setters, so no rules/ value is typed by hand: `gardener setup` (rules/gardener.yaml, the deployments' vault id), `night managed|local`, `hub url`, `fga model` saving `model_id`; each edits only its keys, keeps comments, one owner commit, hub only; `missingOwnerValues` for doctor's setup lines | `src/ownerset.ts` |
+| One hub, many replicas: `rules/hub.yaml`, the commit gate, ops queue and replay, signed-commit checks, sync, promote. See `docs/hub.md` | `src/hub.ts` |
+| Leaving: `pocketbrain uninstall` plans, and with `--yes` runs, the removal of the launchd jobs, logs, pocketBrain's tunnel config, the menu-bar app and the keys folder; brain and backups stay (`--remove-brain` for the brain only); account-side steps are only listed. See `docs/quickstart.md#leaving` | `src/uninstall.ts` |
+| A door per pilot user: `pilot door` (operator: named tunnel + hostname via cloudflared) and `door install` (pilot: credentials 0600, agent-API-only ingress, `public_url`). See `docs/pilot-door.md` | `src/door.ts` |
+| The sealed edge: per-agent cells sealed per token, served while the hub sleeps, writes queued sealed to the hub and replayed. See `docs/edge.md` | `src/edge.ts` |
+| Encrypted backups, rotation, restore onto a clean machine, `drill` (copy, back up, wipe, restore, diff). Runbook: `docs/backup.md` | `src/backup.ts` |
+| Ranked retrieval (BM25) over one agent's rendered carve, behind `search` and `context_pack` | `src/retrieve.ts` |
+| French-English word map that widens a search query across languages (off unless `PB_LEXICON=1`, gap G172) | `src/lexicon.ts` |
+| Freshness, computed when a view is built, never stored | `src/freshness.ts` |
+| Normalizers before any comparison, so formatting differences never become conflicts | `src/normalize.ts` |
+| One leak matcher shared by the relay and the write-path tripwire (spacing, case, look-alikes) | `src/match.ts` |
+| The owner's own message registry (rank 5); an unknown message id goes to the owner, not the brain. The dashboard's inbox card says "claimed to be you" for any proposal that cites an unregistered exact owner id, whatever route filed it (`proposals()` in `src/dashboard/data.ts`), since accepting registers it | `src/louis.ts` |
+| OpenFGA as a second lock on slices (`pocketbrain fga`, `rules/fga.yaml`). See `docs/fga.md` | `src/fga.ts` |
+| Coworker offboarding that follows the sign-in service | `src/offboard.ts` |
+| Model price table for the meter and spend caps | `src/pricing.ts` |
+| Keys for launchd hubs, one file per variable in `~/.config/pocketbrain/keys/` | `src/secrets.ts` |
+| Agent memory sync: scan readable agent memories, quiz the others, owner-approved corrections (`pocketbrain memsync`). See `docs/memory-sync.md` | `src/memsync.ts` |
+| Belief radar: fact by assistant picture of what each one's own memory holds, every stored answer re-graded against the brain now, and `fixEverywhere` (approve waiting corrections, ask the rest) (`pocketbrain beliefs`). Owner-only. See `docs/memory-sync.md` | `src/beliefs.ts` |
+| Quiz budget for the belief radar: at most N questions per assistant a week, never-asked facts first, then standing, reads and age (`pocketbrain beliefs plan [--ask]`). Owner-only. See `docs/memory-sync.md` | `src/quizplan.ts` |
+| Memory exam: per-agent scorecard from the logs (quiz verdicts, brain-first reads, source refusals, slice probes), weekly in `start`, digest line (`pocketbrain exam`). See `docs/memory-sync.md` | `src/exam.ts` |
+| Memory import: an agent's memory files, a claude.ai export or the owner's notes become inbox proposals through the capture pipeline (`pocketbrain memsync import`). See `docs/memory-sync.md` | `src/memimport.ts` |
+| Health probe in `start` (every `PB_PROBE_MINUTES`, default 120): local `/health`, public door, plain-401 `/mcp`, OAuth door metadata; job checks with no network (`jobChecks`: nightly pass, its housekeeping and digest failed or over 36h old, backup stale, last 3 texts failed, a model key in the keys folder the hub didn't load, auto-update rolled back, blocked or not run for 3h, a consented source silent for 72h: `silentSources` in `src/fill.ts`), see `docs/real-use-bar.md`; a check that starts failing becomes one `hub` alert; state in `log/probe.json`. `bun run check` is the pre-PR check (tests, typecheck, evals) | `src/probe.ts` |
+| Weekly carve audit (`pocketbrain audit carve`, Sundays in `start`): each agent's grant and visible notes and facts against the last snapshot in `log/carve-audit.jsonl`, every widening traced to its commits, `carve_widened` alert unless the owner made them. The write-path fuzz is `test/fuzz-write.test.ts`. See `docs/carve-audit.md` | `src/audit.ts` |
+| Canary kit (`pocketbrain probe init`, `probe check`): decoy notes in the `probe` area that only a slice naming it reaches, canaries in `rules/canaries.yaml`, the leak oracle `findCanaries`, the write-path refusal (the agent sees check `leak_tripwire`; only the owner's alert says canary) and the read path's `canary_served` alert. See `docs/canaries.md` | `src/canary.ts` |
+| `pocketbrain doctor`: hub, replicas, signatures, ops, server, public door, dashboard exposure, snapshots | `src/doctor.ts` |
+| `pocketbrain doctor --fix [--yes]`: the safe repairs a doctor line names in `fix` (stale git lock, gardener.yaml, public_url from the tunnel's hostname, tunnel ingress, a backup); preview first, `--yes` runs them, logs one hand fix, checks again | `src/doctor-fix.ts` |
+| Spend caps on the brain's own model calls: `log/usage.jsonl` (hash-chained), `usage:` in policy.yaml, per-month and per-step caps that pause model steps, `pocketbrain usage`, the dashboard's Spend page. Reads and writes are never metered. See `docs/usage.md` | `src/usage.ts`, `src/dashboard/usage.ts` |
+| The evidence block on each inbox proposal, written by the hub (notes touched, refs, the value it replaces, `verify_source` verdicts for that value), shown on the dashboard card. See `docs/gardener.md` | `src/evidence.ts` |
+| The gardener (`role: gardener`): its door (`upkeep_run`, `sleep_run`, `changes_since`, `last_run` in core.ts), proposal cap, hours tripwire, `night: managed`, `ant` cleanup and token rotation (`rules/gardener.yaml`). See `docs/gardener.md` | `src/gardener.ts` |
+| `pocketbrain tend --managed [--apply]`: the gardener's Managed Agents files for the owner's own account (name, door, timezone, windows from their brain); `--apply` runs them through `ant`, token into the vault on stdin, deployments created paused. See `docs/gardener.md` | `src/tend.ts` |
+| Ask to see: an agent asks for one read outside its slice, the owner approves on the phone (Auth0 Guardian via CIBA) or in the dashboard; `log/asks.jsonl`, `ask_read` in the read log, `pocketbrain ask`. See `docs/ask-to-see.md` | `src/asks.ts` |
+| The act door: an agent asks to send one mail (`act`, `act_status`, `POST /v1/act`); the `act` block in policy.yaml (validated and dropped for collaborators, the gardener, the resolver and owner channel, inside_wall, paused and read-only in `loadRules`), recipient list, tripwire and latch, outward screen, caps, dashboard-only approval bound to a content hash, re-checks at approve and send (offboarded coworkers too), `actions/log.jsonl` (chained) and fake transport `actions/fake/sent.jsonl`, both hub state the brain's git ignores, no network. Texts only reject or put off. See `docs/act.md` | `src/act.ts` |
+| What outbound text must not carry: `hiddenNeedles` (the union of the relay's and the write tripwire's hidden values; the relay and write path move onto it in the gaps thread), `outwardScreen` (values above a ceiling, with their notes) | `src/needles.ts` |
+| Standing: who matters to the owner (`rules/standing.yaml`, owner only, `pocketbrain standing`): tiers inner, close, known; the `standing:` line on person notes (carved like a personal fact named `standing`); `who_is` / `GET /v1/who` (address only, trusted and owner-pinned addresses); suggestions from pulled mail and texts (`log/standing/contacts.json`). Priority only; `STANDING_READERS` pins who may read it. See `docs/standing.md` | `src/standing.ts` |
+| UI quality: accessibility, keyboard, light and dark, empty/busy/error states for every dashboard and `/b` page, screenshot baselines with `PB_UI_SHOTS=1`. A new page goes in `test/ui-rig.ts`. See `docs/ui-quality.md` | `test/ui-quality.test.ts`, `test/ui-audit.ts` |
+| Attacks that must keep failing | `test/security.test.ts`, and the scripted red team in `evals/cases/redteam.ts` (`bun evals/run.ts --only rt`) |
+| The carve as a property: seeded random brains and policies (areas, tags, types, sensitivity, aliases, object and list facts, share_with, slices, excludes, tiers, reader tokens, merges, superseded decisions, handoffs); for every agent and token, no value, name, note id or generator date the leak oracle (`evals/lib/oracle.ts`) calls carved out reaches orientation, read, search, context_pack, whats_new or memory_check. 6 brains per `bun test`, `CARVE_SOAK=1` for 300, `CARVE_SEED=n` to replay, `CARVE_FREEZE=1` to freeze a failing seed into `test/fixtures/carve-seeds/` (replayed every run; `"gap"` in its meta.json marks a known open gap that must still fail) | `test/carve-property.test.ts`, `test/carve-gen.ts` |
+
+## Feature freeze (lifted by Louis, 2026-10-10)
+
+The freeze from 2026-10-08 is lifted. Still parked (log only, don't build): a compiled `index.md` per agent view, one line per visible note (title, type, freshness), for agents to scan before searching.
+
+## Invariants: don't break these
+
+1. **Enforcement is code, never prose.** `rules/RULES.md` is guidance only. Any sharing limit must hold even if an agent ignores every instruction.
+2. **Identity comes from the token** (server; for OAuth, from the owner's binding of the token's client in `rules/oauth.yaml`, never from the client's own name) or the `--as` flag the operator sets (CLI). Never from a request body.
+3. **A hidden note answers exactly like a missing one**, in read, search, write-by-id, write-by-title and slug collisions. Compare error messages in tests. A fact hidden from the writer is never changed by its write: retire answers like a missing fact, anything else goes to the inbox with one fixed reply (`write.ts`, eval gap G55). A carved value in a visible note's title or aliases, in any spelling the leak matcher catches, is `[withheld]` in that agent's carve copy (`carve.ts`, `withholdIn` in `match.ts`); a by-title write resolves against those copies. A new note's id leaves out values carved from other agents that the writer is shown, never ones carved from the writer (that would be an oracle), and a title with no Latin letters gets `note-<hash>` (`safeSlug` in `write.ts`, G56).
+4. **Flags only tighten.** `sensitivity` and `share_with` can be raised by an agent, never lowered. Only Louis loosens, by editing files. A record whose `share_with` an agent's own write set carries `shared_by: <agent>`; only then may that agent keep writing a fact it shared away from itself (not once the owner confirmed it or accepted a proposal into it, i.e. it carries an owner ref, and not once another writer merged into it, which drops `shared_by`). A `share_with` the owner set has no `shared_by`.
+5. **Only Louis edits `rules/`.** The write path refuses it and the digest flags any rules commit made by an agent.
+6. **Models never decide.** Model output becomes review items for Louis. Deterministic checks never call a model. Two exceptions only tighten: the opt-in classifier (`src/aftercheck.ts`) may raise a fact to private after its write committed, and the relay's request check (`src/relay.ts`, step 3c) may hold a message for the owner that the code checks passed; no model ever lowers, delivers, moves or undoes anything.
+7. **Every write is a git commit authored by the writer**, and `log/writes.jsonl` is hash-chained. Use `git()` from `src/git.ts`, which sets the author.
+8. **Louis's kill switches hold everywhere.** `status: paused | read-only` on an agent in policy.yaml is checked in `server.ts` (every request), `core.ts` (snapshot, resolver; read-only also stops dispute moves), `write()`, the memory-check reply (`memsync.ts`; read-only stops it) and the relay (read-only holds outgoing mail only). The dashboard sets it. New entry points must respect it.
+9. **Louis's editor skips routing only.** `owner_editor` in policy.yaml (set from the dashboard, none by default) lets that one agent's writes skip the trial tier and area-owner routing in `write()`. Every check, the tripwire, injection and secret checks, `rules/` protection, area changes going to Louis and the kill switches still apply; its log lines carry `as: "owner_editor"`.
+10. **Reads go through cells when serving.** `serve` builds `.cells/<agent>/` (only that agent's slice, links to hidden notes and carved values already scrubbed, no other agent named) and `core.snapshot()` reads from it. A new read entry point must go through `snapshot()`. Kill switches still read the hub's own rules. `bun test` passes with `PB_CELLS=1` too; keep it that way.
+11. **With `rules/hub.yaml`, only the hub commits brain changes.** `git()` runs `hubGate` before any commit: a replica may only commit its own `ops/<name>/` files, an unnamed clone nothing. `write()` on a replica queues an op instead; so do captures, inbox answers and upkeep (`queueOp`, applied by `applyOp` in hub.ts). A new commit path needs nothing extra, but it will be refused on replicas unless it queues an op.
+12. **Agents never see model spend, and reads and writes are never metered.** No agent-facing text (orientation, tools, API routes, errors, cells, the text channel that Instinct relays) changes with the spend cap; `test/usage.test.ts` and `evals/cases/usage.ts` require identical answers with no cap and over it. Nothing in the read or write path records usage. A new model step uses `modelFor()` (recorded, paused past its cap) and treats its error as "held".
+
+13. **Only the owner widens a read, one read at a time.** `ask_to_see` answers the same whether or not anything matches; an approval comes only from the dashboard or a CIBA approval for the owner's own Auth0 user, releases one note once, and never secret notes or `never` types. Nothing changes the agent's slice.
+
+14. **Standing sets priority, never access or trust.** Nothing that decides a check (relay, capture, pull checks, write path, injection, secrets, held mail) reads it; `test/standing.test.ts` pins the files that may (`STANDING_READERS` in `src/standing.ts`). Agents can't write it: `rules/` is read-only and a fact named `standing` is refused (`reserved_attribute`, always on). `who_is` matches the address, never the display name, and lifts nobody above `known` (nor gives them authority) through an address the owner didn't pin; `standing set` pins only owner-confirmed addresses unless the owner names more with `--pin`.
+
+15. **A co-owner's word counts only in the co-owner's areas** (`docs/household.md`). `loadRules` cuts a co-owner's assistant to those areas, personal at most, no money and none of the owner's roles; `write()` records its owner-word as `confirmed-by-co-owner` (never an owner ref, never in the owner's registry), refuses its writes elsewhere, and ranks the label as an owner's word only on that assistant's own record in that co-owner's area. No agent may send the label. slices.yaml can't redefine her area slice, ask to see offers her assistant nothing past those limits, and the resolver and the nightly pass treat her word there like the owner's.
+
+## How to add…
+
+- **A write check:** add a function block in `runChecks` (`src/checks.ts`). If it is security, put its name in `ALWAYS_ON`. Give it a test in `test/security.test.ts` or `test/write.test.ts`.
+- **A CLI command:** add a branch in `main()` (`src/cli.ts`) and a line in `USAGE`. A long-running command returns `-1`.
+- **An MCP tool or API route:** add the logic to `src/core.ts` (taking `agent`), then wire it in `TOOLS`/`callTool` and `api()` in `src/server.ts`, and in `OPENAPI`. Wrap writes in `serial()`. If it changes what an agent may do, say so in `src/orientation.ts`, which names no other agent and nothing outside the caller's carve. Bodies reach it as JSON objects (`bodyOf` refuses anything else with a 400) but their fields are the agent's: check types, and add the route to `test/malformed.test.ts`, which fails on any 500.
+- **A scheduled job (start.ts, gardener, a cloud routine):** it starts report-only: it logs and digests what it would change, and changes nothing until the owner turns it on in policy. Give it a slot (when it runs), a budget (calls or dollars per run, capped like model steps) and a `recordJob` status line so the probe sees it stop. A job that reports something wrong is fixed the same day, not left running.
+- **A number in a report, audit or eval summary:** a script prints it (`bun evals/run.ts`, `pocketbrain week`, `git` output) and you quote that output. Never count, time or compare by reading; models misread timestamps and lists.
+- **A model-judged step:** get the model with `modelFor(root, "<step>")` from `src/usage.ts` (recorded, and refused past the spend cap; treat the error as "held"), send only notes at or below `max_sensitivity` and never bodies, `logJudgment`, and output review lines. Test it with the `fake` provider.
+
+## Gotchas we hit
+
+- Every source file starts with `// SPDX-License-Identifier: AGPL-3.0-only`.
+- The owner is `owner` in code and in new records (`src/owner.ts`): `confirmed-by-owner`, `owner:<date>/<channel>` refs, git author `owner`, `rules/owner-messages.yaml`, `owner_channel`, `/v1/owner/`. The `louis` forms from the first brain are still read everywhere (`isOwnerConfirmed`, `OWNER_REF`, `isOwnerId`); never compare to one spelling. `git()` writes `owner.name` as the author, except a brain whose owner is Louis keeps `louis`. Agent-facing text says `ownerName(rules)` or "the owner", never a literal "Louis".
+- Other people's health, school, legal or money details are stored but forced to private, shared with the resolver only (`thirdPartySensitive` in `src/checks.ts`, applied in `write()`). Word lists that may meet accented text use `wordsRe` from `src/checks.ts`, never `\b`, which only knows ASCII letters (G129).
+
+- The shared mount needs `git config --global --add safe.directory '*'`.
+- `git add` of a path that doesn't exist fails the whole command silently, because `git()` doesn't throw. Add only paths that exist.
+- A write that must be in git uses `commitPaths` (src/git.ts): it commits only those paths, reports a failed commit and puts the files back (also when the hub gate throws), where `git()` would stay silent. Inbox answers (`decideProposal`) use it too. A stale `.git/index.lock`, `HEAD.lock`, `packed-refs.lock` or `refs/**/*.lock` (over a minute old, left by a killed git command) is removed before any commit.
+- Read paths share one cached carve per cell build (`snapshot` in src/core.ts), and cells and snapshots load notes with `loadBrain(root, { shared: true })`, which hands out the parsed notes themselves, frozen (a write throws). Code that edits notes loads them without `shared`. Several caches key on a frozen note's identity (cell updates, search documents). See docs/perf.md.
+- `YAML.stringify` makes `&a1` anchors for repeated arrays unless you pass `aliasDuplicateObjects: false` (see `serializeNote`).
+- Tests pin the date with `PB_TODAY` (set by `makeBrain`). Code that uses `new Date()` for day logic will drift.
+- Test and eval runs put every temp folder under one per-run folder (`TMPDIR`, set in `test/setup.ts` and `evals/lib/sandbox.ts`) and delete it at the end. Make temp folders with `mkdtempSync(join(tmpdir(), …))` so they land there; a hard-coded `/tmp` path leaks.
+- Notion rows lose newlines as a literal `n` and auto-link ids (`[evt1.bG](http://evt1.bG)`). `cleanText` repairs both. Re-import is deterministic, so fix the importer, not the notes.
+- A `retired` history record (sleep.ts) isn't a no-op target: re-asserting the value revives it. Code that scans `history` for "seen before" must skip retired records.
+- `pkill -f "cli.ts serve"` also kills the shell running it. Keep the PID instead (`& SP=$!`).
+- Cloud sessions set a global `gpg.ssh.program` that signs with the session's own key. `hub init` sets `gpg.ssh.program=ssh-keygen` locally and verification always uses `ssh-keygen`; test and eval runs never read it: `isolateGit` (`evals/lib/gitenv.ts`, called from `test/setup.ts` and `evals/lib/sandbox.ts`) points `GIT_CONFIG_GLOBAL` at a run-local config with signing off, so a busy or missing session signer can't fail test commits.
+- This cloud session has no model API keys, so live model calls are untested here.
+
+## Other threads' territory
+
+- `evals/` belongs to the eval thread. CI runs `bun evals/run.ts` if it exists.
+- `src/handover.ts` belongs to the portability thread, which sends patches.
+- `src/textline/` and `evals/cases/textline.ts` belong to the text channel thread. Texts never carry private or money values; relayed replies only tighten (see `docs/text-channel.md`).
+- `src/dashboard/` belongs to the dashboard thread. Its buttons call `decideProposal`, `decideHeld`, `confirmHeldAnswer`, `ownerDecide`, `revokeTokens`, `undoRun` and `digest`, plus `decideCapture`, the standing buttons in `people.ts` (`setStanding`, `approveSuggestion`, `dismissSuggestion`) and its own `setFact`, `saveNoteText`, `setEditor`, `revertCommit`, `forgetNote`, `bringBack`, `markNeverRight`, `hideNoteFrom`, `showNoteTo` and `setNoteSensitivity` (`edit.ts`); agree changes to those signatures with it.
+- Send heads-ups about changed public signatures in `write.ts`, `carve.ts`, `relay.ts`, `upkeep.ts` and `core.ts`.
+
+## Shipping
+
+CI runs gitleaks over the whole git history first (`.github/workflows/ci.yml`). A test that needs a secret-shaped string should build it at run time rather than commit it whole.
+
+Commit locally with the session's attribution trailers. Then `git -C /mnt/project-files/pocketbrain-app pull <local repo> main` to mirror, and refresh `/mnt/project-files/pocketbrain-handoff/*.bundle` (`git bundle create … --all`). Don't push to GitHub until Louis says so.
+
+The brain's format number (`FORMAT` at its root, `src/format.ts`): a newer brain stops every command with one line, an older one is migrated after a dry run on a copy (`pocketbrain migrate [--apply]`, and `start` by itself); see `docs/release.md`, "Brain format". Releases, CI, lanes, the UI regression snapshots (`test/ui/`, rewrite with `PB_UI_UPDATE=1`) and the Mac's auto-update (`scripts/deploy.ts`, which follows the `release` branch with a health check and rollback): `docs/release.md`. A branch that changes behaviour adds its line under `## [Unreleased]` in `CHANGELOG.md`.
+
+## Harness (`.claude/`)
+
+- `.claude/hooks/guard.ts` runs before every Bash and edit call (wired in `.claude/settings.json`) and blocks, failing closed: commits or blanket `git add` on main; edits to `.claude/settings*.json` or the guard; any edit inside the real brain, and destructive commands (rm, mv, sed -i, git reset --hard/clean/push/restore) naming it. The same for off-limits folders listed outside the repo (`$PB_GUARD_PATHS` or `~/.config/pocketbrain/guard-paths`, one path per line), and any edit that writes a secret-shaped string. Anything that touches the live hub asks the person first instead of running (unloading or booting out its launchd jobs, cloudflared, killing the hub or tunnel, edits to `~/Library/LaunchAgents/com.pocketbrain.*` or `~/.cloudflared/`); a plain restart (`launchctl kickstart -k` of com.pocketbrain.start or .tunnel) and `launchctl list|print` run freely, by Louis's choice. Its contract is `test/guard.test.ts`. Propose guard changes; Louis makes them.
+- `.claude/hooks/after-edit.ts` (PostToolUse, same path lists as the gate) reminds you of the slice audit or agent evals after editing the access core or a prompt.
+- Git hooks in `.githooks/` (`bun install` enables them): pre-commit blocks commits on main outside a merge, denylisted personal terms (private list at `$PB_DENYLIST` or `~/.config/pocketbrain/denylist.txt`) and staged secrets; pre-push runs tests, tsc and `evals --ci`. Claude Code hooks only load where this repo is the session's project dir (Claude Code on the Mac); git hooks apply to every commit in a clone that ran `bun install`.
+- `.claude/rules/access-core.md` loads when you edit carve, write, checks, auth, oauth, cell, view or relay.
+- Stop hook `.claude/hooks/stop-check.ts`: if src, test, scripts or evals changed, the typecheck must pass before a turn ends.
+- The merge gate is `bun scripts/gate.ts [base]`, the same for every thread's branch: test first (a test change, and the changed tests must fail on the base's code), docs for a new src file or CLI change, a recorded `clear` slice audit when the access core changed, a recorded passing `--llm --only agents` run when a prompt changed, and `bun run check`. Evidence lives in a ledger keyed by git tree (`bun scripts/gate.ts record ...`); its contract is `test/gate.test.ts`.
+- New outbound hosts: every host src/ names in a URL is listed with its reason in `scripts/outbound-hosts.txt`; `test/outbound.test.ts` fails on a new or stale one.
+- Skills in `.claude/skills/`: `/merge-gate` before any merge, `/release` (ordered release checklist, ends with the `launch-critic` agent), `/review-outside-pr` (adversarial review of a fork's PR; CI job `outside-pr` stays red on sensitive paths until the label `reviewed`), `/reflect` at the end of a session (kept tips go to the project's living list `harness-tips.md`).
+- Show evidence, not claims: the command and its result line.
+- Docs ship with the change. `test/docs.test.ts` fails when README, CLAUDE.md or a current doc in `docs/` names a `pocketbrain` command or flag the CLI doesn't have, a repo path that doesn't exist or a `bun run` script that isn't in package.json, and when a `src/*.ts` file is missing from the table above. Design-history docs are listed in its `HISTORY` set.
+
+## Laws
+
+Pre-conditions for merging, adapted from the harness that shipped Louis's last product. When a convenience conflicts with a law, the law wins.
+
+| Law | One line |
+|---|---|
+| Recurrence | The access-core files are registered fragile surfaces (`test/contracts/registry.ts`), each with a contract suite `test/contracts/<surface>.contract.test.ts` of must-never rows. A bug fixed on a surface adds a row to its contract in the same branch; a new access-core file registers first. |
+| Operator | A branch that leaves work only the owner can do (a key, a setting, a hand step on the Mac) names it with the exact command in its handoff, so it lands as `pocketbrain task "<what>" --cmd "<command>"` on the hub. No secret in either. |
+| Ceilings | What a text guard (secret, injection, withheld) does NOT catch is a row in its table (`test/ceilings.test.ts`), never a sentence with "any" or "every". Closing a ceiling moves the row to the catch table. Ordinary text a guard knowingly holds is a row too (over-hold table). |
+| Test first | A behaviour change ships with a test seen failing before the fix. |
+| Gate | Every reviewer or red-team finding becomes a case (`evals/gaps.ts`) before merge. |
+| Eval | Any prompt, standing instruction or model-output schema change ships with an `--llm` eval run, including `--only agents`, compared against the saved baseline (`bun evals/run.ts --llm --only agents --k 3 --compare agents`; no pass -> fail). |
+| Code over prose | A rule that must never slip is enforced in code (write path, carve, `.claude/hooks/guard.ts`), never only in an instruction. |
+| Read | Read the code before describing it; cite `file:line`. |
+| Truth | A comment that describes behaviour is a testable claim; keep it true or delete it. |
+| Docs | Docs ship with the change; a stale doc is a bug. `test/docs.test.ts` checks what it can. |
+| Postmortem | A silent failure that lasted over a day gets a detector (health probe, digest line or eval). |
+| Plan | A change over ~3 files or ~50 lines, or on the access core, gets a written plan first; access-core changes also get the `slice-auditor` agent. |

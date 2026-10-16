@@ -1,0 +1,54 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - link "Brain":
+    - /url: /brain
+  - text: /
+  - link "People":
+    - /url: /brain?kind=people
+  - text: /
+  - link "Jane Roy":
+    - /url: /note/people/jane-roy
+  - heading "History" [level=1]
+  - text: 1 save since 8 Oct 2026 See the note on
+  - textbox "See the note on"
+  - button "Go"
+  - heading "Facts over time" [level=2]
+  - text: Role
+  - list:
+    - listitem:
+      - text: Course coordinator now since 1 Sep 2026 · from an email · added by planner ·
+      - link "As it was":
+        - /url: /history/people/jane-roy?at=v1
+  - text: Phones
+  - list:
+    - listitem:
+      - text: +15145550100 now since 1 Sep 2026 · from an email · added by planner ·
+      - link "As it was":
+        - /url: /history/people/jane-roy?at=v1
+  - heading "Every save" [level=2]
+  - text: 8 Oct 2026 12:00 You Created the note
+  - link "As it was":
+    - /url: /history/people/jane-roy?at=v1

@@ -1,0 +1,10 @@
+- main:
+  - 'heading "Search: Jane" [level=1]'
+  - list:
+    - listitem:
+      - link "Jane Roy":
+        - /url: /b/notes/people%2Fjane-roy
+      - text: people/jane-roy · person
+  - paragraph:
+    - link "Back to the start page":
+      - /url: /b

@@ -1,0 +1,8 @@
+- main:
+  - heading "pocketBrain sign-in" [level=1]
+  - paragraph: Sign in with your pocketBrain connection (the agent name and its key from your vault).
+  - text: Agent
+  - textbox "Agent"
+  - text: Key
+  - textbox "Key"
+  - button "Sign in"

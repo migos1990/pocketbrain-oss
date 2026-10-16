@@ -1,0 +1,149 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Small helpers every module used to carry its own copy of: hashing, regex escaping, whole-word
+// matching, and the append-only JSON-lines logs under log/.
+import { createHash } from "node:crypto";
+import { appendFileSync, closeSync, existsSync, ftruncateSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+export const sha256 = (s: string | Uint8Array) => createHash("sha256").update(s).digest("hex");
+
+export const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// `word` as a whole word in `text`, case-insensitive. `edge` is the class of characters that
+// may not touch it on either side (letters by default; the relay also counts digits).
+export function hasWord(text: string, word: string, edge = "\\p{L}"): boolean {
+  return new RegExp(`(^|[^${edge}])${escapeRe(word)}($|[^${edge}])`, "iu").test(text);
+}
+
+// Many whole words against many texts (a carve holds thousands of carved values). Each word's
+// pattern is compiled once, and a word is tried on a text only if the text has a token equal to
+// the word's first token: one pass over the text's tokens instead of one pattern per word
+// (docs/perf.md). Words whose first token isn't plain ASCII, or that start with a separator, are
+// always tried, so the matches are exactly those of the patterns.
+const foldToken = (s: string) => s.replace(/\u017F/g, "s").replace(/\u212A/g, "k").toLowerCase(); // the two non-ASCII letters /iu folds to ASCII
+// A word's key: its first two tokens when both are plain ASCII (adjacent tokens in the text),
+// else the first; common first words ("the", a first name) would otherwise match most texts.
+// Undefined when the word must always be tried.
+export function tokenKey(w: string): string | undefined {
+  const two = w.match(/^([A-Za-z0-9]+)[^\p{L}\p{N}]+([A-Za-z0-9]+)(?=[^\p{L}\p{N}]|$)/u);
+  if (two) return `${two[1].toLowerCase()} ${two[2].toLowerCase()}`;
+  const one = w.match(/^[A-Za-z0-9]+(?=[^\p{L}\p{N}]|$)/u);
+  return one ? one[0].toLowerCase() : undefined;
+}
+// The keys a text offers: every token and every pair of adjacent tokens.
+export function textKeys(text: string, into = new Set<string>()): Set<string> {
+  const toks = foldToken(text).split(/[^\p{L}\p{N}]+/u);
+  for (let k = 0; k < toks.length; k++) { into.add(toks[k]); if (k + 1 < toks.length) into.add(`${toks[k]} ${toks[k + 1]}`); }
+  return into;
+}
+export function tokenIndex(words: string[]): (text: string) => number[] {
+  const by = new Map<string, number[]>(), always: number[] = [];
+  words.forEach((w, i) => {
+    const k = tokenKey(w);
+    if (k === undefined) always.push(i); else (by.get(k) ?? by.set(k, []).get(k)!).push(i);
+  });
+  return (text) => {
+    const c = new Set(always);
+    const toks = foldToken(text).split(/[^\p{L}\p{N}]+/u);
+    for (let k = 0; k < toks.length; k++) {
+      for (const i of by.get(toks[k]) ?? []) c.add(i);
+      if (k + 1 < toks.length) for (const i of by.get(`${toks[k]} ${toks[k + 1]}`) ?? []) c.add(i);
+    }
+    return [...c].sort((a, b) => a - b);
+  };
+}
+
+// Whole words (letters and digits on neither side) found in a text, in the order given. Same
+// matches as hasWord(text, word, "\\p{L}\\p{N}") for each word.
+export function wordSet(words: string[]) {
+  const edge = "\\p{L}\\p{N}";
+  const each = words.map((w) => new RegExp(`(^|[^${edge}])${escapeRe(w)}($|[^${edge}])`, "iu"));
+  const candidates = tokenIndex(words);
+  return { found: (text: string) => candidates(text).filter((i) => each[i].test(text)).map((i) => words[i]) };
+}
+
+// One JSON object per line. A torn line (a crash mid-append) is skipped, not fatal.
+export function readJsonl<T = Record<string, unknown>>(file: string): T[] {
+  if (!existsSync(file)) return [];
+  const out: T[] = [];
+  for (const l of readFileSync(file, "utf8").split("\n")) {
+    if (!l.trim()) continue;
+    try { out.push(JSON.parse(l)); } catch { /* torn line */ }
+  }
+  return out;
+}
+
+// The last `bytes` of a file (all of it when smaller), without reading the rest.
+export function tailOf(file: string, bytes = 65_536): { text: string; whole: boolean } {
+  const fd = openSync(file, "r");
+  try {
+    const size = fstatSync(fd).size, n = Math.min(size, bytes);
+    const buf = Buffer.alloc(n);
+    readSync(fd, buf, 0, n, size - n);
+    return { text: buf.toString("utf8"), whole: n === size };
+  } finally { closeSync(fd); }
+}
+
+// A line a crash cut short (the process died mid-append, so it was never acknowledged) is cut
+// off before the next append; otherwise the next entry would be glued onto it and lost too.
+export function endTornLine(file: string): boolean {
+  if (!existsSync(file)) return false;
+  const fd = openSync(file, "r+");
+  try {
+    const size = fstatSync(fd).size;
+    if (!size) return false;
+    const last = Buffer.alloc(1);
+    readSync(fd, last, 0, 1, size - 1);
+    if (last[0] === 0x0a) return false;
+    // Walk back to the last newline; the torn line is everything after it.
+    const chunk = 65_536;
+    for (let end = size; end > 0; end -= chunk) {
+      const start = Math.max(0, end - chunk), buf = Buffer.alloc(end - start);
+      readSync(fd, buf, 0, buf.length, start);
+      const nl = buf.lastIndexOf(0x0a);
+      if (nl >= 0) { ftruncateSync(fd, start + nl + 1); return true; }
+    }
+    ftruncateSync(fd, 0);
+    return true;
+  } finally { closeSync(fd); }
+}
+
+export function appendJsonl(file: string, entry: unknown) {
+  mkdirSync(dirname(file), { recursive: true });
+  endTornLine(file);
+  appendFileSync(file, JSON.stringify(entry) + "\n");
+}
+
+// A source call that never answers must not hold up the hub: pulls run in the same queue as
+// agent writes. Gives up after PB_HTTP_TIMEOUT_MS (default 20 s), whatever `http` is.
+export async function timed(http: (url: string, init?: RequestInit) => Promise<Response>, url: string, init: RequestInit = {}): Promise<Response> {
+  const ms = Number(process.env.PB_HTTP_TIMEOUT_MS ?? 20_000);
+  const ac = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => { ac.abort(); reject(new Error(`no answer from ${new URL(url).host} in ${ms / 1000}s`)); }, ms); });
+  try { return await Promise.race([http(url, { ...init, signal: ac.signal }), late]); }
+  finally { clearTimeout(timer); }
+}
+
+// log/alerts.jsonl: what the digest, dashboard and text channel surface as "needs you".
+export function alert(root: string, entry: Record<string, unknown>) {
+  appendJsonl(join(root, "log", "alerts.jsonl"), { at: new Date().toISOString(), ...entry });
+}
+
+// A request body as text, read as it streams and stopped at `max` bytes: undefined when it is
+// longer. A declared length over the cap is refused before reading; a chunked body is counted.
+export async function readCapped(req: Request, max: number): Promise<string | undefined> {
+  if (Number(req.headers.get("content-length") ?? 0) > max) return undefined;
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > max) { await reader.cancel().catch(() => undefined); return undefined; }
+    parts.push(value);
+  }
+  return Buffer.concat(parts).toString("utf8");
+}

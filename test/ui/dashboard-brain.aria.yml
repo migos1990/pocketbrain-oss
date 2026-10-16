@@ -1,0 +1,58 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - heading "Brain" [level=1]
+  - search:
+    - searchbox "Search or ask"
+    - button "Ask"
+  - paragraph:
+    - text: "Your assistants:"
+    - link "steward":
+      - /url: /agent/steward
+    - text: ","
+    - link "planner":
+      - /url: /agent/planner
+    - text: ","
+    - link "gardener":
+      - /url: /agent/gardener
+    - text: ","
+    - link "helper":
+      - /url: /agent/helper
+    - text: . Each one sees only the notes you share with it.
+  - heading "Browse" [level=2]
+  - link "People 2":
+    - /url: /brain?kind=people
+  - link "Projects 2":
+    - /url: /brain?kind=projects
+  - link "Money 1":
+    - /url: /brain?kind=money
+  - link "Decisions 1":
+    - /url: /brain?kind=decisions
+  - heading "Changed this week" [level=2]
+  - link "See every change":
+    - /url: /history
+  - text: Nothing changed in the last 7 days. Changes your assistants save show up here.
+  - heading "Needs a look" [level=2]
+  - text: Everything has been checked recently.

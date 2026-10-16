@@ -1,0 +1,44 @@
+- banner:
+  - img "pocketBrain"
+  - text: Robin's brain
+  - navigation "Pages":
+    - link "Overview":
+      - /url: /
+    - link "Decide":
+      - /url: /deck
+    - link "Brain":
+      - /url: /brain
+    - link "Who sees what":
+      - /url: /map
+    - link "Assistants":
+      - /url: /agents
+    - link "Who matters":
+      - /url: /people
+    - link "Activity":
+      - /url: /activity
+    - link "Upkeep":
+      - /url: /upkeep
+    - link "Digest":
+      - /url: /digest
+    - link "Spend":
+      - /url: /usage
+- main:
+  - link "Brain":
+    - /url: /brain
+  - heading "What changed this week" [level=1]
+  - text: 6 saves in the last 7 days See the brain on
+  - textbox "See the brain on"
+  - button "Go"
+  - heading "Thu 8 Oct 2026" [level=2]
+  - link "Pick a bank Decisions You created the note 12:00":
+    - /url: /history/decisions/2026-09-01-pick-bank
+  - link "Main bank Money You created the note 12:00":
+    - /url: /history/money/main-bank
+  - link "Jane Roy People You created the note 12:00":
+    - /url: /history/people/jane-roy
+  - link "Paul Advisor People You created the note 12:00":
+    - /url: /history/people/paul-advisor
+  - link "Course A Projects You created the note 12:00":
+    - /url: /history/projects/course-a
+  - link "Course B Projects You created the note 12:00":
+    - /url: /history/projects/course-b

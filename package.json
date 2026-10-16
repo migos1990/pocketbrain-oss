@@ -1,0 +1,55 @@
+{
+  "name": "pocketbrain",
+  "version": "0.1.0",
+  "description": "A second brain you own, shared by your AI assistants: each one sees only the slice you grant it, enforced in code.",
+  "keywords": [
+    "second-brain",
+    "memory",
+    "mcp",
+    "ai-assistant",
+    "privacy",
+    "personal-knowledge"
+  ],
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "pocketbrain": "src/cli.ts"
+  },
+  "files": [
+    "src/",
+    "examples/seed/",
+    "docs/quickstart.md",
+    "install.sh",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "scripts": {
+    "test": "bun test",
+    "check": "bun test && bun run typecheck && bun run deadcode && bun evals/run.ts --ci",
+    "deadcode": "bunx knip@5.88.1 --no-progress --include files,dependencies,unlisted,unresolved",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "pb": "bun src/cli.ts",
+    "demo": "bun scripts/demo.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke": "bun scripts/smoke.ts",
+    "perf": "bun scripts/perf.ts",
+    "crash": "bun scripts/crash.ts",
+    "eval": "bun evals/run.ts",
+    "e2e": "bun scripts/e2e.ts",
+    "conformance": "bun scripts/conformance.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "playwright": "1.56.1",
+    "typescript": "^7.0.2"
+  }
+}
