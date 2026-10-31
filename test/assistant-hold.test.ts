@@ -102,7 +102,7 @@ test("the home's diary says what is held and until when, never the value", async
   runAuto(root, DURING);
   const v = homeView(root, loadRules(root), loadBrain(root), DURING);
   const lines = [...v.since, ...v.earlier.flatMap((d) => d.lines)].map((l) => l.what);
-  expect(lines).toContain("Something new about Jane Roy, held until Fri 30 Oct");
+  expect(lines).toContain("Something new about Jane Roy, held until Fri 30 Oct.");
   expect(JSON.stringify(v)).not.toContain("B-201");
 });
 

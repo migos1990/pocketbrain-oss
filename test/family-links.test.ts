@@ -60,7 +60,7 @@ test("a page with the owner's surname gets 'may be family', linking the owner's 
   expect(inbound.get("people/alain-lake") ?? 0).toBeGreaterThan(0);
   const { homeView } = await import("../src/dashboard/home");
   const v = homeView(root, loadRules(root), notes, new Date(), { all: true });
-  expect(v.since.map((l) => l.what)).toContain("Alain Lake may be family: same surname as you");
+  expect(v.since.map((l) => l.what)).toContain("Alain may be family: same surname as you.");
   // Asks nothing.
   expect(v.waiting.map((w) => w.what).join(" ")).not.toMatch(/Alain/);
 });

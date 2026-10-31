@@ -44,19 +44,19 @@ test("a conflict the Gardener is still weighing doesn't wait on the owner; once 
   expect(homeView(root, loadRules(root), loadBrain(root), new Date()).waiting).toHaveLength(0);
   lean(root, id);
   const w = homeView(root, loadRules(root), loadBrain(root), new Date()).waiting;
-  expect(w).toEqual([{ what: "Two sources disagree on Course C's room", verb: "tap to settle", href: `/settle/${id}` }]);
+  expect(w).toEqual([{ what: "Course C's room is B-201. Or C-305?", verb: "tap to settle", href: `/settle/${id}`, meta: "Two sources disagree" }]);
 });
 
 test("the screen asks one plain question, the Gardener's side first with its reason, then keep both", () => {
   const { root, id } = brain();
   lean(root, id);
   const c = ownerConflicts(root)[0]!;
-  expect(question(c)).toBe("Is Course C's room B-201 or C-305?");
+  expect(question(c)).toBe("What is Course C's room?");
   expect(ordered(c).map((s) => s.value)).toEqual(["C-305", "B-201"]);
   const html = settlePage(c, "x", loadRules(root));
   expect(html).toContain("The Gardener leans this way: the calendar invite is the newer booking");
-  expect(html).toContain("from calendar, 7 Oct");
-  expect(html).toContain("from an email, 7 Oct");
+  expect(html).toContain("From calendar, 7 Oct");
+  expect(html).toContain("From an email, 7 Oct");
   expect(html).toContain(SETTLE_COPY.both);
   expect(html.indexOf("C-305</b>")).toBeLessThan(html.indexOf("B-201</b>"));
 });
@@ -70,7 +70,7 @@ test("a pick is one diary line, and its Undo opens the conflict again with the o
   const row = readDiary(root).at(-1)!;
   expect(row).toMatchObject({ kind: "settled", fact_key: "projects/course-c#room", from: "B-201", to: "C-305", settles: id, source_word: "calendar" }); // a tap files at the side's rank (audit v4)
   const line = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true }).since.find((l) => l.token === row.undo_token)!;
-  expect(line.what).toBe("You settled it: Course C's room is C-305");
+  expect(line.what).toBe("You settled it: Course C's room is C-305.");
   expect(line.undo).toBe("undo");
   expect(undoFact(root, row.undo_token).outcome).toBe("undone");
   expect(room(root).value).toBe("B-201");
@@ -103,7 +103,7 @@ test("the dashboard: /settle/<id> shows the rows; a tap settles and lands on the
   };
   const pg = await req("GET", `/settle/${id}`);
   expect(pg.status).toBe(200);
-  expect(pg.text).toContain("Is Course C&#39;s room B-201 or C-305?");
+  expect(pg.text).toContain("What is Course C&#39;s room?");
   const csrf = pg.text.match(/name="csrf" value="([^"]+)"/)![1]!;
   const typed = await req("POST", "/action/settle-pick", { csrf, id, value: "110" });
   expect(typed.status).toBe(303);
@@ -124,7 +124,7 @@ test("a conflict the Gardener hasn't weighed yet opens, says so, and can be answ
   expect(settlePage(c, "x", loadRules(root))).toContain(esc(SETTLE_COPY.held));
   const v = homeView(root, loadRules(root), loadBrain(root), new Date());
   expect(v.waiting).toHaveLength(0);
-  expect(v.gardener).toEqual([{ what: "Two sources disagree on Course C's room", verb: "the Gardener looks tonight", href: `/settle/${id}` }]);
+  expect(v.gardener).toEqual([{ what: "Course C's room is B-201. Or C-305?", verb: "the Gardener looks tonight", href: `/settle/${id}`, meta: "Two sources disagree" }]);
   ownerDecide(root, id, 2, `settle-${id}`);
   expect(room(root).value).toBe("C-305");
 });
@@ -142,7 +142,7 @@ test("the same value from several sources is one row with a count; past two rows
   const c = ownerConflict(root, id)!;
   expect(c.sides.map((s) => [s.value, s.sources])).toEqual([["B-201", 1], ["C-305", 3], ["D-110", 1]]);
   const html = settlePage(c, "x", loadRules(root));
-  expect(html).toContain("from calendar, 7 Oct · 3 sources");
+  expect(html).toContain("From calendar, 7 Oct · 3 sources");
   expect(html).toContain(SETTLE_COPY.all);
   expect(html).not.toContain(SETTLE_COPY.both);
 });

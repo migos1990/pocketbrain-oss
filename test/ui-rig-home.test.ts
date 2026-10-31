@@ -36,13 +36,15 @@ test("the rig's home is a full day: conflicts and a private value waiting, a wee
     expect(who).toContain("remembers “She&#39;s the course coordinator”");
     expect(who).toContain(HOME_COPY.fix);
     expect(who).toContain("/action/fix-everywhere");
-    // The memories: since yesterday, then earlier days, each with its day inside the line, and the rest folded.
-    expect(count(html, `>${HOME_COPY.undo}</button>`)).toBeGreaterThanOrEqual(12);
+    // The face is six cards (G560); the full list is the week's memories, each with its Undo and
+    // its day inside the line.
     expect(html).toContain(APP_COPY.justSaid);
-    expect(html).toContain("you said, Tue");
-    expect(html).toContain("from your ChatGPT");
-    expect(html).toContain("from an email, Sun");
     expect(html).toMatch(/\d+ more on your mind/);
+    const all = await homeOf(r, "/home?all=1");
+    expect(count(all, `>${HOME_COPY.undo}</button>`)).toBeGreaterThanOrEqual(12);
+    expect(all).toContain("You said so on Tuesday");
+    expect(all).toContain("ChatGPT learned it");
+    expect(all).toContain("From Sunday&#39;s email");
   } finally { r.stop(); }
 }, 60_000);
 

@@ -42,7 +42,9 @@ test("only receipt-titled pages held from an unknown sender are set aside", asyn
   const { homeView } = await import("../src/dashboard/home");
   const { loadRules } = await import("../src/rules");
   const v = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true });
-  expect(v.since.map((l) => l.what)).toContain("A receipt on Apple order MTFLMN7MFQ was set aside; receipts aren't facts");
+  // A money page's name stays off the home: the line says a receipt was set aside (re-audit, G573).
+  expect(v.since.map((l) => l.what)).toContain("A receipt was set aside; receipts aren't facts.");
+  expect(v.since.map((l) => l.what).join(" ")).not.toMatch(/Apple/);
   expect(v.waiting.map((w) => w.what).join(" ")).not.toMatch(/Apple/);
   // Once: a second upkeep finds nothing.
   upkeep(root);

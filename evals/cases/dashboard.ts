@@ -70,20 +70,23 @@ class Rig {
     await this.page.waitForLoadState("load");
   }
   lastCommit() { return sh(this.root, ["git", "log", "-1", "--format=%an|%s"]); }
-  // The home's "two sources disagree on what's next for …" row: how many, and settle it by picking a side.
+  // The home's conflict over what's next: "Next for Atlas launch: … Or …?" when its values may show,
+  // else "Two sources disagree on what's next for …" (G560). How many, and settle it by picking a side.
   async waiting() {
     await this.page.goto(new URL("/home", this.page.url()).href);
-    return this.page.locator("li", { hasText: /two sources disagree on what.s next for/i }).count();
+    return this.page.locator("li", { hasText: NEXT_CONFLICT }).count();
   }
   async settle(side: string) {
     const n = await this.waiting();
-    await this.page.locator("li", { hasText: /two sources disagree on what.s next for/i }).first().getByRole("link").click();
+    await this.page.locator("li", { hasText: NEXT_CONFLICT }).first().getByRole("link").click();
     await this.page.waitForLoadState("load");
     await this.page.locator("form.pick button", { hasText: side }).first().click();
     await this.page.waitForLoadState("load");
     return n;
   }
 }
+
+const NEXT_CONFLICT = /two sources disagree on what.s next for|next for [^:]+: .*\bOr\b.*\?/i;
 
 async function episode(fn: (r: Rig) => Promise<Result>): Promise<Result> {
   if (!server || !auth || !dash) return na("no dashboard at this commit");

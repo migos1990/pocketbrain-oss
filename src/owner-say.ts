@@ -339,7 +339,7 @@ function about(page: Note, title: (id: string) => string | undefined, fresh?: bo
   const facts = Object.entries(page.fm.facts ?? {}).filter(([, f]) => !isDisputed(f) && (fresh || !closedFact(page, f))).slice(0, 3)
     .map(([a, f]) => lineWords(isVerbAttribute(a) ? "verbNew" : "new", { title: name, attr: attrWords(a), value: plain(valueOf(f), title) }));
   // Sentences, as the home says them (audit v7: Ask answered with a list), never "Name: a is x; b is y".
-  return facts.length ? `${facts.join(". ")}.` : `${name}, and nothing else yet.`;
+  return facts.length ? facts.join(" ") : `${name}, and nothing else yet.`;
 }
 
 function answer(page: Note, attr: string | undefined, notes: Note[], fresh?: boolean): SayReply {
@@ -570,7 +570,7 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   const title = String(page.fm.title), had = page.fm.facts?.[told.attribute] !== undefined;
   const own = told.attribute === "next_step" ? "next" : told.attribute === "last_contact" ? "contact" : told.attribute === "role" ? "role" : isVerbAttribute(told.attribute) ? "verb" : undefined;
   const label = told.attribute === "role" && /^(runs|leads|heads|manages|directs|chairs|teaches|coaches|founded|owns)\b/i.test(v) ? `${title} ${v}`
-    : lineWords((own ? `${own}${had ? "Changed" : "New"}` : had ? "changed" : "new") as LineKey, { title, attr: attrWords(told.attribute), value: told.attribute === "last_contact" ? sayDay(told.value) : v });
+    : lineWords((own ? `${own}${had ? "Changed" : "New"}` : had ? "changed" : "new") as LineKey, { title, attr: attrWords(told.attribute), value: told.attribute === "last_contact" ? sayDay(told.value) : v }).replace(/\.$/, ""); // the reply adds its own full stop
   const guess = told.when?.approx ? ` ${say("say.guessed-date", { day: told.when.as_of, phrase: told.when.phrase })}` : "";
   if (r.outcome === "noop" || (r.outcome === "committed" && readDiary(root).length === before)) return { kind: "say.already", page: page.fm.id, fact_key, text: say("say.already") };
   if (r.outcome === "refused") return { kind: "say.refused", page: page.fm.id, text: say("say.refused", { why: plainWhy(r.fails?.[0]?.check, r.message) }) };

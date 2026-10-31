@@ -17,7 +17,7 @@ test("a held value from an unknown sender says so on the home, and Show releases
   Object.assign(n.fm.facts!.home_town as FactRecord, { sender: "unknown" });
   saveNote(root, n);
   const row = homeView(root, loadRules(root), loadBrain(root), new Date()).waiting.find((w) => w.seen === "people/jane-roy#home_town")!;
-  expect(`${row.what} · ${row.verb}`).toBe("Something new about Jane Roy · from an address your pages don't hold · only you can see it yet");
+  expect(`${row.what} · ${row.verb}`).toBe("Something new about Jane Roy. · from an address your pages don't hold · only you can see it yet");
   expect(JSON.stringify(row)).not.toContain("Rimouski");
   expect(markSeen(root, "people/jane-roy#home_town").outcome).toBe("seen");
   expect(homeView(root, loadRules(root), loadBrain(root), new Date()).waiting.some((w) => w.seen === "people/jane-roy#home_town")).toBe(false);

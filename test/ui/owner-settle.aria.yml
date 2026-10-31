@@ -3,10 +3,10 @@
     - /url: /home
   - text: 1 of 3
   - paragraph: Atlas launch · Work
-  - heading "Is Atlas launch's next step freeze the beta build on 15 October or freeze the beta build on 22 October?" [level=1]
+  - heading "What's next for Atlas launch?" [level=1]
   - paragraph: Two sources say different things. Pick one, or tell me what's right.
-  - button "freeze the beta build on 15 October from an email, 7 Oct"
-  - button "freeze the beta build on 22 October from an email, 7 Oct"
+  - button "15 October freeze the beta build on 15 October From an email, 7 Oct"
+  - button "22 October freeze the beta build on 22 October From an email, 7 Oct"
   - button "Not sure, keep both I stop asking"
   - paragraph: Or tell me
   - text: Actually, it's…

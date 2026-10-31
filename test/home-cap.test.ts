@@ -40,9 +40,9 @@ test("a page named as a bare slug, under any folder, or in the attribute reads a
   ].join("\n") + "\n");
   const v = homeView(root, loadRules(root), loadBrain(root), new Date("2026-10-08T15:00:00Z"), { all: true });
   const text = v.since.map((l) => l.what).join("\n");
-  expect(text).toContain("Jane Roy's employer is Bay Institute");
-  expect(text).toContain("Jane Roy's next step is");
-  expect(text).toContain("Jane Roy works with Paul Advisor, Bay Institute");
+  expect(text).toContain("Jane's employer is Bay Institute.");
+  expect(text).toContain("Jane's next step is");
+  expect(text).toContain("Jane works with Paul Advisor, Bay Institute.");
   expect(text).not.toMatch(/[a-z]+-[a-z]+/);
   expect(text).not.toMatch(/\b[a-z]+\/[a-z]/);
 });
@@ -56,8 +56,8 @@ test("a slug never shows: a page titled with a slug, a slug inside a sentence, a
   writeFileSync(join(root, "diary", "2026-10.jsonl"), [row("2026-10-08T10:00:00Z", "people/jane-roy#role", "coach-tennis"), row("2026-10-08T10:01:00Z", "people/jane-roy#note", "moved to bay-institute last week"), ...lines].join("\n") + "\n");
   const v = homeView(root, loadRules(root), loadBrain(root), new Date("2026-10-08T15:00:00Z"), { all: true });
   const text = v.since.map((l) => l.what).join("\n");
-  expect(text).toContain("Jane Roy's role is coach tennis");
-  expect(text).toContain("Jane Roy's note is moved to Bay Institute last week");
-  expect(text).toContain("Something new about Gone person old");
+  expect(text).toContain("Jane's role is coach tennis.");
+  expect(text).toContain("Jane's note is moved to Bay Institute last week.");
+  expect(text).toContain("Something new about Gone person old.");
   expect(text).not.toMatch(/[a-z]+-[a-z]+/);
 });

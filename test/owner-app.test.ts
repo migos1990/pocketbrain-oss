@@ -65,7 +65,7 @@ test("On your mind: the box, memories with their marks, held values locked; the 
     expect(home).toContain(`<h1>${APP_COPY.mind}</h1>`);
     expect(home).toContain(`placeholder="${esc(APP_COPY.box)}"`);
     expect(home).toContain('<span class="sr">Known by ');
-    expect(home).toMatch(/class="mark( [a-z]+)?" aria-hidden="true">G</);
+    expect(home).toMatch(/class="mark( [a-z0-9]+)?" aria-hidden="true">G</);
     expect(home).toContain('class="mark not"');
     // Hélène's private value waits for Read it: a lock, no marks, no value.
     expect(home).toContain(APP_COPY.onlyYou);

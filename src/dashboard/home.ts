@@ -4,21 +4,22 @@
 // each line with Undo. Built from diary/*.jsonl (src/diary.ts), never from git log. The page itself is
 // html-home.ts; the words are the owner's (test/owner-copy.test.ts).
 import type { Note } from "../brain";
-import { isDisputed, sensitivityRank } from "../brain";
+import { isDisputed, sensitivityRank, loadBrain } from "../brain";
 import type { Rules } from "../rules";
 import { ownerName, ownAssistant } from "../rules";
 import { isOwnerId } from "../owner";
 import { readDiary, shownValue, displayName, sayDay, sayDays, ID_IN_TEXT, type DiaryRow } from "../diary";
 import { ownerLocal } from "../clock";
-import { ownerConflicts } from "../core";
-import { unseenFacts } from "../seen";
+import { ownerConflicts, type SettleCase } from "../core";
+import { unseenFacts, type Unseen } from "../seen";
 import { inboxConflicts } from "../settle-inbox";
 import { comms } from "./data";
 import { agentLabel, cap } from "./labels";
 import { loadRules } from "../rules";
 import { readEntriesSince, type ReadEntry } from "../readlog";
 import type { WrongLine } from "./home-beliefs";
-import { ownerDay } from "../clock";
+import { ownerDay, clock } from "../clock";
+import { sensitiveShape } from "../shape";
 import type { Mark } from "./marks";
 
 export interface HomeLine {
@@ -34,13 +35,20 @@ export interface HomeLine {
   held?: boolean; // its value waits for the owner's Show: a lock, never marks
   just?: boolean; // the owner said it in the last hour: it leads the mind, drawn as just told
   marks?: Mark[]; // one per assistant, added by the dashboard (withMarks in marks.ts)
+  said?: string; // where it came from as the canvas says it: "From Wednesday's email", "You said so today"
+  attr?: string; // the attribute, for which lines lead the face (faceLines)
+  kind?: string; // the diary row's kind, likewise
 }
-export interface Waiting { what: string; verb: string; href: string; seen?: string; stranger?: boolean } // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
+export interface Waiting { what: string; verb: string; href: string; seen?: string; stranger?: boolean; meta?: string } // meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
-export interface HomeView { name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number }
+export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number }
 
 export const SINCE_CAP = 7;
+// The face of On your mind (canvas "final direction", Louis 2026-10-31: the home was a log): six
+// cards at most, what waits first, then the memories worth acting on; the rest a tap away.
+export const MIND_CAP = 6;
+const MIND_MIN_MEMORIES = 2;
 // Held values shown one by one on the home before the rest fold into one line.
 export const HELD_EACH = 3;
 const JUST_SAID_MS = 60 * 60_000;
@@ -119,6 +127,7 @@ export const LINE_COPY = {
   contactSettled: "You settled it: you were last in touch with {title} on {value}",
   roleNew: "{title}'s role is {value}",
   roleChanged: "{title} is {value} now",
+  roleChangedFrom: "{title} is {value} now, not {was}",
   roleSettled: "You settled it: {title} is {value}",
   verbNew: "{title} {attr} {value}",
   verbChanged: "{title} now {attr} {value}",
@@ -132,18 +141,100 @@ export const LINE_COPY = {
   confirmed: "Another {source} confirms {title}'s {attr}",
   saidAgain: "{title}'s {attr} was said again; nothing new",
   somethingNew: "Something new about {title}",
+  somethingUnnamed: "Something new only you can see",
+  manyUnnamed: "{value} new things only you can see",
+  manyNew: "{value} new things about {title}",
   heldUntil: "Something new about {title}, held until {until}",
   questionSetAside: "A question about {title} was set aside, since only a conflict asks you",
   takeBackSetAside: "A take-back on {title} was set aside, since only a conflict asks you",
   receipt: "A receipt on {title} was set aside; receipts aren't facts",
+  receiptUnnamed: "A receipt was set aside; receipts aren't facts",
   family: "{title} may be family: same surname as you",
   disagree: "Two sources disagree on {title}'s {attr}",
   disagreeNext: "Two sources disagree on what's next for {title}",
+  disagreeValues: "{title}'s {attr} is {a}. Or {b}?",
+  disagreeNextValues: "Next for {title}: {a}. Or {b}?",
+  disagreeRoleValues: "{title} is {a}. Or {b}?",
+  disagreeVerbValues: "{title} {attr} {a}. Or {b}?",
+} as const;
+// Where a memory came from, as the canvas says it under the line.
+export const SAID_COPY = {
+  email: "From {day}'s email",
+  calendar: "From {day}'s calendar",
+  notion: "From your Notion {when}",
+  you: "You said so {when}",
+  youVia: "You told your {name} {when}",
+  assistant: "{name} learned it {when}",
+  other: "From {source} {when}",
+  twoEmails: "Two emails disagree",
+  twoSources: "Two sources disagree",
 } as const;
 export type LineKey = keyof typeof LINE_COPY;
-export function lineWords(k: LineKey, v: Partial<Record<"title" | "attr" | "value" | "older" | "source" | "until", string>>): string {
+// Each line is a sentence: capitalised, and ending with a full stop unless it asks.
+export function lineWords(k: LineKey, v: Partial<Record<"title" | "attr" | "value" | "older" | "source" | "until" | "was" | "a" | "b", string>>): string {
   const s = LINE_COPY[k].replace(/\{title\}'s/g, () => /s$/i.test(v.title ?? "") ? `${v.title}'` : `${v.title}'s`).replace(/\{(\w+)\}/g, (_m, x: string) => (v as Record<string, string>)[x] ?? "");
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return (s.charAt(0).toUpperCase() + s.slice(1)).replace(/(?<![.?!…”])$/, ".");
+}
+
+// The name a held value's card or line may say for its page, or undefined when it may not: a page
+// a stranger's mail named (every fact on it came from addresses the pages don't hold, so its title
+// is that mail's subject), a money page, or a name shaped like
+// money, health or legal.
+export function heldName(rules: Rules, n: Note | undefined, u: { page: string; title?: string; unknownSender?: boolean }): string | undefined {
+  const title = displayName(u.page, n?.fm.title !== undefined ? String(n.fm.title) : u.title);
+  // A page every fact of which came from addresses the pages don't hold was named by that mail.
+  const recs = Object.values(n?.fm.facts ?? {}).flatMap((f) => { const x = f as { items?: unknown[]; candidates?: unknown[] }; return (x.items ?? x.candidates ?? [f]) as { sender?: unknown }[]; });
+  const fromStranger = u.unknownSender && (!n || (recs.length > 0 && recs.every((r) => r?.sender === "unknown")));
+  if (fromStranger || n?.fm.type === "money" || u.page.startsWith("money/") || sensitiveShape(rules, title)) return undefined;
+  return title;
+}
+
+// A person by their first name when no other person page starts with it (the canvas says
+// "Antoine is head TA now"); anyone else, and any other page, by their whole name.
+const firstCache = new WeakMap<Map<string, Note>, Map<string, number>>();
+export function shortName(id: string, title: string, notes: Map<string, Note>): string {
+  if (!id.startsWith("people/")) return title;
+  const first = title.split(/\s+/)[0]!;
+  if (first === title || !/^\p{Lu}/u.test(first)) return title;
+  let counts = firstCache.get(notes);
+  if (!counts) {
+    counts = new Map();
+    for (const n of notes.values()) if (n.fm.id.startsWith("people/")) { const f = displayName(n.fm.id, n.fm.title).split(/\s+/)[0]!; counts.set(f, (counts.get(f) ?? 0) + 1); }
+    firstCache.set(notes, counts);
+  }
+  return (counts.get(first) ?? 0) === 1 ? first : title;
+}
+
+// The days a line says, as words the owner uses: "today", "yesterday", else the weekday.
+const FULL_DAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function dayName(day: string, today: string): { day: string; when: string } {
+  const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  if (day === today) return { day: "today", when: "today" };
+  if (day === yesterday) return { day: "yesterday", when: "yesterday" };
+  const w = FULL_DAY[new Date(`${day}T12:00:00Z`).getUTCDay()]!;
+  return Date.parse(today) - Date.parse(day) < 7 * 86_400_000 ? { day: w, when: `on ${w}` } : { day: longDay(day), when: `on ${longDay(day)}` };
+}
+export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at">, rules: Rules, today = dayOf(clock().toISOString())): string {
+  const d = dayName(dayOf(row.at), today);
+  const label = (by: string) => rules.policy.agents[by]?.label ?? by;
+  const f = (s: string, v: Record<string, string>) => { const t = s.replace(/\{(\w+)\}/g, (_m, x: string) => v[x] ?? ""); return t.charAt(0).toUpperCase() + t.slice(1); };
+  switch (row.source_word) {
+    case "email": return f(SAID_COPY.email, d);
+    case "calendar": return f(SAID_COPY.calendar, d);
+    case "notion": return f(SAID_COPY.notion, d);
+    case "you": return !row.by || isOwnerId(row.by) ? f(SAID_COPY.you, d) : f(SAID_COPY.youVia, { ...d, name: label(row.by) });
+    case "assistant": case "none": return f(SAID_COPY.assistant, { ...d, name: label(row.by) });
+    default: return f(SAID_COPY.other, { ...d, source: row.source_word });
+  }
+}
+
+// The words two sides share at the start are said once: "freeze the beta build on 15 October. Or
+// 22 October?" (canvas). Only a shared start of two words or more, and never the whole of a side.
+export function differ(values: string[]): { shared: string; rest: string[] } {
+  const words = values.map((v) => v.split(/\s+/));
+  let n = 0;
+  while (words.every((w) => n < w.length - 1 && w[n] === words[0]![n])) n++;
+  return n >= 2 ? { shared: words[0]!.slice(0, n).join(" "), rest: words.map((w) => w.slice(n).join(" ")) } : { shared: "", rest: values };
 }
 
 // A filing that confirmed a held value, by the kind of source it added (G524).
@@ -156,22 +247,36 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   const say = (v: unknown) => plain(v, (x) => { const t = notes.get(x)?.fm.title; return t === undefined ? undefined : String(t); }, slugsOf(notes));
   // A private line, or one whose value waits for the owner's Show (spec §7), names only its page.
   const held = (() => { const f = notes.get(id)?.fm.facts?.[attr] as { items?: { unseen?: boolean; valid_to?: string }[]; unseen?: boolean } | undefined; return !!f && (f.unseen === true || (f.items ?? []).some((i) => i.unseen && !i.valid_to)); })();
-  const shapeless = held || sensitivityRank(row.sensitivity) >= sensitivityRank("private");
+  // Decided from the page as it is now, never only from the stored row (audit v7's rule; owner-canvas
+  // slice audit): a page or a fact's live record made private since says only that something is new.
+  const isPrivate = (x: unknown) => typeof x === "string" && sensitivityRank(x as never) >= sensitivityRank("private");
+  const noteNow = notes.get(id), factNow = noteNow?.fm.facts?.[attr] as { sensitivity?: string; valid_to?: string; items?: { sensitivity?: string; valid_to?: string }[]; candidates?: { sensitivity?: string }[] } | undefined;
+  const privateNow = isPrivate(noteNow?.fm.sensitivity) || [factNow, ...(factNow?.items ?? []).filter((i) => !i.valid_to), ...(factNow?.candidates ?? [])].some((r) => isPrivate(r?.sensitivity));
+  const shapeless = held || privateNow || sensitivityRank(row.sensitivity) >= sensitivityRank("private");
+  // A private line names its page only as its held card would (heldName).
+  const stranger = [factNow, ...(factNow?.items ?? [])].some((r) => (r as { sender?: unknown } | undefined)?.sender === "unknown");
+  const safeName = heldName(rules, noteNow, { page: id, title: row.title, unknownSender: stranger }) !== undefined;
+  const named = !shapeless || safeName;
   const from = `${fromWords(row, rules)}, ${weekday(dayOf(row.at))}`;
+  const said = saidWords(row, rules), tag = { said, attr, kind: row.kind };
   // An assistant's proposal held until its day, or one set aside (src/filing.ts): never its value.
-  if (row.kind === "held") return { token: row.undo_token, page: id, what: lineWords("heldUntil", { title: row.title, until: row.until ? longDay(row.until) : "you let it file" }), from, undo: "none", maybe: false, shapeless: true };
-  if (row.kind === "set_aside") return { token: row.undo_token, page: id, what: lineWords(attr === "open_question" ? "questionSetAside" : "takeBackSetAside", { title: row.title }), from, undo: "none", maybe: false, shapeless: true };
+  if (row.kind === "held") return { token: row.undo_token, page: id, what: lineWords("heldUntil", { title: row.title, until: row.until ? longDay(row.until) : "you let it file" }), from, undo: "none", maybe: false, shapeless: true, ...tag };
+  if (row.kind === "set_aside") return { token: row.undo_token, page: id, what: lineWords(attr === "open_question" ? "questionSetAside" : "takeBackSetAside", { title: row.title }), from, undo: "none", maybe: false, shapeless: true, ...tag };
   const verb = isVerbAttribute(attr);
-  const w = (k: LineKey) => lineWords(k, { title: row.title!, attr: a, value: say(row.to), older: olderSay(row), source: CONFIRMED_BY[row.source_word] ?? "source" });
+  const t = shortName(id, row.title!, notes);
+  const w = (k: LineKey) => lineWords(k, { title: t, attr: a, value: say(row.to), older: olderSay(row), source: CONFIRMED_BY[row.source_word] ?? "source", ...(row.from !== undefined && !shapeless ? { was: say(row.from) } : {}) });
   // A few attributes have their own sentence: what's next, when the owner was last in touch, a role.
   const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : undefined;
-  const what = row.why === "receipt" ? w("receipt")
+  // What may be said is decided first (owner-canvas re-audit): a receipt says its page only by a
+  // name heldName allows, and a family line, like any other, says nothing on a page private now.
+  const what = row.why === "receipt" ? (safeName ? w("receipt") : lineWords("receiptUnnamed", {}))
+    : shapeless ? (named ? w("somethingNew") : lineWords("somethingUnnamed", {}))
     : row.why === "family" ? w("family")
-    : shapeless ? w("somethingNew")
     : verb && (row.kind === "new" || row.kind === "item_added") ? w("verbNew")
     : verb && row.kind === "changed" ? w("verbChanged")
     : verb && row.kind === "settled" ? w("verbSettled")
     : verb && row.kind === "kept" && row.source_word !== "you" ? w("verbKept")
+    : own === "role" && row.kind === "changed" && row.from !== undefined ? w("roleChangedFrom")
     : own && (row.kind === "new" || row.kind === "changed" || row.kind === "settled") ? w(`${own}${row.kind === "new" ? "New" : row.kind === "changed" ? "Changed" : "Settled"}` as LineKey)
     : row.kind === "new" ? w("new")
     : row.kind === "changed" ? w("changed")
@@ -184,7 +289,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
     : row.kind === "confirmed" ? (row.added?.length ? w("confirmed") : w("saidAgain"))
     : undefined;
   if (!what) return undefined; // a conflict line waits on the owner instead
-  const about = row.why === "receipt" ? {} : { key: row.fact_key, ...(held ? { held } : {}) };
+  const about = { ...tag, ...(row.why === "receipt" ? { kind: "receipt" } : { key: row.fact_key, ...(held ? { held } : {}) }) };
   if (row.kind === "kept" || (row.kind === "confirmed" && !row.added?.length)) return { token: row.undo_token, page: id, what, from, undo: "none", maybe: false, shapeless, ...about };
   const note = notes.get(id);
   const now = note ? shownValue(note.fm.facts?.[attr]) : undefined;
@@ -214,15 +319,50 @@ function foldKept(rows: DiaryRow[]): (DiaryRow & { count?: number })[] {
 // still weighs are listed apart, quietly, and open the same settle screen.
 function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[]; gardener: Waiting[] } {
   const open = ownerConflicts(root, now, { held: true });
-  const disagree = (page: string, title: string | undefined, attr: string) => lineWords(attr === "next_step" ? "disagreeNext" : "disagree", { title: displayName(page, title), attr: words(attr) });
-  const line = (c: (typeof open)[number], verb: string) => ({ what: disagree(c.page, c.title, c.attr), verb, href: `/settle/${c.id}` });
-  // What the owner hasn't seen yet is held from every assistant (spec §7): named, never shown here.
-  const held = unseenFacts(root).map((u) => ({ what: lineWords("somethingNew", { title: displayName(u.page, u.title) }), verb: `${u.unknownSender ? "from an address your pages don't hold · " : ""}only you can see it yet`, href: `/p/${u.page.split("/").map(encodeURIComponent).join("/")}`, seen: u.fact_key, ...(u.unknownSender ? { stranger: true } : {}) }));
-  // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
-  const inbox = inboxConflicts(root).map((c) => ({ what: disagree(c.page, c.title, c.attr), verb: "tap to settle", href: `/settle/${c.id}` }));
-  // A message the relay held between two assistants: send it or not, on its own settle screen.
   const rules = loadRules(root);
-  const mail = comms(root).filter((m) => m.verdict === "held").map((m) => ({ what: `${cap(agentLabel(rules, m.from))}'s message to ${agentLabel(rules, m.to)} is held`, verb: "tap to decide", href: `/settle/m-${m.id}` }));
+  const notes = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n]));
+  const unseen = unseenFacts(root);
+  const disagree = (page: string, title: string | undefined, attr: string) => lineWords(attr === "next_step" ? "disagreeNext" : "disagree", { title: displayName(page, title), attr: words(attr) });
+  // A conflict says its two values, as the canvas does, only when they could show on any sign-in:
+  // worked out from the page as it is now, never from what the conflict stored (audit v7's rule):
+  // the page and the fact below private, no value held for Read it, nothing money-, health- or
+  // legal-shaped, and short enough for a line. Else the sentence names only the page.
+  const valued = (c: SettleCase): string | undefined => {
+    const n = notes.get(c.page);
+    if (!n || c.private || c.sides.length !== 2 || sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
+    const f = n.fm.facts?.[c.attr] as { sensitivity?: string; candidates?: { sensitivity?: string }[]; items?: { sensitivity?: string }[] } | undefined;
+    if ([f, ...(f?.candidates ?? []), ...(f?.items ?? [])].some((r) => r?.sensitivity && sensitivityRank(r.sensitivity as never) >= sensitivityRank("private"))) return undefined;
+    if (unseen.some((u) => u.page === c.page)) return undefined;
+    const say = (v: unknown) => plain(v, (x) => { const t = notes.get(x)?.fm.title; return t === undefined ? undefined : String(t); }, slugsOf(notes));
+    const vals = c.sides.map((x) => say(x.value));
+    if (vals.some((v) => !v || v.length > 80) || sensitiveShape(rules, c.attr, ...vals)) return undefined;
+    const d = differ(vals);
+    const a = d.shared ? `${d.shared} ${d.rest[0]}` : vals[0]!, b = d.rest[1]!;
+    const t = shortName(c.page, displayName(c.page, c.title), notes);
+    return lineWords(c.attr === "next_step" ? "disagreeNextValues" : c.attr === "role" ? "disagreeRoleValues" : isVerbAttribute(c.attr) ? "disagreeVerbValues" : "disagreeValues", { title: t, attr: words(c.attr), a, b });
+  };
+  const meta = (c: SettleCase) => c.sides.every((x) => x.source_word === "email") ? SAID_COPY.twoEmails : SAID_COPY.twoSources;
+  const line = (c: SettleCase, verb: string) => { const v = valued(c); return { what: v ?? disagree(c.page, c.title, c.attr), verb, href: `/settle/${c.id}`, ...(v ? { meta: meta(c) } : {}) }; };
+  // What the owner hasn't seen yet is held from every assistant (spec §7): named, never shown here.
+  // A held value's card names its page only when that name is safe on any sign-in (owner's phone,
+  // 2026-10-31: "Something new about Apple Services payment" twice): never a name a stranger's mail
+  // gave it, a money page or a name shaped like money, health or legal. Cards that would read the
+  // same are one card that counts them; its Read it shows each (the keys, one per line).
+  const groups = new Map<string, Unseen[]>();
+  for (const u of unseen) {
+    const name = heldName(rules, notes.get(u.page), u);
+    const g = groups.get(name ?? "") ?? [];
+    g.push(u); groups.set(name ?? "", g);
+  }
+  const held = [...groups].map(([name, us]) => {
+    const one = us.length === 1, page = us[0]!.page, stranger = us.some((u) => u.unknownSender);
+    const what = name ? (one ? lineWords("somethingNew", { title: name }) : lineWords("manyNew", { title: name, value: String(us.length) })) : one ? lineWords("somethingUnnamed", {}) : lineWords("manyUnnamed", { value: String(us.length) });
+    return { what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(stranger ? { stranger: true } : {}) };
+  });
+  // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
+  const inbox = inboxConflicts(root).map((c) => line(c, "tap to settle"));
+  // A message the relay held between two assistants: send it or not, on its own settle screen.
+  const mail = comms(root).filter((m) => m.verdict === "held").map((m) => ({ what: `${cap(agentLabel(rules, m.from))}'s message to ${agentLabel(rules, m.to)} is held.`, verb: "tap to decide", href: `/settle/m-${m.id}` }));
   // Each held value is its own locked card with Read it (owner app brief, 2026-10-30), after the
   // conflicts, but only a few (owner's phone, 2026-10-29: a wall of receipts was the first thing on
   // the home); the rest are one line, a tap away.
@@ -326,6 +466,7 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
   recent.sort(([a], [b]) => Number(justSaid(b)) - Number(justSaid(a)) || (justSaid(a) ? b.at.localeCompare(a.at) : 0) || (a.confidence === "inferred" ? 0 : 1) - (b.confidence === "inferred" ? 0 : 1) || a.rank - b.rank || b.at.localeCompare(a.at));
   const cap = o.all ? recent.length : SINCE_CAP + recent.filter(([r]) => justSaid(r)).length;
   return {
+    ...(o.all ? { all: true } : {}),
     name: firstName(rules),
     date: longDay(today),
     reads: assistantReads(root, rules, now, notes, o.fresh ?? true),
@@ -336,6 +477,18 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
     earlierFolded: o.all ? 0 : [...older].reduce((n, [, lines], i) => n + (i < EARLIER_DAYS ? Math.max(0, lines.length - EARLIER_PER_DAY) : lines.length), 0),
   };
 }
+
+// The memories that lead the face: what the owner just said, then what's next, a role, the facts
+// that read as a verb ("prefers"), then other news. A last-contact date, a confirmation, a value
+// kept or said again, an undo, a take-back, a receipt, a set-aside and a line that may only say
+// "something new" (its card above waits already) are the full list's only.
+const FACE_KINDS = new Set(["new", "changed", "settled", "item_added"]);
+const faceRank = (l: HomeLine) => l.just ? 0 : l.attr === "next_step" ? 1 : l.attr === "role" ? 2 : l.attr && isVerbAttribute(l.attr) ? 3 : 4;
+export function faceLines(lines: HomeLine[], room: number): HomeLine[] {
+  const fit = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.just || (FACE_KINDS.has(l.kind ?? "") && l.attr !== "last_contact" && l.undo !== "undone"));
+  return fit.sort((a, b) => faceRank(a.l) - faceRank(b.l) || a.i - b.i).slice(0, Math.max(room, fit.filter(({ l }) => l.just).length)).map(({ l }) => l);
+}
+export const faceRoom = (waiting: number) => Math.max(MIND_MIN_MEMORIES, MIND_CAP - waiting);
 
 // Memory's "Pages that changed" (owner app step 3): one row per page the diary touched in the last
 // 7 days, newest first, with its area, the attributes that changed in the owner's words (never a

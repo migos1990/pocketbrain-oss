@@ -9,12 +9,22 @@ import { scrubLeaves } from "../view";
 import type { Rules } from "../rules";
 import { ownAssistant } from "../rules";
 
-export interface Mark { agent: string; name: string; short: string; holds: boolean }
+export interface Mark { agent: string; name: string; short: string; holds: boolean; colour?: string }
 
 // The assistants a mark is drawn for: the owner's own, not paused (the same as the home's rows).
 export function markAgents(rules: Rules): { agent: string; name: string }[] {
   return Object.entries(rules.policy.agents).filter(([k, a]) => ownAssistant(rules, k) && a.status !== "paused")
     .map(([agent, a]) => ({ agent, name: a.label ?? agent })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Each assistant's own colour (canvas: Claude ink, ChatGPT teal, Gemini indigo), on its marks and
+// its Who knows card; any other takes the next free one, in the same order everywhere.
+const KNOWN_COLOUR: Record<string, number> = { claude: 0, chatgpt: 1, gemini: 2 };
+export const COLOURS = 6;
+export function colours(names: string[]): string[] {
+  const used = new Set<number>();
+  const pick = names.map((n) => { const c = KNOWN_COLOUR[n.toLowerCase().replace(/[^a-z]/g, "")]; if (c === undefined || used.has(c)) return undefined; used.add(c); return c; });
+  return pick.map((c) => { if (c !== undefined) return `c${c}`; let k = 0; while (used.has(k) && k < COLOURS - 1) k++; used.add(k); return `c${k}`; });
 }
 
 // A short name per assistant for its mark: its first letter, two when another starts the same.
@@ -38,9 +48,9 @@ function holds(res: CarveResult, hidden: Set<string>, key: string): boolean {
 // One carve per assistant, then a lookup per fact: marksFor(rules, notes)("people/x#role").
 export function marksFor(rules: Rules, notes: Note[]): (factKey: string) => Mark[] {
   const agents = markAgents(rules);
-  const short = shorts(agents.map((a) => a.name));
+  const short = shorts(agents.map((a) => a.name)), colour = colours(agents.map((a) => a.name));
   const carves = agents.map((a) => { const res = carve(notes, rules, grantFor(rules, a.agent), { flags: false }); return { res, hidden: new Set(res.hiddenFacts.map((h) => h.key)) }; });
-  return (key) => agents.map((a, i) => ({ ...a, short: short[i]!, holds: holds(carves[i]!.res, carves[i]!.hidden, key) }));
+  return (key) => agents.map((a, i) => ({ ...a, short: short[i]!, colour: colour[i]!, holds: holds(carves[i]!.res, carves[i]!.hidden, key) }));
 }
 
 // The home's lines with their marks: a filed line whose fact is still on its page gets one per

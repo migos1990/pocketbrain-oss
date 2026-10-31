@@ -68,7 +68,7 @@ test("the home says it in words", async () => {
   runAuto(root, AFTER);
   const v = homeView(root, loadRules(root), loadBrain(root), AFTER);
   const lines = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
-  expect(lines.map((l) => l.what)).toContain("Another email confirms Course A's next thing to do");
+  expect(lines.map((l) => l.what)).toContain("Another email confirms Course A's next thing to do.");
 });
 
 test("the self-check counts a hub filing that left no diary line", async () => {

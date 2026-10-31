@@ -24,13 +24,22 @@ function receipts(n: number) {
 }
 const NOW = new Date("2026-10-29T23:00:00Z");
 
+// Held values on pages with plain names from known senders: one card per page.
+function named(n: number) {
+  const root = makeBrain();
+  for (let i = 1; i <= n; i++) writeFileSync(join(root, "people", `held-${i}.md`), `---\nid: people/held-${i}\ntype: person\ntitle: Person ${i}\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  prefers: { value: "tea", as_of: 2026-10-28, sources: ["gmail:f00000000000003${i}"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true, sender: known }\n---\n`);
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+  Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: held"], { cwd: root });
+  return root;
+}
+
 test("held values are a locked card each, a few of them, with the rest one tap away", () => {
-  const root = receipts(5);
+  const root = named(5);
   const v = homeView(root, loadRules(root), loadBrain(root), NOW);
   const held = v.waiting.filter((w) => /only you can see/.test(w.verb));
   expect(HELD_EACH).toBe(3);
   expect(held.filter((w) => w.seen)).toHaveLength(3);
-  for (const w of held.filter((w) => w.seen)) expect(w.what).toBe("Something new about Apple Services payment");
+  for (const w of held.filter((w) => w.seen)) expect(w.what).toMatch(/^Something new about Person \d\.$/);
   const rest = held.filter((w) => !w.seen);
   expect(rest).toHaveLength(1);
   expect(rest[0]!.what).toBe("2 more new private things.");
@@ -38,9 +47,16 @@ test("held values are a locked card each, a few of them, with the rest one tap a
   const all = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
   expect(all.waiting.filter((w) => w.seen)).toHaveLength(5);
   // Exactly HELD_EACH: no "more" line.
-  const three = receipts(3);
+  const three = named(3);
   expect(homeView(three, loadRules(three), loadBrain(three), NOW).waiting.filter((w) => w.seen)).toHaveLength(3);
   expect(homeView(three, loadRules(three), loadBrain(three), NOW).waiting.filter((w) => !w.seen)).toHaveLength(0);
+});
+
+test("receipts from strangers are one card that names none of them (owner's phone, 2026-10-31, G568)", () => {
+  const root = receipts(5);
+  const v = homeView(root, loadRules(root), loadBrain(root), NOW);
+  expect(v.waiting.map((w) => w.what)).toEqual(["5 new things only you can see."]);
+  expect(v.waiting[0]!.seen!.split("\n")).toHaveLength(5);
 });
 
 test("one held value keeps its own row and Show", () => {
@@ -48,6 +64,7 @@ test("one held value keeps its own row and Show", () => {
   const v = homeView(root, loadRules(root), loadBrain(root), NOW);
   expect(v.waiting).toHaveLength(1);
   expect(v.waiting[0]!.seen).toBe("money/apple-payment-1#amount");
+  expect(v.waiting[0]!.what).toBe("Something new only you can see.");
 });
 
 test("each held value has one Read it on the home: its card, never its memory too (Mac, 2026-10-31, G550)", async () => {
@@ -66,7 +83,7 @@ test("each held value has one Read it on the home: its card, never its memory to
     // Its memory further down keeps the lock, naming only its page.
     const v = homeView(root, loadRules(root), loadBrain(root), new Date(DEMO_NOW), { all: true });
     const line = [...v.since, ...v.earlier.flatMap((x) => x.lines)].find((l) => l.held)!;
-    expect(line.what).toBe("Something new about Hélène Lefebvre");
+    expect(line.what).toBe("Something new about Hélène.");
     const card = memoryCard(line, "c");
     expect(card).toContain(APP_COPY.onlyYou);
     expect(card).not.toContain("diary-seen");

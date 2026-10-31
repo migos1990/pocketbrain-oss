@@ -6,6 +6,7 @@
 // model decides anything here. Fixed words are in APP_COPY, held to the owner's words by
 // test/owner-copy.test.ts.
 import type { HomeView, HomeLine, Waiting, ChangedPage } from "./home";
+import { faceLines, faceRoom } from "./home";
 import type { Mark } from "./marks";
 import type { WrongLine } from "./home-beliefs";
 import type { SayReply } from "../owner-say";
@@ -87,12 +88,15 @@ const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w
 const and = (names: string[]) => names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
 // The look (brief 2026-10-30): white ground, one accent, soft rounded blocks, a four-item tab bar.
-// The typeface is named, never fetched: the hub serves no outside files (its CSP is default-src
-// 'none'), so a phone without Plus Jakarta Sans gets its own sans.
+// The typeface is the hub's own copy of Plus Jakarta Sans (SIL OFL, src/dashboard/fonts/), served
+// at FONT_PATH; the page policy allows fonts from the hub only (font-src 'self').
 const LIGHT = "--t-work:#e0e3ff;--t-work-text:#2e2a9e;--t-teaching:#ffe8c2;--t-teaching-text:#6b3f00;--t-personal:#d5f2ec;--t-personal-text:#0b5b52;--bg:#ffffff;--soft:#f6f6f9;--line:#ececf1;--text:#111318;--text-2:#4f5361;--muted:#5f6370;--accent:#4338ca;--accent-text:#4338ca;--on-accent:#ffffff;--ink:#111318;--on-ink:#ffffff;--warn:#7a3e00;--warn-bg:#fff4e6;--dash:#9ea2ae;";
 const DARK = "--t-work:#26264d;--t-work-text:#c7cbff;--t-teaching:#3a2a10;--t-teaching-text:#f5c77e;--t-personal:#0f2f2a;--t-personal-text:#8fe0cf;--bg:#15161a;--soft:#202128;--line:#2c2e36;--text:#ecedf1;--text-2:#b9bcc8;--muted:#a3a7b3;--accent:#a5b4fc;--accent-text:#a5b4fc;--on-accent:#15161a;--ink:#ecedf1;--on-ink:#15161a;--warn:#f5c77e;--warn-bg:#33270f;--dash:#6b6f7b;";
 const FONT = '"Plus Jakarta Sans",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Helvetica,sans-serif';
+export const FONT_PATH = "/font/plus-jakarta-sans.woff2";
+const MARK_COLOURS = ".c0{background:var(--ink);color:var(--on-ink)}.c1{background:#0f766e;color:#fff}.c2{background:#4338ca;color:#fff}.c3{background:#b45309;color:#fff}.c4{background:#be185d;color:#fff}.c5{background:#475569;color:#fff}";
 export const APP_CSS = `
+@font-face{font-family:"Plus Jakarta Sans";font-style:normal;font-weight:500 800;font-display:swap;src:url(${FONT_PATH}) format("woff2")}
 :root{color-scheme:light;${LIGHT}}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;${DARK}}}
 :root[data-theme="dark"]{color-scheme:dark;${DARK}}
@@ -132,6 +136,9 @@ ul{list-style:none;margin:0;padding:0}
 .pill.solid{color:var(--on-ink);background:var(--ink);border-color:var(--ink)}
 .marks{display:inline-flex;align-items:center;gap:4px}
 .mark{min-width:24px;height:24px;padding:0 4px;border-radius:7px;background:var(--ink);color:var(--on-ink);font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+${MARK_COLOURS.replace(/\.c(\d)/g, ".mark.c$1,.av.c$1")}
+.card .said{font-size:13px;line-height:18px;color:var(--muted)}
+.card .meta{font-size:13px;line-height:18px;font-weight:700;color:var(--warn)}
 .mark.not{background:var(--bg);border:1.5px dashed var(--dash);color:var(--muted)}
 a.mark.not{position:relative;border-color:var(--accent);color:var(--accent-text)}
 a.mark.not::after{content:"";position:absolute;inset:-10px}
@@ -183,6 +190,9 @@ a.mark.not::after{content:"";position:absolute;inset:-10px}
 .agent details{margin:8px 0 0}.agent summary{min-height:44px;display:flex;align-items:center;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer}
 .settings{display:flex;flex-direction:column;justify-content:center;min-height:56px;background:var(--soft);border-radius:18px;padding:10px 16px;margin:16px 0 0;color:var(--text);font-weight:700}
 .settings small{font-weight:500;color:var(--muted);font-size:13px}
+.pinned{position:fixed;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom));background:var(--bg);padding:10px max(16px,env(safe-area-inset-left)) 8px}
+.pinned>*{max-width:608px;margin-left:auto;margin-right:auto}.pinned form.box{margin:0 auto}
+.wrap.chat{padding-bottom:calc(180px + env(safe-area-inset-bottom))}
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;height:calc(84px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-start;padding:8px 8px env(safe-area-inset-bottom)}
 nav.tabbar a{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:64px;min-height:56px;padding-top:4px;color:var(--muted);font-size:11px;line-height:14px;font-weight:600}
 nav.tabbar a[aria-current]{color:var(--accent-text);font-weight:700}
@@ -215,21 +225,25 @@ export function marksHtml(marks: Mark[], key?: string): string {
   const yes = marks.filter((m) => m.holds).map((m) => m.name), no = marks.filter((m) => !m.holds).map((m) => m.name);
   const said = [yes.length ? fill(APP_COPY.knownBy, { names: and(yes) }) : APP_COPY.nobody, ...(yes.length && no.length ? [fill(no.length === 1 ? APP_COPY.notBy : APP_COPY.notByMany, { names: and(no) })] : [])].join("; ");
   return `<span class="marks"><span class="sr">${esc(said)}</span>${marks.map((m) => m.holds || !key
-    ? `<span class="mark${m.holds ? "" : " not"}" aria-hidden="true">${esc(m.short)}</span>`
+    ? `<span class="mark${m.holds ? (m.colour ? ` ${m.colour}` : "") : " not"}" aria-hidden="true">${esc(m.short)}</span>`
     : `<a class="mark not" href="${esc(letHref(key, m.agent))}" aria-label="${esc(fill(APP_COPY.letMark, { name: m.name }))}">${esc(m.short)}</a>`).join("")}</span>`;
 }
 
 const lock = (stranger?: boolean) => `<span class="note">${LOCK}${esc(stranger ? `${APP_COPY.stranger} · ${APP_COPY.onlyYou}` : APP_COPY.onlyYou)}</span>`;
 
 // A memory: the line in the owner's words, where it came from, Undo, and who knows it.
-export function memoryCard(l: HomeLine, csrf: string): string {
-  const from = `<small>${esc(l.from)}${l.maybe ? ` · ${HOME_COPY.maybe}` : ""}${l.was !== undefined ? ` · ${HOME_COPY.was} ${esc(l.was)}` : ""}</small>`;
-  const undo = l.undo === "undo" ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: l.token })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${l.what}`)}">${HOME_COPY.undo}</button></form>`
+// On the face (the six cards) a memory is its sentence, where it came from and who knows it: its
+// Undo and what it was are on the full list and on its page, but what the owner just said keeps
+// its Undo there too.
+export function memoryCard(l: HomeLine, csrf: string, face = false): string {
+  const where = l.said ?? l.from;
+  const from = face ? `<small>${esc(where)}${l.maybe ? ` · ${HOME_COPY.maybe}` : ""}</small>` : `<small>${esc(where)}${l.maybe ? ` · ${HOME_COPY.maybe}` : ""}${l.was !== undefined ? ` · ${HOME_COPY.was} ${esc(l.was)}` : ""}</small>`;
+  const undo = face && !l.just ? "" : l.undo === "undo" ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: l.token })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${l.what}`)}">${HOME_COPY.undo}</button></form>`
     : l.undo === "changed" ? `<a class="state" href="${href(l.page)}">${HOME_COPY.changed}</a>`
     : l.undo === "undone" ? `<span class="state">${HOME_COPY.undone}</span>` : "";
   // A held value's memory is locked; its one Read it is its card above (G550: never twice).
   const who = l.held ? lock() : l.marks?.length ? marksHtml(l.marks, l.key) : "";
-  const fromLine = l.just ? `<small>${APP_COPY.justSaid}${l.was !== undefined ? ` · ${HOME_COPY.was} ${esc(l.was)}` : ""}</small>` : from;
+  const fromLine = l.just ? `<small>${APP_COPY.justSaid}${l.was !== undefined && !face ? ` · ${HOME_COPY.was} ${esc(l.was)}` : ""}</small>` : from;
   return `<li class="card${l.held ? " warn" : l.just ? " told" : ""}"><a class="what" href="${href(l.page)}">${esc(l.what)}</a><div class="foot">${fromLine}<span class="acts">${undo}${who}</span></div></li>`;
 }
 
@@ -237,10 +251,10 @@ export function memoryCard(l: HomeLine, csrf: string): string {
 function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.readIt}: ${w.what}`)}">${APP_COPY.readIt}</button></form></div></li>`;
   if (w.href === "/home?all=1") return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock()}<a class="pill solid" href="${esc(w.href)}">${APP_COPY.seeThem}</a></div></li>`;
-  if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${APP_COPY.gardener}</small></div></li>`;
+  if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${w.meta ? `${esc(w.meta)} · ` : ""}${APP_COPY.gardener}</small></div></li>`;
   const verb = w.href.startsWith("/settle/m-") ? APP_COPY.decide : APP_COPY.settle;
   // One link per block: the question opens from its Settle (or Decide), never twice.
-  return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><a class="pill" href="${esc(w.href)}" aria-label="${esc(`${verb}: ${w.what}`)}">${verb}</a></div></li>`;
+  return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot">${w.meta ? `<span class="meta">${esc(w.meta)}</span>` : ""}<a class="pill" href="${esc(w.href)}" aria-label="${esc(`${verb}: ${w.what}`)}">${verb}</a></div></li>`;
 }
 
 const header = (day: string, title: string, initial: string) => `<header class="top"><div><p class="day">${esc(day)}</p><h1>${esc(title)}</h1></div><a class="me" href="/who" aria-label="${APP_COPY.me}">${esc(initial)}</a></header>`;
@@ -249,9 +263,12 @@ const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<
 // On your mind (/home): the box, then what waits on the owner, then the memories, least certain and
 // newest first (homeView's order), the day inside each line, never a heading.
 export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string } = {}): string {
-  const lines = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
-  const more = v.folded + v.earlierFolded;
-  const cards = [...v.waiting.map((w) => waitingCard(w, csrf)), ...v.gardener.map((w) => waitingCard(w, csrf, true)), ...lines.map((l) => memoryCard(l, csrf))];
+  const all = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
+  // The face: what waits, then the memories worth acting on, six cards in all (MIND_CAP); the full
+  // list (?all=1) is every line with its Undo.
+  const lines = v.all ? all : faceLines(all, faceRoom(v.waiting.length + v.gardener.length));
+  const more = v.all ? 0 : all.length - lines.length + v.folded + v.earlierFolded;
+  const cards = [...v.waiting.map((w) => waitingCard(w, csrf)), ...v.gardener.map((w) => waitingCard(w, csrf, true)), ...lines.map((l) => memoryCard(l, csrf, !v.all))];
   return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name.slice(0, 1))}
 ${box(csrf, {}, APP_COPY.box)}${replyHtml(csrf, o)}
 ${cards.length ? `<ul class="mind">${cards.join("")}</ul>` : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(fill(APP_COPY.more, { n: more }))}</a>` : ""}`);
@@ -276,9 +293,11 @@ export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { t
   };
   const older = o.older ? `<p class="quiet">${APP_COPY.askOlder}</p>` : "";
   const talk = turns.length ? `<ol class="talk">${turns.map((t, i) => turn(t, i === turns.length - 1)).join("")}</ol>` : older ? "" : `<p class="bubble">${APP_COPY.askHint}</p>`;
+  // The box sits at the bottom, above the tabs, as in any chat (Louis, 2026-10-31), and the page
+  // opens on the newest answer.
   return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.ask, v.name.slice(0, 1))}
 ${older}${talk}${o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : ""}
-${box(csrf, { from: "ask" }, APP_COPY.askBox)}`);
+<div class="pinned">${box(csrf, { from: "ask" }, APP_COPY.askBox)}</div>${turns.length ? "<script>scrollTo(0,document.body.scrollHeight)</script>" : ""}`, { wrap: "chat" });
 }
 
 // Memory (/memory): the kinds with their counts, a kind's pages, a search, and this week's pages.
@@ -311,7 +330,7 @@ ${search}${below}`);
 
 // Who knows (/who): one block per assistant, its reads today and what it asked, how much it gets
 // (See as), what its own memory has wrong with Fix everywhere; then Settings.
-export interface WhoExtras { flash?: string; memory?: { pages: number; people: number; learned: number; backup?: string }; trial?: string[]; shorts?: Record<string, string> }
+export interface WhoExtras { flash?: string; memory?: { pages: number; people: number; learned: number; backup?: string }; trial?: string[]; shorts?: Record<string, string>; colours?: Record<string, string> }
 export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
   const readLine = (r: HomeView["reads"][number]) => r.today === 0 ? APP_COPY.readNot : r.today === 1 ? APP_COPY.readOnce : fill(APP_COPY.readTimes, { n: r.today });
   const wrongLine = (r: HomeView["reads"][number], l: WrongLine) => `<li class="line wrong"><div class="t"><a href="${href(l.page)}">${esc(l.what)}</a><small>${esc(l.said !== undefined ? fill(HOME_COPY.remembers, { name: r.name, said: l.said, now: l.now ?? "" }) : fill(HOME_COPY.remembersQuiet, { name: r.name }))}</small></div>${l.fixing ? `<span class="state">${HOME_COPY.onItsWay}</span>` : `<form method="post" action="/action/fix-everywhere">${hidden(csrf, { key: l.key })}<button aria-label="${esc(`${HOME_COPY.fix}: ${l.what}`)}">${HOME_COPY.fix}</button></form>`}</li>`;
@@ -322,7 +341,7 @@ export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
     const sees = r.sees !== undefined ? fill(r.sees === r.of ? APP_COPY.seesAll : APP_COPY.seesSome, { sees: r.sees, of: r.of ?? r.sees }) : "";
     const asked = r.asked?.length ? `<details><summary>${esc(fill(APP_COPY.asked, { n: r.asked.length + (r.askedMore ?? 0) }))}</summary><ul>${r.asked.map((a) => `<li class="line ask"><div class="t">${esc(a.what)}<small>${esc(fill(HOME_COPY.askGot, { at: a.at, told: a.told }))}</small></div></li>`).join("")}${r.askedMore ? `<li class="line ask"><small>${esc(fill(HOME_COPY.askMore, { n: r.askedMore }))}</small></li>` : ""}</ul></details>` : "";
     const wrong = r.wrong?.length ? `<ul class="wrongs">${r.wrong.map((l) => wrongLine(r, l)).join("")}${r.more ? `<li class="line"><small>${esc(fill(HOME_COPY.wrongMore, { n: r.more }))}</small></li>` : ""}</ul>` : "";
-    return `<li class="agent"><div class="who-head"><span class="av" aria-hidden="true">${esc(o.shorts?.[r.agent] ?? r.name.slice(0, 1))}</span><div class="t"><b>${esc(r.name)}</b>${trial.has(r.agent) ? `<span class="badge">${APP_COPY.trial}</span>` : ""}<small>${esc(readLine(r))}</small></div>${r.seeHref ? `<a class="see" href="${esc(r.seeHref)}">${APP_COPY.seeAs}</a>` : ""}</div>${sees || trial.has(r.agent) ? `<p class="sees">${esc([sees, trial.has(r.agent) ? APP_COPY.trialWhy : ""].filter(Boolean).join(" · "))}</p>` : ""}${wrong}${asked}</li><!--agent-->`;
+    return `<li class="agent"><div class="who-head"><span class="av${o.colours?.[r.agent] ? ` ${o.colours[r.agent]}` : ""}" aria-hidden="true">${esc(o.shorts?.[r.agent] ?? r.name.slice(0, 1))}</span><div class="t"><b>${esc(r.name)}</b>${trial.has(r.agent) ? `<span class="badge">${APP_COPY.trial}</span>` : ""}<small>${esc(readLine(r))}</small></div>${r.seeHref ? `<a class="see" href="${esc(r.seeHref)}">${APP_COPY.seeAs}</a>` : ""}</div>${sees || trial.has(r.agent) ? `<p class="sees">${esc([sees, trial.has(r.agent) ? APP_COPY.trialWhy : ""].filter(Boolean).join(" · "))}</p>` : ""}${wrong}${asked}</li><!--agent-->`;
   };
   const m = o.memory;
   const numbers = m ? `<section class="numbers" aria-labelledby="mem"><h2 id="mem">${APP_COPY.yourMemory}</h2><div class="nums"><p><b>${m.pages}</b><span>pages</span></p><p><b>${m.people}</b><span>people</span></p><p><b>${m.learned}</b><span>learned this week</span></p></div><p class="backup">${esc(m.backup ?? APP_COPY.backupNone)}</p></section>` : "";

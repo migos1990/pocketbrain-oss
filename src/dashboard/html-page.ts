@@ -52,6 +52,7 @@ export const PAGE_COPY = {
   openPrivate: "Only you see this page. It stays open 10 minutes after you sign in.",
   edit: "Edit this page",
   editShort: "Edit",
+  roleAt: "{role} at {org}",
 } as const;
 
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
@@ -67,7 +68,7 @@ const PAGE_CSS = `
 .band .chips{margin:0}.band .chip{font-size:13px;line-height:18px;font-weight:700;color:var(--band-text,var(--text));background:var(--bg);border-radius:999px;padding:6px 12px}
 .prose{font-size:17px;line-height:26px}
 .prose h2,.prose h3{font-size:17px;color:var(--text);margin:20px 0 4px}
-.prose sup a{font-size:12px;display:inline-block;min-width:24px;text-align:center}
+.prose sup a{font-size:12px;display:inline-block;min-width:24px;padding-left:2px;text-align:left}
 .prose ol{padding-left:24px;color:var(--muted);font-size:13px;line-height:18px;list-style:decimal}
 .prose ol li{margin:0 0 8px}
 .prose details.quote{border:0}.prose details.quote summary{min-height:44px;font-weight:500;color:var(--muted)}
@@ -81,8 +82,6 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font
 dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
 .seen{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 0;font-size:13px;line-height:18px;color:var(--muted)}
 .seen b{font-weight:700}.seen span{background:var(--soft);border-radius:999px;padding:3px 10px;font-weight:600;color:var(--text)}
-.pinned{position:fixed;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom));background:var(--bg);padding:10px max(16px,env(safe-area-inset-left)) 8px}
-.pinned>*{max-width:608px;margin-left:auto;margin-right:auto}.pinned form.box{margin:0 auto}
 .wrap.page{padding-bottom:calc(190px + env(safe-area-inset-bottom))}
 `;
 
@@ -165,6 +164,21 @@ function projectCard(s: State, n: Note, fresh: boolean): string {
   return open ? `<a class="project" href="/settle/${esc(open.id)}">${inner}</a>` : `<div class="project">${inner}</div>`;
 }
 
+// What a person does, under their name (canvas Person board: "QA lead at Harbourline · Montréal"):
+// their role, where they work, their city, each only where Details would show it. None known: the
+// page's kind and sources, as before.
+function personLine(s: State, n: Note, fresh: boolean, closed: boolean): string | undefined {
+  if (closed || folderOf(n.fm.id) !== "people") return undefined;
+  const one = (attr: string) => {
+    const f = n.fm.facts?.[attr];
+    const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined;
+    return r && !r.valid_to && (fresh || !shut(n, r)) ? plain(r.value, (x) => { const t = s.notes.find((m) => m.fm.id === x)?.fm.title; return t === undefined ? undefined : String(t); }) : "";
+  };
+  const [role, org, city] = [one("role"), one("org"), one("city")];
+  const what = role && org ? fill(PAGE_COPY.roleAt, { role, org }) : role || org;
+  return [what, city].filter(Boolean).join(" · ") || undefined;
+}
+
 const AREAS = new Set(["work", "teaching", "personal"]);
 const initials = (name: string) => name.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
@@ -179,7 +193,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
     return [];
-  }, 2).replace(/href="\/note\//g, 'href="/p/');
+  }, 2).replace(/href="\/note\//g, 'href="/p/').replace(/(class="b-ref">)\[(\d+)\]/g, "$1$2").replace(/\s+(<sup>)/g, "$1");
   const c = connections(s, n);
   const mentioned = c.mentionedIn.length ? `<h2>${PAGE_COPY.mentioned}</h2><ul>${c.mentionedIn.map((x) => `<li class="line"><div class="t"><a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a></div></li>`).join("")}</ul>` : "";
   const who = whoSees(s, csrf, n, closed);
@@ -192,7 +206,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const face = folderOf(n.fm.id) === "people" && initials(name) ? `<span class="face" aria-hidden="true">${esc(initials(name))}</span>` : "";
   const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
-<div class="head">${face}<div><h1>${esc(name)}</h1><p class="kind">${esc(kind)} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}</p></div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+<div class="head">${face}<div><h1>${esc(name)}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p></div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
   const pinned = `<div class="pinned">${replyHtml(csrf, { ...o, page: n.fm.id })}<form class="box" method="post" action="/say">${hidden(csrf, { page: n.fm.id })}<label class="sr" for="q">${esc(fill(PAGE_COPY.box, { name: first }))}</label><input type="text" id="q" name="q" placeholder="${esc(fill(PAGE_COPY.box, { name: first }))}" autocomplete="off" enterkeyhint="send" maxlength="500"><button>${PAGE_COPY.send}</button></form></div>`;

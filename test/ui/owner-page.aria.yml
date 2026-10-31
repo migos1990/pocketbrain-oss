@@ -5,32 +5,32 @@
     - /url: /note/people/maya-chen
     - text: Edit
   - heading "Maya Chen" [level=1]
-  - paragraph: person · 3 sources
+  - paragraph: design lead at Harbourline Software · Montréal
   - text: Work Maya Chen is the design lead at
   - link "Harbourline Software":
     - /url: /p/orgs/harbourline
   - text: .
   - superscript:
-    - link "[1]":
+    - link "1":
       - /url: "#fn-1"
   - text: Maya works with you on Atlas.
   - superscript:
-    - link "[2]":
+    - link "2":
       - /url: "#fn-2"
   - text: Maya's city is Montréal.
   - superscript:
-    - link "[1]":
+    - link "1":
       - /url: "#fn-1"
   - text: You were last in touch with Maya on 7 Oct.
   - superscript:
-    - link "[3]":
+    - link "3":
       - /url: "#fn-3"
   - text: Its sources also name
   - link "Robin Lefebvre":
     - /url: /p/people/robin-lefebvre
   - text: .
   - superscript:
-    - link "[3]":
+    - link "3":
       - /url: "#fn-3"
   - text: See also
   - link "Atlas launch":
@@ -40,10 +40,10 @@
     - /url: /p/projects/designer-hire
   - text: .
   - superscript:
-    - link "[4]":
+    - link "4":
       - /url: "#fn-4"
   - superscript:
-    - link "[5]":
+    - link "5":
       - /url: "#fn-5"
   - text: (Written by the hub from this page's facts.)
   - heading "Earlier notes" [level=2]
@@ -58,7 +58,7 @@
     - /url: /p/projects/designer-hire
   - text: .
   - superscript:
-    - link "[6]":
+    - link "6":
       - /url: "#fn-6"
   - heading "References" [level=2]
   - list:
@@ -73,10 +73,10 @@
   - heading "What changed" [level=2]
   - list:
     - listitem:
-      - link "You were last in touch with Maya Chen on 7 Oct 2026":
+      - link "You were last in touch with Maya on 7 Oct 2026.":
         - /url: /p/people/maya-chen
       - text: "from an email, Wed · was: 25 Aug 2026"
-      - 'button "Undo: You were last in touch with Maya Chen on 7 Oct 2026"': Undo
+      - 'button "Undo: You were last in touch with Maya on 7 Oct 2026."': Undo
   - heading "Mentioned on" [level=2]
   - list:
     - listitem:

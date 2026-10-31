@@ -9,7 +9,7 @@ import type { Rules } from "../rules";
 import type { Note } from "../brain";
 import type { HeldMessage } from "./data";
 import { agentLabel, cap, factName, withNames } from "./labels";
-import { fromWords, plain } from "./home";
+import { fromWords, plain, differ } from "./home";
 import { displayName } from "../diary";
 import { esc, hidden, signInAgain } from "./html-home";
 import { appPage } from "./html-app";
@@ -21,7 +21,8 @@ export const SETTLE_COPY = {
   subMany: "Your sources say different things. Pick one, or tell me what's right.",
   of: "{n} of {of}",
   orTell: "Or tell me",
-  two: "Is {name}'s {attr} {a} or {b}?",
+  next: "What's next for {name}?",
+  what: "What is {name}'s {attr}?",
   many: "Which is {name}'s {attr}?",
   lean: "The Gardener leans this way: {why}",
   both: "Not sure, keep both",
@@ -59,6 +60,7 @@ form.pick{margin:0 0 12px}
 form.pick button{width:100%;text-align:left;font:inherit;color:var(--text);background:var(--soft);border:2px solid var(--soft);border-radius:20px;padding:16px 18px;min-height:56px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
 form.pick button b{font-size:22px;line-height:28px;font-weight:800;overflow-wrap:anywhere}
 form.pick button small{font-size:14px;line-height:20px;color:var(--muted)}
+form.pick button .whole{font-size:14px;line-height:20px;color:var(--text);background:var(--bg);border-radius:12px;padding:8px 12px;overflow-wrap:anywhere}
 form.pick button .lean{color:var(--accent-text);font-weight:600}
 form.pick.first button{background:var(--t-work);border-color:var(--accent)}form.pick.first button b{color:var(--t-work-text)}
 form.pick.both button{background:var(--bg);border:1.5px solid var(--line);flex-direction:row;justify-content:space-between;align-items:center;border-radius:16px;padding:14px 18px}
@@ -66,18 +68,24 @@ form.pick.both button b{font-size:15px;line-height:22px;font-weight:700;color:va
 .tell{margin:8px 0 6px;font-size:13px;line-height:18px;font-weight:700;color:var(--muted)}
 `;
 
+// One short question (canvas Settle board: "When does the beta freeze?"); the sides say the values.
 export const question = (c: SettleCase) => {
   const [name, attr] = [displayName(c.page, c.title), c.attr.replace(/_/g, " ")];
-  return c.sides.length === 2 ? fill(SETTLE_COPY.two, { name, attr, a: plain(c.sides[0]!.value), b: plain(c.sides[1]!.value) }) : fill(SETTLE_COPY.many, { name, attr });
+  const fixed = fill(c.attr === "next_step" ? SETTLE_COPY.next : SETTLE_COPY.what, { name, attr });
+  return /s's /.test(fixed) ? fixed.replace(/s's /, "s' ") : fixed;
 };
 
 // The Gardener's side first, then the rest in their own order.
 export const ordered = (c: SettleCase): SettleSide[] => [...c.sides.filter((s) => s.lean), ...c.sides.filter((s) => !s.lean)];
 
+// A side shows big only the part that differs from the others ("15 October"), its whole value under
+// it when that is more, then where it came from.
 function row(c: SettleCase, s: SettleSide, csrf: string, rules: Rules, first = false): string {
-  const from = [fromWords(s, rules), day(s.as_of)].filter(Boolean).join(", ") + (s.sources > 1 ? ` · ${fill(SETTLE_COPY.count, { n: s.sources })}` : "");
+  const from = cap([fromWords(s, rules), day(s.as_of)].filter(Boolean).join(", ") + (s.sources > 1 ? ` · ${fill(SETTLE_COPY.count, { n: s.sources })}` : ""));
   const lean = s.lean ? `<small class="lean">${esc(fill(SETTLE_COPY.lean, { why: s.lean }))}</small>` : "";
-  return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(plain(s.value))}</b><small>${esc(from)}</small>${lean}</button></form>`;
+  const d = differ(c.sides.map((x) => plain(x.value)));
+  const whole = plain(s.value), big = d.rest[c.sides.indexOf(s)] ?? whole;
+  return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(big)}</b>${big !== whole ? `<span class="whole">${esc(whole)}</span>` : ""}<small>${esc(from)}</small>${lean}</button></form>`;
 }
 
 export interface SettleWhere { area?: string; pos?: number; of?: number }

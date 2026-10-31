@@ -21,8 +21,8 @@ test("a preference on the home reads as a sentence, first and added", () => {
     expect(r.outcome).not.toBe("refused");
   }
   const got = lines(root);
-  expect(got).toContain("Jane Roy prefers long novels");
-  expect(got).toContain("Jane Roy prefers email over phone calls");
+  expect(got).toContain("Jane prefers long novels.");
+  expect(got).toContain("Jane prefers email over phone calls.");
   expect(got.join("\n")).not.toMatch(/prefers is|added to prefers/);
 });
 

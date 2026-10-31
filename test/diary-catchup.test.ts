@@ -35,7 +35,7 @@ test("a fact changed outside write() becomes one diary line; a second run adds n
   expect(row).toMatchObject({ fact_key: "people/jane-roy#role", kind: "changed", from: "Course coordinator", to: "Program director", title: "Jane Roy" });
   expect(catchUpDiary(root, new Date()).rows).toBe(0);
   const v = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true });
-  expect(v.since.map((l) => l.what)).toContain("Jane Roy is Program director now");
+  expect(v.since.map((l) => l.what)).toContain("Jane is Program director now, not Course coordinator.");
 });
 
 test("a write that already has its line, and a page-text commit, add nothing", () => {

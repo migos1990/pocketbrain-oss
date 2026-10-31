@@ -2,7 +2,7 @@
   - region "Let Gemini know this?":
     - heading "Let Gemini know this?" [level=1]
     - paragraph: Gemini doesn't get your teaching pages.
-    - paragraph: "Next for Product Discovery course: return the midterm reflections on 13 October"
+    - paragraph: "Next for Product Discovery course: return the midterm reflections on 13 October."
     - button "Just this one Gemini reads this page once, the next time it checks in. What it sees stays the same."
     - 'link "Everything in teaching Gemini gets every teaching page from now on: 21 pages. You change it in Settings."':
       - /url: /agent/gemini

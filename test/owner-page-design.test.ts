@@ -32,7 +32,7 @@ test("a person's page: a band in its area's tint, its prose, what changed, who s
     expect(p).toMatch(/<header class="band t-work">/);
     expect(p).toContain(`<a href="/memory">‹ ${PAGE_COPY.back}</a>`);
     expect(p).toContain('<span class="face" aria-hidden="true">HB</span>');
-    expect(p).toMatch(/<h1>Hannah Becker<\/h1><p class="kind">person · \d+ sources?<\/p>/);
+    expect(p).toMatch(/<h1>Hannah Becker<\/h1><p class="kind">[^<]+ at Harbourline Software[^<]*<\/p>/);
     expect(p).toContain('<span class="chip">Work</span>');
     expect(p).toContain(`<h2 class="sec">${PAGE_COPY.changed}</h2>`);
     expect(p).toMatch(/<div class="seen"><b>Who sees Hannah<\/b>(<span>[^<]+<\/span>)+<\/div>/);

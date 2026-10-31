@@ -8,22 +8,22 @@
   - paragraph: project · 2 sources
   - text: Work Atlas launch is in beta.
   - superscript:
-    - link "[1]":
+    - link "1":
       - /url: "#fn-1"
   - text: The lead of Atlas launch is
   - link "Robin Lefebvre":
     - /url: /p/people/robin-lefebvre
   - text: .
   - superscript:
-    - link "[1]":
+    - link "1":
       - /url: "#fn-1"
   - text: "Due for Atlas launch: 3 Nov."
   - superscript:
-    - link "[1]":
+    - link "1":
       - /url: "#fn-1"
   - text: "Next for Atlas launch: freeze the beta build on 15 October."
   - superscript:
-    - link "[2]":
+    - link "2":
       - /url: "#fn-2"
   - text: A different value is waiting to be checked. The people of Atlas launch are
   - link "Maya Chen":
@@ -42,7 +42,7 @@
     - /url: /p/people/hannah-becker
   - text: .
   - superscript:
-    - link "[1]":
+    - link "1":
       - /url: "#fn-1"
   - text: (Written by the hub from this page's facts.)
   - heading "Earlier notes" [level=2]
@@ -75,7 +75,7 @@
     - /url: /p/decisions/2026-10-01-weekly-team-review
   - text: .
   - superscript:
-    - link "[3]":
+    - link "3":
       - /url: "#fn-3"
   - heading "References" [level=2]
   - list:
@@ -89,10 +89,10 @@
   - heading "What changed" [level=2]
   - list:
     - listitem:
-      - 'link "Next for Atlas launch: freeze the beta build on 15 October"':
+      - 'link "Next for Atlas launch: freeze the beta build on 15 October."':
         - /url: /p/projects/atlas-launch
       - text: "from an email, Wed · was: freeze the beta build"
-      - 'button "Undo: Next for Atlas launch: freeze the beta build on 15 October"': Undo
+      - 'button "Undo: Next for Atlas launch: freeze the beta build on 15 October."': Undo
   - heading "Mentioned on" [level=2]
   - list:
     - listitem:

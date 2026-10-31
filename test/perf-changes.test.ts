@@ -29,4 +29,4 @@ test("whats_new over 300 trailer-less commits stays under its budget, and the se
   expect(second.batches).toBe(0);
   expect(JSON.stringify(second.r.changes)).toBe(JSON.stringify(first.r.changes));
   expect(first.ms).toBeLessThan(5000); // loose: only a runaway fails here
-});
+}, 60_000); // 300 git commits of setup can pass 5 s on a loaded machine; work, not time, is asserted

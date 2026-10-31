@@ -5,7 +5,7 @@
 import { test, expect } from "bun:test";
 import { OWNER_SAY } from "../src/owner-errors";
 import { HOME_COPY } from "../src/dashboard/html-home";
-import { fromWords, LINE_COPY } from "../src/dashboard/home";
+import { fromWords, LINE_COPY, SAID_COPY } from "../src/dashboard/home";
 import { PAGE_COPY } from "../src/dashboard/html-page";
 import { SETTLE_COPY } from "../src/dashboard/html-settle";
 import { APP_COPY } from "../src/dashboard/html-app";
@@ -17,6 +17,7 @@ const OWNER_FACING: Record<string, string[]> = {
   "owner-say replies": Object.values(OWNER_SAY),
   "home page": Object.values(HOME_COPY),
   "the memories' sentences": Object.values(LINE_COPY),
+  "where a memory came from": Object.values(SAID_COPY),
   "the four tabs": Object.values(APP_COPY),
   "page screen": Object.values(PAGE_COPY),
   "settle screen": Object.values(SETTLE_COPY),

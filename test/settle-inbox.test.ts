@@ -33,7 +33,7 @@ test("a proposal that contradicts a live value waits on the home and settles; on
   expect(cs[0]!.sides.map((s) => s.value)).toEqual([role0, "Dean of studies"]);
   const v = homeView(root, loadRules(root), loadBrain(root), new Date("2026-10-08T15:00:00Z"));
   const w = v.waiting.find((x) => x.href === `/settle/${cs[0]!.id}`)!;
-  expect(w.what).toBe("Two sources disagree on Jane Roy's role");
+  expect(w.what).toBe(`Jane is ${role0}. Or Dean of studies?`);
   const { dashboardHandler } = await import("../src/dashboard/server");
   const H = "127.0.0.1:8799";
   const d = dashboardHandler(root, { port: 8799, loginKey: "k".repeat(32) });

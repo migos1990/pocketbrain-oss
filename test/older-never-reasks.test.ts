@@ -32,7 +32,7 @@ test("owner's word on Monday, three older emails on Tuesday: no conflict, one li
   const kept = readDiary(root).filter((r) => r.kind === "kept");
   expect(kept).toHaveLength(3);
   const lines = homeView(root, loadRules(root), loadBrain(root), new Date("2026-10-08T15:00:00Z"), { all: true }).since.filter((l) => l.what.includes("I kept your word"));
-  expect(lines.map((l) => l.what)).toEqual(["3 older emails still say Jane Roy's role is Course coordinator; I kept your word"]);
+  expect(lines.map((l) => l.what)).toEqual(["3 older emails still say Jane's role is Course coordinator; I kept your word."]);
   delete process.env.PB_NOW;
 });
 
@@ -60,7 +60,7 @@ test("the owner's own earlier word goes to history, never a conflict against the
   expect((jane(root).fm.history!.role as FactRecord[]).some((h) => h.value === "chair")).toBe(true);
   expect(readDiary(root).filter((r) => r.kind === "conflict")).toHaveLength(0);
   const lines = homeView(root, loadRules(root), loadBrain(root), new Date("2026-10-08T15:00:00Z"), { all: true }).since.map((l) => l.what);
-  expect(lines).toContain("Jane Roy's role was chair earlier, kept as history");
+  expect(lines).toContain("Jane's role was chair earlier, kept as history.");
   delete process.env.PB_NOW;
 });
 

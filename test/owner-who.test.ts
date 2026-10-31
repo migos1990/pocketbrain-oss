@@ -37,7 +37,7 @@ test("Who knows: your memory in numbers, then a card per assistant", async () =>
     const cs = cards(w);
     expect(cs).toHaveLength(3);
     const claude = cs.find((c) => c.includes("<b>Claude</b>"))!;
-    expect(claude).toMatch(/<span class="av" aria-hidden="true">Cl<\/span>/);
+    expect(claude).toMatch(/<span class="av c\d" aria-hidden="true">Cl<\/span>/);
     expect(claude).toContain("Read your brain 6 times today");
     expect(claude).toMatch(/<a class="see" href="[^"]+">See as<\/a>/);
     expect(claude).toMatch(/Sees (\d+ pages|all your pages)/);

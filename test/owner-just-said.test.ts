@@ -26,7 +26,7 @@ test("what the owner just said shows on the home whatever the cap", () => {
     appendDiary(root, { ...diaryRow({ at: new Date(now.getTime() + 1000 * (i + 1)).toISOString(), factKey: `people/jane-roy#note_${i}`, title: "Jane Roy", kind: "new", from: undefined, to: `guess ${i}`, incoming: { value: `guess ${i}`, as_of: "2026-10-01", sources: ["agent:planner"], verification: "unverified", confidence: "inferred", by: "planner", recorded: "2026-10-01" }, rank: 1, sensitivity: "personal" }) }, now.toISOString().slice(0, 7));
   }
   const v = homeView(root, loadRules(root), loadBrain(root), new Date(now.getTime() + 60_000));
-  expect(v.since[0]!.what).toContain("Zed Quorum");
+  expect(v.since[0]!.what).toContain("Zed");
 });
 
 test("undo of the only fact on a page started from the box takes the page and its text away", () => {

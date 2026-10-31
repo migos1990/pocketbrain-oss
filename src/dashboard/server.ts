@@ -41,8 +41,9 @@ import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, lear
 import type { Note } from "../brain";
 import { ownerPage, askProse } from "./html-page";
 import { signInAgain } from "./html-home";
-import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY } from "./html-app";
-import { withMarks, marksFor, markAgents, shorts } from "./marks";
+import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY, FONT_PATH } from "./html-app";
+const FONT_FILE = new URL("./fonts/plus-jakarta-sans-latin.woff2", import.meta.url).pathname;
+import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
 import { readDiary } from "../diary";
 import { inboxConflict, inboxConflicts, settleInbox } from "../settle-inbox";
@@ -217,7 +218,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   const setTailnet = (t: Tailnet, port: number) => { tn = t; setPort(port); };
   setPort(opts.port);
 
-  const PAGE_HEADERS = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; form-action 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
+  const PAGE_HEADERS = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
   const html = (p: Page, status = 200, extra: Record<string, string> = {}) =>
     new Response(layout({ root }, p), { status, headers: { ...PAGE_HEADERS, ...extra } });
   // The owner app's four tabs (html-app.ts): On your mind is the home, with a mark per assistant
@@ -236,12 +237,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const v = homeView(root, rules, notes, clock(), { fresh });
     v.reads = withRadar(root, rules, notes, v.reads, fresh);
     const pages = notes.filter((n) => folderOf(n.fm.id) !== "disputes" && n.fm.sensitivity !== "secret");
-    const agents = markAgents(rules), short = shorts(agents.map((a) => a.name));
+    const agents = markAgents(rules), short = shorts(agents.map((a) => a.name)), colour = colours(agents.map((a) => a.name));
     return new Response(whoPage(v, csrf, {
       flash,
       memory: { pages: pages.length, people: pages.filter((n) => folderOf(n.fm.id) === "people").length, learned: learnedThisWeek(root, clock()), backup: backedUpWords(lastBackup(root)?.at, clock()) },
       trial: Object.entries(rules.policy.agents).filter(([, a]) => a.tier === "trial").map(([k]) => k),
       shorts: Object.fromEntries(agents.map((a, i) => [a.agent, short[i]!])),
+      colours: Object.fromEntries(agents.map((a, i) => [a.agent, colour[i]!])),
     }), { headers: PAGE_HEADERS });
   };
   // A turn made right after a sign-in may hold a private value: on an older sign-in it isn't shown again.
@@ -353,6 +355,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const url = new URL(req.url);
     const host = req.headers.get("host") ?? "";
     if (!hosts.has(host)) return oops("dash.host");
+    // The owner app's typeface (html-app.ts): a public font file, the same for everyone, no brain in it.
+    if (url.pathname === FONT_PATH && req.method === "GET") return new Response(Bun.file(FONT_FILE), { headers: { "content-type": "font/woff2", "cache-control": "public, max-age=31536000, immutable" } });
 
     // The tailnet and tailscale serve: a phone link works here, and a signed-out phone can ask for one.
     const remote = hosts !== allowedHosts;
@@ -499,12 +503,19 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       }
       if (action === "diary-seen") {
         // Show: the owner sees a held value, and from now on their assistants get it (src/seen.ts).
-        const key = form.key ?? "";
-        const r = markSeen(root, key);
-        if (r.outcome !== "seen") return go("/home", { err: r.outcome === "not_found" ? "Nothing waiting there any more." : r.message });
-        const hash = key.lastIndexOf("#"), id = key.slice(0, hash);
-        const n = loadBrain(root).find((x) => x.fm.id === id);
-        return go("/home", { ok: `${displayName(id, n?.fm.title)}: ${key.slice(hash + 1).replace(/_/g, " ")} is ${plain(r.value)}. Your assistants get it now.` });
+        // A card can hold several values that read the same (home.ts heldName): one key per line.
+        const keys = (form.key ?? "").split("\n").map((k) => k.trim()).filter(Boolean).slice(0, 50);
+        const notes = loadBrain(root), said: string[] = [];
+        for (const key of keys) {
+          const r = markSeen(root, key);
+          if (r.outcome === "not_saved") return go("/home", { err: r.message });
+          if (r.outcome !== "seen") continue;
+          const hash = key.lastIndexOf("#"), id = key.slice(0, hash);
+          const n = notes.find((x) => x.fm.id === id);
+          said.push(`${displayName(id, n?.fm.title)}: ${key.slice(hash + 1).replace(/_/g, " ")} is ${plain(r.value)}.`);
+        }
+        if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
+        return go("/home", { ok: `${said.join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.` });
       }
       if (action === "fix-everywhere") {
         // The belief radar's one tap (src/dashboard/home-beliefs.ts): every assistant gets the brain's

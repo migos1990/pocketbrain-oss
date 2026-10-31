@@ -44,7 +44,7 @@ test("the home has the box, not the old tab bar, and a told fact comes back as N
   expect(said.status).toBe(200);
   expect(said.text).toContain("Noted: Jane Roy is program director now.");
   expect(role(root)).toBe("program director");
-  expect(said.text).toContain("Jane Roy is program director now");
+  expect(said.text).toContain("Jane is program director now, not Course coordinator.");
   const token = said.text.match(/name="token" value="([0-9a-f]{16})"/)![1]!;
   const undone = await req("POST", "/action/diary-undo", { csrf: await csrf(), token });
   expect(undone.status).toBe(303);
@@ -75,7 +75,7 @@ test("since yesterday: at most 7 lines, least certain first, the rest folded; pr
   const all = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true });
   const priv = all.since.find((l) => l.page === "people/paul-advisor")!;
   expect(priv.shapeless).toBe(true);
-  expect(priv.what).toBe("Something new about Paul Advisor");
+  expect(priv.what).toBe("Something new about Paul.");
   expect(JSON.stringify(all)).not.toContain("1200 a year");
 });
 
@@ -113,7 +113,7 @@ test("a linked value in Details is a link to its page", async () => {
   expect(write(root, { agent: "planner", id: "people/jane-roy", attribute: "works_on", value: "[[projects/course-a]]", as_of: "2026-10-05", sources: ["gmail:f000000000000002"], verification: "verified-by-source" } as never).outcome).toBe("committed");
   const pg = await req("GET", "/p/people/jane-roy");
   expect(pg.text).toMatch(/<dd><a [^>]*href="\/p\/projects\/course-a"[^>]*>Course A<\/a>/);
-  expect(pg.text).toContain("Jane Roy works on Course A"); // the diary line says the page's name, not its id
+  expect(pg.text).toContain("Jane works on Course A."); // the diary line says the page's name, not its id
 });
 
 // The Mac's second check (2026-10-26): a line read "Maybe: <person>: open question is … orgs/<slug>"
@@ -128,7 +128,7 @@ test("lines use page names, never ids or slugs; a guess is marked in the small l
   write(root, { agent: "planner", id: "projects/harbour-club", attribute: "status", value: "open", as_of: "2026-10-05", sources: ["gmail:f000000000000003"], verification: "verified-by-source" } as never);
   const v = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true });
   const q = v.since.find((l) => l.what.includes("open question"))!;
-  expect(q.what).toBe("Jane Roy's open question is ask about Bay institute and Gone page");
+  expect(q.what).toBe("Jane's open question is ask about Bay institute and Gone page.");
   expect(v.since.find((l) => l.page === "projects/harbour-club")!.what).toStartWith("Harbour club's ");
   const html = (await req("GET", "/home?all=1")).text;
   expect(html).not.toContain("Maybe:");
