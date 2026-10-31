@@ -33,6 +33,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- `pocketbrain aftercheck classify on --cap 1` turns on the second-opinion classifier after an assistant's write with its own monthly spend cap, as one owner commit (`off` turns it off), so no one types into `rules/policy.yaml`. A conflict check whose model answer is cut off no longer stops the classifier: each step runs on its own and the failed one is retried, and the conflict check now has room for its whole answer.
 - The public repo (pocketbrain-oss) now follows `main`: after CI passes, a workflow exports that commit, refuses it on any denylisted term or a secret-shaped string beyond the known test fixtures, and pushes it there as one commit; `bun scripts/public-sync.ts check` says whether the public repo and pocketbrain.dev are in step, and a release tag is refused while the README's status line names another version (`cut` now moves it). See docs/release.md, The public repo and the site.
 - The optional local search model's image library (sharp, via @huggingface/transformers) is pinned to 0.35.5, past three high advisories in libvips, libheif and librsvg; search setup still loads the model.
 - An assistant fact that also asked to move its page to another area now files where the page is (found by its id or its title, G522), instead of being refused by the hub every day; a save refused twice stops being retried; receipt pages set aside no longer count against the north star (G519, G520).

@@ -124,15 +124,17 @@ async function drainOnce(root: string, models: AftercheckModels, lock: Lock): Pr
     const mark = (event: "done" | "error", step?: string, detail?: string) =>
       appendJsonl(queueFile(root), { at: new Date().toISOString(), key: p.key, event, ...(step ? { step } : {}), ...(detail ? { detail } : {}) } satisfies QueueEvent);
     if (!conflictModel && !classifyModel) { mark("done", undefined, "no model step on"); out.skipped.push(p.key); return; }
-    try {
-      if (conflictModel) { const c = await checkConflicts(root, conflictModel, p.key, p.agent); if (c) out.conflicts.push(c); }
-      if (classifyModel) { const c = await classifyFact(root, classifyModel, p.key, p.agent, lock); out.raised.push(...c.raised); out.review.push(...c.review); }
-      mark("done");
-      out.checked.push(p.key);
-    } catch (e) {
-      mark("error", undefined, (e as Error).message.slice(0, 200));
-      out.errors.push(`${p.key}: ${(e as Error).message}`);
-    }
+    // Each step runs on its own: a conflict check that fails (a cut answer, a timeout) never stops
+    // the classifier, and the key comes back for the step that failed.
+    const failed: string[] = [];
+    const step = async (name: string, run: () => Promise<void>) => {
+      try { await run(); } catch (e) { failed.push(`${name}: ${(e as Error).message}`); }
+    };
+    if (conflictModel) await step(CONFLICT_STEP, async () => { const c = await checkConflicts(root, conflictModel, p.key, p.agent); if (c) out.conflicts.push(c); });
+    if (classifyModel) await step(CLASSIFY_STEP, async () => { const c = await classifyFact(root, classifyModel, p.key, p.agent, lock); out.raised.push(...c.raised); out.review.push(...c.review); });
+    if (!failed.length) { mark("done"); out.checked.push(p.key); return; }
+    mark("error", undefined, failed.join("; ").slice(0, 200));
+    out.errors.push(...failed.map((f) => `${p.key}: ${f}`));
   });
   return out;
 }
@@ -177,7 +179,7 @@ export async function checkConflicts(root: string, model: Model, key: string, ag
     "",
     context,
   ].join("\n");
-  const reply = await model.complete({ system: "You check a knowledge base for facts that clash. Be conservative: answer false unless the clash is clear.", prompt, maxTokens: 200 });
+  const reply = await model.complete({ system: "You check a knowledge base for facts that clash. Be conservative: answer false unless the clash is clear.", prompt, maxTokens: 400 });
   const ans = parseJson<{ conflict?: boolean; kind?: string; note?: string; why?: string }>(reply.text);
   logJudgment(root, CONFLICT_STEP, reply, prompt, ans ?? { unparsed: reply.text.slice(0, 200) }, model.config.model);
   if (!ans) throw new Error("no readable answer");

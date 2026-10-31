@@ -168,3 +168,17 @@ test("an agent's write over the API answers at once and queues its check", async
     expect(q.map((e) => e.event)).toEqual(["queued", "done"]); // no key here: the rules decided alone
   } finally { if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved; }
 });
+
+test("a cut conflict answer never stops the classifier: the fact is still raised and the conflict check is retried", async () => {
+  const root = makeBrain();
+  setPolicy(root, { aftercheck: { classify: true } });
+  committedWrite(root);
+  const asked: number[] = [];
+  const cut = makeModel({ provider: "fake", model: "fake-small", max_sensitivity: "personal" }, { fake: (r) => { asked.push(r.maxTokens ?? 0); return '{"conflict": false, "kind": "contradicts", "note": "projects/course-a", "why": "The new next step'; } });
+  const r = await drainAftercheck(root, { conflicts: cut, classify: jev({ third_party_sensitive: { type: "noul", noul: 0.93 }, category: { type: "choice", choice: "health", confidence: 0.9 } }) });
+  expect(r.raised).toHaveLength(1);
+  expect(fact(root)).toMatchObject({ sensitivity: "private" });
+  expect(r.errors).toEqual([`${KEY}: ${CONFLICT_STEP}: no readable answer`]);
+  expect(pendingChecks(root)).toHaveLength(1); // the conflict check comes back
+  expect(asked[0]).toBeGreaterThanOrEqual(400); // room for the whole JSON answer
+});

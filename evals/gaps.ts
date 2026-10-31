@@ -2792,6 +2792,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Builder, 2026-10-30: on b867757c GitHub CI and the release run's own ci jobs were green, but publish failed at `git push origin refs/tags/v0.2.0`: its `bun install` turned on .githooks, and pre-push ran the full suite on a runner with no age or Chromium. No tag, no release, no release branch.",
     fix: ".githooks/pre-push lets a push through without its checks only when every ref is a tag or refs/heads/release at a commit already on origin/main (which passed them and CI); any other push, or a tag off main, is checked in full. Test: test/githooks.test.ts.",
   },
+  G575: {
+    closed: "f060a403",
+    title: "A cut conflict answer stopped the classifier, and the classifier could only be turned on by hand",
+    severity: "medium",
+    finding: "Mac, 2026-10-31 (Jev turn-on on a throwaway clone): with both after-write checks on, write.conflicts got a 107-character answer cut mid-sentence (JSON with no closing brace) under maxTokens 200, threw \"no readable answer\", and the classifier never ran. With conflicts off, the classifier raised the fact (personal to private at 0.97). Turning the classifier on also needed a hand edit inside the brain's rules/, which the Mac guard blocks.",
+    fix: "drainAftercheck runs each step on its own: a failed step is recorded and its key retried, and the other step still runs. The conflict check asks for up to 400 tokens. `pocketbrain aftercheck classify on|off [--cap <dollars>]` sets aftercheck.classify and usage.cap.steps write.classify as one owner commit (setAftercheckClassify in src/ownerset.ts). Tests: test/aftercheck.test.ts (a cut conflict answer never stops the classifier), test/ownerset.test.ts (aftercheck classify on --cap 1).",
+  },
   G569: {
     closed: "cfe27318",
     title: "Merging the owner's two pages for himself had no way forward",

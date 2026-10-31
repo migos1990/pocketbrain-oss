@@ -46,7 +46,7 @@ import { sha256 } from "./util";
 import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setDashboardTailnet, setAgentTier, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -312,6 +312,7 @@ const USAGE = `pocketbrain <command>
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
                                      (policy.yaml; docs/sources-pull.md)
+  aftercheck classify on|off [--cap <$>]  the second-opinion classifier after an agent's write, and its own monthly cap (docs/aftercheck.md)
   wiki family on|off                 whether upkeep links a person page with your surname to your page as maybe family (off: counts only; docs/owner-home.md)
   wiki links on|off|preview          whether upkeep links a name that fits exactly one note (off: nothing); preview lists what it would link (policy.yaml; docs/wiki.md)
   gardener open [minutes] [--agent g]  let the gardener connect outside its hours for a manual run (default 60)
@@ -1377,6 +1378,10 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
   if (cmd === "next-steps") {
     if (args[0] !== "newest") { console.error("next-steps newest"); return 2; }
     return ownerSet(() => setNextStepNewest(root));
+  }
+  if (cmd === "aftercheck") {
+    if (args[0] !== "classify") { console.error("aftercheck classify on | off [--cap <dollars a month>]"); return 2; }
+    return ownerSet(() => setAftercheckClassify(root, args[1] ?? "", arg(args, "--cap")));
   }
   if (cmd === "backfill") return ownerSet(() => setNightlyBackfill(root, args[0] ?? ""));
   if (cmd === "wiki") {

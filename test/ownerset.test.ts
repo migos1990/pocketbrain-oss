@@ -107,3 +107,25 @@ test("tend's manual steps name the commands, not a YAML edit", async () => {
   expect(steps).toContain("pocketbrain night managed");
   expect(steps).not.toMatch(/write rules\/|in rules\/hub\.yaml/);
 });
+
+test("aftercheck classify on --cap 1 turns the second opinion on with its own step cap, keeps the rest of policy.yaml, and off turns it off", () => {
+  const root = makeBrain();
+  const p = join(root, "rules", "policy.yaml");
+  const before = YAML.parse(readFileSync(p, "utf8"));
+  writeFileSync(p, YAML.stringify({ ...before, aftercheck: { conflicts: true }, usage: { cap: { monthly: 20, steps: { "capture.extract": 5 } } } }));
+  git(root, "add", "-A"); git(root, "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-qm", "policy by hand");
+  const on = cli(root, "aftercheck", "classify", "on", "--cap", "1");
+  expect(on.code).toBe(0);
+  const after = YAML.parse(rules(root, "policy.yaml"));
+  expect(after.aftercheck).toEqual({ conflicts: true, classify: true });
+  expect(after.usage.cap).toEqual({ monthly: 20, steps: { "capture.extract": 5, "write.classify": 1 } });
+  expect(after.agents).toEqual(before.agents);
+  expect(git(root, "log", "-1", "--format=%s")).toMatch(/^owner: aftercheck classify on/);
+  expect(git(root, "status", "--porcelain")).toBe("");
+  const off = cli(root, "aftercheck", "classify", "off");
+  expect(off.code).toBe(0);
+  const last = YAML.parse(rules(root, "policy.yaml"));
+  expect(last.aftercheck.classify).toBe(false);
+  expect(last.usage.cap.steps["write.classify"]).toBe(1);
+  expect(cli(root, "aftercheck", "classify", "on", "--cap", "lots").code).not.toBe(0);
+});

@@ -213,6 +213,19 @@ export function setFamilyLinks(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { family_links: mode === "on" }, `family_links ${mode}`);
 }
 
+// `pocketbrain aftercheck classify on|off [--cap <dollars>]`: the second-opinion classifier after an
+// agent's write (src/aftercheck.ts, docs/aftercheck.md), off until the owner says so. `--cap` sets
+// that step's own monthly spend cap (usage.cap.steps, docs/usage.md). Off keeps the cap.
+export function setAftercheckClassify(root: string, mode: string, cap?: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("aftercheck classify on | off [--cap <dollars a month>]");
+  if (cap !== undefined && !(/^\d+(\.\d+)?$/.test(cap) && Number(cap) > 0)) throw new OwnerSetError("--cap takes dollars a month, like --cap 1");
+  const what = `aftercheck classify ${mode}${cap !== undefined ? `, write.classify capped at $${cap} a month` : ""}`;
+  return editRules(root, "policy.yaml", (doc) => {
+    doc.setIn(["aftercheck", "classify"], mode === "on");
+    if (cap !== undefined) doc.setIn(["usage", "cap", "steps", "write.classify"], Number(cap));
+  }, what);
+}
+
 // `pocketbrain hub url <https://…>`: the one address agents hold.
 export function setPublicUrl(root: string, url: string): string {
   if (!loadHub(root)) throw new OwnerSetError("no rules/hub.yaml yet; start with pocketbrain hub init --name <machine>");
