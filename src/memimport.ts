@@ -8,10 +8,11 @@
 // - deterministic checks drop what the text doesn't say and compare the rest with the brain:
 //   known values are skipped, changes and new facts become proposals naming the old value;
 // - an agent's memory is cited as that agent's observation (self-reported), never the owner's
-//   word; the owner's own notes are the owner's word. Nothing is committed until the owner accepts.
+//   word; the owner's own notes are the owner's word. What files itself is the hub's filing (src/filing.ts), never this.
 import { existsSync, readFileSync, readdirSync, statSync, lstatSync } from "node:fs";
-import { join, basename } from "node:path";
-import { loadRules, ownerName } from "./rules";
+import { join, basename, relative, sep } from "node:path";
+import { loadRules, ownerName, tierOf } from "./rules";
+import { loadEscalation } from "./textline/policy";
 import { capture, captureConfig, type CaptureResult } from "./capture";
 import { memoryFiles, chunks } from "./memsync";
 import type { Model } from "./model";
@@ -47,10 +48,13 @@ export function memoryShape(data: unknown): MemoryShape {
 
 export function readMemory(paths: string[]): { name: string; text: string; shape?: MemoryShape }[] {
   const out: { name: string; text: string; shape?: MemoryShape }[] = [];
-  const add = (p: string) => {
+  // Inside a folder a file is named by its path from the folder given (G580): claude.ai's memory
+  // export keeps a project's pages under projects/<project>/, and most never name the project.
+  const add = (p: string, top?: string) => {
     if (!existsSync(p)) return;
     // Inside a folder, links are skipped (G76): one could point at the brain itself.
-    if (statSync(p).isDirectory()) { for (const n of readdirSync(p).sort()) if (!n.startsWith(".") && !lstatSync(join(p, n)).isSymbolicLink()) add(join(p, n)); return; }
+    if (statSync(p).isDirectory()) { for (const n of readdirSync(p).sort()) if (!n.startsWith(".") && !lstatSync(join(p, n)).isSymbolicLink()) add(join(p, n), top ?? p); return; }
+    const rel = top ? relative(top, p).split(sep).join("/") : "";
     const raw = readFileSync(p, "utf8");
     if (/\.json$/i.test(p)) {
       let data: unknown;
@@ -62,7 +66,12 @@ export function readMemory(paths: string[]): { name: string; text: string; shape
       const walk = (v: unknown) => { if (typeof v === "string") { if (v.trim() && !ID_ONLY.test(v.trim())) lines.push(v.trim()); } else if (v && typeof v === "object") for (const x of Object.values(v)) walk(x); };
       walk(data);
       out.push({ name: basename(p), text: lines.join("\n"), shape });
-    } else if (/\.(md|markdown|txt)$/i.test(p)) out.push({ name: basename(p), text: raw, shape: "text" });
+    } else if (/\.(md|markdown|txt)$/i.test(p)) {
+      // A file in a subfolder says where it sat, as its first line, so the model reads the folder
+      // as the page's subject; a file at the folder's top or given by itself is read as it is.
+      const sub = rel.includes("/");
+      out.push({ name: rel || basename(p), text: sub && raw.trim() ? `(From ${rel.replace(/\.(md|markdown|txt)$/i, "")})\n${raw}` : raw, shape: "text" });
+    }
   };
   for (const p of paths) add(p.replace(/^~(?=\/|$)/, process.env.HOME ?? ""));
   return out.filter((x) => x.text.trim());
@@ -96,4 +105,17 @@ export async function importMemory(root: string, who: string, paths: string[], m
     }
   }
   return out;
+}
+
+// What happens next, said after an import (G580). Facts file themselves on the hub's tick
+// (src/filing.ts, auto_decide.file: all): a new one lands on its page with Undo, a value that differs
+// from one the brain holds opens as a conflict on the settle screen. A trial assistant's imported
+// facts are only proposals, and like any of its proposals they expire unanswered; the owner is told
+// before that happens, not after.
+export function afterImport(root: string, who: string): string {
+  const a = loadEscalation(root).auto_decide;
+  if (a.off || a.file !== "all") return "Its facts wait for you in the inbox (auto_decide in rules/escalation.yaml).";
+  const settle = "New facts file themselves on the hub's next tick, each with Undo; a value that differs from one the brain holds opens on your settle screen.";
+  if (who === ME || tierOf(loadRules(root), who).writes === "direct") return settle;
+  return `${who} is a trial assistant, so its facts are proposals that expire after ${a.proposal_days} days unanswered: accept them in the inbox, or make ${who} a core assistant first and import again.`;
 }

@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- Importing claude.ai's memory export (the folder of pages it gives you) keeps each project page's project as its subject, says afterwards where the facts went (they file themselves, and a value that differs from yours opens on the settle screen), warns when a trial assistant's facts would expire unanswered, and with no model key stores every page for the hub to read later instead of stopping at the first (G580).
 - Your contacts can fill your people pages (G548): add a `contacts` source (Google Contacts, or a vCard export from your phone) and each card adds what the brain didn't have, citing the card: nicknames, job and company, emails and phones (kept behind Show), and from your own card who is family, which can start a page for a relative the brain didn't know. A card never replaces a job title, and a family link that contradicts a page is a conflict to settle. No model is used. See docs/sources-pull.md, Contacts.
 - The box says what it noted as a sentence, the way On your mind says your memories: "Noted: Jane Roy is dean now.", "Noted: Next for Ben Carter: …", instead of "Noted: Jane Roy: role is dean."
 - With no model set up, the box now reads a to-do you say in your own words: "I owe Ben the sample by tomorrow" or "I need to send Jane the slides by Friday" is noted as your next step on that person's page, instead of "I didn't catch who or what that's about" (G557).

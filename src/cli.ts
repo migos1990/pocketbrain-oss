@@ -33,7 +33,7 @@ import { connectGoogle } from "./google";
 import { recordCheckedRefs, registerLouisMessages } from "./louis";
 import { exportBrain, exportSlice, importBundle } from "./passport";
 import { modelFor, pausedReason, summary, capState, money, fmtMinutes } from "./usage";
-import { routing } from "./model";
+import { routing, modelConfigFor, KEY_ENV } from "./model";
 import { serve, serial } from "./server";
 import * as hub from "./hub";
 import { doctor, renderDoctor } from "./doctor";
@@ -97,7 +97,7 @@ import * as quizplan from "./quizplan";
 import * as fillMod from "./fill";
 import { examRun } from "./exam";
 import { runGolden } from "./golden";
-import { importMemory, skippedMemory, ME } from "./memimport";
+import { importMemory, skippedMemory, afterImport, ME } from "./memimport";
 import { listHandoffs, decideHandoff } from "./handoff";
 import * as edge from "./edge";
 import { ownerError } from "./owner-errors";
@@ -1307,15 +1307,19 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       loadKeys(); // ANTHROPIC_API_KEY (or the step's key) from ~/.config/pocketbrain/keys/, as the hub does
       { const why = pausedReason(root, CAPTURE_STEP); if (why) { console.error(`import ${why}`); return 1; } }
       const who = args[1];
-      const model = modelFor(root, CAPTURE_STEP, who === ME ? "capture" : who);
+      // Without the step's key every file is still stored, for the hub's capture pass to read once
+      // it has one (G580: the first file's model call threw and the rest were never stored).
+      const cfg = modelConfigFor(root, CAPTURE_STEP), env = cfg.api_key_env ?? KEY_ENV[cfg.provider];
+      const model = env && !process.env[env] ? undefined : modelFor(root, CAPTURE_STEP, who === ME ? "capture" : who);
       const given = args.slice(2).filter((x) => !x.startsWith("--"));
       for (const s of skippedMemory(given)) console.log(`${s.name}: ${s.shape === "gemini-activity" ? "Gemini activity" : "chat history"}, not memory; nothing imported (pocketbrain logs import keeps chats)`);
       importMemory(root, who, given, model).then((rs) => {
         for (const { name, result: r } of rs) {
-          const state = r.refused ? `refused: ${r.refused}` : r.duplicate ? "already imported" : r.held ? `held for you: ${r.held.join("; ")}` : r.queued ? `queued as ${r.queued}` : `${r.items.filter((i) => i.proposal).length} proposal(s), ${r.items.filter((i) => i.status === "known").length} already known`;
+          const state = r.refused ? `refused: ${r.refused}` : r.duplicate ? "already imported" : r.held ? `held for you: ${r.held.join("; ")}` : r.queued ? `queued as ${r.queued}` : !model ? "stored, waiting for a model to read it" : `${r.items.filter((i) => i.proposal).length} proposal(s), ${r.items.filter((i) => i.status === "known").length} already known`;
           console.log(`${name}: ${state}`);
         }
-        console.log("Review them with pocketbrain inbox.");
+        if (!model) console.log("No model key, so nothing was read yet: the hub's capture pass reads these once it has one (ANTHROPIC_API_KEY in ~/.config/pocketbrain/keys/, or the step rules/models.yaml names).");
+        console.log(afterImport(root, who));
         process.exit(0);
       }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
       return -1;

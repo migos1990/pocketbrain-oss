@@ -146,7 +146,7 @@ Before syncing, the brain should hold what the assistants already know. Memory i
 | Whose | How | Cited as |
 | --- | --- | --- |
 | Claude Code | `pocketbrain memsync import claude` (its `memory.files`, or give paths) | `agent_observation`, by claude |
-| claude.ai | Export its memory, then `pocketbrain memsync import claude <export.json or .md>` | `agent_observation`, by claude |
+| claude.ai | Export its memory (a folder of pages: `areas/`, `people/`, `topics/`, `projects/<project>/`), unzip it into an empty folder, then `pocketbrain memsync import claude <that folder>`; a page in a subfolder is read with `(From <path>)` as its first line, so a project's pages keep their project. An older `memories.json` is read whole | `agent_observation`, by claude |
 | ChatGPT | Export your data (Settings, Data controls), then `pocketbrain memsync import <agent> conversations.json`: only what ChatGPT saved to its memory is read, never the chats (unconfirmed against a real export) | `agent_observation`, by that agent |
 | Gemini | Paste the Saved info page into a `.txt` and import it; Google's download holds chats and activity, no saved info, so `MyActivity.json` reads as nothing | `agent_observation`, by that agent |
 | Town, Instinct | `pocketbrain memsync ask town`: at its next `memory_check` it gets `tell_me`, and replies with `memory_dump` | `agent_observation`, by that agent |
@@ -155,8 +155,12 @@ Before syncing, the brain should hold what the assistants already know. Memory i
 Each chunk (under `capture.max_bytes`, cut at paragraph breaks) is stored as a capture: secrets
 removed, injection shapes held, the same text twice a no-op. A model lists candidate facts with
 their quotes; the checks drop anything the text doesn't say, skip values the brain already holds,
-and turn changes and new facts into inbox proposals naming the old value. Nothing is committed
-until the owner accepts.
+and turn changes and new facts into proposals naming the old value. With `auto_decide.file: all`
+(the default, docs/filing.md) a core assistant's or the owner's new facts then file themselves on
+the hub's tick, each with Undo, and a value that differs from one the brain holds opens as a
+conflict on the settle screen; a trial assistant's are proposals that expire after `proposal_days`
+unanswered, and the import says so. With no key for the capture step every file is still stored,
+and the hub's capture pass reads them once it has one.
 
 Most of what a vendor remembers is prose: how the owner likes answers, what to avoid, when to reach
 someone. Such a line becomes a `prefers` fact on that person's page, in the line's own words, one

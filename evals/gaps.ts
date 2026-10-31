@@ -2846,6 +2846,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Audit v7, 2026-10-31: with no model key (bring your own model, works with none), the brief's example \u201cI owe Ben the sample by tomorrow\u201d got \u201cI didn't catch who or what that's about\u201d: no fixed pattern read a to-do the owner said in the first person.",
     fix: "src/owner-say.ts parseClause: \u201cI owe / promised <x>\u201d and \u201cI need to / have to / must / should / am going to <x>\u201d are the owner's next step, kept in their words with their time words (\u201cby tomorrow\u201d keeps its by and gets the date), on the page of the person <x> names, found as a reminder's page is; a to-do naming nobody the brain holds writes nothing. Test: test/box-owe.test.ts; eval say-checks-owed-no-model.",
   },
+  G580: {
+    closed: "10a61d4d",
+    title: "A claude.ai memory folder lost each project page's subject, and the import said the wrong thing next",
+    severity: "medium",
+    finding: "Importing a real claude.ai memory export, 2026-10-31: the export is a folder of Markdown pages (areas/, people/, topics/, projects/<project>/<page>.md) and most of a project's pages never name the project, but readMemory sent each file by its base name only, so the model had no subject for them. The CLI then said \"Review them with pocketbrain inbox\" though facts file themselves now, said nothing when a trial assistant's imported facts would expire unanswered, and with no model key the first file's model call threw so the other files were never stored.",
+    fix: "readMemory names a file inside a folder by its path from that folder and, for one in a subfolder, puts \"(From <path>)\" as its first line; afterImport (src/memimport.ts) says where the facts go (file themselves, a different value opens on the settle screen) or that a trial assistant's expire after proposal_days; with no key for the capture step every file is stored for the hub's capture pass. Tests: test/memimport-vendors.test.ts.",
+  },
   G573: {
     closed: "43844adb",
     title: "A family line and a receipt line said what a private page hides",
