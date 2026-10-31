@@ -2799,12 +2799,26 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac, 2026-10-31 (Jev turn-on on a throwaway clone): with both after-write checks on, write.conflicts got a 107-character answer cut mid-sentence (JSON with no closing brace) under maxTokens 200, threw \"no readable answer\", and the classifier never ran. With conflicts off, the classifier raised the fact (personal to private at 0.97). Turning the classifier on also needed a hand edit inside the brain's rules/, which the Mac guard blocks.",
     fix: "drainAftercheck runs each step on its own: a failed step is recorded and its key retried, and the other step still runs. The conflict check asks for up to 400 tokens. `pocketbrain aftercheck classify on|off [--cap <dollars>]` sets aftercheck.classify and usage.cap.steps write.classify as one owner commit (setAftercheckClassify in src/ownerset.ts). Tests: test/aftercheck.test.ts (a cut conflict answer never stops the classifier), test/ownerset.test.ts (aftercheck classify on --cap 1).",
   },
+  G572: {
+    closed: "bacf8625",
+    title: "A merge dropped the owner's confirmation of a value",
+    severity: "medium",
+    finding: "Builder's audit of G569, 2026-10-31 (on main before it): the kept record vouched for by a source, the dropped one the same value confirmed by the owner (an imsg: ref); planMerge combined their sources but kept the weaker verification, so an assistant's contradicting write that was a conflict before the merge (\"contradicts a fact the owner confirmed\") replaced the value after it (invariant 6).",
+    fix: "addSources (src/merge.ts) keeps the strongest word that joined the record: the owner's (confirmed-by-owner), else a co-owner's with whose (confirmed-by-co-owner, co_owner). Tests: test/merge-owner-word.test.ts. Eval: rt-person-merge-keeps-owner-word.",
+  },
   G569: {
     closed: "cfe27318",
     title: "Merging the owner's two pages for himself had no way forward",
     severity: "medium",
     finding: "Live, 2026-10-31: `pocketbrain merge` of the owner's two pages for himself was refused: \"has a fact some assistants can't see (private or shared with only some); the owner can merge these by hand later\" and \"instinct, gardener see one of these notes but not the other\". The shape run showed the whole cause: three private records and one held record (waiting for the owner to see it) on one page. There is no merge by hand, and every person page with a private phone or email behind Show (contacts files them there) hit the same refusal.",
     fix: "carveParity (src/merge.ts) no longer refuses a pair for a fact hidden by its own record flags (private above a ceiling, share_with, a hold): planMerge keeps every flag and only tightens a combined record, and a fact is hidden when any of its records is (G170), so it stays hidden from exactly the same assistants; a fact hidden by name or by a slice still refuses, and mergeLeaks and brainChanges still decide. A record another writer's joins drops shared_by (addSources, invariant 4; builder's slice audit). Tests: test/sameperson-redteam.test.ts (G569 a private / share_with / held fact no longer blocks the pair), test/contracts/write.contract.test.ts (G569 audit row). Eval: rt-person-flagged-facts-merge.",
+  },
+  G576: {
+    closed: "d809cb9f",
+    title: "The owner's merge of his two pages was still refused after G569",
+    severity: "medium",
+    finding: "Live, 2026-10-31, after G569: `pocketbrain merge` of the owner's two pages was refused with \"instinct, instinct (reader token) see one of these notes but not the other\". The shape run: the merge disputes one fact; instinct (the resolver) couldn't see a held fact on the kept page that the merge doesn't dispute, and its reader token couldn't see two private facts there, one of them the disputed one. The resolver check refused on any hidden fact, and on the reader token too, though a reader token never reads a dispute (core refuses it on the dispute routes). Past that check, the value the reader read on the dropped page would be hidden with the private record it is disputed with, and mergeLeaks and brainChanges refused that as a value newly [withheld] (G247).",
+    fix: "carveParity (src/merge.ts) checks the resolver only on the facts in dispute, and only its own token, not its reader token. mergeLeaks and brainChanges let a value become newly [withheld] when the merged note hides it by its own flags (heldByFlags): the owner's merge aligns to the stricter view, showing less, never more; every other newly withheld string still refuses. A word leaving the shown set is excused only by a value the merge newly hides (builder's slice audit: a value hidden already let a card offer a merge the backstop refused). Test: test/merge-resolver-scope.test.ts. Eval: rt-person-merge-dispute-private-side.",
   },
   G559: {
     closed: "829cfb88",

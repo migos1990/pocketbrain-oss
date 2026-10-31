@@ -29,7 +29,7 @@ import { squash } from "./match";
 import { refString, isExactLouisRef } from "./sources";
 import { openDispute } from "./upkeep";
 import { git } from "./git";
-import { OWNER, OWNER_REF, isOwnerConfirmed, normVerification } from "./owner";
+import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, normVerification } from "./owner";
 
 // Why `drop` can't merge into `keep`, in plain words, or undefined. A merge moves the dropped
 // note's facts under the kept note's id, area and tags, so anything the rules keep apart would
@@ -102,11 +102,13 @@ const asViewer = <T>(v: Viewer, fn: () => T): T => withTokenRole(v.agent, v.role
 const byFlags = (reason: string) => /^(do not share|fact is )/.test(reason) || reason === HELD_REASON;
 export function carveParity(rules: Rules, keep: Note, drop: Note): string | undefined {
   const { r } = planMerge(keep, drop, () => "c-merge-check");
+  const disputed = new Set(r.disputes.map((d) => { const k = d.split(" -> ")[0]!; return k.slice(k.lastIndexOf("#") + 1); }));
   const resolvers = new Set([rules.policy.resolver, rules.policy.owner_channel ?? rules.policy.resolver].filter((x): x is string => !!x));
   const attrNames = [...new Set([keep, drop].flatMap((n) => Object.keys(n.fm.facts ?? {})))];
   const uneven: string[] = [];
   for (const viewer of viewers(rules, [...resolvers])) {
     const agent = viewer.agent;
+    const resolver = resolvers.has(agent) && viewer.role !== "reader";
     let ok = true;
     try {
       const res = asViewer(viewer, () => carve([keep, drop], rules, grantFor(rules, agent), { flags: false }));
@@ -132,8 +134,13 @@ export function carveParity(rules: Rules, keep: Note, drop: Note): string | unde
         if (a.body !== b.body || attrs(a) !== attrs(b) || scopedOut(a) !== scopedOut(b)) ok = false;
         else if (other.some((h) => !byFlags(h.reason))) ok = false;
         else if (r.namesHeld.length) ok = false;
-        else if (r.disputes.length && resolvers.has(agent) && hid.length) ok = false;
-      } else if (r.disputes.length && resolvers.has(agent)) ok = false; // the resolver must see the packet's notes
+        // The resolver reads what the packet shows it: the facts in dispute. A fact hidden from it on
+        // another attribute never reaches the packet, and stays hidden on the merged note by its own
+        // flags; a disputed fact it can't see on either note refuses (G576). A reader token never
+        // reads the packet (core.ts refuses it on the dispute routes), so only the resolver's own
+        // token is checked; the reader keeps the parity checks above like any viewer.
+        else if (r.disputes.length && resolver && hid.some((h) => disputed.has(h.key.slice(h.key.lastIndexOf("#") + 1)))) ok = false;
+      } else if (r.disputes.length && resolver) ok = false; // the resolver must see the packet's notes
     } catch { ok = false; } // a grant that can't be carved fails closed
     if (!ok) uneven.push(viewer.label);
   }
@@ -164,6 +171,10 @@ export function planMerge(keepIn: Note, dropIn: Note, dispute: (keep: Note, attr
     // write.ts does for a same-value write, G55; slice audit of G569).
     // The owner's word joining it counts the same way: the record is no longer the agent's alone
     // (ownOnly in write.ts reads only owner: refs, so an owner-confirmed imsg: record wouldn't show).
+    // The strongest word that joined it stays on it: the owner's, else a co-owner's, with whose
+    // (G572: a merge kept the weaker label and the owner's word stopped guarding the value).
+    if (isOwnerConfirmed(normVerification(from.verification)) && !isOwnerConfirmed(normVerification(into.verification))) { into.verification = OWNER_CONFIRMED; delete into.co_owner; }
+    else if (from.verification === "confirmed-by-co-owner" && !isOwnerConfirmed(normVerification(into.verification)) && into.verification !== "confirmed-by-co-owner") { into.verification = "confirmed-by-co-owner"; if (from.co_owner) into.co_owner = from.co_owner; }
     if (from.by !== into.by || isOwnerConfirmed(normVerification(from.verification)) || (from.sources ?? []).some((x) => OWNER_REF.test(refString(x)) || isExactLouisRef(refString(x)))) delete into.shared_by;
   };
   const facts = (keep.fm.facts ??= {});
@@ -335,6 +346,21 @@ function repointed(p: Note, dropId: string, keepId: string): Note {
   return c;
 }
 
+// The values of facts on a note that the carve hides by the facts' own flags (its sensitivity, share_with,
+// a hold): the stricter side of a merge. The merged note keeps every flag (G569), so a value the
+// viewer reads today can end up hidden with the record it was combined with; that value then reads
+// [withheld] wherever the viewer meets it, which shows less, never more. The owner's merge aligns
+// to that stricter view (G576); every other newly withheld string still refuses (G247, G261, G265).
+function heldByFlags(res: CarveResult, note: Note): Set<string> {
+  const out = new Set<string>();
+  for (const h of res.hiddenFacts) {
+    if (!h.key.startsWith(`${note.fm.id}#`) || !byFlags(h.reason)) continue;
+    const f = note.fm.facts?.[h.key.slice(note.fm.id.length + 1)];
+    if (f) for (const v of valueStrings(f)) out.add(v.toLowerCase());
+  }
+  return out;
+}
+
 export function mergeLeaks(rules: Rules, keep: Note, drop: Note, rulesAfter: Rules = rules, pointers: Note[] = [], others: Set<string> = new Set(), titled: Set<string> = new Set()): string | undefined {
   const { keep: after, drop: pointer } = planMerge(keep, drop, () => "c-merge-check");
   const ptrsAfter = pointers.map((p) => repointed(p, drop.fm.id, keep.fm.id));
@@ -359,18 +385,22 @@ export function mergeLeaks(rules: Rules, keep: Note, drop: Note, rulesAfter: Rul
       // Nor is anything scrubbed after that wasn't before (G247): a name or value the agent reads
       // in other notes today never turns into [withheld] because two notes it may not read merged.
       const was0 = new Set(before.carvedValues);
-      newlyScrubbed = afterRes.carvedValues.filter((x) => !was0.has(x));
+      const held = heldByFlags(afterRes, after);
+      // A word is explained only by a value the merge newly hides (builder's audit of G576): a value
+      // hidden already never withheld anything new, so its words don't excuse a word leaving the shown set.
+      const heldWords = new Set(afterRes.carvedValues.filter((x) => !was0.has(x) && held.has(x.toLowerCase())).flatMap((x) => x.split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(squash)));
+      newlyScrubbed = afterRes.carvedValues.filter((x) => !was0.has(x) && !held.has(x.toLowerCase()));
       // The merge keeps one spelling of values equal under compareKey ("Café Roy", "Cafe Roy").
       // A spelling the agent reads on the pair today and won't after stops counting as shown, so the
       // same string elsewhere in the brain (another note's alias, a hidden fact) could start being
       // withheld from its prose (G261). mergeNotes checks the whole brain before it writes.
       const shownAfter = shownStrings(afterRes, keep.fm.id);
-      const lost = [...shownStrings(before, keep.fm.id), ...shownStrings(before, drop.fm.id)].filter((x) => !shownAfter.has(x) && others.has(x));
+      const lost = [...shownStrings(before, keep.fm.id), ...shownStrings(before, drop.fm.id)].filter((x) => !shownAfter.has(x) && others.has(x) && !held.has(x));
       if (lost.length) { for (const x of lost) spelled.add(x); newlyScrubbed.push(...lost); }
       // A title's words count as shown; the dropped title becomes only an alias of the kept note,
       // and aliases don't (shownWords). A word another note's name holds stops being shown (G265).
       const wordsAfter = titleFactWords(afterRes, keep.fm.id);
-      const gone = [...new Set([...titleFactWords(before, keep.fm.id), ...titleFactWords(before, drop.fm.id)])].filter((w) => !wordsAfter.has(w) && otherWords.has(w) && !titled.has(w));
+      const gone = [...new Set([...titleFactWords(before, keep.fm.id), ...titleFactWords(before, drop.fm.id)])].filter((w) => !wordsAfter.has(w) && otherWords.has(w) && !titled.has(w) && !heldWords.has(w));
       if (gone.length) { for (const w of gone) wordsGone.add(w); newlyScrubbed.push(...gone); }
     } catch { sees.push(viewer.label); continue; } // a grant that can't be carved fails closed
     if (newlyScrubbed.length) scrubs.push(viewer.label);
@@ -410,8 +440,12 @@ export function brainChanges(rules: Rules, notes: Note[], keep: Note, drop: Note
   for (const viewer of viewers(rules, extra)) {
     try {
       const differs = asViewer(viewer, () => {
-        const a = carve(notes, rules, grantFor(rules, viewer.agent), { flags: false });
+        const a0 = carve(notes, rules, grantFor(rules, viewer.agent), { flags: false });
         const b = carve(after, rules, grantFor(rules, viewer.agent), { flags: false });
+        // A value the merged note now hides by its own flags is compared as withheld today too (G576).
+        const had = new Set(a0.carvedValues), held = heldByFlags(b, plan.keep);
+        const stricter = b.carvedValues.filter((x) => !had.has(x) && held.has(x.toLowerCase()));
+        const a: CarveResult = stricter.length ? { ...a0, carvedValues: [...a0.carvedValues, ...stricter] } : a0;
         const needles = (r: CarveResult) => needlesOf(r).map((n) => JSON.stringify([n.value, n.squashed, n.digits ?? "", n.parts])).sort().join("\n");
         if (needles(a) !== needles(b)) return true;
         if ([...a.carvedValues].sort().join("\0") !== [...b.carvedValues].sort().join("\0")) return true;

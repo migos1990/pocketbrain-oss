@@ -3500,6 +3500,18 @@ const throws = (f: () => unknown) => { try { f(); return false; } catch { return
 const readAs = (root: string, agent: string, id: string): string => { try { return String(core.readNote(root, agent, id).markdown ?? ""); } catch { return ""; } };
 const MARC_COPY = { title: "Marc T", type: "person", area: "work", attribute: "emails", value: "marc@brightwave.example", as_of: "2026-10-07" };
 const samePersonCases: Case[] = [
+  samePersonCase("rt-person-merge-keeps-owner-word", "a merge folding the owner's confirmation of a value into a record a source vouched for keeps the owner's word, so a contradicting write is still a conflict", (root) => {
+    const rec = (v: string, ver: string, src: string) => `{ value: "${v}", as_of: 2026-09-01, sources: ["${src}"], verification: ${ver}, by: steward, recorded: 2026-10-01 }`;
+    evPerson(root, "people/ev-ann", "Ann Lake", { area: "work", created: "2026-10-01", facts: `  home: ${rec("12 Elm St", "verified-by-source", "gmail:f000000000000044")}\n` });
+    evPerson(root, "people/ev-ann-2", "Ann Lake", { area: "work", facts: `  home: ${rec("12 Elm St", "confirmed-by-owner", "imsg:12345")}\n` });
+    const p = evAnn(root);
+    let merged = false;
+    try { if (p && !p.blocked) { sameMod.mergeSamePerson(root, p.id); merged = true; } } catch { /* refused */ }
+    const keep = p?.keep ?? "people/ev-ann";
+    const ver = String((pb.brain.loadBrain(root).find((n: any) => n.fm.id === keep)?.fm.facts?.home as any)?.verification ?? "");
+    const w = core.remember(root, "planner", { id: keep, attribute: "home", value: "1 Other Rd", as_of: "2026-10-05", sources: ["gmail:f000000000000043"], verification: "verified-by-source" });
+    return [["merged", merged], [`merged record keeps the owner's word (${ver})`, ver === "confirmed-by-owner"], [`a contradicting write isn't filed over it (${w.outcome})`, w.outcome !== "committed"]];
+  }, "G572"),
   samePersonCase("rt-person-flagged-facts-merge", "two pages for one person merge although one holds a private fact and a held one; both stay hidden from exactly the assistants they were hidden from", (root) => {
     const rec = (v: string, flag: string) => `{ value: "${v}", as_of: 2026-09-01, sources: ["imsg:phonemsg-91"], verification: verified-by-source, by: planner, recorded: 2026-10-01, ${flag} }`;
     evPerson(root, "people/ev-ann", "Ann Lake", { area: "work", created: "2026-10-01", facts: `  home: ${rec("12 Elm St", "sensitivity: private")}\n  nickname: ${rec("Annie Bee", "unseen: true")}\n` });
@@ -3511,6 +3523,17 @@ const samePersonCases: Case[] = [
     const after = readAs(root, "helper", p?.keep ?? "people/ev-ann");
     return [[`offered without a block (${p?.blocked ?? "none"})`, !!p && !p.blocked], ["merged", merged], ["helper read the page before", before.includes("Ann Lake")], ["helper still never reads the private home or the held nickname", !!after && !/12 Elm St|Annie Bee/.test(after)]];
   }, "G569"),
+  samePersonCase("rt-person-merge-dispute-private-side", "two pages for one person merge although the role they disagree on is private on one and the resolver holds an unrelated held fact; the dispute opens and the role stays hidden from an assistant below private", (root) => {
+    const rec = (v: string, flag = "") => `{ value: "${v}", as_of: 2026-09-01, sources: ["imsg:phonemsg-91"], verification: verified-by-source, by: planner, recorded: 2026-10-01${flag} }`;
+    evPerson(root, "people/ev-ann", "Ann Lake", { area: "work", created: "2026-10-01", facts: `  role: ${rec("Head of studies", ", sensitivity: private")}\n  nickname: ${rec("Annie Bee", ", unseen: true")}\n` });
+    evPerson(root, "people/ev-ann-2", "Ann Lake", { area: "work", facts: `  role: ${rec("Course lead")}\n` });
+    const p = evAnn(root);
+    let merged = false;
+    try { if (p && !p.blocked) { sameMod.mergeSamePerson(root, p.id); merged = true; } } catch { /* refused */ }
+    const kept = p ? readFileSync(join(root, `${p.keep}.md`), "utf8") : "";
+    const after = readAs(root, "helper", p?.keep ?? "people/ev-ann");
+    return [[`offered without a block (${p?.blocked ?? "none"})`, !!p && !p.blocked], ["merged", merged], ["the role is in dispute", /^  role:[\s\S]*?\bdispute: /m.test(kept)], ["helper reads the page and neither role", after.includes("Ann Lake") && !/Head of studies|Course lead/.test(after)]];
+  }, "G576"),
   samePersonCase("rt-person-self-reported-plant", "an agent copying an inner person's address onto a new note, self-reported, gets no 'same person?' question", (root) => {
     // In steward's own area, so the copy is committed and the check isn't passed by an inbox item.
     const r = W("steward", { ...MARC_COPY, area: "personal", sources: ["agent:steward"], verification: "self-reported" });
