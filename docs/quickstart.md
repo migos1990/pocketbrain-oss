@@ -4,15 +4,15 @@ You'll end up with a brain on your own computer, one memory of you that every as
 
 ## 1. Install (1 minute)
 
-You need git (on a Mac, `xcode-select --install` adds it). Paste this into Terminal and press Enter:
+You need git (on a Mac, `xcode-select --install` adds it) and [Bun](https://bun.sh) 1.4 (`curl -fsSL https://bun.sh/install | bash`). The public source is linked from pocketbrain.dev ("Source on GitHub"). Paste this into Terminal, with that address in place of `<public repository>`, and press Enter:
 
 ```sh
-curl -fsSL https://pocketbrain.dev/install.sh | sh
+git clone <public repository> ~/pocketbrain && cd ~/pocketbrain && bun install && bun link
 ```
 
-It installs [Bun](https://bun.sh) (the runtime pocketBrain uses) if it's missing, then the newest pocketBrain release into `~/.pocketbrain/app`, and puts the `pocketbrain` command in `~/.bun/bin`. Run the same line again to update; it never overwrites changes you made in that folder. If Terminal then says it can't find `pocketbrain`, **open a new Terminal window**; if it still can't, your Bun didn't come from its own installer, so add `~/.bun/bin` to your PATH.
+It puts the `pocketbrain` command in `~/.bun/bin`. To update later: `cd ~/pocketbrain && git pull && bun install`. If Terminal then says it can't find `pocketbrain`, **open a new Terminal window**; if it still can't, your Bun didn't come from its own installer, so add `~/.bun/bin` to your PATH.
 
-From a clone instead: `git clone <repository> pocketbrain && cd pocketbrain && bun install && bun link`.
+A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is written (`install.sh`: it adds Bun if it's missing and installs the newest release into `~/.pocketbrain/app`), but the site doesn't serve it yet.
 
 ## 2. Create your brain (3 minutes)
 

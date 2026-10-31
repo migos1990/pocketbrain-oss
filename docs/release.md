@@ -1,9 +1,9 @@
 # Releases, CI and the Mac's auto-update
 
-How a change gets from a branch to the hub on the Mac, and who has to do what. Short version: branches go through the merge gate and `main` runs CI on every push. Today the Mac runs a `main` sha: the coordinator says "go <sha>" and the Mac thread runs `bun scripts/deploy.ts go <sha>`, which keeps it only when the restarted hub itself reports that sha, then prints the real brain's north star ([The Mac takes a main sha](#the-mac-takes-a-main-sha)). The release flow below (a dated version cut on `main`, a CI-made tag `vX.Y.Z`, the Mac following the `release` branch by itself) is kept for when tags exist; none has yet, since cloud sessions can't push tags.
+How a change gets from a branch to the hub on the Mac, and who has to do what. Short version: every branch reaches `main` through a pull request that passes CI, the merge gate and a code review ([Pull requests](#pull-requests)), and `main` runs CI on every push. Today the Mac runs a `main` sha: the coordinator says "go <sha>" and the Mac thread runs `bun scripts/deploy.ts go <sha>`, which keeps it only when the restarted hub itself reports that sha, then prints the real brain's north star ([The Mac takes a main sha](#the-mac-takes-a-main-sha)). The release flow below (a dated version cut on `main`, a CI-made tag `vX.Y.Z`, the Mac following the `release` branch by itself) is kept for when tags exist; none has yet, since cloud sessions can't push tags.
 
 ```
-branch ──gate──▶ main ──CI──▶ release cut ──CI again──▶ tag vX.Y.Z + GitHub release + `release` branch ──▶ Mac (every 10 min)
+branch ──PR (CI + gate + review)──▶ main ──CI──▶ release cut ──CI again──▶ tag vX.Y.Z + GitHub release + `release` branch ──▶ Mac (every 10 min)
 ```
 
 ## Lanes
@@ -182,18 +182,42 @@ cd /tmp && rm -rf pb-site && mkdir pb-site && git -C ~/pocketbrain archive origi
 cd pb-site/site && npx wrangler pages deploy . --project-name pocketbrain --branch main
 ```
 
+**The installer's address is the site's.** `install.sh` clones from `https://pocketbrain.dev/git`, and the quick start's one line fetches `https://pocketbrain.dev/install.sh`. Both are routes of the site's counter worker ([site-analytics.md](site-analytics.md)), which isn't deployed yet, and the installer takes the newest `v*` tag, which the public repo doesn't have yet (the sync pushes commits, not tags). Until both are there, the README and the quick start install from a clone, and `bun scripts/docs-live.ts` fails on any `pocketbrain.dev` address a doc names that doesn't answer.
+
 **Checking both.** `bun scripts/public-sync.ts check` reads the live site and the public repo and prints IN SYNC or OUT OF SYNC with what lags: a site naming a version that is not a tag, or not the newest tag; a public repo whose last commit names another source than `main`'s tip, or another version. `--site <file>` checks a site file before deploying it, `--no-site` and `--no-public` check one side. `verify-tag` (CI, on every release) also refuses a tag whose README status line names another version, and `cut` moves that line with `package.json`.
+
+## Pull requests
+
+Owner, 2026-10-31: every thread branch lands through its own pull request with a code review, so each change has one page holding its diff, CI, review and evidence.
+
+1. **The thread** pushes `claude/<name>` and opens a pull request against `main` from `.github/pull_request_template.md`, filling every section (or "none"), and asks the builder to land it. One branch, one PR; a follow-up fix is a new commit on the same branch.
+2. **The builder** replays the branch onto `main`'s tip as today (replayed shas differ from the thread's) and pushes it back to the same branch (`git push --force-with-lease`; the branch is the builder's once handed over), so CI, the slice audit and the gate all see the exact tree that will land.
+3. **The builder reviews it**: `/merge-gate` on that head, with `/code-review --comment <PR number>` as its fresh-eyes step, so the findings are inline comments on the PR. A finding that affects correctness or a law goes back to the thread as a failing test on the same branch; the rest are optional. When the access core changed, the slice audit's report is linked in the PR.
+4. **The builder merges** with a merge commit (**Create a merge commit**, never squash or rebase merge) once the `test` check is green on that head and the gate said MERGE. The replayed commits land with the exact shas and trees that CI, the slice audit and the gaps' `closed:` cites saw. Branches audited together may land as one PR. The Mac is given the `main` sha.
+
+A release cut goes the same way: `bun scripts/release.ts cut` builds `claude/release-X.Y.Z` locally, then the builder pushes that branch and opens a PR from it instead of pushing `main`; its merge is the push to `main` that `release.yml` tags. The ruleset goes on only after v0.2.1 is tagged, so the queue ahead of that cut lands directly as before.
+
+The ruleset on `main` (owner, set once in Settings, Rules, or by a session with admin rights after the owner's word): pull request required, 0 approvals (the builder and the threads act as one GitHub account, which can't approve its own PR), required status check `test` (the `ci` workflow's job; not `release` or `public-sync`, which push tags, the `release` branch and the public repo, never `main`), merge commits allowed and linear history not required, no force-push, no deletion, no bypass list. Not "branch must be up to date": the builder already replays onto the tip before merging, and a strict check would rerun 20 minutes of CI for every other open PR after each merge. It never restricts tags, or CI can't tag.
+
+## Docs
+
+Docs that no longer match the code are a bug (project rule 11), and two tests catch the drift a test can see, so CI fails on it:
+
+- `test/docs.test.ts`: every `pocketbrain` command and flag named in a code span is one the CLI has, every `bun run` script is in package.json, every path in a code span exists, every CLI command and MCP tool is named somewhere, known overclaims stay out, and public docs speak to any owner.
+- `test/docs-truth.test.ts`: links to a section of a doc land on a heading, repo paths named in sentences exist, `pocketbrain <command> <subcommand>` is one `help --all` lists, the environment variables and key names the code reads are named in the docs and the other way round (names only), package.json, README's status line and the newest dated CHANGELOG section name one version, the changelog opens with `[Unreleased]` and runs newest first, every gap id it cites is named by code or tests, CLAUDE.md's map lists each file once, every doc is linked from another, and the phone doc's Settings list is the dashboard's.
+
+What needs the network is `bun scripts/docs-live.ts`: every `https://pocketbrain.dev` address inside a doc's shell block must answer. CI's `docs-live` workflow (`.github/workflows/docs-live.yml`) runs it on every push to `main` and daily, so a site change that breaks a doc shows within a day; run it by hand after a site deploy and before a public post; `bun scripts/public-sync.ts check` is its partner for the site's version and the public repo.
 
 ## Who pushes
 
 | Step | Who |
 |---|---|
-| Merge a branch into `main` | the builder thread, after `bun scripts/gate.ts main` says MERGE |
-| Push `main` to the private repo | the builder, when the gate passed and `bun run check` is green; CI runs again there |
-| Cut a release and push `main` | the builder, after a merge batch, when CI on `main` is green and nothing waits on a paid eval or slice audit; CI makes the tag |
+| Open a pull request | the thread that wrote the branch |
+| Merge a pull request into `main` | the builder thread, after `/merge-gate` says MERGE on the replayed head, its `/code-review` is on the PR and `test` is green |
+| Cut a release | the builder, after a merge batch, when CI on `main` is green and nothing waits on a paid eval or slice audit; the release branch lands by PR and CI makes the tag |
 | Deploy to the Mac | the Mac thread, on the coordinator's "go <sha>": `bun scripts/deploy.ts go <sha>`, reporting its last lines (verified sha, north star). Once tags exist and the update job is installed, the Mac also takes a tag by itself once its CI passed |
 | Public repo | CI's public-sync workflow, after CI passes on `main` (owner, 2026-10-31); a first-time push or any other change to it, the owner only |
 | The site | after each tag, the thread that cut it updates and pushes `claude/pocketbrain-site`; the Mac thread deploys it on the coordinator's word |
 | npm, `rules/` in the brain | The owner only |
 
-GitHub enforces the rest with a ruleset on `main` and `release` (the owner sets it once in the repository's Settings, Rules): no force-push, no deletion. It doesn't require the `test` check, which would refuse the builder's direct pushes; CI on `main` and the release workflow's own CI run stand in for it. It must not restrict tag creation, or CI can't tag.
+GitHub enforces the rest: the ruleset on `main` above, and on `release` no force-push, no deletion. Neither restricts tag creation, or CI can't tag.

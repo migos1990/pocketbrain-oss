@@ -44,7 +44,7 @@ MCP tools `ask_to_see` (what, why) and `ask_status` (request); JSON `POST /v1/as
 ## What the owner sees
 
 - **Phone (Guardian):** "helper wants to read a private person note once. Code K7QM". Approving releases the best match; the dashboard shows the same code next to it. The push names the kind of note (its level and type) so a phone approval isn't blind; the title is only in it with `push_title: true`, since the push travels through Auth0 and Apple or Google.
-- **Dashboard, Needs you:** "helper wants to read Mom once", its reason, the words it used, the time left, **Allow once** for the best match, **Allow X instead** for the next two matches, and **Decline**. If the push couldn't be sent, the reason is right there.
+- **Dashboard, Settings, Still open:** "helper wants to read Mom once", its reason, the words it used, the time left, **Allow once** for the best match, **Allow X instead** for the next two matches, and **Decline**. If the push couldn't be sent, the reason is right there.
 - **CLI:** `pocketbrain ask list | decline <id> | test`. Approving is not on the CLI: any program with a shell can run `pocketbrain`, so an approval comes only from the dashboard click or your phone (G244). `ask approve` says so and changes nothing.
 
 ## Just this one: the owner offers first

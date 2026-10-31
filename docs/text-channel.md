@@ -97,7 +97,7 @@ When Messages stops answering. Messages can hang on AppleEvents (2026-10-23/24 i
 
 A direct transport's replies count as the owner's own word, but no reply decides anything either way (above). Everything else in this doc holds.
 
-The other options stay in code behind the same interface: `instinct` (the 2026-10-08 design, below), `twilio` (SMS from a number the owner owns) and `fake` (tests, demo, evals). `transport.fallback` adds a second one.
+The other options stay in code behind the same interface: `instinct` (the 2026-10-08 design, below; the bearer key for its `push_url` in `INSTINCT_PUSH_KEY`), `twilio` (SMS from a number the owner owns; keys in `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`) and `fake` (tests, demo, evals). Keys are read from the environment or the keys folder (`~/.config/pocketbrain/keys/`), never from `rules/`. `transport.fallback` adds a second one.
 
 ## Running it
 

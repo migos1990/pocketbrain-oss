@@ -1,6 +1,6 @@
 # The owner's home: one box, a diary, prose pages
 
-The owner's phone UI is being rebuilt as three screens (owner's direction, 2026-10-26): a home with one text box and a diary of what the brain learned, a page that opens on prose with footnotes, and a settle screen that is the only place that ever asks. Since 2026-10-30 the home is one of four tabs (On your mind, Memory, Ask, Who knows; the owner app brief), built in steps. This page describes what exists so far; it grows with each part as it lands.
+The owner's phone UI (owner's direction, 2026-10-26, and the owner app brief of 2026-10-30) is four tabs, On your mind, Memory, Ask and Who knows, plus a page that opens on prose with references and a settle screen, the only place that ever asks. On your mind is the home: one text box and a diary of what the brain learned. This page describes what is built today.
 
 ## The diary
 

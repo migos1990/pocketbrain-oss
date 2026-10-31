@@ -2,7 +2,7 @@
 
 The owner is asked only about conflicts (owner, 2026-10-25; outside review v5). Everything else a capture or a source finds files itself on the hub's tick, with Undo, and an outside assistant's unanswered proposal expires. The code is `src/filing.ts`; conflicts are asked on the home and settled on `/settle/<id>` ([owner-home.md](owner-home.md)).
 
-What is still open and isn't a conflict (an assistant's proposal, held mail, a held capture) waits on Settings (`/overview`, the home's Settings link) under Still open, one at a time; nothing counts it or asks about it.
+What is still open and isn't a conflict (an assistant's proposal, held mail, a held capture) waits on Settings (`/overview`, linked from Who knows) under Still open, one at a time; nothing counts it or asks about it.
 
 ## When the hub decides
 The text channel's tick inside `pocketbrain start` (every 5 minutes) reads your replies first, then runs `runAuto` on the server's write queue, one write at a time with everything else the hub writes, and under the decide lock below. Anything you answered in that tick is skipped, even a reply that couldn't apply, so a text of yours is never overruled a moment later. A tick run on its own (`textline watch` or cron `textline once` beside the server) never decides for you. The hub decides two kinds of item:

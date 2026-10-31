@@ -22,7 +22,7 @@ On each other machine, clone the brain over the tailnet, then:
 pocketbrain hub init --name laptop --key ~/.ssh/pocketbrain_laptop --git ssh://laptop.<tailnet>.ts.net/~/brain
 ```
 
-It prints the `hub add-replica …` line to run on the hub. After that, `pocketbrain hub sync` on the laptop works. Add `--no-hub` for a copy that must never be promoted.
+It prints the `hub add-replica …` line to run on the hub. Which machine a clone is lives in that clone's own `.git/config` (`pocketbrain.replica`); `PB_REPLICA` overrides it for one command. After that, `pocketbrain hub sync` on the laptop works. Add `--no-hub` for a copy that must never be promoted.
 
 ## Day to day
 

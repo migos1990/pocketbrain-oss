@@ -1,6 +1,6 @@
 # The dashboard on a phone
 
-The owner reads the dashboard on his phone (2026-10-24: "bad UIs on phone"). The new-user run (docs/ease-of-use.md) checks every page at 390 x 844. What each page does about it:
+The owner reads the dashboard on a phone (2026-10-24: "bad UIs on phone"). The UI checks ([ui-quality.md](ui-quality.md), `test/ui-quality.test.ts`) load the pages at phone width, 390 px. What each page does about it:
 
 - **Menu.** No tab bar: the top row is Home and Settings. Settings (`/overview`) links every other page (Brain, Assistants with the off switches, Who sees what, Who matters, Activity, History, Digest, Upkeep, Spend; `SETTINGS` in `src/dashboard/html.ts`).
 - **Home.** Only conflicts are asked, counted by the home's own function (`waitingCount` in `src/dashboard/home.ts`); everything else still open is listed one by one on Settings, never counted.

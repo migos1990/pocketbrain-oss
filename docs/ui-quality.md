@@ -18,7 +18,7 @@ every `bun test` and fails on any of these:
   states on top (a change to approve, a held message, an assistant set to read-only), and an error
   banner. The rig pins the hub's clock (`PB_NOW`) to the demo's morning, 8 Oct 2026 at 10:00 in
   Montréal, so the home's date, its diary and its reads all fall on that day.
-- **Phone width:** the overview and the door's start page don't scroll sideways at 390 px.
+- **Phone width:** the overview and the door's start page don't scroll sideways at 390 px. What each page does for a phone is in [dashboard-phone.md](dashboard-phone.md).
 
 Pages are listed in `test/ui-rig.ts`: add a page there when you add one to the dashboard or the door.
 

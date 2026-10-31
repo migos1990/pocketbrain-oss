@@ -1,0 +1,22 @@
+# The docs' live half (docs/release.md, Docs): every pocketbrain.dev address a doc tells you to run
+# must answer. The offline drift checks run in ci.yml's bun test (test/docs-truth.test.ts).
+# Owner's yes, 2026-10-31. Read-only and needs no secret, so the public copy runs it too.
+name: docs-live
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docs-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun scripts/docs-live.ts
