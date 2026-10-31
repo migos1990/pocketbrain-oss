@@ -2792,6 +2792,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Builder, 2026-10-30: on b867757c GitHub CI and the release run's own ci jobs were green, but publish failed at `git push origin refs/tags/v0.2.0`: its `bun install` turned on .githooks, and pre-push ran the full suite on a runner with no age or Chromium. No tag, no release, no release branch.",
     fix: ".githooks/pre-push lets a push through without its checks only when every ref is a tag or refs/heads/release at a commit already on origin/main (which passed them and CI); any other push, or a tag off main, is checked in full. Test: test/githooks.test.ts.",
   },
+  G569: {
+    closed: "cfe27318",
+    title: "Merging the owner's two pages for himself had no way forward",
+    severity: "medium",
+    finding: "Live, 2026-10-31: `pocketbrain merge` of the owner's two pages for himself was refused: \"has a fact some assistants can't see (private or shared with only some); the owner can merge these by hand later\" and \"instinct, gardener see one of these notes but not the other\". The shape run showed the whole cause: three private records and one held record (waiting for the owner to see it) on one page. There is no merge by hand, and every person page with a private phone or email behind Show (contacts files them there) hit the same refusal.",
+    fix: "carveParity (src/merge.ts) no longer refuses a pair for a fact hidden by its own record flags (private above a ceiling, share_with, a hold): planMerge keeps every flag and only tightens a combined record, and a fact is hidden when any of its records is (G170), so it stays hidden from exactly the same assistants; a fact hidden by name or by a slice still refuses, and mergeLeaks and brainChanges still decide. A record another writer's joins drops shared_by (addSources, invariant 4; builder's slice audit). Tests: test/sameperson-redteam.test.ts (G569 a private / share_with / held fact no longer blocks the pair), test/contracts/write.contract.test.ts (G569 audit row). Eval: rt-person-flagged-facts-merge.",
+  },
   G559: {
     closed: "829cfb88",
     title: "A page read like a form: the full name in every sentence, role and org apart, the year on this year's dates",

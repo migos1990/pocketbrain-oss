@@ -19,17 +19,17 @@
 import type { FactRecord, Fact, Note } from "./brain";
 import { loadBrain, saveNote, today, isDisputed, isList, sensitivityRank } from "./brain";
 import { loadRules, type Rules } from "./rules";
-import { carve, grantFor, mergedTarget, records, valueStrings, visibleFacts, type CarveResult } from "./carve";
+import { carve, grantFor, mergedTarget, records, valueStrings, visibleFacts, HELD_REASON, type CarveResult } from "./carve";
 import { fgaConfirmsAll } from "./fga";
 import { renderNote, needlesOf } from "./view";
 import { cellText, mayReadDifferently } from "./cell";
 import { withTokenRole, READER_CEILING } from "./tokenrole";
 import { compareKey } from "./normalize";
 import { squash } from "./match";
-import { refString } from "./sources";
+import { refString, isExactLouisRef } from "./sources";
 import { openDispute } from "./upkeep";
 import { git } from "./git";
-import { OWNER } from "./owner";
+import { OWNER, OWNER_REF, isOwnerConfirmed, normVerification } from "./owner";
 
 // Why `drop` can't merge into `keep`, in plain words, or undefined. A merge moves the dropped
 // note's facts under the kept note's id, area and tags, so anything the rules keep apart would
@@ -99,12 +99,12 @@ function viewers(rules: Rules, extra: string[] = []): Viewer[] {
 }
 const asViewer = <T>(v: Viewer, fn: () => T): T => withTokenRole(v.agent, v.role, fn);
 
+const byFlags = (reason: string) => /^(do not share|fact is )/.test(reason) || reason === HELD_REASON;
 export function carveParity(rules: Rules, keep: Note, drop: Note): string | undefined {
   const { r } = planMerge(keep, drop, () => "c-merge-check");
   const resolvers = new Set([rules.policy.resolver, rules.policy.owner_channel ?? rules.policy.resolver].filter((x): x is string => !!x));
   const attrNames = [...new Set([keep, drop].flatMap((n) => Object.keys(n.fm.facts ?? {})))];
   const uneven: string[] = [];
-  const limited = new Set<string>(); // notes holding a private or share_with-limited fact some viewer can't see
   for (const viewer of viewers(rules, [...resolvers])) {
     const agent = viewer.agent;
     let ok = true;
@@ -122,28 +122,22 @@ export function carveParity(rules: Rules, keep: Note, drop: Note): string | unde
       else if (a && b) {
         const hid = [...hidden(keep.fm.id), ...hidden(drop.fm.id)];
         const other = hid.filter((h) => !/^attribute (not in slice|excluded in slice)/.test(h.reason));
+        // A fact hidden by its own record flags (its sensitivity above this viewer's ceiling,
+        // share_with, or a hold waiting for the owner to see it) keeps those flags on the merged
+        // note, and a record combined with it only tightens (planMerge: moved records keep every
+        // flag; addSources raises the level, intersects share_with and keeps the kept record's hold;
+        // raise() lifts the dropped note's facts to its level), and a fact is hidden when any of its
+        // records is (factHiddenReason, G170), so it stays hidden from this viewer (G569).
+        // A fact hidden by name or by a slice refuses.
         if (a.body !== b.body || attrs(a) !== attrs(b) || scopedOut(a) !== scopedOut(b)) ok = false;
-        else if (other.length) {
-          // A fact hidden by its sensitivity or share_with is named as the note's fact, not as this viewer.
-          for (const h of other) if (/^(do not share|fact is )/.test(h.reason)) limited.add(h.key.startsWith(`${keep.fm.id}#`) ? keep.fm.title : drop.fm.title);
-          if (other.some((h) => !/^(do not share|fact is )/.test(h.reason))) ok = false;
-          else continue;
-        }
+        else if (other.some((h) => !byFlags(h.reason))) ok = false;
         else if (r.namesHeld.length) ok = false;
         else if (r.disputes.length && resolvers.has(agent) && hid.length) ok = false;
       } else if (r.disputes.length && resolvers.has(agent)) ok = false; // the resolver must see the packet's notes
     } catch { ok = false; } // a grant that can't be carved fails closed
     if (!ok) uneven.push(viewer.label);
   }
-  // The usual cause, named plainly: a fact kept from some assistants (private, or share_with) can't
-  // be shown under the merged note to exactly those who saw it before, so the pair waits for the owner.
-  const parts: string[] = [];
-  if (limited.size) {
-    const t = [...limited].sort();
-    parts.push(`${t.join(" and ")} ${t.length === 1 ? "has a fact" : "have facts"} some assistants can't see (private or shared with only some); the owner can merge these by hand later`);
-  }
-  if (uneven.length) parts.push(`${uneven.join(", ")} ${uneven.length === 1 ? "sees" : "see"} one of these notes but not the other (or not all of it); make their access the same first`);
-  return parts.length ? parts.join("; also, ") : undefined;
+  return uneven.length ? `${uneven.join(", ")} ${uneven.length === 1 ? "sees" : "see"} one of these notes but not the other (or not all of it); make their access the same first` : undefined;
 }
 
 export interface MergeResult { ok: boolean; message: string; moved: string[]; merged: string[]; disputes: string[]; namesHeld: string[]; tagsHeld: string[] }
@@ -166,6 +160,11 @@ export function planMerge(keepIn: Note, dropIn: Note, dispute: (keep: Note, attr
     for (const s of from.sources) if (!have.has(refString(s))) into.sources.push(s);
     if (from.sensitivity && sensitivityRank(from.sensitivity) > sensitivityRank(into.sensitivity ?? keep.fm.sensitivity)) into.sensitivity = from.sensitivity;
     if (from.share_with) into.share_with = into.share_with ? into.share_with.filter((a) => from.share_with!.includes(a)) : from.share_with;
+    // Another writer's record in it: the sharing agent no longer holds it alone (invariant 4, as
+    // write.ts does for a same-value write, G55; slice audit of G569).
+    // The owner's word joining it counts the same way: the record is no longer the agent's alone
+    // (ownOnly in write.ts reads only owner: refs, so an owner-confirmed imsg: record wouldn't show).
+    if (from.by !== into.by || isOwnerConfirmed(normVerification(from.verification)) || (from.sources ?? []).some((x) => OWNER_REF.test(refString(x)) || isExactLouisRef(refString(x)))) delete into.shared_by;
   };
   const facts = (keep.fm.facts ??= {});
   for (const [attr, f] of Object.entries(drop.fm.facts ?? {})) {

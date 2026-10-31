@@ -14,6 +14,7 @@ import { sha256 } from "../../src/util";
 import { setFact } from "../../src/dashboard/edit";
 import { ENCODED_BANK, ORDINARY } from "./leak-rows";
 import { registerLouisMessages } from "../../src/louis";
+import { samePersonProposals, mergeSamePerson } from "../../src/sameperson";
 
 const base = { agent: "planner", id: "projects/course-a", attribute: "next_step", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" as const };
 const sh = (root: string, ...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: root }).stdout.toString().trim();
@@ -459,3 +460,49 @@ test("contract write: a titled surname alone never files on the owner's page bes
     expect(fact(root, "people/robin-lake", "appointment"), title).toBeUndefined();
   }
 });
+
+// Slice audit of G569 (builder, 2026-10-31): before G569 a share_with fact refused the pair, so this
+// was unreachable; planMerge's addSources kept shared_by when another writer's record joined it.
+const OPEN = `{ value: "(514) 555-0100", as_of: 2026-09-01, sources: ["imsg:phonemsg-77"], verification: verified-by-source, by: planner, recorded: 2026-10-01 }`;
+const commitAll = (root: string) => { Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "fixture"], { cwd: root }); };
+
+test("contract write: a merge folding another writer's record into a shared_by record drops shared_by, so the sharer's write goes to the inbox (invariant 4, G569 audit)", () => {
+  const root = makeBrain();
+  const p = join(root, "people/jane-roy.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace(/\nfacts:\n/, `\nfacts:\n  home: { value: "12 Elm St", as_of: 2026-09-01, sources: ["imsg:phonemsg-79"], verification: verified-by-source, by: planner, recorded: 2026-10-01, share_with: [steward], shared_by: planner }\n`));
+  writeFileSync(join(root, "people/j-roy.md"), `---\nid: people/j-roy\ntype: person\ntitle: Jay Roy\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-03\nupdated: 2026-10-03\nby: steward\nfacts:\n  phones: { items: [${OPEN}] }\n  home: { value: "12 Elm St", as_of: 2026-09-02, sources: ["gmail:f0000000000000b1"], verification: verified-by-source, by: steward, recorded: 2026-10-02, share_with: [steward] }\n---\nA person.\n`);
+  commitAll(root);
+  const pr = samePersonProposals(root).find((x) => [x.keep, x.drop].includes("people/j-roy"))!;
+  expect(pr.blocked).toBeUndefined(); // G569: allowed now
+  mergeSamePerson(root, pr.id);
+  const rec = loadBrain(root).find((n) => n.fm.id === pr.keep)!.fm.facts!.home as { shared_by?: string; sources: string[] };
+  expect(rec.sources).toContain("gmail:f0000000000000b1");
+  expect(rec.shared_by).toBeUndefined(); // FAILS: "planner"
+  // and so planner's write is treated like any write to a fact hidden from it
+  const w = remember(root, "planner", { id: pr.keep, attribute: "home", value: "1 Planner Rd", as_of: "2026-10-05", sources: ["gmail:f000000000000043"] });
+  expect(w.outcome).toBe("inbox"); // FAILS: "disputed"
+});
+
+test("contract write: a merge folding the owner's confirmation into a shared_by record drops shared_by, same writer on both sides (invariant 4, G569 re-audit)", () => {
+  const root = makeBrain();
+  const p = join(root, "people/jane-roy.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace(/\nfacts:\n/, `\nfacts:\n  home: { value: "12 Elm St", as_of: 2026-09-01, sources: ["gmail:f000000000000044"], verification: verified-by-source, by: planner, recorded: 2026-10-01, share_with: [steward], shared_by: planner }\n`));
+  writeFileSync(join(root, "people/j-roy.md"), `---\nid: people/j-roy\ntype: person\ntitle: Jay Roy\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-03\nupdated: 2026-10-03\nby: steward\nfacts:\n  phones: { items: [${OPEN}] }\n  home: { value: "12 Elm St", as_of: 2026-09-02, sources: ["imsg:phonemsg-ABCDEFGHIJKLMNOPQRST12"], verification: confirmed-by-owner, by: planner, recorded: 2026-10-02, share_with: [steward] }\n---\nA person.\n`);
+  commitAll(root);
+  const before = remember(makeCopyForMerge(root), "planner", { id: "people/j-roy", attribute: "home", value: "1 Other Rd", as_of: "2026-10-05", sources: ["gmail:f000000000000043"] }).outcome;
+  expect(before).toBe("inbox");
+  const pr = samePersonProposals(root).find((x) => [x.keep, x.drop].includes("people/j-roy"))!;
+  expect(pr.blocked).toBeUndefined();
+  mergeSamePerson(root, pr.id);
+  const rec = loadBrain(root).find((n) => n.fm.id === pr.keep)!.fm.facts!.home as { shared_by?: string };
+  expect(rec.shared_by).toBeUndefined(); // FAILS: "planner"
+  const w = remember(root, "planner", { id: pr.keep, attribute: "home", value: "1 Other Rd", as_of: "2026-10-05", sources: ["gmail:f000000000000043"] });
+  expect(w.outcome).toBe("inbox"); // FAILS: "disputed"
+});
+function makeCopyForMerge(root: string): string {
+  const { mkdtempSync, cpSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  const d = mkdtempSync(join(tmpdir(), "pb-copy-"));
+  cpSync(root, d, { recursive: true });
+  return d;
+}

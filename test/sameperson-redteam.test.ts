@@ -461,18 +461,36 @@ test("G227 merging two notes an agent never reads leaves its view alone: no [wit
   expect(JSON.stringify(seen(root, "planner", "projects/lunch"))).toContain("Plan lunch with Kimberly Zed.");
 });
 
-test("a private or share_with fact blocks the pair with a reason that says so", () => {
-  const root = makeBrain();
-  person(root, "people/j-roy", "Jay Roy", { facts: `  home: { value: "12 Elm St", as_of: 2026-09-01, sources: ["imsg:phonemsg-78"], verification: verified-by-source, by: planner, recorded: 2026-10-01, sensitivity: private }\n` });
-  commit(root);
-  const p = pairWith(root, "people/j-roy");
-  expect(p.blocked).toBe("Jay Roy has a fact some assistants can't see (private or shared with only some); the owner can merge these by hand later");
-  expect(p.swap_blocked).toBe(p.blocked);
-  expect(() => mergeSamePerson(root, p.id)).toThrow("can't merge here: Jay Roy has a fact some assistants can't see");
-  edit(root, "people/j-roy.md", (s) => s.replace("sensitivity: private }", "share_with: [steward] }"));
-  commit(root);
-  expect(pairWith(root, "people/j-roy").blocked).toMatch(/^Jay Roy has a fact some assistants can't see/);
-});
+// Live, 2026-10-31 (G569): the owner's two pages for himself were refused because one holds a fact
+// some assistants can't see, with "the owner can merge these by hand later" and no way to. A fact
+// hidden by its own flags (private above a ceiling, share_with) keeps those flags on the merged
+// note, and a combined record only tightens (planMerge), so it stays hidden from exactly the
+// assistants it was hidden from; the rendered checks (mergeLeaks, brainChanges) still decide.
+const hiddenFrom = (root: string, id: string, attr: string) => {
+  const rules = loadRules(root), out: string[] = [];
+  for (const agent of Object.keys(rules.policy.agents ?? {})) for (const role of [undefined, "reader" as const]) {
+    const res = withTokenRole(agent, role, () => carve(loadBrain(root), rules, grantFor(rules, agent), { flags: false }));
+    const v = res.visible.get(id);
+    if (!v || res.hiddenFacts.some((h) => h.key === `${id}#${attr}`) || !v.note.fm.facts?.[attr]) out.push(`${agent}${role ? " (reader)" : ""}`);
+  }
+  return out.sort();
+};
+for (const [kind, flag] of [["private", "sensitivity: private"], ["share_with", "share_with: [steward]"], ["held", "unseen: true"]] as const) {
+  test(`G569 a ${kind} fact no longer blocks the pair: it merges and stays hidden from exactly the same assistants`, () => {
+    const root = makeBrain();
+    person(root, "people/j-roy", "Jay Roy", { facts: `  home: { value: "12 Elm St", as_of: 2026-09-01, sources: ["imsg:phonemsg-78"], verification: verified-by-source, by: planner, recorded: 2026-10-01, ${flag} }\n` });
+    commit(root);
+    const before = hiddenFrom(root, "people/j-roy", "home");
+    expect(before.length).toBeGreaterThan(0);
+    const p = pairWith(root, "people/j-roy");
+    expect(p.blocked).toBeUndefined();
+    mergeSamePerson(root, p.id);
+    const keep = p.keep;
+    expect(loadBrain(root).find((n) => n.fm.id === p.drop)!.fm.status).toBe("merged");
+    expect(hiddenFrom(root, keep, "home")).toEqual(before);
+    for (const agent of before.filter((a) => !a.includes("reader"))) expect(JSON.stringify(seen(root, agent, keep) ?? "")).not.toContain("12 Elm St");
+  });
+}
 
 // ---------- round-6 audit (G246, G247) ----------
 const JR = rec("+15145550100", "gmail:f000000000000001"); // Jane's own phone and ref: upkeep's recheck leaves it alone
