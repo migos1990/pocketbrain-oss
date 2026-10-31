@@ -9,7 +9,7 @@
 //
 // A sentence passes when the box did what the owner meant: the right fact on the right page, or an
 // answer that wrote nothing. 8 of 10 passes the case; a question that wrote anything fails it.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SRC } from "../lib/pb";
 import { sandbox } from "../lib/sandbox";
@@ -124,6 +124,18 @@ export function sayCases(): Case[] {
         const r: Reply = await box.ownerSayModel(root, "Jane is the dean and she wants the slides by Thursday", {}, fake({ kind: "tell", facts: [{ name: "Jane", attribute: "role", value: "the dean" }, { name: "Jane", attribute: "next_step", value: "wants the slides by Thursday", when: "by Thursday" }] }));
         const step = factOf(root, "Jane Roy", "next_step");
         return ok(!step.includes("wants") && r.text.includes("she wants the slides by Thursday"), `next step "${step}"; reply: ${r.text.slice(0, 120)}`);
+      },
+    },
+    {
+      id: "say-checks-owed-no-model", dimension: "writes", source: "synthetic",
+      title: "with no model, the brief's sentence \"I owe Ben the sample by tomorrow\" is a next step on Ben's page, and a to-do naming nobody writes nothing (G557)",
+      run: async () => {
+        const root = sandbox("synthetic", (r) => writeFileSync(join(r, "people", "ben-carter.md"), "---\nid: people/ben-carter\ntype: person\ntitle: Ben Carter\naliases:\n  - Ben\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-09-01\nupdated: 2026-09-01\nby: owner\n---\n"));
+        const r: Reply = box.ownerSay(root, "I owe Ben the sample by tomorrow");
+        const before = brainMod.loadBrain(root).length;
+        const none: Reply = box.ownerSay(root, "I need to buy milk");
+        const step = factOf(root, "Ben Carter", "next_step");
+        return ok(r.kind === "say.noted" && step.startsWith("owe ben the sample by") && none.kind !== "say.noted" && brainMod.loadBrain(root).length === before, `${r.kind}: next step "${step}"; "buy milk" ${none.kind}`);
       },
     },
     {

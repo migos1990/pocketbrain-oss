@@ -2253,6 +2253,17 @@ const pauseAgent = (root: string, agent: string) => { setStatus(root, agent, "pa
 // An outside assistant's proposal: the only kind of item the hub can expire.
 const deckProposal = (root: string) => pb.write.write(root, { agent: "helper", id: "projects/course-a", attribute: "meeting_room", value: "Room C", as_of: "2026-10-07", sources: ["gmail:f000000000000006"] });
 const deckCase = (id: string, gap: string, title: string, run: () => Result | Promise<Result>): Case => ({ id, dimension: "write-quality", kind: "attack", gap, title, source: "synthetic", run: () => (deck?.runAuto ? run() : na("no decision deck at this commit")) });
+// The owner Robin Lake (alias "M. Lake") and Alain Lake, both in the work area; `on`: family_links.
+const familyBrain = (on: boolean, extra = "") => {
+  const root = deckBrain();
+  const pol = join(root, "rules/policy.yaml");
+  writeFileSync(pol, `owner: { name: Robin, aliases: [Robin Lake] }\n${on ? "family_links: true\n" : ""}${readFileSync(pol, "utf8").replace(/^owner:.*\n/m, "")}`);
+  const page = (slug: string, title: string, head = "", more = "") => writeNote(root, `people/${slug}`, `---\nid: people/${slug}\ntype: person\ntitle: ${title}\n${head}area: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  city: { value: Lyon, as_of: 2026-10-28, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n${more}---\n`);
+  page("robin-lake", "Robin Lake", "aliases: [M. Lake]\n");
+  page("alain-lake", "Alain Lake", "", extra);
+  sh(root, ["git", "add", "-A"]); sh(root, ["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: pages"]);
+  return root;
+};
 const deckCases: Case[] = [
   deckCase("rt-deck-self-verified-wins", "G78", "a value the agent marked verified itself, citing a made-up message, never wins a conflict by timeout", () => {
     const root = deckBrain();
@@ -2496,6 +2507,70 @@ const deckCases: Case[] = [
     const done = deck.runAuto(root, at);
     const silent = diary.filedWithoutLine(root, at);
     return ok(done.length === 1 && silent.length === 0, `filed ${done.length}, without a line ${silent.length}`);
+  }),
+  deckCase("rt-deck-family-surname", "G546", "a page with the owner's surname is linked as maybe family, and a titled surname on the owner's page is the owner, never one of the other title", async () => {
+    const family = await opt("family.ts");
+    if (!family?.linkFamily) return na("no family link at this commit");
+    const root = deckBrain();
+    const pol = join(root, "rules/policy.yaml");
+    writeFileSync(pol, `owner: { name: Robin, aliases: [Robin Lake] }\nfamily_links: true\n${readFileSync(pol, "utf8").replace(/^owner:.*\n/m, "")}`);
+    const page = (slug: string, title: string, extra = "") => writeNote(root, `people/${slug}`, `---\nid: people/${slug}\ntype: person\ntitle: ${title}\n${extra}area: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  city: { value: Lyon, as_of: 2026-10-28, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n---\n`);
+    page("robin-lake", "Robin Lake", "aliases: [M. Lake]\n");
+    page("alain-lake", "Alain Lake");
+    sh(root, ["git", "add", "-A"]); sh(root, ["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: pages"]);
+    const filed = family.linkFamily(root).filed;
+    const notes = pb.brain.loadBrain(root);
+    const v = notes.find((n: any) => n.fm.id === "people/alain-lake")?.fm.facts?.family?.value;
+    const mme = pb.write.resolveEntity(notes, "person", "Mme Lake").id;
+    return ok(filed.length === 1 && v === "[[people/robin-lake]]" && mme !== "people/robin-lake", `filed ${filed.length}, value ${v ? "links" : "none"}, Mme ${mme === "people/robin-lake" ? "owner" : "not owner"}`);
+  }),
+  // Builder's slice audit of b532242: F1 (hidden refs copied onto the family fact), F3 (a nightly
+  // writer on with no switch), F4 (the owner's "M. Lake" caught the father's "Monsieur Lake").
+  deckCase("rt-deck-family-hidden-refs", "G546", "the family fact never carries a ref of a fact shared with one assistant or held unseen", async () => {
+    const family = await opt("family.ts");
+    if (!family?.linkFamily) return na("no family link at this commit");
+    const root = familyBrain(true, `  diagnosis: { value: Sekrit, as_of: 2026-10-28, sources: ["url:https://clinic.example/alain-oncology"], verification: verified-by-source, by: steward, recorded: 2026-10-28, share_with: [steward] }\n  lawyer: { value: Bob, as_of: 2026-10-28, sources: ["gmail:f0000000000000aa"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true }\n`);
+    family.linkFamily(root);
+    const refs = (pb.brain.loadBrain(root).find((n: any) => n.fm.id === "people/alain-lake")?.fm.facts?.family?.sources ?? []).map(String);
+    return ok(refs.length > 0 && !refs.some((r: string) => /oncology|f0000000000000aa/.test(r)), `refs ${refs.length}, hidden among them ${refs.filter((r: string) => /oncology|f0000000000000aa/.test(r)).length}`);
+  }),
+  deckCase("rt-deck-family-excluded-refs", "G546", "the family fact never carries a ref of a fact an exclude by name hides from a reader", async () => {
+    const family = await opt("family.ts");
+    if (!family?.linkFamily) return na("no family link at this commit");
+    const root = familyBrain(true, `  diagnosis: { value: Sekrit, as_of: 2026-10-28, sources: ["url:https://clinic.example/byname-oncology"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
+    const pol = join(root, "rules/policy.yaml");
+    writeFileSync(pol, readFileSync(pol, "utf8").replace(/(planner: \{[^}]*?)( \})/, `$1, exclude: ["people/alain-lake#diagnosis"]$2`));
+    sh(root, ["git", "-c", "user.name=owner", "-c", "user.email=o@x", "commit", "-qam", "owner: exclude"]);
+    family.linkFamily(root);
+    const refs = (pb.brain.loadBrain(root).find((n: any) => n.fm.id === "people/alain-lake")?.fm.facts?.family?.sources ?? []).map(String);
+    return ok(refs.length > 0 && !refs.some((r: string) => /oncology/.test(r)), `refs ${refs.length}, excluded among them ${refs.filter((r: string) => /oncology/.test(r)).length}`);
+  }),
+  deckCase("rt-deck-family-tighten", "G546", "a fact tightened after the family link is filed leaves no ref of it for another reader", async () => {
+    const family = await opt("family.ts");
+    if (!family?.linkFamily) return na("no family link at this commit");
+    const root = familyBrain(true, `  diagnosis: { value: Sekrit, as_of: 2026-10-28, sources: ["url:https://clinic.example/later-hidden"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
+    family.linkFamily(root);
+    const n = pb.brain.loadBrain(root).find((x: any) => x.fm.id === "people/alain-lake");
+    n.fm.facts.diagnosis.share_with = ["steward"];
+    pb.brain.saveNote(root, n);
+    const core = await import(join(SRC, "core.ts"));
+    const seen = ["planner", "helper"].filter((a) => JSON.stringify(core.readNote(root, a, "people/alain-lake")).includes("later-hidden"));
+    return ok(seen.length === 0, `${seen.length} of 2 other readers still read the tightened ref`);
+  }),
+  deckCase("rt-deck-family-off", "G546", "a new nightly writer starts off: no family fact until the owner turns it on", async () => {
+    const family = await opt("family.ts");
+    if (!family?.linkFamily) return na("no family link at this commit");
+    const root = familyBrain(false);
+    const r = family.linkFamily(root);
+    const filed = Array.isArray(r) ? r.length : r.filed.length;
+    return ok(filed === 0 && !pb.brain.loadBrain(root).find((n: any) => n.fm.id === "people/alain-lake")?.fm.facts?.family, `filed ${filed} while off`);
+  }),
+  deckCase("rt-deck-titled-father", "G547", "the owner's 'M. Lake' never catches 'Monsieur Lake' while a relative's page has that surname", async () => {
+    if (!pb.write.sameTitled) return na("no titled matching at this commit");
+    const root = familyBrain(true);
+    const notes = pb.brain.loadBrain(root);
+    const hits = ["Monsieur Lake", "Mr Lake"].filter((t) => pb.write.resolveEntity(notes, "person", t).id === "people/robin-lake");
+    return ok(hits.length === 0, `${hits.length} of 2 titled surnames filed on the owner's page`);
   }),
 ];
 
@@ -3604,7 +3679,7 @@ const samePersonCases: Case[] = [
     // The page writer's opening for the touched page (G445), its references and the heading the old
     // text moved under ("Earlier notes", or "Your notes") are no part of the repoint: they are set
     // aside, and the writer's text names neither note.
-    const writer = after.match(/^[^\n]*\(Written by the hub from this page's facts\.\)\n\n/m)?.[0] ?? "";
+    const writer = after.match(/^[^\n]*\n\n\(Written by the hub from this page's facts\.\)\n\n/m)?.[0] ?? "";
     const refs = [...after.matchAll(/^\[\^p-[^\]]+\]: .*\n?/gm)].map((m) => m[0]);
     const rest = refs.reduce((t, r) => t.replace(r, ""), after.replace(writer, "").replace(/^#{2,4} (Earlier|Your) notes\n/m, "")).replace(/\n{3,}/g, "\n\n").trimEnd();
     return [["helper sees TA is [[redacted]]", before.includes("TA is [[redacted]]")], [`merge refused (${p?.blocked})`, refused], ["helper's view after upkeep is unchanged", rest === before.trimEnd()], ["the writer's text names neither note", !/ev-ann|Ann L/.test(writer + refs.join(""))]];

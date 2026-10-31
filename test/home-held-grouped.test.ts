@@ -13,6 +13,7 @@ import { homeView, HELD_EACH } from "../src/dashboard/home";
 import { loadRules } from "../src/rules";
 import { loadBrain } from "../src/brain";
 import { memoryCard, APP_COPY } from "../src/dashboard/html-app";
+import { dashboardHandler } from "../src/dashboard/server";
 
 function receipts(n: number) {
   const root = makeBrain();
@@ -32,7 +33,7 @@ test("held values are a locked card each, a few of them, with the rest one tap a
   for (const w of held.filter((w) => w.seen)) expect(w.what).toBe("Something new about Apple Services payment");
   const rest = held.filter((w) => !w.seen);
   expect(rest).toHaveLength(1);
-  expect(rest[0]!.what).toBe("2 more new private things");
+  expect(rest[0]!.what).toBe("2 more new private things.");
   expect(rest[0]!.href).toBe("/home?all=1");
   const all = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
   expect(all.waiting.filter((w) => w.seen)).toHaveLength(5);
@@ -49,17 +50,25 @@ test("one held value keeps its own row and Show", () => {
   expect(v.waiting[0]!.seen).toBe("money/apple-payment-1#amount");
 });
 
-test("a held value's memory is locked with its own Read it, naming only its page", async () => {
+test("each held value has one Read it on the home: its card, never its memory too (Mac, 2026-10-31, G550)", async () => {
   process.env.PB_NOW = DEMO_NOW;
   try {
     const { root } = await makeDemoBrain();
+    const H = "127.0.0.1:8797";
+    const d = dashboardHandler(root, { port: 8797, loginKey: "k".repeat(32) });
+    const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
+    const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+    const html = await (await d.handle(new Request(`http://${H}/home`, { headers: { host: H, cookie } }))).text();
+    const keys = [...html.matchAll(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="[^"]*"><input type="hidden" name="key" value="([^"]+)"/g)].map((m) => m[1]);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.length).toBeLessThanOrEqual(HELD_EACH);
+    expect(new Set(keys).size).toBe(keys.length);
+    // Its memory further down keeps the lock, naming only its page.
     const v = homeView(root, loadRules(root), loadBrain(root), new Date(DEMO_NOW), { all: true });
-    const line = [...v.since, ...v.earlier.flatMap((d) => d.lines)].find((l) => l.held)!;
+    const line = [...v.since, ...v.earlier.flatMap((x) => x.lines)].find((l) => l.held)!;
     expect(line.what).toBe("Something new about Hélène Lefebvre");
-    const html = memoryCard(line, "c");
-    expect(html).toContain('action="/action/diary-seen"');
-    expect(html).toContain(`name="key" value="${line.key}"`);
-    expect(html).toContain(APP_COPY.readIt);
-    expect(html).not.toMatch(/marks|Known by/);
+    const card = memoryCard(line, "c");
+    expect(card).toContain(APP_COPY.onlyYou);
+    expect(card).not.toContain("diary-seen");
   } finally { delete process.env.PB_NOW; }
 }, 60_000);

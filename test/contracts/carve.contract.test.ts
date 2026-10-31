@@ -356,3 +356,48 @@ test("must never: a value marked unseen reaches any agent's carve", () => {
     expect(res.hiddenFacts.some((h) => h.key === "projects/held#room")).toBe(false);
   }
 });
+
+// Builder's slice audits of claude/family-links (b532242, b1619f30; G546): the hub's family fact
+// on a page never carries the ref of a fact some reader of that fact can't read, however it is
+// hidden: share_with, held unseen, an exclude by name, or a slice's exclude_attributes.
+test("contract carve: a hub-made family fact carries no ref of a fact its readers can't read (G546)", async () => {
+  const { linkFamily } = await import("../../src/family");
+  const hiders: { name: string; fact: string; policy?: (s: string) => string; slices?: (s: string) => string }[] = [
+    { name: "share_with", fact: "share_with: [steward]" },
+    { name: "unseen", fact: "unseen: true" },
+    { name: "exclude by name", fact: "", policy: (s) => s.replace("exclude_types: [money] }", `exclude_types: [money], exclude: ["people/alain-lake#hidden"] }`) },
+    { name: "slice exclude_attributes", fact: "", policy: (s) => s.replace("helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }", "helper: { tier: trial, slices: [nohidden], exclude_types: [money] }"), slices: (s) => s.replace("slices:\n", "slices:\n  nohidden:\n    areas: [work]\n    exclude_attributes: [hidden]\n    max_sensitivity: personal\n") },
+  ];
+  for (const h of hiders) {
+    const root = makeBrain();
+    const pol = join(root, "rules", "policy.yaml");
+    writeFileSync(pol, (h.policy ?? ((s: string) => s))(readFileSync(pol, "utf8").replace("owner: { name: Robin }", "owner: { name: Robin, aliases: [Robin Lake] }")) + "family_links: true\n");
+    if (h.slices) { const sl = join(root, "rules", "slices.yaml"); writeFileSync(sl, h.slices(readFileSync(sl, "utf8"))); }
+    const page = (slug: string, title: string, more = "") => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  city: { value: Lyon, as_of: 2026-10-28, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n${more}---\n`);
+    page("robin-lake", "Robin Lake");
+    page("alain-lake", "Alain Lake", `  hidden: { value: Sekrit, as_of: 2026-10-28, sources: ["url:https://clinic.example/hidden-ref"], verification: verified-by-source, by: steward, recorded: 2026-10-28${h.fact ? `, ${h.fact}` : ""} }\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: pages"], { cwd: root });
+    linkFamily(root);
+    const fam = loadBrain(root).find((n) => n.fm.id === "people/alain-lake")!.fm.facts?.family as { sources?: unknown[] } | undefined;
+    expect(JSON.stringify(fam?.sources ?? []), h.name).not.toContain("hidden-ref");
+  }
+});
+
+// Builder's slice audit of da6497e0 (F6, G546): a tightening after the family link is filed holds
+// at once for every reader: the family fact copied no ref of the tightened fact.
+test("contract carve: a fact tightened after the family link leaves no ref of it on the page (G546)", async () => {
+  const { linkFamily } = await import("../../src/family");
+  const { saveNote } = await import("../../src/brain");
+  const root = makeBrain();
+  const pol = join(root, "rules", "policy.yaml");
+  writeFileSync(pol, readFileSync(pol, "utf8").replace("owner: { name: Robin }", "owner: { name: Robin, aliases: [Robin Lake] }") + "family_links: true\n");
+  const page = (slug: string, title: string, more = "") => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  city: { value: Lyon, as_of: 2026-10-28, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n${more}---\n`);
+  page("robin-lake", "Robin Lake");
+  page("alain-lake", "Alain Lake", `  diagnosis: { value: Sekrit, as_of: 2026-10-28, sources: ["url:https://clinic.example/later-hidden"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: pages"], { cwd: root });
+  expect(linkFamily(root).filed).toEqual(["people/alain-lake"]);
+  const n = loadBrain(root).find((x) => x.fm.id === "people/alain-lake")!;
+  (n.fm.facts!.diagnosis as { share_with?: string[] }).share_with = ["steward"];
+  saveNote(root, n);
+  for (const agent of ["planner", "helper"]) expect(JSON.stringify(core.readNote(root, agent, "people/alain-lake")), agent).not.toContain("later-hidden");
+});

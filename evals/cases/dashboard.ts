@@ -157,7 +157,7 @@ export const dashboardCases: Case[] = [
     const h = heldMessage(r.root);
     await r.open();
     await r.page.goto(`${r.dashUrl}/settle/m-h1`);
-    await r.page.getByRole("link", { name: /Home/ }).click();
+    await r.page.getByRole("link", { name: /^‹ (Home|On your mind)$/ }).click();
     await r.page.waitForURL(/\/home/);
     return steps([["not delivered", !existsSync(h.out)], ["still on the home", (await r.page.locator('a[href="/settle/m-h1"]').count()) === 1]]);
   }) },

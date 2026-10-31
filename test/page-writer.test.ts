@@ -35,8 +35,8 @@ test("page writer: a touched page gets one cited sentence per fact; a second run
   const r = renderTouchedPages(root, SINCE);
   expect(r.written).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
-  expect(b).toContain("Ana Diaz's role is program director.[^p-role]");
-  expect(b).toContain("Ana Diaz works at North College.[^p-org]");
+  // Role and org are one sentence with both references (G559).
+  expect(b).toContain("Ana Diaz is the program director at North College.[^p-role][^p-org]");
   expect(b).toMatch(/^\[\^p-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
   const log = sh(root, "hub", "log", "-1", "--format=%an%n%B");
   expect(log.split("\n")[0]).toBe("hub");
@@ -158,7 +158,7 @@ test("note page: a page-writer page reads as words: linked names, dated referenc
   person(root, "ana-diaz", "Ana Diaz", fact("role", "program director", "gmail:f0000000000000a1") + fact("org", "\"[[North College]]\"", "owner:2026-10-05/dashboard") + fact("last_contact", "2026-10-05", "gmail:f0000000000000a1"));
   capture(root, "gmail:f0000000000000a1", ["Ben Okafor"]);
   renderTouchedPages(root, SINCE);
-  expect(body(root, "people/ana-diaz")).toContain("Ana Diaz works at [[orgs/north-college|North College]].");
+  expect(body(root, "people/ana-diaz")).toContain("Ana Diaz is the program director at [[orgs/north-college|North College]].");
   const ana = loadBrain(root).find((n) => n.fm.id === "people/ana-diaz")!;
   const html = notePage(loadState(root), "x", ana, "").body;
   // The edit form keeps the raw value; what the page shows never has brackets.
@@ -295,17 +295,18 @@ test("page writer: any attribute reads as a sentence; the text says the hub wrot
   const r = renderTouchedPages(root, SINCE);
   const ana = body(root, "people/ana-diaz");
   expect(ana).toContain("Ana Diaz's hobby is sailing.");
-  expect(ana).toContain("Ana Diaz's languages are French and Portuguese.");
-  expect(ana).toContain("You were last in touch with Ana Diaz on 5 Oct 2026.");
-  expect(ana).toContain("On Ana Diaz, the bio: Runs the evening programme;");
-  expect(ana).not.toMatch(/\b[A-Z][a-z]+ of Ana Diaz: /);
-  expect(ana.split("\n")[0]).toEndWith("(Written by the hub from this page's facts.)");
+  // The full name once, then the first name; a date this year without its year (G559).
+  expect(ana).toContain("Ana's languages are French and Portuguese.");
+  expect(ana).toContain("You were last in touch with Ana on 5 Oct.");
+  expect(ana).toContain("On Ana, the bio: Runs the evening programme;");
+  expect(ana).not.toMatch(/\b[A-Z][a-z]+ of Ana( Diaz)?: /);
+  expect(ana.split("\n\n")[1]).toBe("(Written by the hub from this page's facts.)");
   expect(sh(root, "hub", "log", "-1", "--format=%B")).toMatch(/^Why: \d+ pages are new since 2000-01-01/m);
   expect(r.written).toContain("people/ana-diaz");
   // A page whose facts didn't change since `since`, only its text: the Why says so.
   const cut = new Date(Date.now() + 1000).toISOString();
   Bun.sleepSync(1100);
-  writeFileSync(join(root, "people", "ana-diaz.md"), readFileSync(join(root, "people", "ana-diaz.md"), "utf8").replace(" (Written by the hub from this page's facts.)", ""));
+  writeFileSync(join(root, "people", "ana-diaz.md"), readFileSync(join(root, "people", "ana-diaz.md"), "utf8").replace("\n\n(Written by the hub from this page's facts.)", ""));
   sh(root, "hub", "commit", "-qam", "hub: text");
   renderTouchedPages(root, cut);
   expect(sh(root, "hub", "log", "-1", "--format=%B")).toMatch(/^Why: 1 page changed only in its links or text since /m);
@@ -323,7 +324,7 @@ test("page writer: a page opening with someone else's text gets its facts' cited
   const r = renderTouchedPages(root, SINCE);
   expect(r.written).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
-  expect(b).toStartWith("Ana Diaz's role is program director.[^p-role] (Written by the hub from this page's facts.)");
+  expect(b).toStartWith("Ana Diaz's role is program director.[^p-role]\n\n(Written by the hub from this page's facts.)");
   expect(b).toContain("## Earlier notes\nImported from your notes.[^1]");
   expect(b).toMatch(/^\[\^1\]: Your notes, 2026-09-01$/m);
   expect(b).toMatch(/^\[\^p-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
@@ -337,7 +338,7 @@ test("page writer: a longer text in the owner's commit is kept under Earlier not
   const r = renderTouchedPages(root, SINCE);
   expect(r.kept).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
-  expect(b).toStartWith("Ana Diaz's role is coach tennis.");
+  expect(b).toStartWith("Ana Diaz works as coach tennis at North College.");
   expect(b).toContain("## Earlier notes\nMet Ana at the spring retreat;");
   // Every reference says what kind of source it is.
   expect(b).toMatch(/^\[\^p-org\]: Notion import, 2026-10-05 \(notion:import\/2026-09-15\)$/m);

@@ -63,7 +63,6 @@
       - text: from an email, Thu
       - 'button "Undo: Something new about Hélène Lefebvre"': Undo
       - text: Only you know this
-      - 'button "Read it: Something new about Hélène Lefebvre"': Read it
     - listitem:
       - 'link "Next for Kitchen renovation: take the tile delivery on 12 October"':
         - /url: /p/projects/kitchen-renovation

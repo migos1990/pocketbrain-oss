@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G546: {
+    title: "A page with the owner's surname never linked to the owner",
+    severity: "medium",
+    finding: "Owner's phone, 2026-10-31: his father's person page (same surname, a first name of its own, one source) said 'Nothing written here yet', and nothing linked it to the owner's page or back; the owner said the brain should make that link itself.",
+    fix: "src/family.ts linkFamily (upkeep step 1c3): a person page with a first name of its own and the owner's surname gets one inferred fact, family: [[owner page]], citing no source of its own ('unverified'), so no other fact's ref is copied and a later tightening holds (builder's audits of b532242, b1619f30, da6497e0: F1, F2, F6); a fact any reader of the link has carved away never stops it; an unbuildable view stops every link, in one hub commit with a writes.jsonl line, a diary line ('may be family: same surname as you') and Undo that holds; never on the owner's page, a namesake's, a title and surname alone, a page that says how the owner knows them, or a page read by an assistant that can't read the owner's; off until `pocketbrain wiki family on` (F3); nothing asks. src/wiki.ts says it as a guess and the owner's page links back. Test: test/family-links.test.ts; evals rt-deck-family-*.",
+    closed: "3eba44f7",
+  },
+  G547: {
+    title: "'M. <surname>' (the owner) became a person page of its own",
+    severity: "medium",
+    finding: "Owner's phone, 2026-10-31: a person page titled with the French 'M.' and the owner's surname sat in the people list beside his own page; he says it is him. The name matcher knew Mr, Mme and Dr but not 'M.' or 'Monsieur', and a title with a surname alone never resolved to the owner.",
+    fix: "src/write.ts: Monsieur, Madame, Mademoiselle, Miss are titles (HONORIFIC); 'M.' stays a possible initial in personKey, but sameTitled matches two titled names of the same kind ('M. Lake' is 'Mr Lake', never 'Mme Lake') and a titled full name is that name, in resolveEntity. src/capture.ts ownerOf: a title and surname alone on the owner's page (as merging that page into the owner's leaves it) is the owner under any title of the same kind, only while no one else's page has that surname (builder's audit of b532242, F4; sharingSurname). The real page merges by `pocketbrain merge <owner page> <that page>` once the owner types it. Test: test/family-links.test.ts; eval rt-deck-titled-father; contract row in test/contracts/write.contract.test.ts.",
+    closed: "3eba44f7",
+  },
   G539: {
     title: "The hub's yes changed a fact hidden from the proposer, and skipped its kill switch and withheld types",
     severity: "high",
@@ -2778,6 +2792,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Builder, 2026-10-30: on b867757c GitHub CI and the release run's own ci jobs were green, but publish failed at `git push origin refs/tags/v0.2.0`: its `bun install` turned on .githooks, and pre-push ran the full suite on a runner with no age or Chromium. No tag, no release, no release branch.",
     fix: ".githooks/pre-push lets a push through without its checks only when every ref is a tag or refs/heads/release at a commit already on origin/main (which passed them and CI); any other push, or a tag off main, is checked in full. Test: test/githooks.test.ts.",
   },
+  G559: {
+    closed: "829cfb88",
+    title: "A page read like a form: the full name in every sentence, role and org apart, the year on this year's dates",
+    severity: "medium",
+    finding: "Louis, 2026-10-31: the app's pages feel underwhelming. The hub's opening text read \"Maya Chen's role is design lead. Maya Chen works at Harbourline Software. Maya Chen works with you on Atlas. … on 7 Oct 2026. (Written by the hub from this page's facts.)\", where his canvas reads \"Hannah is the QA lead at Harbourline Software, … She wrote to you this morning; before that, 30 August.\"",
+    fix: "pageLead in src/wiki.ts names a person in full once and by the first name after (firstName: not a one-word name, a title or an initial); a person's role and org are one sentence with both references (\"is the design lead at\" when the role reads as a title, \"works as … at\" when not); a date this year is said without its year (the reference keeps it); the made-by line is its own paragraph after the opening text, and north-star's proseBeyondHub still counts that text as the writer's. Code only, no model. Tests: test/page-prose.test.ts; eval wiki-page-reads-like-a-person.",
+  },
   G549: {
     title: "verify_source quoted a contact card's held phone or email",
     severity: "medium",
@@ -2789,6 +2810,20 @@ export const GAPS: Record<string, Gap> = {
     severity: "medium",
     finding: "Louis, 2026-10-31 (what other sources would make a better wiki): his address book already says who is his father, what people are called, their jobs and how to reach them, and none of it reached the wiki; his father's page never linked to him.",
     fix: "A contacts source (src/contacts.ts): Google Contacts read only (contacts.readonly) or a vCard file, each card read by code and filed through the capture path (fileCard in src/capture.ts). Pages that exist get aliases, an empty role or org, and private emails and phones behind Show; the owner's own card gives relationship, the only new page a card starts; a stale job never replaces one; a contradicting relationship is a conflict. Tests: test/contacts.test.ts (Robin's address book on the demo brain), test/contacts-google.test.ts (fake People API).",
+  },
+  G557: {
+    closed: "7b0d923c",
+    title: "The box with no model didn't catch the brief's own example sentence",
+    severity: "medium",
+    finding: "Audit v7, 2026-10-31: with no model key (bring your own model, works with none), the brief's example \u201cI owe Ben the sample by tomorrow\u201d got \u201cI didn't catch who or what that's about\u201d: no fixed pattern read a to-do the owner said in the first person.",
+    fix: "src/owner-say.ts parseClause: \u201cI owe / promised <x>\u201d and \u201cI need to / have to / must / should / am going to <x>\u201d are the owner's next step, kept in their words with their time words (\u201cby tomorrow\u201d keeps its by and gets the date), on the page of the person <x> names, found as a reminder's page is; a to-do naming nobody the brain holds writes nothing. Test: test/box-owe.test.ts; eval say-checks-owed-no-model.",
+  },
+  G550: {
+    closed: "e391034b",
+    title: "A held value had two Read it on the home",
+    severity: "low",
+    finding: "Mac use-it check of 428c2b97, 2026-10-31: /home at 390px showed 6 Read it forms for 4 held values, 3 of them after the \"N more new private things\" line, because a held value's memory line carried its own Read it beside its card, so the three-card limit did not hold.",
+    fix: "A held value's memory keeps its lock but no Read it; its one Read it is its card under Waiting on you (memoryCard in src/dashboard/html-app.ts). Test: test/home-held-grouped.test.ts (each held value has one Read it on the home).",
   },
   G545: {
     closed: "9372e2d5",

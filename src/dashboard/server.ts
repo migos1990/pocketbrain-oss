@@ -16,7 +16,7 @@ import { loadRules } from "../rules";
 import { loadBrain } from "../brain";
 import { carve, grantFor } from "../carve";
 import { renderView } from "../view";
-import { CoreError, ownerWhy, ownerDecide, ownerKeepBoth, ownerConflict } from "../core";
+import { CoreError, ownerWhy, ownerDecide, ownerKeepBoth, ownerConflict, ownerConflicts } from "../core";
 import { settlePage, heldMailPage } from "./html-settle";
 import { ownerError, ownerErrorHtml, ownerStatus, type OwnerErrorId, type Vars } from "../owner-errors";
 import { decideHeld, fileTransport, type MailTransport } from "../relay";
@@ -39,13 +39,13 @@ import { usagePage } from "./usage";
 import { peoplePage } from "./people";
 import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, learnedThisWeek, backedUpWords } from "./home";
 import type { Note } from "../brain";
-import { ownerPage } from "./html-page";
+import { ownerPage, askProse } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY } from "./html-app";
 import { withMarks, marksFor, markAgents, shorts } from "./marks";
 import { lastBackup } from "../backup";
 import { readDiary } from "../diary";
-import { inboxConflict, settleInbox } from "../settle-inbox";
+import { inboxConflict, inboxConflicts, settleInbox } from "../settle-inbox";
 import { ownerSay, ownerSayModel, boxModel, type SayReply } from "../owner-say";
 import { undoFact } from "../undo";
 import { fixEverywhere } from "../beliefs";
@@ -250,8 +250,12 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const day = now().getTime() - 86_400_000;
     const all = (chats.get(sid) ?? []).filter((t) => t.at >= day);
     const shown = all.filter((t) => fresh || !t.fresh);
-    const titles = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, displayName(n.fm.id, n.fm.title)]));
-    const turns = shown.map((t) => ({ ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}) }));
+    const notes = loadBrain(root, { shared: true });
+    const titles = new Map(notes.map((n) => [n.fm.id, displayName(n.fm.id, n.fm.title)]));
+    // An answer about a page shows that page's prose as the page is now (askProse in html-page.ts).
+    let st: ReturnType<typeof loadState> | undefined;
+    const prose = (t: AskTurn) => { const n = t.reply.kind === "say.lookup" && t.reply.page ? notes.find((x) => x.fm.id === t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {}; };
+    const turns = shown.map((t) => ({ ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}), ...prose(t) }));
     return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, older: all.length - shown.length, flash }), { headers: PAGE_HEADERS });
   };
   // The sheet a dashed mark opens: only for one of the owner's assistants that doesn't get the fact.
@@ -624,7 +628,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];
-    if (settleId) return new Response(settlePage(settleId.startsWith("p-") ? inboxConflict(root, settleId) : ownerConflict(root, settleId), csrf, loadRules(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
+    if (settleId) {
+      const c = settleId.startsWith("p-") ? inboxConflict(root, settleId) : ownerConflict(root, settleId);
+      // Where this question sits among the ones waiting on the home ("1 of 3"), and its page's area.
+      const ids = [...ownerConflicts(root, now()).filter((x) => !x.held).map((x) => x.id), ...inboxConflicts(root).map((x) => x.id)];
+      const area = c ? loadBrain(root, { shared: true }).find((n) => n.fm.id === c.page)?.fm.area : undefined;
+      return new Response(settlePage(c, csrf, loadRules(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()), ...(area ? { area: String(area) } : {}), ...(c && ids.includes(c.id) ? { pos: ids.indexOf(c.id) + 1, of: ids.length } : {}) }), { headers: PAGE_HEADERS });
+    }
     if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1");
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
     if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);

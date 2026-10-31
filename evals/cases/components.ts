@@ -625,6 +625,23 @@ const pullCases: Case[] = [
     const hidden = !/Kestrelmoor/.test(text);
     return ok(cited && hidden && again, `cited sentence ${cited}; shared-with fact left out ${hidden}; second run commits nothing ${again}`);
   } },
+  { id: "wiki-page-reads-like-a-person", dimension: "upkeep", gap: "G559", title: "a person's page reads like the owner's canvas: full name once then the first name, role and org in one sentence with both references, this year's dates without the year, the made-by line its own paragraph", source: "Louis 2026-10-31 (pages underwhelming)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.firstName) return na("no first-name prose at this commit");
+    const root = sandbox("synthetic");
+    const year = TODAY.slice(0, 4);
+    const rec = (v: string, ref: string) => `{ value: ${v}, as_of: ${year}-10-05, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: ${year}-10-05 }`;
+    mkdirSync(join(root, "orgs"), { recursive: true });
+    writeFileSync(join(root, "orgs", "harbourline.md"), `---\nid: orgs/harbourline\ntype: org\ntitle: Harbourline Software\narea: work\nsensitivity: personal\nstatus: active\ncreated: ${year}-10-01\nupdated: ${year}-10-01\nby: planner\n---\n`);
+    writeFileSync(join(root, "people", "maya-chen.md"), `---\nid: people/maya-chen\ntype: person\ntitle: Maya Chen\narea: work\nsensitivity: personal\nstatus: active\ncreated: ${year}-10-05\nupdated: ${year}-10-05\nby: planner\nfacts:\n  role: ${rec("design lead", "gmail:f0000000000000a1")}\n  org: ${rec("\"[[orgs/harbourline]]\"", "gmail:f0000000000000a2")}\n  last_contact: ${rec(`${year}-10-04`, "gmail:f0000000000000a3")}\n---\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: maya"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const [lead, made] = readFileSync(join(root, "people", "maya-chen.md"), "utf8").split(/^---$/m).slice(2).join("---").trim().split("\n\n");
+    const merged = (lead ?? "").startsWith("Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^p-role][^p-org]");
+    const first = (lead ?? "").includes("You were last in touch with Maya on 4 Oct.[^p-last-contact]");
+    const own = made === wiki.MADE && !(lead ?? "").includes(wiki.MADE);
+    return ok(merged && first && own, `one sentence for role and org ${merged}; first name and no year ${first}; made-by line apart ${own}`);
+  } },
   { id: "src-recheck-weak-read-first", dimension: "upkeep", title: "a capped recheck reads first the source behind a weak, single-source fact assistants read, not the well-backed or unread ones", source: "backlog 310", run: async () => {
     if (!pb.pull?.recheckCandidates) return na("no recheck priority at this commit");
     const rec = (v: string, as_of: string, refs: string[], ver: string) => `{ value: ${v}, as_of: ${as_of}, sources: [${refs.map((r) => `"${r}"`).join(", ")}], verification: ${ver}, by: planner }`;

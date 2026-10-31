@@ -381,27 +381,45 @@ const shown = (v: unknown): string => Array.isArray(v) ? v.map(shown).join(", ")
 // A value that already reads as what someone did ("sent Sam a request for feedback on …").
 const DID = /^(?:[a-z]+ed|sent|met|told|gave|made|wrote|took|got|brought|built|taught|led|ran|knew|is|was|has|had|works|leads|runs|manages|knows|reports|teaches|helps|owns|lives|says|wants|needs|plans|uses)\b/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-// "2026-10-05" reads "5 Oct 2026" in a sentence; anything else is left as written.
-const inWords = (v: string) => v.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m, y: string, mo: string, d: string) => +mo >= 1 && +mo <= 12 ? `${+d} ${MONTHS[+mo - 1]} ${y}` : m);
+// "2026-10-05" reads "5 Oct" in a sentence this year and "5 Oct 2025" from another (the reference
+// under the text keeps the whole date); anything else is left as written.
+const inWords = (v: string) => v.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m, y: string, mo: string, d: string) => +mo >= 1 && +mo <= 12 ? `${+d} ${MONTHS[+mo - 1]}${y === today().slice(0, 4) ? "" : ` ${y}`}` : m);
+// A person is named in full once, then by the first name, the way someone writes about a colleague
+// (the owner's canvas, 2026-10-31): never when the first word is a title or an initial ("Dr Lee",
+// "M. Dupont", "J. Smith"), or the name is one word.
+const TITLE_WORD = /^(?:dr|mr|mrs|ms|mx|m|mme|mlle|prof|monsieur|madame|mademoiselle|miss|sir|dame|rev|fr|sr|st)\.?$/i;
+export function firstName(n: Note): string | undefined {
+  if (n.fm.type !== "person") return undefined;
+  const w = String(n.fm.title ?? "").trim().split(/\s+/);
+  return w.length >= 2 && !TITLE_WORD.test(w[0]!) && /^\p{Lu}[\p{L}'’-]+$/u.test(w[0]!) ? w[0] : undefined;
+}
+// A role read as a title takes "the" ("the design lead at …"); any other is said as the work it is
+// ("works as coach tennis at …"), so a role never reads wrong for want of grammar.
+const TITLE_NOUN = /(?:^|\s)(?:lead|director|manager|head|coordinator|chair|chairperson|dean|president|officer|editor|founder|co-founder|cofounder|engineer|designer|developer|analyst|advisor|adviser|professor|lecturer|teacher|instructor|consultant|partner|specialist|architect|scientist|owner|administrator|secretary|treasurer|recruiter|researcher|associate|assistant|producer|principal|counsel|accountant|strategist|writer|librarian|nurse|physician|doctor|lawyer|attorney|vp|ceo|cto|cfo|coo|cio|ciso|cpo|cmo)$/i;
+const titleRole = (role: string) => { const head = role.trim().split(/\s+(?:of|for)\s+/i)[0]!; return TITLE_NOUN.test(head) || /^[A-Z]{2,5}$/.test(head.split(/\s+/).at(-1)!); };
 const whose = (t: string) => /s$/.test(t) ? `${t}'` : `${t}'s`;
 // One sentence per fact, shaped by what kind of value it is (rules/checks.yaml: a date, a list,
 // a link, an address) rather than by its name, so any attribute reads as words.
-function sentence(n: Note, attr: string, values: string[], owner: string[] = [], spec: AttributeSpec = {}): string {
-  const t = String(n.fm.title ?? n.fm.id), words = values.map((x) => inWords(x).replace(/\.$/, ""));
+function sentence(n: Note, attr: string, values: string[], owner: string[] = [], spec: AttributeSpec = {}, called?: string): string {
+  const full = String(n.fm.title ?? n.fm.id), t = called ?? full, words = values.map((x) => inWords(x).replace(/\.$/, ""));
   const v = words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0];
   const person = n.fm.type === "person", lab = label(attr).toLowerCase(), many = words.length > 1;
   // On someone else's page the owner is "you", the way a person would write it to them:
   // "Ana Diaz sent you a request for feedback on …", not "Relationship of Ana Diaz: sent Sam …".
-  if (person && !many && DID.test(v) && /\s/.test(v) && !owner.some((o) => o.toLowerCase() === t.toLowerCase())) {
+  if (person && !many && DID.test(v) && /\s/.test(v) && !owner.some((o) => o.toLowerCase() === full.toLowerCase())) {
     let said = v;
     for (const o of owner) said = said.replace(new RegExp(`\\b${o.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:'s|’s)?\\b`, "g"), (m) => /s$/.test(m) && m !== o ? "your" : "you");
     return `${t} ${said}.`;
   }
   // A few attributes say the same thing every page does, so they read as a person would say it.
   if (attr === "relationship" && person) return `How you know ${t}: ${v}.`;
+  // Upkeep's guess from the surname (src/family.ts): said as a guess, linking the owner's page.
+  if (attr === "family" && person) return `${t} may be family: same surname as ${v}.`;
   // A role is said as the role it is: "the" in front only fits some ("the coach tennis" doesn't).
   if (attr === "role") return `${whose(t)} role is ${v}.`;
   if (attr === "org" && person) return `${t} works at ${v}.`;
+  // A person's role and org, from the same facts, are one sentence (the merge in pageLead).
+  if (attr === "role+org" && person) { const [role, org] = words; return /^(?:a|an|the)\s/i.test(role!) ? `${t} is ${role} at ${org}.` : titleRole(role!) ? `${t} is the ${role} at ${org}.` : `${t} works as ${role} at ${org}.`; }
   // A preference is the words it was said in, one after the other (G490).
   if (attr === "prefers" && person) return `How ${t} likes things: ${words.join("; ")}.`;
   if (attr === "last_contact") return `You were last in touch with ${t} on ${v}.`;
@@ -544,6 +562,10 @@ export async function backfillNameKeys(root: string, since: string, max = NAME_K
 export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; rec: FactRecord }[]; said?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
   const lines: string[] = [], refs: { label: string; text: string }[] = [];
   const seen = new Map<string, Set<string>>(); // page named -> labels of the facts whose source names it
+  // Links in a sentence written by the id they resolve to, so every reader resolves them; one some
+  // reader of this page can't see reads as its plain name.
+  const linkWords = (s: string) => s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, to: string, words?: string) => { const id = o.resolve?.(to); return id && !o.blind(id) ? `[[${id}|${words ?? o.byId.get(id)?.fm.title ?? to}]]` : (words ?? (id === to ? o.byId.get(id)?.fm.title : undefined) ?? to); });
+  const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean }[] = [];
   for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     if (NOT_PROSE.test(attr) || isDisputed(f) || o.hidden(`${n.fm.id}#${attr}`)) continue;
     const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)) && r.value !== undefined && r.value !== null && shown(r.value).trim());
@@ -559,12 +581,27 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     // A person's org written as plain words ("Town") links when it is the title of exactly one org
     // page; a value that is a page's id ("orgs/town") is that page, read by its name.
     const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (v.includes("[[")) return v; if (o.byId.has(v.trim())) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" ? `[[${v.trim()}]]` : v; });
-    const said = sentence(n, attr, vals, o.owner, o.spec?.(attr)).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, to: string, words?: string) => { const id = o.resolve?.(to); return id && !o.blind(id) ? `[[${id}|${words ?? o.byId.get(id)?.fm.title ?? to}]]` : (words ?? (id === to ? o.byId.get(id)?.fm.title : undefined) ?? to); });
-    lines.push(`${said}[^${lab}]${waits ? " A different value is waiting to be checked." : ""}`);
+    facts.push({ attr, vals, labs: [lab], waits });
     if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
     for (const r of recs) for (const s of r.sources ?? []) for (const to of o.names.get(itemOf(refString(s))) ?? [])
       if (to !== n.fm.id && o.byId.has(to) && !o.blind(to)) seen.set(to, (seen.get(to) ?? new Set()).add(lab));
   }
+  // A person's role and org are one sentence, where the first of them stood, with both their
+  // references ("Maya Chen is the design lead at Harbourline Software."); a list or a value
+  // waiting to be checked keeps its own sentence.
+  const role = facts.findIndex((x) => x.attr === "role"), org = facts.findIndex((x) => x.attr === "org");
+  if (n.fm.type === "person" && role >= 0 && org >= 0 && [role, org].every((i) => facts[i]!.vals.length === 1 && !facts[i]!.waits)) {
+    const both = { attr: "role+org", vals: [facts[role]!.vals[0]!, facts[org]!.vals[0]!], labs: [...new Set([...facts[role]!.labs, ...facts[org]!.labs])], waits: false };
+    facts.splice(Math.max(role, org), 1);
+    facts.splice(Math.min(role, org), 1, both);
+  }
+  // The full name once, then the first name.
+  const short = firstName(n);
+  for (const x of facts) {
+    const said = linkWords(sentence(n, x.attr, x.vals, o.owner, o.spec?.(x.attr), lines.length && short ? short : undefined));
+    lines.push(`${said}${x.labs.map((l) => `[^${l}]`).join("")}${x.waits ? " A different value is waiting to be checked." : ""}`);
+  }
+  const called = lines.length && short ? short : String(n.fm.title ?? n.fm.id);
   // The people whose org fact names this page, each cited by that fact's sources: a page they
   // link to links back, from facts, never guessed.
   const members = (o.members ?? []).filter((m) => m.id !== n.fm.id && o.byId.has(m.id) && !o.blind(m.id)).sort((a, b) => String(o.byId.get(a.id)!.fm.title ?? a.id).localeCompare(String(o.byId.get(b.id)!.fm.title ?? b.id))).slice(0, 12);
@@ -603,7 +640,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
       if (!labs.includes(lab)) labs.push(lab);
     }
     const links = ids.map((id) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`);
-    lines.push(`${n.fm.title ?? n.fm.id} also comes up in the sources of ${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)}` : links[0]}.${labs.map((l) => `[^${l}]`).join("")}`);
+    lines.push(`${called} also comes up in the sources of ${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)}` : links[0]}.${labs.map((l) => `[^${l}]`).join("")}`);
   }
   // Pages whose facts link this one (and, on the owner's own page, their decisions and money that
   // nothing else links): "See also", cited by those facts' sources (outside review v5, midday:
@@ -635,7 +672,7 @@ function withLead(n: Note, lead: { text: string; refs: { label: string; text: st
   const rest = secs.map((x) => `## ${x.heading}\n${x.text}`).join("\n\n");
   const cited = new Set([...rest.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]));
   const defs = [...lead.refs.map((r) => `[^${r.label}]: ${r.text}`), ...f.notes.filter((x) => cited.has(x.label) && !x.label.startsWith("p-")).map((x) => `[^${x.label}]: ${x.text}`)];
-  return `${lead.text} ${MADE}\n${rest ? `\n${rest}\n` : ""}\n${defs.join("\n")}\n`;
+  return `${lead.text}\n\n${MADE}\n${rest ? `\n${rest}\n` : ""}\n${defs.join("\n")}\n`;
 }
 
 // Where someone else's opening text goes once the writer's opens the page, and the headings the

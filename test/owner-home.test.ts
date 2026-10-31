@@ -42,7 +42,7 @@ test("the home has the box, not the old tab bar, and a told fact comes back as N
   expect(page.text).not.toMatch(/to decide/i);
   const said = await req("POST", "/say", { csrf: await csrf(), q: "Jane Roy's role is program director" });
   expect(said.status).toBe(200);
-  expect(said.text).toContain("Noted: Jane Roy: role is program director.");
+  expect(said.text).toContain("Noted: Jane Roy is program director now.");
   expect(role(root)).toBe("program director");
   expect(said.text).toContain("Jane Roy is program director now");
   const token = said.text.match(/name="token" value="([0-9a-f]{16})"/)![1]!;
@@ -97,7 +97,7 @@ test("a page opens on its prose; the box there knows the page; Undo there comes 
   expect(pg.text).not.toContain('class="tabs"');
   const said = await req("POST", "/say", { csrf: await csrf(), q: "her role is program director", page: "people/jane-roy" });
   expect(said.text).toContain("<h1>Jane Roy</h1>");
-  expect(said.text).toContain("Noted: Jane Roy: role is program director.");
+  expect(said.text).toContain("Noted: Jane Roy is program director now.");
   const token = said.text.match(/name="token" value="([0-9a-f]{16})"/)![1]!;
   const undone = await req("POST", "/action/diary-undo", { csrf: await csrf(), token, page: "people/jane-roy" });
   expect(undone.loc).toStartWith("/p/people/jane-roy?ok=");

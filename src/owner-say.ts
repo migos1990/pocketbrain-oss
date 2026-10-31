@@ -22,7 +22,7 @@ import { clock } from "./clock";
 import { ownerConflicts, ownerDecide } from "./core";
 import { forgetPerson } from "./forget";
 import { forgetNote } from "./dashboard/edit";
-import { plain, attrWords, isVerbAttribute } from "./dashboard/home";
+import { plain, attrWords, isVerbAttribute, lineWords, type LineKey } from "./dashboard/home";
 import { findSecret, SENSITIVE_WORDS } from "./checks";
 import { KEY_ENV, logJudgment, modelConfigFor, parseJson, type Model } from "./model";
 import { modelFor } from "./usage";
@@ -132,6 +132,9 @@ export function parseClause(clause: string, d = today()): Told | undefined {
   let m: RegExpMatchArray | null;
   // A reminder keeps its time words ("on 12 Nov", "tomorrow"): they say when, not when it was said.
   if ((m = clean(clause).match(/^(?:please )?remind me (?:to|about) (.+)$/i))) return { name: "", attribute: "next_step", value: clean(m[1]!), remind: true };
+  // "I owe Ben the sample by tomorrow", "I need to send Jane the slides": the owner's own to-do, on the
+  // page of the person it names (found like a reminder's), in their words (G557).
+  if ((m = clean(clause).match(/^I (?:(owe|promised) (.+)|(?:need to|have to|must|should|['’]ve got to|have got to|['’]m going to|am going to) (.+))$/i))) return { name: "", attribute: "next_step", value: clean(m[1] ? `${m[1].toLowerCase()} ${m[2]!}` : m[3]!), remind: true };
   const { rest, when } = whenOf(clean(clause), d);
   const c = rest.replace(/^(so |and |but |actually,? )/i, "").trim();
   if ((m = c.match(/^(.+?)\s*:\s*(?:the )?next step is (?:to )?(.+)$/i))) return { name: m[1]!, attribute: "next_step", value: clean(m[2]!), when };
@@ -334,8 +337,9 @@ function about(page: Note, title: (id: string) => string | undefined, fresh?: bo
   const prose = top ? plain(top.replace(/\[\^[^\]\s]+\]/g, "").split(MADE).join(" "), title).replace(/\s+/g, " ").trim() : "";
   if (prose) return prose.length <= 280 ? prose : `${prose.slice(0, 280).replace(/\s+\S*$/, "")}…`;
   const facts = Object.entries(page.fm.facts ?? {}).filter(([, f]) => !isDisputed(f) && (fresh || !closedFact(page, f))).slice(0, 3)
-    .map(([a, f]) => `${attrWords(a)}${isVerbAttribute(a) ? "" : " is"} ${plain(valueOf(f), title)}`);
-  return facts.length ? `${name}: ${facts.join("; ")}.` : `${name}, and nothing else yet.`;
+    .map(([a, f]) => lineWords(isVerbAttribute(a) ? "verbNew" : "new", { title: name, attr: attrWords(a), value: plain(valueOf(f), title) }));
+  // Sentences, as the home says them (audit v7: Ask answered with a list), never "Name: a is x; b is y".
+  return facts.length ? `${facts.join(". ")}.` : `${name}, and nothing else yet.`;
 }
 
 function answer(page: Note, attr: string | undefined, notes: Note[], fresh?: boolean): SayReply {
@@ -535,7 +539,7 @@ const SECRET_ATTRIBUTE = /(^|_)(pass(word|code|phrase)?|pin|secret|security_code
 function tell(root: string, rules: Rules, page: Note, told: Told, channel: string): SayReply {
   const d = today();
   // "the dean" is kept as dean; a next step said for tomorrow keeps the day it means.
-  told = { ...told, value: told.attribute === "role" || told.attribute === "org" ? told.value.replace(/^(an?|the)\s+/i, "") : told.attribute === "next_step" ? told.value.replace(/\b(?:on |by )?(tomorrow|today)\b/i, (_w, day: string) => `on ${sayDay(shift(d, day.toLowerCase() === "tomorrow" ? 1 : 0))}`) : told.value };
+  told = { ...told, value: told.attribute === "role" || told.attribute === "org" ? told.value.replace(/^(an?|the)\s+/i, "") : told.attribute === "next_step" ? told.value.replace(/\b(?:(on|by) )?(tomorrow|today)\b/i, (_w, by: string | undefined, day: string) => `${by?.toLowerCase() === "by" ? "by" : "on"} ${sayDay(shift(d, day.toLowerCase() === "tomorrow" ? 1 : 0))}`) : told.value };
   if (SECRET_ATTRIBUTE.test(told.attribute)) return { kind: "say.refused", page: page.fm.id, text: say("say.refused", { why: say("say.why-secret") }) };
   const spec = attributeSpec(rules, String(page.fm.type), told.attribute);
   void spec;
@@ -562,7 +566,11 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   if (!page.fm.id) page = { ...page, fm: { ...page.fm, id: fact_key.slice(0, fact_key.lastIndexOf("#")) } };
   // In the owner's words: a day as "28 Oct 2026", "runs the new lab" as said, never "next step".
   const v = plain(told.value);
-  const label = told.attribute === "role" && /^(runs|leads|heads|manages|directs|chairs|teaches|coaches|founded|owns)\b/i.test(v) ? `${page.fm.title} ${v}` : isVerbAttribute(told.attribute) ? `${page.fm.title} ${attrWords(told.attribute)} ${v}` : `${page.fm.title}: ${attrWords(told.attribute)} is ${v}`;
+  // Said as the home says its memories (LINE_COPY), never "Page: attribute is value".
+  const title = String(page.fm.title), had = page.fm.facts?.[told.attribute] !== undefined;
+  const own = told.attribute === "next_step" ? "next" : told.attribute === "last_contact" ? "contact" : told.attribute === "role" ? "role" : isVerbAttribute(told.attribute) ? "verb" : undefined;
+  const label = told.attribute === "role" && /^(runs|leads|heads|manages|directs|chairs|teaches|coaches|founded|owns)\b/i.test(v) ? `${title} ${v}`
+    : lineWords((own ? `${own}${had ? "Changed" : "New"}` : had ? "changed" : "new") as LineKey, { title, attr: attrWords(told.attribute), value: told.attribute === "last_contact" ? sayDay(told.value) : v });
   const guess = told.when?.approx ? ` ${say("say.guessed-date", { day: told.when.as_of, phrase: told.when.phrase })}` : "";
   if (r.outcome === "noop" || (r.outcome === "committed" && readDiary(root).length === before)) return { kind: "say.already", page: page.fm.id, fact_key, text: say("say.already") };
   if (r.outcome === "refused") return { kind: "say.refused", page: page.fm.id, text: say("say.refused", { why: plainWhy(r.fails?.[0]?.check, r.message) }) };

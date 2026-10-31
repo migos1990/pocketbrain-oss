@@ -80,7 +80,10 @@ export function citedProse(n: Note): boolean {
 // sentences, so a page passing on its lead alone shows coverage, not that anyone summarized it.
 export function proseBeyondHub(n: Note): boolean {
   const { text } = footnotes(n.body ?? "");
-  const rest = text.split(/\n\s*\n/).filter((p) => !p.includes(MADE)).join("\n").replace(/^#.*$/gm, "").replace(/\[\^[^\]]+\]/g, "").trim();
+  // The made-by line is its own paragraph right after the writer's lead (G559); an older page has
+  // it at the end of the lead.
+  const paras = text.split(/\n\s*\n/);
+  const rest = paras.filter((p, i) => !p.includes(MADE) && paras[i + 1]?.trim() !== MADE).join("\n").replace(/^#.*$/gm, "").replace(/\[\^[^\]]+\]/g, "").trim();
   return rest.split(/\s+/).filter(Boolean).length >= 5;
 }
 // The owner's page shows the source's own words under a reference (G451, kept outside git): counted

@@ -114,7 +114,7 @@ form.box button{font:inherit;font-weight:700;border:0;border-radius:999px;paddin
 .bubble{background:var(--soft);border-radius:20px 20px 20px 6px;padding:11px 15px;margin:0 0 10px;max-width:94%}
 .you{background:var(--accent);color:var(--on-accent);border-radius:20px 20px 6px 20px;margin-left:auto;max-width:86%}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
-.talk{list-style:none;margin:0;padding:0}.talk .bubble{width:fit-content}.chips form{margin:0}
+.talk{list-style:none;margin:0;padding:0}.answer p{margin:0}.answer .cites{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}.answer .cites a{font-size:13px;line-height:18px;font-weight:700;background:var(--bg);color:var(--text);border-radius:999px;padding:5px 11px}.talk .bubble{width:fit-content}.chips form{margin:0}
 .chips .open{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;background:var(--soft);color:var(--text);font-weight:700}
 .chips button{font:inherit;font-weight:700;color:var(--accent-text);background:none;border:1.5px solid var(--accent);border-radius:999px;padding:0 14px;min-height:44px;cursor:pointer}
 ul{list-style:none;margin:0;padding:0}
@@ -201,8 +201,8 @@ const TABS: [Tab, string, string, string][] = [
 ];
 export const tabBar = (on: Tab) => `<nav class="tabbar" aria-label="${APP_COPY.tabs}">${TABS.map(([t, path, name, d]) => `<a href="${path}"${t === on ? ' aria-current="page"' : ""}>${ICON(d)}${esc(name)}</a>`).join("")}</nav>`;
 
-export function appPage(title: string, on: Tab, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title)}</title><style>${APP_CSS}</style></head><body><main class="wrap">
+export function appPage(title: string, on: Tab, body: string, o: { css?: string; wrap?: string } = {}): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title)}</title><style>${APP_CSS}${o.css ?? ""}</style></head><body><main class="wrap${o.wrap ? ` ${o.wrap}` : ""}">
 ${body}
 </main>${tabBar(on)}</body></html>`;
 }
@@ -227,9 +227,8 @@ export function memoryCard(l: HomeLine, csrf: string): string {
   const undo = l.undo === "undo" ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: l.token })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${l.what}`)}">${HOME_COPY.undo}</button></form>`
     : l.undo === "changed" ? `<a class="state" href="${href(l.page)}">${HOME_COPY.changed}</a>`
     : l.undo === "undone" ? `<span class="state">${HOME_COPY.undone}</span>` : "";
-  // A held value's memory is locked too, with its own Read it (the same Show as Waiting on you).
-  const readIt = l.held && l.key ? `<form method="post" action="/action/diary-seen">${hidden(csrf, { key: l.key })}<button class="pill solid" aria-label="${esc(`${APP_COPY.readIt}: ${l.what}`)}">${APP_COPY.readIt}</button></form>` : "";
-  const who = l.held ? `${lock()}${readIt}` : l.marks?.length ? marksHtml(l.marks, l.key) : "";
+  // A held value's memory is locked; its one Read it is its card above (G550: never twice).
+  const who = l.held ? lock() : l.marks?.length ? marksHtml(l.marks, l.key) : "";
   const fromLine = l.just ? `<small>${APP_COPY.justSaid}${l.was !== undefined ? ` · ${HOME_COPY.was} ${esc(l.was)}` : ""}</small>` : from;
   return `<li class="card${l.held ? " warn" : l.just ? " told" : ""}"><a class="what" href="${href(l.page)}">${esc(l.what)}</a><div class="foot">${fromLine}<span class="acts">${undo}${who}</span></div></li>`;
 }
@@ -262,7 +261,7 @@ ${cards.length ? `<ul class="mind">${cards.join("")}</ul>` : `<p class="quiet">$
 // Ask (/ask): the conversation so far, oldest first, then the box. Each turn keeps its Undo and,
 // after a write, a link to the page; only the last answer's chips can still be tapped, as only
 // those count as a tap (server.ts). Turns hidden because the sign-in is older say so in one line.
-export interface AskTurnView { said: string; reply: SayReply; title?: string }
+export interface AskTurnView { said: string; reply: SayReply; title?: string; prose?: { html: string; cites: { href: string; label: string }[] } }
 export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { turns?: AskTurnView[]; older?: number; flash?: string } = {}): string {
   const turns = o.turns ?? [];
   const turn = (t: AskTurnView, last: boolean) => {
@@ -271,7 +270,9 @@ export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { t
       t.reply.undo_token && t.reply.page && t.title ? `<a class="open" href="${href(t.reply.page)}">${esc(fill(APP_COPY.open, { title: t.title }))}</a>` : "",
       ...(last ? (t.reply.chips ?? []).map((c) => `<form method="post" action="/say">${hidden(csrf, { q: c.say, chip: "1", from: "ask" })}<button>${esc(c.label)}</button></form>`) : []),
     ].filter(Boolean);
-    return `<li><p class="bubble you">${esc(t.said)}</p><p class="bubble"${last ? ' role="status"' : ""}>${esc(t.reply.text)}</p>${acts.length ? `<div class="chips">${acts.join("")}</div>` : ""}${last && t.reply.signin ? signInAgain(csrf) : ""}</li>`;
+    // An answer about a page is that page's own prose, with what it cites under it.
+    const answer = t.prose ? `<div class="bubble answer"${last ? ' role="status"' : ""}><p>${t.prose.html}</p><p class="cites">${t.prose.cites.map((c) => `<a href="${esc(c.href)}">${esc(c.label)}</a>`).join("")}</p></div>` : `<p class="bubble"${last ? ' role="status"' : ""}>${esc(t.reply.text)}</p>`;
+    return `<li><p class="bubble you">${esc(t.said)}</p>${answer}${acts.length ? `<div class="chips">${acts.join("")}</div>` : ""}${last && t.reply.signin ? signInAgain(csrf) : ""}</li>`;
   };
   const older = o.older ? `<p class="quiet">${APP_COPY.askOlder}</p>` : "";
   const talk = turns.length ? `<ol class="talk">${turns.map((t, i) => turn(t, i === turns.length - 1)).join("")}</ol>` : older ? "" : `<p class="bubble">${APP_COPY.askHint}</p>`;

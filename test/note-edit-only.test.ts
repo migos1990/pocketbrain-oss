@@ -14,7 +14,7 @@ test("a page links to its edit page once, by name", () => {
   const s = loadState(root, new Date());
   const n = s.notes.find((x) => x.fm.id === "people/jane-roy")!;
   const html = ownerPage(s, "t", n, []);
-  expect(html).toContain(`<a href="/note/people/jane-roy">${PAGE_COPY.edit}</a>`);
+  expect(html).toContain(`<a href="/note/people/jane-roy" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`);
   expect(html.match(/href="\/note\//g)).toHaveLength(1);
 });
 

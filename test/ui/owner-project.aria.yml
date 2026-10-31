@@ -1,9 +1,12 @@
 - main:
-  - link "‹ Home":
-    - /url: /home
+  - link "‹ Memory":
+    - /url: /memory
+  - link "Edit this page":
+    - /url: /note/projects/atlas-launch
+    - text: Edit
   - heading "Atlas launch" [level=1]
   - paragraph: project · 2 sources
-  - text: Atlas launch is in beta.
+  - text: Work Atlas launch is in beta.
   - superscript:
     - link "[1]":
       - /url: "#fn-1"
@@ -14,7 +17,7 @@
   - superscript:
     - link "[1]":
       - /url: "#fn-1"
-  - text: "Due for Atlas launch: 3 Nov 2026."
+  - text: "Due for Atlas launch: 3 Nov."
   - superscript:
     - link "[1]":
       - /url: "#fn-1"
@@ -81,6 +84,15 @@
       - text: Email, 7 Oct 2026
       - group: What the source said
     - listitem: Email, 12 Sep 2026
+  - 'link "Atlas launch Next: freeze the beta build on 15 October Two sources disagree · settle"':
+    - /url: /settle/c-0001
+  - heading "What changed" [level=2]
+  - list:
+    - listitem:
+      - 'link "Next for Atlas launch: freeze the beta build on 15 October"':
+        - /url: /p/projects/atlas-launch
+      - text: "from an email, Wed · was: freeze the beta build"
+      - 'button "Undo: Next for Atlas launch: freeze the beta build on 15 October"': Undo
   - heading "Mentioned on" [level=2]
   - list:
     - listitem:
@@ -107,15 +119,18 @@
     - listitem:
       - link "Sofia Marquez":
         - /url: /p/people/sofia-marquez
-  - heading "Changed" [level=2]
-  - list:
-    - listitem:
-      - 'link "Next for Atlas launch: freeze the beta build on 15 October"':
-        - /url: /p/projects/atlas-launch
-      - text: "from an email, Wed · was: freeze the beta build"
-      - 'button "Undo: Next for Atlas launch: freeze the beta build on 15 October"': Undo
   - group: Details
-  - group: Who sees this
+  - text: Who sees Atlas Claude ChatGPT Gemini gardener
+  - group: Change who sees it
   - text: What changed about Atlas?
   - textbox "What changed about Atlas?"
   - button "Send"
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

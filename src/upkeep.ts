@@ -20,6 +20,7 @@ import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
 import { wikiLint, renderTouchedPages } from "./wiki";
 import { setAsideReceipts } from "./receipt-pages";
+import { linkFamily } from "./family";
 import { OWNER } from "./owner";
 import { staleMentions } from "./drift";
 import { linkMentions, namePlan } from "./mentions";
@@ -159,6 +160,14 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   // 1c2. Receipts held as pages before no-reply mail stopped being read (src/receipt-pages.ts):
   //      set aside once, a diary line each with Undo; one hub commit with a why.
   if (setAsideReceipts(root).length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+  // 1c3. A person with the owner's surname may be family (src/family.ts): one inferred fact linking
+  //      the owner's page, a diary line each with Undo; one hub commit with a why.
+  //      Off until the owner turns it on: then a count only, never a name.
+  {
+    const fam = linkFamily(root);
+    if (fam.filed.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+    else if (fam.counted) add({ rule: "family-links", key: "family-links", kind: "review", detail: `${fam.counted} person page${fam.counted === 1 ? " has" : "s have"} your surname and may be family; \`pocketbrain wiki family on\` links them to your page` });
+  }
 
   // 1d. Page text (src/wiki.ts renderTouchedPages, docs/wiki.md): every page a commit touched in
   //     the last day gets an opening paragraph from its facts, each sentence citing its source,

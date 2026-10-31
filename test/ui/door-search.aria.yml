@@ -4,7 +4,7 @@
     - listitem:
       - link "Maya Chen":
         - /url: /b/notes/people%2Fmaya-chen
-      - text: people/maya-chen · person Maya Chen's role is design lead.[^p-role] Maya Chen works at [[orgs/harbourline|Harbourline Software]].[^p-role] Maya Chen works with you on Atlas.[^p-relations
+      - text: people/maya-chen · person Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^p-role] Maya works with you on Atlas.[^p-relationship] Maya's city is Montréal.[^p-r
     - listitem:
       - link "Hire a senior designer, not two juniors":
         - /url: /b/notes/decisions%2F2026-09-15-hire-senior-designer
@@ -16,7 +16,7 @@
     - listitem:
       - link "Atlas launch":
         - /url: /b/notes/projects%2Fatlas-launch
-      - text: "projects/atlas-launch · project Atlas launch is in beta.[^p-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^p-status] Due for Atlas launch: 3 Nov 2026.[^p-status"
+      - text: "projects/atlas-launch · project Atlas launch is in beta.[^p-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^p-status] Due for Atlas launch: 3 Nov.[^p-status] Nex"
     - listitem:
       - link "Harbourline Software":
         - /url: /b/notes/orgs%2Fharbourline

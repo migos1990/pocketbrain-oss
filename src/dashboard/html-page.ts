@@ -15,17 +15,26 @@ import { agentLabel } from "./labels";
 import { refString } from "../sources";
 import { keptQuotes, itemRef } from "../quotes";
 import { sensitiveShape } from "../shape";
-import { CSS, esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
+import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
+import { appPage } from "./html-app";
+import { plain } from "./home";
+import { ownerConflicts } from "../core";
+import { inboxConflicts } from "../settle-inbox";
+import { MADE } from "../wiki";
 import { sensitivityRank } from "../brain";
 
 export const PAGE_COPY = {
-  back: "Home",
+  back: "Memory",
+  next: "Next:",
+  disagree: "Two sources disagree · settle",
   sources: "{n} sources",
   oneSource: "1 source",
   mentioned: "Mentioned on",
-  changed: "Changed",
+  changed: "What changed",
   details: "Details",
   who: "Who sees this",
+  whoName: "Who sees {name}",
+  change: "Change who sees it",
   nobody: "Only you.",
   hide: "Hide from {agent}",
   showAgain: "Show to {agent} again",
@@ -42,27 +51,39 @@ export const PAGE_COPY = {
   shutPage: "This page is private. Sign in again to read it.",
   openPrivate: "Only you see this page. It stays open 10 minutes after you sign in.",
   edit: "Edit this page",
+  editShort: "Edit",
 } as const;
 
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
 const PAGE_CSS = `
-.top{display:flex;align-items:center;min-height:44px}
-.top a{color:var(--text-2);font-size:15px;display:inline-flex;align-items:center;min-height:44px}
-h1{font-size:26px;line-height:32px;font-weight:600;margin:4px 0 0}
-.kind{color:var(--text-2);font-size:15px;margin:0 0 16px}
-.prose{font-size:18px;line-height:29px}
-.prose h2,.prose h3{font-size:17px;color:var(--text);margin:20px 0 4px;text-transform:none;letter-spacing:0}
-.prose sup a{font-size:13px;display:inline-block;min-width:24px;text-align:center}
-.prose ol{padding-left:24px;color:var(--text-2);font-size:15px;line-height:22px}
+.band{margin:calc(-20px - env(safe-area-inset-top)) max(-16px,calc(-1 * env(safe-area-inset-left))) 20px;padding:calc(20px + env(safe-area-inset-top)) 20px 22px;border-radius:0 0 28px 28px;background:var(--soft);display:flex;flex-direction:column;gap:14px}
+.band.t-work{background:var(--t-work);--band-text:var(--t-work-text)}.band.t-teaching{background:var(--t-teaching);--band-text:var(--t-teaching-text)}.band.t-personal{background:var(--t-personal);--band-text:var(--t-personal-text)}
+.band .bar{display:flex;justify-content:space-between;align-items:center}
+.band .bar a{color:var(--band-text,var(--text));font-weight:700;display:inline-flex;align-items:center;min-height:44px}
+.band .head{display:flex;gap:16px;align-items:center}.band .head>div{min-width:0}
+.band .face{flex:none;width:68px;height:68px;border-radius:50%;background:var(--bg);color:var(--band-text,var(--text));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800}
+.band h1{font-size:26px;line-height:32px;overflow-wrap:anywhere}
+.band .kind{margin:2px 0 0;font-size:14px;line-height:20px;color:var(--band-text,var(--muted));font-weight:600}
+.band .chips{margin:0}.band .chip{font-size:13px;line-height:18px;font-weight:700;color:var(--band-text,var(--text));background:var(--bg);border-radius:999px;padding:6px 12px}
+.prose{font-size:17px;line-height:26px}
+.prose h2,.prose h3{font-size:17px;color:var(--text);margin:20px 0 4px}
+.prose sup a{font-size:12px;display:inline-block;min-width:24px;text-align:center}
+.prose ol{padding-left:24px;color:var(--muted);font-size:13px;line-height:18px;list-style:decimal}
 .prose ol li{margin:0 0 8px}
-details{border-top:1px solid var(--line)}
-details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:500}
-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:15px;line-height:22px}
-dt{color:var(--text-2)}dd{margin:0;overflow-wrap:anywhere}
-.pinned{position:sticky;bottom:0;background:var(--bg);padding:12px 0 calc(12px + env(safe-area-inset-bottom));margin-top:24px;border-top:1px solid var(--line)}
-.pinned form.box{margin:0}
-.prose details.quote{border:0}.prose details.quote summary{min-height:44px;font-weight:400;color:var(--text-2)}
+.prose details.quote{border:0}.prose details.quote summary{min-height:44px;font-weight:500;color:var(--muted)}
 .prose blockquote{margin:0 0 8px;padding-left:12px;border-left:2px solid var(--line);color:var(--text)}
+a.project{margin:18px 0 0;background:var(--soft);border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;color:var(--text)}
+.project .nm{font-weight:700}.project .flag{align-self:flex-start;font-size:13px;line-height:18px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:8px;padding:4px 10px}
+h2.sec{font-size:17px;line-height:24px;font-weight:700;color:var(--text);margin:22px 0 4px}
+details{border-top:1px solid var(--line);margin:8px 0 0}
+details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:700}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:15px;line-height:22px}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+.seen{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 0;font-size:13px;line-height:18px;color:var(--muted)}
+.seen b{font-weight:700}.seen span{background:var(--soft);border-radius:999px;padding:3px 10px;font-weight:600;color:var(--text)}
+.pinned{position:fixed;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom));background:var(--bg);padding:10px max(16px,env(safe-area-inset-left)) 8px}
+.pinned>*{max-width:608px;margin-left:auto;margin-right:auto}.pinned form.box{margin:0 auto}
+.wrap.page{padding-bottom:calc(190px + env(safe-area-inset-bottom))}
 `;
 
 // A value as text with its [[links]] kept, for wikiLinks to turn into links to their pages.
@@ -116,7 +137,9 @@ function whoSees(s: State, csrf: string, n: Note, closed: boolean): string {
   const id = n.fm.id;
   const seen = audience(s, id).seen;
   const names = seen.map((a) => agentLabel(s.rules, a));
-  if (closed) return `<details><summary>${PAGE_COPY.who}</summary><p>${names.length ? esc(names.join(", ")) : PAGE_COPY.nobody}</p></details>`;
+  const first = displayName(id, n.fm.title).split(/\s+/)[0]!;
+  const chips = `<div class="seen"><b>${esc(fill(PAGE_COPY.whoName, { name: first }))}</b>${names.length ? names.map((x) => `<span>${esc(x)}</span>`).join("") : esc(PAGE_COPY.nobody)}</div>`;
+  if (closed) return chips;
   const act = (action: string, f: Record<string, string>, label: string) => `<form method="post" action="/action/${action}">${hidden(csrf, f)}<button>${esc(label)}</button></form>`;
   const rows = s.agents.map((a) => {
     const byName = (s.rules.policy.agents[a.name]?.exclude ?? []).includes(id);
@@ -126,8 +149,24 @@ function whoSees(s: State, csrf: string, n: Note, closed: boolean): string {
     return `<li class="line"><div class="t">${esc(a.label)} · ${esc(state)}</div>${btn}</li>`;
   }).join("");
   const level = `<details><summary>${PAGE_COPY.level}</summary><p class="quiet">${PAGE_COPY.levelNote}</p><form method="post" action="/action/note-sensitivity">${hidden(csrf, { id })}<select name="sensitivity" aria-label="${PAGE_COPY.level}">${LEVELS.map(([v, l]) => `<option value="${v}"${v === n.fm.sensitivity ? " selected" : ""}>${esc(l)}</option>`).join("")}</select> <button>${PAGE_COPY.save}</button></form></details>`;
-  return `<details id="who"><summary>${PAGE_COPY.who}</summary><p>${names.length ? esc(names.join(", ")) : PAGE_COPY.nobody}</p>${rows ? `<ul>${rows}</ul>` : ""}${level}</details>`;
+  return `${chips}<details id="who"><summary>${PAGE_COPY.change}</summary>${rows ? `<ul>${rows}</ul>` : ""}${level}</details>`;
 }
+
+// The page's open question as a card (the brief's Person board): what's next, and a conflict on the
+// page with its way to settle. A value shows only where Details would show it.
+function projectCard(s: State, n: Note, fresh: boolean): string {
+  const id = n.fm.id;
+  const open = [...ownerConflicts(s.root, s.now), ...inboxConflicts(s.root)].find((c) => c.page === id);
+  const f = n.fm.facts?.next_step;
+  const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined;
+  const next = r && !r.valid_to && (fresh || !shut(n, r)) ? plain(r.value, (x) => { const t = s.notes.find((m) => m.fm.id === x)?.fm.title; return t === undefined ? undefined : String(t); }) : "";
+  if (!open && !next) return "";
+  const inner = `<span class="nm">${esc(displayName(id, n.fm.title))}</span>${next ? `<span>${PAGE_COPY.next} ${esc(next)}</span>` : ""}${open ? `<span class="flag">${PAGE_COPY.disagree}</span>` : ""}`;
+  return open ? `<a class="project" href="/settle/${esc(open.id)}">${inner}</a>` : `<div class="project">${inner}</div>`;
+}
+
+const AREAS = new Set(["work", "teaching", "personal"]);
+const initials = (name: string) => name.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
 export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; fresh?: boolean } = {}): string {
   const fresh = !!o.fresh, closed = !fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
@@ -143,17 +182,42 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   }, 2).replace(/href="\/note\//g, 'href="/p/');
   const c = connections(s, n);
   const mentioned = c.mentionedIn.length ? `<h2>${PAGE_COPY.mentioned}</h2><ul>${c.mentionedIn.map((x) => `<li class="line"><div class="t"><a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a></div></li>`).join("")}</ul>` : "";
-  const changed = lines.length ? `<h2>${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   const who = whoSees(s, csrf, n, closed);
   const details = closed ? "" : facts(s, n, fresh);
   const open = fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private") ? `<p class="kind">${PAGE_COPY.openPrivate}</p>` : "";
   const body = open + (closed ? `<p class="quiet">${PAGE_COPY.shutPage}</p>${signInAgain(csrf)}` : details.includes(PAGE_COPY.shut) || withheld ? `${proseOrEmpty()}${signInAgain(csrf)}` : proseOrEmpty());
   function proseOrEmpty() { return prose.trim() ? `<div class="prose">${prose}</div>` : `<p class="quiet">${esc(fill(PAGE_COPY.empty, { name: first }))}</p>`; }
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(name)}</title><style>${CSS}${PAGE_CSS}</style></head><body><main class="wrap">
-<div class="top"><a href="/home">‹ ${PAGE_COPY.back}</a></div>
-<h1>${esc(name)}</h1><p class="kind">${esc(String(n.fm.type ?? kindLabel(folderOf(n.fm.id))))} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}</p>
-${body}${mentioned}${changed}
-${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}<p><a href="/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}">${PAGE_COPY.edit}</a></p></details>` : ""}${who}
-<div class="pinned">${replyHtml(csrf, { ...o, page: n.fm.id })}<form class="box" method="post" action="/say">${hidden(csrf, { page: n.fm.id })}<label class="sr" for="q">${esc(fill(PAGE_COPY.box, { name: first }))}</label><input type="text" id="q" name="q" placeholder="${esc(fill(PAGE_COPY.box, { name: first }))}" autocomplete="off" enterkeyhint="send" maxlength="500"><button>${PAGE_COPY.send}</button></form></div>
-</main></body></html>`;
+  const area = String(n.fm.area ?? "");
+  const kind = String(n.fm.type ?? kindLabel(folderOf(n.fm.id)));
+  const face = folderOf(n.fm.id) === "people" && initials(name) ? `<span class="face" aria-hidden="true">${esc(initials(name))}</span>` : "";
+  const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
+  const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
+<div class="head">${face}<div><h1>${esc(name)}</h1><p class="kind">${esc(kind)} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}</p></div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+  const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
+  const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
+  const pinned = `<div class="pinned">${replyHtml(csrf, { ...o, page: n.fm.id })}<form class="box" method="post" action="/say">${hidden(csrf, { page: n.fm.id })}<label class="sr" for="q">${esc(fill(PAGE_COPY.box, { name: first }))}</label><input type="text" id="q" name="q" placeholder="${esc(fill(PAGE_COPY.box, { name: first }))}" autocomplete="off" enterkeyhint="send" maxlength="500"><button>${PAGE_COPY.send}</button></form></div>`;
+  return appPage(name, "memory", `${band}
+${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${mentionedList}
+${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}
+${pinned}`, { css: PAGE_CSS, wrap: "page" });
+}
+
+// Ask's answer about a page (audit v7: Ask answered with a list of facts): the page's own opening
+// prose, its links kept, and what it cites as chips (the page, the pages it names, how many
+// sources). Worked out when Ask is drawn, from the page as it is then, with the same rule as the
+// page: a private page answers nothing before a fresh sign-in. No new read: it is the page the box
+// already answered from.
+export interface AskProse { html: string; cites: { href: string; label: string }[] }
+export function askProse(s: State, n: Note, fresh: boolean): AskProse | undefined {
+  if (!fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
+  const top = (n.body ?? "").split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !x.startsWith("[^"));
+  if (!top) return undefined;
+  const notes = new Set((top.match(/\[\^[^\]\s]+\]/g) ?? []));
+  const text = top.replace(/\[\^[^\]\s]+\]/g, "").split(MADE).join(" ").replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  const html = wikiLinks(s, text).replace(/href="\/note\//g, 'href="/p/').replace(/ class="mono"/g, "").replace(/ title="[^"]*"/g, "");
+  const linked = [...new Set([...html.matchAll(/href="\/p\/([^"]+)"/g)].map((m) => decodeURIComponent(m[1]!)))].filter((id) => id !== n.fm.id).slice(0, 2);
+  const title = (id: string) => displayName(id, s.notes.find((x) => x.fm.id === id)?.fm.title);
+  const count = sourceCount(n) || notes.size;
+  return { html, cites: [{ href: href(n.fm.id), label: displayName(n.fm.id, n.fm.title) }, ...linked.map((id) => ({ href: href(id), label: title(id) })), ...(count ? [{ href: href(n.fm.id), label: count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count }) }] : [])] };
 }

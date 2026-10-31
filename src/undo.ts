@@ -101,7 +101,9 @@ export function undoFact(root: string, token: string): UndoResult {
 function emptied(root: string, note: Note): boolean {
   if (Object.keys(note.fm.facts ?? {}).length) return false;
   if (!Object.values(note.fm.history ?? {}).flat().every((r) => (r as FactRecord).ended_by?.correction)) return false;
-  const words = note.body.split("\n").filter((l) => !/^\[\^[^\]]+\]:/.test(l) && !l.includes(MADE)).join("").trim();
+  // The writer's own text is no one's words: the made-by paragraph and the opening it follows (G559).
+  const paras = note.body.split(/\n\s*\n/);
+  const words = paras.filter((p, i) => !p.includes(MADE) && paras[i + 1]?.trim() !== MADE).join("\n").split("\n").filter((l) => !/^\[\^[^\]]+\]:/.test(l)).join("").trim();
   if (words) return false;
   return !loadBrain(root).some((n) => n.fm.id !== note.fm.id && JSON.stringify([n.fm, n.body]).includes(note.fm.id));
 }

@@ -136,6 +136,7 @@ export const LINE_COPY = {
   questionSetAside: "A question about {title} was set aside, since only a conflict asks you",
   takeBackSetAside: "A take-back on {title} was set aside, since only a conflict asks you",
   receipt: "A receipt on {title} was set aside; receipts aren't facts",
+  family: "{title} may be family: same surname as you",
   disagree: "Two sources disagree on {title}'s {attr}",
   disagreeNext: "Two sources disagree on what's next for {title}",
 } as const;
@@ -165,6 +166,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // A few attributes have their own sentence: what's next, when the owner was last in touch, a role.
   const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : undefined;
   const what = row.why === "receipt" ? w("receipt")
+    : row.why === "family" ? w("family")
     : shapeless ? w("somethingNew")
     : verb && (row.kind === "new" || row.kind === "item_added") ? w("verbNew")
     : verb && row.kind === "changed" ? w("verbChanged")
@@ -224,7 +226,7 @@ function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[
   // Each held value is its own locked card with Read it (owner app brief, 2026-10-30), after the
   // conflicts, but only a few (owner's phone, 2026-10-29: a wall of receipts was the first thing on
   // the home); the rest are one line, a tap away.
-  const shown = held.length > HELD_EACH && !expand ? [...held.slice(0, HELD_EACH), { what: `${held.length - HELD_EACH} more new private things`, verb: "only you can see them yet · tap to see them", href: "/home?all=1" }] : held;
+  const shown = held.length > HELD_EACH && !expand ? [...held.slice(0, HELD_EACH), { what: `${held.length - HELD_EACH} more new private things.`, verb: "only you can see them yet · tap to see them", href: "/home?all=1" }] : held;
   return { waiting: [...open.filter((c) => !c.held).map((c) => line(c, "tap to settle")), ...inbox, ...mail, ...shown], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
 

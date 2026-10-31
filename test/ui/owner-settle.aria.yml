@@ -1,10 +1,23 @@
 - main:
-  - link "‹ Home":
+  - link "‹ On your mind":
     - /url: /home
+  - text: 1 of 3
+  - paragraph: Atlas launch · Work
   - heading "Is Atlas launch's next step freeze the beta build on 15 October or freeze the beta build on 22 October?" [level=1]
+  - paragraph: Two sources say different things. Pick one, or tell me what's right.
   - button "freeze the beta build on 15 October from an email, 7 Oct"
   - button "freeze the beta build on 22 October from an email, 7 Oct"
-  - button "Not sure, keep both Nothing changes and I stop asking."
+  - button "Not sure, keep both I stop asking"
+  - paragraph: Or tell me
   - text: Actually, it's…
   - textbox "Actually, it's…"
   - button "Send"
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

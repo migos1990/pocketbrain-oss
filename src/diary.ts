@@ -39,7 +39,7 @@ export interface DiaryRow {
   settles?: string; // on a `settled` row: the conflict it answered (its Undo opens it again)
   ref?: string; // on a `held` or `set_aside` row: the proposal's file under inbox/
   until?: string; // on a `held` row: the owner's day the hold ends
-  why?: "receipt"; // a held receipt page upkeep set aside (src/receipt-pages.ts); Undo brings it back
+  why?: "receipt" | "family"; // a held receipt page upkeep set aside (src/receipt-pages.ts), Undo brings it back; or a page upkeep linked as maybe family (src/family.ts)
   added?: string[]; // on a `confirmed` row: the source refs the filing added (Undo takes them out)
 }
 

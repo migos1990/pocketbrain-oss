@@ -443,3 +443,19 @@ test("contract write: the hub's yes never changes a fact hidden from the propose
     expect(JSON.stringify(fact(root, "people/jane-roy", "role")), String(area)).toBe(was);
   }
 });
+
+// Builder's slice audit of claude/family-links b532242 (F4, G547): a titled surname alone never
+// files on the owner's page while someone else's page has that surname, under any title of its kind.
+test("contract write: a titled surname alone never files on the owner's page beside a relative's page (G547)", () => {
+  const rows = ["Monsieur Lake", "Mr Lake", "Mr. Lake", "M. Lake"];
+  for (const title of rows) {
+    const root = makeBrain();
+    editPolicy(root, (s) => s.replace("owner: { name: Robin }", "owner: { name: Robin, aliases: [Robin Lake] }"));
+    const page = (slug: string, t: string, aliases = "") => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${t}\n${aliases}area: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  city: { value: Lyon, as_of: 2026-10-28, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n---\n`);
+    page("robin-lake", "Robin Lake", "aliases: [Mr. Robin Lake]\n");
+    page("alain-lake", "Alain Lake");
+    sh(root, "add", "-A"); sh(root, "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: pages");
+    write(root, { ...base, agent: "steward", type: "person", title, attribute: "appointment", value: "Cardiology, Tuesday", id: undefined } as WriteRequest);
+    expect(fact(root, "people/robin-lake", "appointment"), title).toBeUndefined();
+  }
+});

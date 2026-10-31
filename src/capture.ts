@@ -31,7 +31,7 @@ import { loadRules, attributeSpec, captureAgentName, isDeclared, cardOnly, BUILT
 import { records } from "./carve";
 import { redactSecrets, findInjection } from "./checks";
 import type { WriteRequest } from "./checks";
-import { resolveEntity, personKey, stripCredentials } from "./write";
+import { resolveEntity, personKey, stripCredentials, titleKind, untitledKey, sameTitled, sharingSurname } from "./write";
 import { normalizeValue, compareKey } from "./normalize";
 import { squash } from "./match";
 import { hasWord, alert } from "./util";
@@ -395,7 +395,15 @@ export function ownerOf(rules: Rules, notes: Note[], entity: string): { page?: s
   entity = entity.replace(/\s*\([^)]*\)/g, "").trim();
   const bare = stripCredentials(entity);
   const flipped = bare.split(",").length === 2 ? bare.split(",").map((x) => x.trim()).reverse().join(" ") : undefined;
-  return keys.has(personKey(entity)) || (!!flipped && keys.has(personKey(flipped))) ? { page: page?.fm.id } : undefined;
+  // A titled surname on the owner's page ("M. Lake", as a merge leaves the dropped page's title) is
+  // the owner under any title of the same kind ("Mr Lake", "Monsieur Lake"), never "Mme Lake" (G547).
+  // A titled full name of the owner's ("M. <first> <last>") is the owner too.
+  // A titled surname alone is the owner only while no one else's page has that surname (the
+  // father's "Monsieur Lake"; builder's slice audit of b532242).
+  const lone = !untitledKey(entity).includes(" ");
+  const others = lone && page ? sharingSurname(notes, untitledKey(entity)).some((n) => n !== page) : false;
+  const asTitled = (!others && (page ? [page.fm.title, ...(page.fm.aliases ?? [])] : []).some((x) => sameTitled(entity, x))) || (!!titleKind(entity) && !lone && keys.has(untitledKey(entity)));
+  return keys.has(personKey(entity)) || (!!flipped && keys.has(personKey(flipped))) || asTitled ? { page: page?.fm.id } : undefined;
 }
 
 // A bulk mail's footer: who it was sent to, how to unsubscribe (owner's phone, 2026-10-25: an

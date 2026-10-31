@@ -88,7 +88,7 @@ export const BUSY_PAGES: [string, string][] = [
 ];
 
 // What the owner types into Ask before ask-busy is checked (a conversation: a question, then a write).
-export const ASK_SAYS = ["what is Isabelle Roy's role?", "Product Discovery course's next step is book the exam room"];
+export const ASK_SAYS = ["what is Isabelle Roy's role?", "Product Discovery course's next step is book the exam room", "who is Maya Chen?"];
 
 // Browser-door pages, signed in as Gemini (the sign-in page is checked before signing in).
 export const DOOR_PAGES: [string, string][] = [

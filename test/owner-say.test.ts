@@ -53,7 +53,7 @@ test("a told fact is saved as the owner's word, with a diary line, Undo and its 
   const root = makeBrain();
   const r = ownerSay(root, "Jane Roy's role is program director");
   expect(r.kind).toBe("say.noted");
-  expect(r.text).toBe("Noted: Jane Roy: role is program director. Seen by your assistants.");
+  expect(r.text).toBe("Noted: Jane Roy is program director now. Seen by your assistants.");
   const f = jane(root).fm.facts!.role as FactRecord;
   expect(f.value).toBe("program director");
   expect(f.verification).toBe("confirmed-by-owner");

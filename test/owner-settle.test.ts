@@ -4,6 +4,7 @@
 // both" beside them; a pick is one diary line whose Undo opens the conflict again. A conflict the
 // Gardener is still weighing doesn't wait on the owner yet.
 import { test, expect } from "bun:test";
+import { esc } from "../src/dashboard/html-home";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
@@ -120,7 +121,7 @@ test("a conflict the Gardener hasn't weighed yet opens, says so, and can be answ
   const { root, id } = brain();
   const c = ownerConflict(root, id)!;
   expect(c.held).toBe(true);
-  expect(settlePage(c, "x", loadRules(root))).toContain(SETTLE_COPY.held);
+  expect(settlePage(c, "x", loadRules(root))).toContain(esc(SETTLE_COPY.held));
   const v = homeView(root, loadRules(root), loadBrain(root), new Date());
   expect(v.waiting).toHaveLength(0);
   expect(v.gardener).toEqual([{ what: "Two sources disagree on Course C's room", verb: "the Gardener looks tonight", href: `/settle/${id}` }]);

@@ -81,7 +81,22 @@ export const isCredential = (w: string) => {
   const k = w.toLowerCase().replace(/\./g, "");
   return CREDENTIALS.has(k) || (NAMELIKE.has(k) && (w.includes(".") || w === w.toUpperCase()));
 };
-const HONORIFIC = /^(dr|mr|mrs|ms|mx|mme|mlle|prof)\.?\s+/i;
+// A title before a name; a person's key leaves it out. "M." is left in: it can be an initial
+// ("M. Dupont" may be Marc Dupont), so it keeps two names apart (slice audit 2026-10-25).
+export const HONORIFIC = /^(dr|mr|mrs|ms|mx|mme|mlle|prof|monsieur|madame|mademoiselle|miss)\.?\s+/i;
+// Titles of a kind, "M." (the French "Mr", with its dot) among them: two titled names match when
+// their titles are of the same kind and the rest is the same name ("M. Lake" is "Mr Lake", never
+// "Mme Lake"; owner's phone, 2026-10-31; G547).
+const TITLED = /^(mr|mrs|ms|mme|mlle|monsieur|madame|mademoiselle|miss|m(?=\.))\.?\s+/i;
+const TITLE_KIND: Record<string, "m" | "f"> = { mr: "m", m: "m", monsieur: "m", mrs: "f", ms: "f", mme: "f", mlle: "f", madame: "f", mademoiselle: "f", miss: "f" };
+export const titleKind = (name: unknown): "m" | "f" | undefined => typeof name === "string" ? TITLE_KIND[TITLED.exec(name.trim())?.[1]?.toLowerCase() ?? ""] : undefined;
+// The name after its title, as a key: "M. Lake" and "Monsieur Lake" are both "lake".
+export const untitledKey = (name: unknown): string => typeof name === "string" ? personKey(name.trim().replace(TITLED, "")) : personKey(name);
+// Two names that each carry a title of the same kind, the rest the same. A titled full name
+// ("M. Robin Lake") is that name untitled too; a titled surname alone is not ("M. Dupont" isn't "Dupont").
+export const sameTitled = (a: unknown, b: unknown): boolean => !!titleKind(a) && titleKind(a) === titleKind(b) && untitledKey(a) === untitledKey(b);
+// The person pages naming someone with this surname by a full name ("Alain Lake" for "lake").
+export const sharingSurname = (notes: Note[], surname: string): Note[] => notes.filter((n) => n.fm.type === "person" && !["archived", "merged", "superseded"].includes(String(n.fm.status)) && [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => { const w = untitledKey(t).split(" "); return w.length >= 2 && w.at(-1) === surname; }));
 export function stripCredentials(name: string): string {
   const parts = name.split(",").map((x) => x.trim());
   const words = (n: number) => parts.slice(0, n).join(" ").split(/\s+/).filter(Boolean).length;
@@ -98,7 +113,15 @@ export function resolveEntity(notes: Note[], type: string, title: string): { id?
   const same = notes.filter((n) => n.fm.type === type);
   const k = type === "person" ? personKey : compareKey;
   const key = k(title);
-  const exact = same.filter((n) => [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => k(t) === key));
+  const kind = type === "person" ? titleKind(title) : undefined;
+  // A titled surname alone ("Monsieur Lake") is another title's page ("M. Lake") only while no
+  // other page names someone with that surname: the owner's "M. Lake" is not their father's
+  // "Monsieur Lake" (builder's slice audit of b532242). Written exactly as the page's name, it is.
+  const lone = !!kind && !untitledKey(title).includes(" ");
+  const kin = lone ? sharingSurname(same, untitledKey(title)) : [];
+  const exact = same.filter((n) => [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => (k(t) === key && !(kind && titleKind(t) && titleKind(t) !== kind))
+    || (!!kind && sameTitled(title, t) && (!lone || kin.every((x) => x === n)))
+    || (!!kind && !lone && !titleKind(t) && k(t) === untitledKey(title))));
   if (exact.length === 1) return { id: exact[0].fm.id };
   if (exact.length > 1) return { ambiguous: exact.map((n) => n.fm.id) };
   const tokens = key.split(" ");

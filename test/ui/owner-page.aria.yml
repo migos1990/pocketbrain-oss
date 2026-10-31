@@ -1,28 +1,27 @@
 - main:
-  - link "‹ Home":
-    - /url: /home
+  - link "‹ Memory":
+    - /url: /memory
+  - link "Edit this page":
+    - /url: /note/people/maya-chen
+    - text: Edit
   - heading "Maya Chen" [level=1]
   - paragraph: person · 3 sources
-  - text: Maya Chen's role is design lead.
-  - superscript:
-    - link "[1]":
-      - /url: "#fn-1"
-  - text: Maya Chen works at
+  - text: Work Maya Chen is the design lead at
   - link "Harbourline Software":
     - /url: /p/orgs/harbourline
   - text: .
   - superscript:
     - link "[1]":
       - /url: "#fn-1"
-  - text: Maya Chen works with you on Atlas.
+  - text: Maya works with you on Atlas.
   - superscript:
     - link "[2]":
       - /url: "#fn-2"
-  - text: Maya Chen's city is Montréal.
+  - text: Maya's city is Montréal.
   - superscript:
     - link "[1]":
       - /url: "#fn-1"
-  - text: You were last in touch with Maya Chen on 7 Oct 2026.
+  - text: You were last in touch with Maya on 7 Oct.
   - superscript:
     - link "[3]":
       - /url: "#fn-3"
@@ -71,6 +70,13 @@
     - listitem: Email, 12 Sep 2026
     - listitem: Email, 18 Sep 2026
     - listitem: Email, 10 Aug 2026
+  - heading "What changed" [level=2]
+  - list:
+    - listitem:
+      - link "You were last in touch with Maya Chen on 7 Oct 2026":
+        - /url: /p/people/maya-chen
+      - text: "from an email, Wed · was: 25 Aug 2026"
+      - 'button "Undo: You were last in touch with Maya Chen on 7 Oct 2026"': Undo
   - heading "Mentioned on" [level=2]
   - list:
     - listitem:
@@ -91,15 +97,18 @@
     - listitem:
       - link "Senior designer hire":
         - /url: /p/projects/designer-hire
-  - heading "Changed" [level=2]
-  - list:
-    - listitem:
-      - link "You were last in touch with Maya Chen on 7 Oct 2026":
-        - /url: /p/people/maya-chen
-      - text: "from an email, Wed · was: 25 Aug 2026"
-      - 'button "Undo: You were last in touch with Maya Chen on 7 Oct 2026"': Undo
   - group: Details
-  - group: Who sees this
+  - text: Who sees Maya Claude ChatGPT Gemini gardener
+  - group: Change who sees it
   - text: What changed about Maya?
   - textbox "What changed about Maya?"
   - button "Send"
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

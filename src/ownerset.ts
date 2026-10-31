@@ -11,7 +11,7 @@ import { commitPaths } from "./git";
 import { OWNER } from "./owner";
 import { hubRole, loadHub } from "./hub";
 import { loadRules, gardeners } from "./rules";
-import { personKey, stripCredentials, isCredential } from "./write";
+import { personKey, stripCredentials, isCredential, HONORIFIC } from "./write";
 import { namesOwner, KIN_NOTE } from "./capture";
 import { gardenerConfig } from "./gardener";
 import type { OwnerErrorId, Vars } from "./owner-errors";
@@ -206,6 +206,13 @@ export function setLinkNames(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { link_names: mode === "on" }, `link_names ${mode}`);
 }
 
+// `pocketbrain wiki family on|off`: whether upkeep links a person page with the owner's surname to
+// the owner's page as maybe family (src/family.ts, G546), or only counts them. Off until turned on.
+export function setFamilyLinks(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki family on | off");
+  return setRulesKeys(root, "policy.yaml", { family_links: mode === "on" }, `family_links ${mode}`);
+}
+
 // `pocketbrain hub url <https://…>`: the one address agents hold.
 export function setPublicUrl(root: string, url: string): string {
   if (!loadHub(root)) throw new OwnerSetError("no rules/hub.yaml yet; start with pocketbrain hub init --name <machine>");
@@ -258,7 +265,6 @@ export function missingOwnerValues(root: string): { key: string; id: OwnerErrorI
   return out;
 }
 
-const HONORIFIC = /^(dr|mr|mrs|ms|mx|mme|mlle|prof)\.?\s+/i;
 const GENERATION = new Set(["jr", "sr", "ii", "iii", "iv", "fils", "pere"]);
 
 // `pocketbrain me name`: the owner's full name as an alias in rules/policy.yaml, so a mail that
