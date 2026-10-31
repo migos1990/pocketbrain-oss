@@ -1,6 +1,6 @@
 {
   "name": "pocketbrain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A second brain you own, shared by your AI assistants: each one sees only the slice you grant it, enforced in code.",
   "keywords": [
     "second-brain",
@@ -39,11 +39,15 @@
     "perf": "bun scripts/perf.ts",
     "crash": "bun scripts/crash.ts",
     "eval": "bun evals/run.ts",
+    "eval:semantic": "bun evals/run.ts --only ret-synth-semantic",
     "e2e": "bun scripts/e2e.ts",
     "conformance": "bun scripts/conformance.ts"
   },
   "dependencies": {
     "yaml": "^2.9.1"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "3.7.2"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
@@ -51,5 +55,8 @@
     "@xterm/xterm": "5.5.0",
     "playwright": "1.56.1",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
   }
 }

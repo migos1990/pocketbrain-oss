@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Mac hub follows releases by itself. A launchd job runs this every 10 minutes: when the
+// How the Mac's hub takes new code. Two ways, one state file:
+// - go <sha|main> (outside audit 2026-10-27: no vX.Y.Z tag has ever existed and cloud sessions can't
+//   push one, so this is how the Mac runs a main sha): check out exactly that commit of origin/main,
+//   `bun install`, restart, and keep it only when the restarted hub's own /health reports that sha
+//   (the code it started on, not what is checked out); else back to the sha before. Then the real
+//   brain's north star once for that code, its counts in the output and deploy.json, report-only.
+// - run, the release follower: a launchd job runs this every 10 minutes: when the
 // `release` branch on GitHub points at a new vX.Y.Z tag (CI moves it there only after the tag
 // passed), check it out, `bun install`, restart the hub with a plain kickstart, and wait for
 // /health. If the hub doesn't come back healthy, go back to the version it ran before. It never
 // touches the tunnel, the brain, or a working copy with uncommitted changes. See docs/release.md.
+//   bun scripts/deploy.ts go <sha|main> [--app <dir>] [--health <url>] [--brain <dir>]   take one main sha now
 //   bun scripts/deploy.ts run [--app <dir>] [--health <url>]   one pass (what launchd runs)
 //   bun scripts/deploy.ts status                               the last pass (deploy.json)
 //   bun scripts/deploy.ts hold | unhold                        stop or resume following releases
@@ -14,16 +21,25 @@ import { existsSync, mkdirSync, openSync, closeSync, readFileSync, rmSync, statS
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { keysDir } from "../src/secrets";
+import { northStarFor, northStarLine, type NorthStarRecord } from "../src/probe";
 
 export type Status = "deployed" | "current" | "rolled-back" | "down" | "blocked" | "held" | "error";
 // unreleased_since: the oldest commit on main that the release branch doesn't have (null when level),
 // so the hub's self-check can say a release is overdue. Absent when main couldn't be fetched.
-export interface DeployState { status: Status; detail: string; version?: string; sha?: string; previous?: string; at?: string; unreleased_since?: string | null; checked_at: string }
+// mode "go": the last move was `deploy go`; running: the sha the hub's /health reported after it;
+// north_star: that code's real-brain counts (counts only, never a page name).
+export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; checked_at: string }
 export interface Effects {
   install(dir: string): boolean;
   restart(): boolean;
   healthy(): Promise<boolean>;
   log(line: string): void;
+}
+export interface GoEffects extends Effects {
+  // The code sha the running hub reports on /health (undefined when it reports none); `expect`
+  // lets the real one wait a little for a hub that is still coming up on the new code.
+  code(expect?: string): Promise<string | undefined>;
+  northStar(code: string): Promise<NorthStarRecord | undefined>;
 }
 
 export const configDir = () => dirname(keysDir());
@@ -62,7 +78,7 @@ export async function deployOnce(o: { app: string; remote?: string; branch?: str
     fx.log(`${full.checked_at} ${full.status}: ${full.detail}`);
     return full;
   };
-  const keep = { version: last?.version, sha: last?.sha, previous: last?.previous, at: last?.at };
+  const keep = { mode: last?.mode, version: last?.version, sha: last?.sha, running: last?.running, previous: last?.previous, at: last?.at, north_star: last?.north_star };
 
   if (existsSync(o.hold ?? holdPath())) return save({ ...keep, status: "held", detail: "on hold (bun scripts/deploy.ts unhold to follow releases again)" });
   const f = git(app, "fetch", "-q", "--tags", remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`);
@@ -77,6 +93,8 @@ export async function deployOnce(o: { app: string; remote?: string; branch?: str
   if (!tag) return save({ ...keep, status: "error", detail: `${remote}/${branch} (${target.slice(0, 7)}) carries no vX.Y.Z tag; not deploying` });
   const head = git(app, "rev-parse", "HEAD").out;
   if (head === target) return save({ ...keep, version: tag, sha: target, status: "current", detail: `running ${tag}` });
+  // Fast-forward only: a hub that `deploy go` put on a main commit the tag doesn't contain stays.
+  if (!git(app, "merge-base", "--is-ancestor", head, target).ok) return save({ ...keep, status: "current", detail: `running ${head.slice(0, 7)}, which ${tag} doesn't contain; not moving back` });
   // A tag that already failed and was rolled back isn't retried every pass: the hub stays on the
   // version before until a newer tag reaches the branch (fix forward).
   if (last?.status === "rolled-back" && last.previous === tag && last.sha === head) return save({ ...keep, status: "rolled-back", detail: `${tag} was rolled back; staying on ${last.version} until a newer release` });
@@ -88,16 +106,72 @@ export async function deployOnce(o: { app: string; remote?: string; branch?: str
   // deploy.restart tells the hub its next start was planned, not a restart by hand (src/measure.ts noteStart).
   const restart = () => { writeFileSync(join(dirname(file), "deploy.restart"), now() + "\n"); return fx.restart(); };
   const up = (ref: string) => git(app, "checkout", "-q", "--detach", ref).ok && fx.install(app) && restart();
-  if (up(tag) && await fx.healthy()) return save({ status: "deployed", version: tag, sha: target, previous: prev, at: now(), detail: `deployed ${tag} (was ${prev}); hub healthy` });
+  if (up(tag) && await fx.healthy()) return save({ mode: "release", status: "deployed", version: tag, sha: target, previous: prev, at: now(), detail: `deployed ${tag} (was ${prev}); hub healthy` });
 
   fx.log(`${now()} ${tag} failed to come up healthy; rolling back to ${prev}`);
-  if (up(head) && await fx.healthy()) return save({ status: "rolled-back", version: prev, sha: head, previous: tag, at: now(), detail: `${tag} didn't come up healthy; back on ${prev}. Fix forward with a new release.` });
-  return save({ status: "down", version: prev, sha: head, previous: tag, at: now(), detail: `${tag} didn't come up healthy and rolling back to ${prev} didn't either; the hub needs a look` });
+  if (up(head) && await fx.healthy()) return save({ mode: "release", status: "rolled-back", version: prev, sha: head, previous: tag, at: now(), detail: `${tag} didn't come up healthy; back on ${prev}. Fix forward with a new release.` });
+  return save({ mode: "release", status: "down", version: prev, sha: head, previous: tag, at: now(), detail: `${tag} didn't come up healthy and rolling back to ${prev} didn't either; the hub needs a look` });
+}
+
+// `go <sha|main>`: take exactly one commit of origin/main, verified by the hub's own code sha.
+export async function deployGo(o: { app: string; want: string; remote?: string; fx: GoEffects; state?: string; hold?: string; now?: () => Date }): Promise<DeployState> {
+  const { app, fx } = o;
+  const remote = o.remote ?? "origin", file = o.state ?? statePath();
+  const now = () => (o.now?.() ?? new Date()).toISOString();
+  const last = readState(file);
+  const short = (x?: string) => x?.slice(0, 7) ?? "nothing";
+  const save = (s: Omit<DeployState, "checked_at" | "mode">): DeployState => {
+    const full: DeployState = { mode: "go", ...s, checked_at: now() };
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(full, null, 2) + "\n");
+    fx.log(`${full.checked_at} ${full.status}: ${full.detail}`);
+    return full;
+  };
+  const keep = { version: last?.version, sha: last?.sha, running: last?.running, previous: last?.previous, at: last?.at };
+  if (existsSync(o.hold ?? holdPath())) return save({ ...keep, status: "held", detail: "on hold (bun scripts/deploy.ts unhold, then go again)" });
+  const f = git(app, "fetch", "-q", remote, `+refs/heads/main:refs/remotes/${remote}/main`);
+  if (!f.ok) return save({ ...keep, status: "error", detail: `fetch failed: ${f.out.split("\n")[0]}` });
+  const ref = o.want === "main" ? `refs/remotes/${remote}/main` : o.want;
+  const t = /^[0-9a-f]{4,40}$/i.test(ref) || ref.startsWith("refs/remotes/") ? git(app, "rev-parse", "--verify", "-q", `${ref}^{commit}`) : { ok: false, out: "" };
+  if (!t.ok) return save({ ...keep, status: "error", detail: `${o.want} is not a commit here (a sha from main, or main); not deploying` });
+  const target = t.out;
+  if (!git(app, "merge-base", "--is-ancestor", target, `refs/remotes/${remote}/main`).ok) return save({ ...keep, status: "error", detail: `${short(target)} is not on ${remote}/main; not deploying` });
+  const head = git(app, "rev-parse", "HEAD").out;
+  const report = async (s: Omit<DeployState, "checked_at" | "mode">): Promise<DeployState> => {
+    // The north star for the code that runs now: counts only, report-only (no alert, no block).
+    let ns: NorthStarRecord | undefined, why = "";
+    try { ns = await fx.northStar(target); } catch (e) { why = (e as Error).message; }
+    if (!ns) { fx.log(`north star: didn't run: ${why || "no record"}`); return save(s); }
+    const { at: _at, ...kept } = ns;
+    fx.log(northStarLine(ns));
+    return save({ ...s, north_star: kept });
+  };
+  if (head === target && (await fx.code(target)) === target) return report({ ...keep, sha: target, running: target, status: "current", detail: `already running ${short(target)}; hub reports it` });
+  const dirty = git(app, "status", "--porcelain", "--untracked-files=no").out;
+  if (dirty) return save({ ...keep, status: "blocked", detail: `${app} has uncommitted changes (${dirty.split("\n").length} file(s)); not deploying ${short(target)} over them` });
+
+  fx.log(`${now()} deploying ${short(target)} (was ${short(head)})`);
+  const restart = () => { writeFileSync(join(dirname(file), "deploy.restart"), now() + "\n"); return fx.restart(); };
+  const up = (sha: string) => git(app, "checkout", "-q", "--detach", sha).ok && fx.install(app) && restart();
+  // Healthy is not enough: the restarted hub must say it runs the sha asked for.
+  const verify = async (sha: string): Promise<{ ok: boolean; why: string; code?: string }> => {
+    if (!await fx.healthy()) return { ok: false, why: "not healthy" };
+    const code = await fx.code(sha);
+    return code === sha ? { ok: true, why: "", code } : { ok: false, why: code ? `healthy but reported ${short(code)}` : "healthy but reported no code", code };
+  };
+  const v = up(target) ? await verify(target) : { ok: false, why: "install or restart failed" };
+  if (v.ok) return report({ status: "deployed", sha: target, running: target, previous: head, at: now(), detail: `deployed ${short(target)} (was ${short(head)}); hub healthy and running ${short(target)}` });
+
+  fx.log(`${now()} ${short(target)} failed (${v.why}); rolling back to ${short(head)}`);
+  const back = up(head) && await fx.healthy();
+  const code = back ? await fx.code(head) : undefined;
+  if (back) return save({ status: "rolled-back", sha: head, running: code, previous: target, at: now(), detail: `${short(target)} ${v.why}, asked ${short(target)}; back on ${short(head)}${code === head ? "" : ` (hub reports ${short(code)})`}` });
+  return save({ status: "down", sha: head, previous: target, at: now(), detail: `${short(target)} ${v.why} and rolling back to ${short(head)} didn't come up healthy either; the hub needs a look` });
 }
 
 // The real effects on the Mac.
 const run = (cmd: string[], cwd?: string) => Bun.spawnSync(cmd, { cwd, stdout: "inherit", stderr: "inherit" }).exitCode === 0;
-export function macEffects(health: string): Effects {
+export function macEffects(health: string, brain?: string): GoEffects {
   const uid = Bun.spawnSync(["id", "-u"], { stdout: "pipe" }).stdout.toString().trim();
   return {
     install: (dir) => run(["bun", "install", "--frozen-lockfile"], dir),
@@ -111,8 +185,34 @@ export function macEffects(health: string): Effects {
       }
       return false;
     },
+    // The sha the hub started on, from its own /health; a few tries while a slow start catches up.
+    code: async (expect) => {
+      let seen: string | undefined;
+      for (let i = 0; i < 10; i++) {
+        try { const r = await fetch(health, { signal: AbortSignal.timeout(3000) }); seen = ((await r.json()) as { code?: string }).code; } catch { seen = undefined; }
+        if (!expect || seen === expect) return seen;
+        await Bun.sleep(2000);
+      }
+      return seen;
+    },
+    northStar: async (code) => {
+      if (!brain) throw new Error("no brain folder known (pass --brain, or set PB_BRAIN)");
+      return northStarFor(brain, code);
+    },
     log: (l) => console.log(l),
   };
+}
+
+// deploy go reads the running sha from /health, which answers it only on loopback.
+export function loopbackHealth(u: string): boolean {
+  try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(u).hostname); } catch { return false; }
+}
+
+// The hub's brain, for the north star: --brain, $PB_BRAIN, or the one `init` remembered.
+function brainFolder(given?: string): string | undefined {
+  if (given) return resolve(given);
+  if (process.env.PB_BRAIN) return process.env.PB_BRAIN;
+  try { const p = readFileSync(join(configDir(), "brain"), "utf8").trim(); return p && existsSync(join(p, "rules")) ? p : undefined; } catch { return undefined; }
 }
 
 export function updatePlist(o: { bun: string; app: string; home: string; minutes: number }): string {
@@ -161,6 +261,18 @@ async function main(argv: string[]): Promise<number> {
   if (cmd === "hold") { mkdirSync(configDir(), { recursive: true }); writeFileSync(holdPath(), new Date().toISOString() + "\n"); console.log("on hold: the hub stays on its version"); return 0; }
   if (cmd === "unhold") { rmSync(holdPath(), { force: true }); console.log("following releases again"); return 0; }
   if (cmd === "plist") { console.log(updatePlist({ bun: Bun.which("bun") ?? "/opt/homebrew/bin/bun", app, home: homedir(), minutes: Number(opt("--minutes") ?? 10) })); return 0; }
+  if (cmd === "go") {
+    const want = argv[1];
+    if (!want || want.startsWith("--")) { console.error("usage: bun scripts/deploy.ts go <sha|main> [--app <dir>] [--health <url>] [--brain <dir>]"); return 2; }
+    const health = opt("--health") ?? "http://127.0.0.1:8787/health";
+    if (!loopbackHealth(health)) { console.error(`--health must be the hub on loopback (http://127.0.0.1:<port>/health): only there does /health name the sha it runs; got ${health}`); return 2; }
+    const unlock = lock();
+    if (!unlock) { console.log("another pass is running"); return 1; }
+    try {
+      const s = await deployGo({ app, want, fx: macEffects(health, brainFolder(opt("--brain"))) });
+      return ["deployed", "current"].includes(s.status) ? 0 : 1;
+    } finally { unlock(); }
+  }
   if (cmd === "run") {
     const unlock = lock();
     if (!unlock) { console.log("another pass is running"); return 0; }
@@ -169,7 +281,7 @@ async function main(argv: string[]): Promise<number> {
       return ["deployed", "current", "held"].includes(s.status) ? 0 : 1;
     } finally { unlock(); }
   }
-  console.error("usage: bun scripts/deploy.ts run|status|hold|unhold|plist [--app <dir>] [--health <url>] [--minutes <n>]");
+  console.error("usage: bun scripts/deploy.ts go <sha|main>|run|status|hold|unhold|plist [--app <dir>] [--health <url>] [--brain <dir>] [--minutes <n>]");
   return 2;
 }
 

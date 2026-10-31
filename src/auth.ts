@@ -16,17 +16,26 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 
 // role: absent on a token that does everything its agent may (every token before G18).
 // expires: set when the token was rotated out (`token rotate`); past it, the token is refused and
-// the line is dropped at the next change to the file.
+// the line is dropped at the next change to the file. A token never rotated expires
+// TOKEN_MAX_DAYS after it was issued (outside review 2026-10-25, G419: before, it lived forever).
 interface TokenFile { agents: Record<string, { hash: string; issued: string; role?: TokenRole; expires?: string }[]> }
 
+export const TOKEN_MAX_DAYS = 90;
 const now = () => (process.env.PB_NOW ? Date.parse(process.env.PB_NOW) : Date.now());
-const alive = (e: { expires?: string }) => !e.expires || Date.parse(e.expires) > now(); // an unreadable date counts as past
+// When a token stops working: its rotation overlap, else 90 days after the day it was issued.
+export const tokenExpiry = (e: { issued?: string; expires?: string }): number => e.expires ? Date.parse(e.expires) : Date.parse(`${e.issued}T00:00:00Z`) + TOKEN_MAX_DAYS * 86_400_000;
+const alive = (e: { issued?: string; expires?: string }) => tokenExpiry(e) > now(); // an unreadable date counts as past
 
 const file = (root: string) => join(root, "rules", "tokens.yaml");
 
 function load(root: string): TokenFile {
   const t = readYaml<Partial<TokenFile>>(file(root), {});
   return { ...t, agents: t.agents ?? {} };
+}
+
+// Every listed token, expired ones too, so doctor can say which stopped working (dates only).
+export function tokenDates(root: string): Record<string, { role?: TokenRole; issued: string; expires: number }[]> {
+  return Object.fromEntries(Object.entries(load(root).agents).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, v.map((e) => ({ ...(e.role ? { role: e.role } : {}), issued: e.issued, expires: tokenExpiry(e) }))]));
 }
 
 // Issued tokens per agent (hashes and dates only), for the owner dashboard.
@@ -37,7 +46,9 @@ export function tokenInfo(root: string): TokenFile["agents"] {
 }
 
 function save(root: string, t: TokenFile, message = "owner: server tokens changed") {
-  for (const [k, v] of Object.entries(t.agents)) if (Array.isArray(v)) { const keep = v.filter(alive); if (keep.length) t.agents[k] = keep; else delete t.agents[k]; }
+  // A rotated-out line goes once its overlap ends; one past its 90 days stays listed (refused) so
+  // doctor can name it, until the owner rotates or revokes it.
+  for (const [k, v] of Object.entries(t.agents)) if (Array.isArray(v)) { const keep = v.filter((e) => !e.expires || alive(e)); if (keep.length) t.agents[k] = keep; else delete t.agents[k]; }
   mkdirSync(join(root, "rules"), { recursive: true });
   writeFileSync(file(root), "# Hashes of the live server's per-agent tokens. Only the owner edits this file (pocketbrain token).\n" + YAML.stringify(t));
   git(root, ["add", "rules/tokens.yaml"]);
@@ -79,20 +90,30 @@ export function rotateToken(root: string, agent: string, o: { role?: TokenRole; 
   const t = load(root);
   const list = (t.agents[agent] ??= []);
   let expiring = 0;
-  for (const e of list) if ((e.role ?? undefined) === o.role && alive(e)) { if (!e.expires || e.expires > expires) e.expires = expires; expiring++; }
+  for (const e of list) if ((e.role ?? undefined) === o.role) {
+    if (alive(e)) { if (!e.expires || e.expires > expires) e.expires = expires; expiring++; }
+    else if (!e.expires) e.expires = new Date(tokenExpiry(e) || 0).toISOString(); // past its 90 days: dropped below, never revived
+  }
   list.push({ hash: sha256(token), issued: new Date(now()).toISOString().slice(0, 10), ...(o.role ? { role: o.role } : {}) });
   save(root, t, `owner: ${agent} token rotated; the old one works until ${expires}`);
   return { token, expires, expiring };
 }
 
-// Cuts the agent off everywhere: its pasted tokens and every OAuth connection bound to it.
+// Cuts the agent off everywhere: its open one-time codes, its pasted tokens and every OAuth
+// connection bound to it. G336: the codes go first, so a revoke can't stop halfway with the keys
+// gone and a code still able to mint a new one. If the invites lock stays busy (cancelInvites
+// waits 3 s), the sign-ins are revoked anyway and the revoke throws before any key is removed,
+// so the owner sees it failed and runs it again.
 export function revokeTokens(root: string, agent: string): number {
+  let busy: Error | undefined;
+  try { cancelInvites(root, agent); } catch (e) { busy = e as Error; }
+  const clients = revokeAgentClients(root, agent);
+  if (busy) throw new Error(`${agent}: its ${clients} sign-in(s) were revoked, but not its keys: ${busy.message}. Its keys still work; run the revoke again (or pause ${agent} on the dashboard).`);
   const t = load(root);
   const n = t.agents[agent]?.length ?? 0;
   delete t.agents[agent];
   save(root, t);
-  cancelInvites(root, agent);
-  return n + revokeAgentClients(root, agent);
+  return n + clients;
 }
 
 // Keeps only the agent's tokens whose hash passes `keep` (the gardener's rotation). Returns how

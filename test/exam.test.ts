@@ -159,6 +159,21 @@ test("the exam runs weekly: on Sundays, or when the last run is over a week old"
   expect(examDue(root, new Date("2026-10-19T12:00:00Z"))).toBe(true); // slept through Sunday
 });
 
+test("the exam's Sunday and its once-a-day are the owner's (Toronto), whatever the machine's zone", () => {
+  const root = brain();
+  const tz = process.env.TZ;
+  try {
+    // Sunday 21:00 in Toronto is Monday 01:00 UTC: a new hub's first Sunday all the same.
+    process.env.TZ = "UTC";
+    expect(examDue(root, new Date("2026-10-12T01:00:00Z"))).toBe(true);
+    // Run at the Sunday routine's 19:59 Toronto (23:59 UTC); at 20:30 Toronto it's still that Sunday.
+    process.env.TZ = "America/Toronto";
+    process.env.PB_NOW = "2026-10-11T23:59:00Z";
+    examRun(root);
+    expect(examDue(root, new Date("2026-10-12T00:30:00Z"))).toBe(false);
+  } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
+});
+
 test("questions just asked, not yet due, grade nothing", () => {
   const root = brain();
   askJane(root, "helper");

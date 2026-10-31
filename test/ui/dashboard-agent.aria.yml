@@ -1,77 +1,143 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
-  - heading "planner active" [level=1]
-  - paragraph:
-    - text: Sees 3 of 6 notes and 3 facts. Hasn't connected yet.
-    - link "4 things to check":
-      - /url: "#check"
+  - heading "Claude active" [level=1]
+  - paragraph: Sees 99 of 102 notes and 459 facts, with 1 fact held back. 12 reads and 2 writes so far.
   - term: Trust
   - definition: trusted
   - term: Connects as
-  - definition: pasted notes
+  - definition: connector
   - term: Sees
-  - definition: work notes, contacts basic · up to private notes
-  - term: Not shared
-  - definition: money
+  - definition: all · up to private notes
   - term: Last seen
-  - definition: never
+  - definition: 70 min ago
   - term: Budget
   - definition: counted by the hub (pocketbrain start), not by this dashboard on its own
+  - term: Writes
+  - definition: "2 writes in 30 days: 2 kept, 0 corrected, 0 reverted; 0 proposals: 0 accepted, 0 rejected (100% kept)"
   - button "Read-only"
   - button "Pause"
-  - heading "What is planner for?" [level=2]
+  - button "Revoke access"
+  - text: "A new key made in a terminal needs your yes:"
+  - button "One-time code"
+  - text: then
+  - code: pocketbrain token --agent claude --code <code>
+  - heading "What is Claude for?" [level=2]
   - paragraph: Say it in one sentence. You get the slice it would see, with examples, before anything changes.
-  - textbox "What is planner for?":
+  - textbox "What is Claude for?":
     - /placeholder: Handles family logistics
   - button "Propose"
-  - heading "What planner sees" [level=2]
+  - heading "What Claude sees" [level=2]
   - group: Show the summary as the code writes it
   - paragraph:
-    - link "Open the exact view planner gets":
-      - /url: /agent/planner/view
+    - link "Open the exact view Claude gets":
+      - /url: /agent/claude/view
     - text: (exactly the text it is given). See
     - link "what it looked for":
       - /url: "#looked-for"
     - text: .
   - heading "Left out" [level=3]
-  - text: outside granted slices (2) type money not shared (1)
+  - text: conflict packet (owner and resolver only) (3)
   - heading "Facts held back" [level=3]
-  - text: None.
-  - heading "Check these" [level=3]
-  - text: "links to a hidden noteCourse A prose links to Main bank (shown as [[redacted]]) mentions a private kind of detailCourse A mentions \"bank\" (money is not shared) mentions a hidden valueCourse B mentions \"Maple Trust Bank\", which is carved out (Main bank: bank) mentions a private kind of detailCourse B mentions \"Bank\" (money is not shared)"
+  - table:
+    - rowgroup:
+      - 'row "Hélène Lefebvre: prefers do not share (only the owner)"':
+        - 'cell "Hélène Lefebvre: prefers"'
+        - cell "do not share (only the owner)"
   - heading "What it looked for" [level=2]
+  - paragraph: 9 different searches; 0 notes asked for and not given.
   - heading "Searches" [level=3]
-  - text: No searches yet.
+  - table:
+    - rowgroup:
+      - row "Words How Found Last time":
+        - cell "Words"
+        - cell "How"
+        - cell "Found"
+        - cell "Last time"
+    - rowgroup:
+      - 'row "\"Product Discovery course\" loaded its notes 4 notes: Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie 2026-10-08 08:50"':
+        - cell "\"Product Discovery course\""
+        - cell "loaded its notes"
+        - 'cell "4 notes: Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie"'
+        - cell "2026-10-08 08:50"
+      - 'row "\"Kitchen renovation\" loaded its notes 4 notes: Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent 2026-10-08 08:28"':
+        - cell "\"Kitchen renovation\""
+        - cell "loaded its notes"
+        - 'cell "4 notes: Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent"'
+        - cell "2026-10-08 08:28"
+      - 'row "\"Grace Liu\" 2 times loaded its notes 3 notes: Grace Liu, Karen Liu, Harbourline Software 2026-10-08 08:06"':
+        - cell "\"Grace Liu\" 2 times"
+        - cell "loaded its notes"
+        - 'cell "3 notes: Grace Liu, Karen Liu, Harbourline Software"'
+        - cell "2026-10-08 08:06"
+      - 'row "\"Q1 roadmap\" 2 times loaded its notes 4 notes: Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah 2026-10-08 07:44"':
+        - cell "\"Q1 roadmap\" 2 times"
+        - cell "loaded its notes"
+        - 'cell "4 notes: Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"'
+        - cell "2026-10-08 07:44"
+      - 'row "\"Maya Chen\" loaded its notes 3 notes: Maya Chen, Senior designer hire, Atlas launch 2026-10-08 07:22"':
+        - cell "\"Maya Chen\""
+        - cell "loaded its notes"
+        - 'cell "3 notes: Maya Chen, Senior designer hire, Atlas launch"'
+        - cell "2026-10-08 07:22"
+      - 'row "\"Atlas launch\" 2 times loaded its notes 3 notes: Atlas launch, Atlas beta scope, Robin Lefebvre 2026-10-08 07:00"':
+        - cell "\"Atlas launch\" 2 times"
+        - cell "loaded its notes"
+        - 'cell "3 notes: Atlas launch, Atlas beta scope, Robin Lefebvre"'
+        - cell "2026-10-08 07:00"
+      - 'row "\"Pinecrest pilot\" loaded its notes 7 notes: Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs +3 2026-10-07 07:22"':
+        - cell "\"Pinecrest pilot\""
+        - cell "loaded its notes"
+        - 'cell "7 notes: Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs +3"'
+        - cell "2026-10-07 07:22"
+      - 'row "\"Priya Shah\" loaded its notes 5 notes: Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors +1 2026-10-07 07:00"':
+        - cell "\"Priya Shah\""
+        - cell "loaded its notes"
+        - 'cell "5 notes: Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors +1"'
+        - cell "2026-10-07 07:00"
+      - 'row "\"Mom''s move\" loaded its notes 4 notes: Hélène Lefebvre, Mom''s move, Mom moves in December, Marc Lefebvre 2026-10-06 07:00"':
+        - cell "\"Mom's move\""
+        - cell "loaded its notes"
+        - 'cell "4 notes: Hélène Lefebvre, Mom''s move, Mom moves in December, Marc Lefebvre"'
+        - cell "2026-10-06 07:00"
   - heading "Asked for and didn't get" [level=3]
   - text: Nothing refused.
   - heading "What it read, day by day" [level=3]
-  - text: Nothing read in the last 7 days.
+  - table:
+    - rowgroup:
+      - row "Day Notes it was handed Also":
+        - cell "Day"
+        - cell "Notes it was handed"
+        - cell "Also"
+    - rowgroup:
+      - row "2026-10-08 Atlas launch x2, Atlas beta scope, Harbourline Software, Ahmed Saleh, Antoine Lavoie, Claire Dubois, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe, Laila Haddad, Luc Gauthier +8 6 searches":
+        - cell "2026-10-08"
+        - cell "Atlas launch x2, Atlas beta scope, Harbourline Software, Ahmed Saleh, Antoine Lavoie, Claire Dubois, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe, Laila Haddad, Luc Gauthier +8"
+        - cell "6 searches"
+      - row "2026-10-07 Hire a senior designer, not two juniors, Three-month Pinecrest pilot, Harbourline Software, Pinecrest Labs, Aisha Rahman, Ben Carter, Chloé Gagnon, Daniel Okoro, Priya Shah, Ravi Menon, Pinecrest pilot, Q1 roadmap 2 searches":
+        - cell "2026-10-07"
+        - cell "Hire a senior designer, not two juniors, Three-month Pinecrest pilot, Harbourline Software, Pinecrest Labs, Aisha Rahman, Ben Carter, Chloé Gagnon, Daniel Okoro, Priya Shah, Ravi Menon, Pinecrest pilot, Q1 roadmap"
+        - cell "2 searches"
+      - row "2026-10-06 Mom moves in December, Hélène Lefebvre, Marc Lefebvre, Mom's move 1 search":
+        - cell "2026-10-06"
+        - cell "Mom moves in December, Hélène Lefebvre, Marc Lefebvre, Mom's move"
+        - cell "1 search"
+      - row "2026-10-05 Harbourline Software, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe, Robert Ellis, Robin Lefebvre, Theo Lefebvre, Atlas launch, Q1 roadmap 2 searches":
+        - cell "2026-10-05"
+        - cell "Harbourline Software, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe, Robert Ellis, Robin Lefebvre, Theo Lefebvre, Atlas launch, Q1 roadmap"
+        - cell "2 searches"
+      - row "2026-10-02 Atlas beta scope, Weekly Atlas review on Wednesdays, Daniel Okoro, Hannah Becker, Maya Chen, Omar Haddad, Sofia Marquez, Atlas launch 1 search":
+        - cell "2026-10-02"
+        - cell "Atlas beta scope, Weekly Atlas review on Wednesdays, Daniel Okoro, Hannah Becker, Maya Chen, Omar Haddad, Sofia Marquez, Atlas launch"
+        - cell "1 search"
   - paragraph:
     - text: "Also from the command line:"
-    - code: pocketbrain reads planner
+    - code: pocketbrain reads claude
     - text: .
   - heading "Memory exam" [level=2]
   - paragraph:
@@ -81,17 +147,20 @@
     - code: pocketbrain memsync list
     - text: .
   - term: Grade
-  - definition: no data
+  - definition: watch
   - term: Memory in sync
   - definition: 0 of 0 answers
   - term: Read before writing
-  - definition: n/a of 0 writes
+  - definition: 0% of 2 writes
   - term: Refused for the source
   - definition: "0"
   - term: Outside its view
   - definition: 0 asks, 0 leak alerts
-  - heading "Notes in the slice" [level=2]
-  - heading "people (1)" [level=3]
+  - list:
+    - listitem: 2 of 2 write(s) with no read first
+    - listitem: "hasn't called memory_check in 2 days: it isn't syncing on its own (sync routine: not set up)"
+  - heading "Notes it can see" [level=2]
+  - heading "Decisions (10)" [level=3]
   - table:
     - rowgroup:
       - row "Note Sensitivity Facts shown Text":
@@ -100,12 +169,57 @@
         - cell "Facts shown"
         - cell "Text"
     - rowgroup:
-      - row "Jane Roy personal 2/2 yes":
-        - cell "Jane Roy"
+      - row "Atelier Boréal for the kitchen personal 2/2 yes":
+        - cell "Atelier Boréal for the kitchen"
         - cell "personal"
         - cell "2/2"
         - cell "yes"
-  - heading "projects (2)" [level=3]
+      - row "Atlas beta scope personal 2/2 yes":
+        - cell "Atlas beta scope"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Final projects in teams of four personal 2/2 yes":
+        - cell "Final projects in teams of four"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Hire a senior designer, not two juniors personal 2/2 yes":
+        - cell "Hire a senior designer, not two juniors"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Northgate for the pricing page personal 2/2 yes":
+        - cell "Northgate for the pricing page"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Three guest speakers this term personal 2/2 yes":
+        - cell "Three guest speakers this term"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Red River in April personal 2/2 yes":
+        - cell "Red River in April"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Mom moves in December personal 2/2 yes":
+        - cell "Mom moves in December"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Three-month Pinecrest pilot personal 2/2 yes":
+        - cell "Three-month Pinecrest pilot"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Weekly Atlas review on Wednesdays personal 2/2 yes":
+        - cell "Weekly Atlas review on Wednesdays"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+  - heading "Money (2)" [level=3]
   - table:
     - rowgroup:
       - row "Note Sensitivity Facts shown Text":
@@ -114,19 +228,566 @@
         - cell "Facts shown"
         - cell "Text"
     - rowgroup:
-      - row "Course A personal 1/1 yes":
-        - cell "Course A"
-        - cell "personal"
-        - cell "1/1"
+      - row "Household taxes private 2/2 yes":
+        - cell "Household taxes"
+        - cell "private"
+        - cell "2/2"
         - cell "yes"
-      - row "Course B personal 0/0 yes":
-        - cell "Course B"
+      - row "Kitchen budget private 3/3 yes":
+        - cell "Kitchen budget"
+        - cell "private"
+        - cell "3/3"
+        - cell "yes"
+  - heading "Organisations (12)" [level=3]
+  - table:
+    - rowgroup:
+      - row "Note Sensitivity Facts shown Text":
+        - cell "Note"
+        - cell "Sensitivity"
+        - cell "Facts shown"
+        - cell "Text"
+    - rowgroup:
+      - row "Atelier Boréal personal 2/2 yes":
+        - cell "Atelier Boréal"
         - cell "personal"
-        - cell "0/0"
+        - cell "2/2"
+        - cell "yes"
+      - row "Fernwood Climbing Gym personal 2/2 yes":
+        - cell "Fernwood Climbing Gym"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Fieldnote personal 2/2 yes":
+        - cell "Fieldnote"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Gaspé Cottages personal 2/2 yes":
+        - cell "Gaspé Cottages"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Harbourline Software personal 2/2 yes":
+        - cell "Harbourline Software"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Lakeshore College personal 2/2 yes":
+        - cell "Lakeshore College"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Maison des Pins personal 2/2 yes":
+        - cell "Maison des Pins"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Northgate Design Studio personal 2/2 yes":
+        - cell "Northgate Design Studio"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Parc Avenue Books personal 2/2 yes":
+        - cell "Parc Avenue Books"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Pinecrest Labs personal 2/2 yes":
+        - cell "Pinecrest Labs"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Rosemont Children's Choir personal 2/2 yes":
+        - cell "Rosemont Children's Choir"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+      - row "Tilehouse Supply personal 2/2 yes":
+        - cell "Tilehouse Supply"
+        - cell "personal"
+        - cell "2/2"
+        - cell "yes"
+  - heading "People (61)" [level=3]
+  - table:
+    - rowgroup:
+      - row "Note Sensitivity Facts shown Text":
+        - cell "Note"
+        - cell "Sensitivity"
+        - cell "Facts shown"
+        - cell "Text"
+    - rowgroup:
+      - row "Ahmed Saleh personal 5/5 yes":
+        - cell "Ahmed Saleh"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Aisha Rahman personal 6/6 yes":
+        - cell "Aisha Rahman"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Anne Ellis personal 6/6 yes":
+        - cell "Anne Ellis"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Antoine Lavoie personal 6/6 yes":
+        - cell "Antoine Lavoie"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Bea Thompson personal 5/5 yes":
+        - cell "Bea Thompson"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Ben Carter personal 6/6 yes":
+        - cell "Ben Carter"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Camille Lefebvre personal 4/4 yes":
+        - cell "Camille Lefebvre"
+        - cell "personal"
+        - cell "4/4"
+        - cell "yes"
+      - row "Chloé Gagnon personal 6/6 yes":
+        - cell "Chloé Gagnon"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Claire Dubois personal 6/6 yes":
+        - cell "Claire Dubois"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Daniel Okoro personal 7/7 yes":
+        - cell "Daniel Okoro"
+        - cell "personal"
+        - cell "7/7"
+        - cell "yes"
+      - row "Diego Alvarez personal 5/5 yes":
+        - cell "Diego Alvarez"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Elena Rossi personal 6/6 yes":
+        - cell "Elena Rossi"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Emma Wilson personal 4/4 yes":
+        - cell "Emma Wilson"
+        - cell "personal"
+        - cell "4/4"
+        - cell "yes"
+      - row "Ethan Brooks personal 6/6 yes":
+        - cell "Ethan Brooks"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Fatima Diallo personal 6/6 yes":
+        - cell "Fatima Diallo"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Felix Moreau personal 6/6 yes":
+        - cell "Felix Moreau"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Grace Liu personal 6/6 yes":
+        - cell "Grace Liu"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Hannah Becker personal 6/6 yes":
+        - cell "Hannah Becker"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Hélène Lefebvre personal 7/7 yes":
+        - cell "Hélène Lefebvre"
+        - cell "personal"
+        - cell "7/7"
+        - cell "yes"
+      - row "Hugo Martin personal 3/3 yes":
+        - cell "Hugo Martin"
+        - cell "personal"
+        - cell "3/3"
+        - cell "yes"
+      - row "Inès Bouchard personal 6/6 yes":
+        - cell "Inès Bouchard"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Isabelle Roy personal 6/6 yes":
+        - cell "Isabelle Roy"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Jacob Stein personal 6/6 yes":
+        - cell "Jacob Stein"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Jordan Ellis personal 6/6 yes":
+        - cell "Jordan Ellis"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Julie Tran personal 6/6 yes":
+        - cell "Julie Tran"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Kai Nakamura personal 5/5 yes":
+        - cell "Kai Nakamura"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Karen Liu personal 5/5 yes":
+        - cell "Karen Liu"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Kenji Watanabe personal 6/6 yes":
+        - cell "Kenji Watanabe"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Laila Haddad personal 6/6 yes":
+        - cell "Laila Haddad"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Léa Lefebvre personal 5/5 yes":
+        - cell "Léa Lefebvre"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Lina Sato personal 6/6 yes":
+        - cell "Lina Sato"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Luc Gauthier personal 6/6 yes":
+        - cell "Luc Gauthier"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Lucas Bergeron personal 6/6 yes":
+        - cell "Lucas Bergeron"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Lucas Fontaine personal 6/6 yes":
+        - cell "Lucas Fontaine"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Marc-André Côté personal 6/6 yes":
+        - cell "Marc-André Côté"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Marc Lefebvre personal 6/6 yes":
+        - cell "Marc Lefebvre"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Marcus Webb personal 6/6 yes":
+        - cell "Marcus Webb"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Martin Leclerc personal 4/4 yes":
+        - cell "Martin Leclerc"
+        - cell "personal"
+        - cell "4/4"
+        - cell "yes"
+      - row "Maya Chen personal 6/6 yes":
+        - cell "Maya Chen"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Mei Lin personal 6/6 yes":
+        - cell "Mei Lin"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Nadia Lefebvre personal 4/4 yes":
+        - cell "Nadia Lefebvre"
+        - cell "personal"
+        - cell "4/4"
+        - cell "yes"
+      - row "Nina Petrova personal 5/5 yes":
+        - cell "Nina Petrova"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Olivier Pelletier personal 5/5 yes":
+        - cell "Olivier Pelletier"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Omar Haddad personal 6/6 yes":
+        - cell "Omar Haddad"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Patrick O'Neil personal 5/5 yes":
+        - cell "Patrick O'Neil"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Peter Novak personal 6/6 yes":
+        - cell "Peter Novak"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Priya Shah personal 7/7 yes":
+        - cell "Priya Shah"
+        - cell "personal"
+        - cell "7/7"
+        - cell "yes"
+      - row "Rachel Adler personal 6/6 yes":
+        - cell "Rachel Adler"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Ravi Menon personal 6/6 yes":
+        - cell "Ravi Menon"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Robert Ellis personal 4/4 yes":
+        - cell "Robert Ellis"
+        - cell "personal"
+        - cell "4/4"
+        - cell "yes"
+      - row "Robin Lefebvre personal 5/5 yes":
+        - cell "Robin Lefebvre"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Sam Patel personal 5/5 yes":
+        - cell "Sam Patel"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Sarah Kim personal 6/6 yes":
+        - cell "Sarah Kim"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Simone Laurent personal 6/6 yes":
+        - cell "Simone Laurent"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Sofia Marquez personal 6/6 yes":
+        - cell "Sofia Marquez"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Sophie Girard personal 5/5 yes":
+        - cell "Sophie Girard"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Theo Lefebvre personal 4/4 yes":
+        - cell "Theo Lefebvre"
+        - cell "personal"
+        - cell "4/4"
+        - cell "yes"
+      - row "Tomás Rivera personal 6/6 yes":
+        - cell "Tomás Rivera"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Valérie Roy personal 6/6 yes":
+        - cell "Valérie Roy"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+      - row "Yusuf Kaya personal 5/5 yes":
+        - cell "Yusuf Kaya"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Zoe Harper personal 6/6 yes":
+        - cell "Zoe Harper"
+        - cell "personal"
+        - cell "6/6"
+        - cell "yes"
+  - heading "Projects (14)" [level=3]
+  - table:
+    - rowgroup:
+      - row "Note Sensitivity Facts shown Text":
+        - cell "Note"
+        - cell "Sensitivity"
+        - cell "Facts shown"
+        - cell "Text"
+    - rowgroup:
+      - row "Atlas launch personal 5/5 yes":
+        - cell "Atlas launch"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Book club, November personal 5/5 yes":
+        - cell "Book club, November"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Choir winter concert personal 5/5 yes":
+        - cell "Choir winter concert"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Senior designer hire personal 5/5 yes":
+        - cell "Senior designer hire"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Final projects personal 5/5 yes":
+        - cell "Final projects"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Gaspésie trip personal 5/5 yes":
+        - cell "Gaspésie trip"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Guest lectures personal 5/5 yes":
+        - cell "Guest lectures"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Kitchen renovation personal 5/5 yes":
+        - cell "Kitchen renovation"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Mom's move personal 5/5 yes":
+        - cell "Mom's move"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Pinecrest pilot personal 5/5 yes":
+        - cell "Pinecrest pilot"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Pricing page refresh personal 5/5 yes":
+        - cell "Pricing page refresh"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Product Discovery course personal 5/5 yes":
+        - cell "Product Discovery course"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Q1 roadmap personal 5/5 yes":
+        - cell "Q1 roadmap"
+        - cell "personal"
+        - cell "5/5"
+        - cell "yes"
+      - row "Red River climbing trip personal 5/5 yes":
+        - cell "Red River climbing trip"
+        - cell "personal"
+        - cell "5/5"
         - cell "yes"
   - heading "Most read" [level=2]
-  - text: No reads yet.
+  - text: Atlas launch 4× Q1 roadmap 3× Harbourline Software 3× Atlas beta scope 2× Daniel Okoro 2× Maya Chen 2× Robin Lefebvre 2× Julie Tran 2× Kenji Watanabe 2× Grace Liu 2× Karen Liu 2× Priya Shah 2×
   - heading "Recent reads" [level=2]
-  - text: No reads yet.
+  - table:
+    - rowgroup:
+      - row "When Assistant What Notes":
+        - cell "When"
+        - cell "Assistant"
+        - cell "What"
+        - cell "Notes"
+    - rowgroup:
+      - row "70 min ago Claude · loaded its notes \"Product Discovery course\" · Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie":
+        - cell "70 min ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Product Discovery course\""
+        - cell "· Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie"
+      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent":
+        - cell "2 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Kitchen renovation\""
+        - cell "· Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent"
+      - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software":
+        - cell "2 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Grace Liu\""
+        - cell "· Grace Liu, Karen Liu, Harbourline Software"
+      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
+        - cell "2 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Q1 roadmap\""
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
+      - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch":
+        - cell "3 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Maya Chen\""
+        - cell "· Maya Chen, Senior designer hire, Atlas launch"
+      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Robin Lefebvre":
+        - cell "3 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Atlas launch\""
+        - cell "· Atlas launch, Atlas beta scope, Robin Lefebvre"
+      - row "27 h ago Claude · loaded its notes \"Pinecrest pilot\" · Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ravi Menon, Ben Carter +1":
+        - cell "27 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Pinecrest pilot\""
+        - cell "· Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ravi Menon, Ben Carter +1"
+      - row "27 h ago Claude · loaded its notes \"Priya Shah\" · Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman":
+        - cell "27 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Priya Shah\""
+        - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman"
+      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre":
+        - cell "2 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Mom's move\""
+        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre"
+      - row "3 days ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre":
+        - cell "3 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Grace Liu\""
+        - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre"
+      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Robin Lefebvre, Julie Tran, Kenji Watanabe":
+        - cell "3 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Q1 roadmap\""
+        - cell "· Q1 roadmap, Robin Lefebvre, Julie Tran, Kenji Watanabe"
+      - row "6 days ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker +2":
+        - cell "6 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Atlas launch\""
+        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker +2"
   - heading "Recent writes" [level=2]
-  - text: No writes yet.
+  - table:
+    - rowgroup:
+      - row "When Assistant Fact Result Checks it failed":
+        - cell "When"
+        - cell "Assistant"
+        - cell "Fact"
+        - cell "Result"
+        - cell "Checks it failed"
+    - rowgroup:
+      - 'row "2 days ago Claude · Priya Shah: prefers · saved"':
+        - cell "2 days ago"
+        - cell "Claude"
+        - 'cell "· Priya Shah: prefers"'
+        - cell "· saved"
+      - 'row "4 days ago Claude · Daniel Okoro: prefers · saved"':
+        - cell "4 days ago"
+        - cell "Claude"
+        - 'cell "· Daniel Okoro: prefers"'
+        - cell "· saved"

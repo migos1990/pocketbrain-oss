@@ -6,7 +6,7 @@ import { makeBrain } from "./fixture";
 import { handle } from "../src/server";
 import { issueToken } from "../src/auth";
 import { makeModel, type ModelRequest } from "../src/model";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { git } from "../src/git";
 import { noteSaves, actorOf } from "../src/dashboard/history";
 
@@ -22,10 +22,10 @@ function setup(fake: (req: ModelRequest) => string = () => "No model in this tes
     const body = fields ? new URLSearchParams(fields) : undefined;
     const r = await d.handle(new Request(`http://${H}${path}`, { method, body, headers: { host: H, cookie, origin: `http://${H}`, referer: `http://${H}${path.startsWith("/action") ? "/brain" : path}`, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) } }));
     const loc = r.headers.get("location") ?? "";
-    return { status: r.status, text: await r.text(), loc, ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { status: r.status, text: await r.text(), loc, ...flashOf(loc) };
   };
   const login = async () => { const r = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } })); cookie = r.headers.get("set-cookie")!.split(";")[0]; };
-  const csrf = async () => (await req("GET", "/brain")).text.match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = async () => (await req("GET", "/home")).text.match(/name="csrf" value="([^"]+)"/)![1];
   const post = async (path: string, fields: Record<string, string> = {}) => req("POST", path, { csrf: await csrf(), ...fields });
   const agent = async (who: keyof typeof tok, method: string, path: string, body?: unknown) => {
     const r = await handle(root, new Request(`http://pb${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { authorization: `Bearer ${tok[who]}` } }));

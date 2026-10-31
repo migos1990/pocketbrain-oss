@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import { join } from "node:path";
 import YAML from "yaml";
 import { hubGate } from "./hub";
+import { requestId } from "./reqid";
 
 // Anything that makes a commit passes the hub gate first (src/hub.ts): with rules/hub.yaml set,
 // only the hub commits brain changes and a replica only its own op files.
@@ -57,6 +58,13 @@ export function clearStaleLock(root: string): boolean {
   return cleared;
 }
 
+// A time git printed with %aI or %cI, as the hub writes its own: git 2.43 says "+00:00" for UTC
+// and newer git says "Z", so a string compared or sorted with the hub's times is made one shape.
+export function gitTime(at: string): string {
+  const t = Date.parse(at.trim());
+  return Number.isNaN(t) ? at.trim() : new Date(t).toISOString();
+}
+
 export function git(root: string, args: string[], author?: string): string {
   return gitRun(root, args, author).out;
 }
@@ -67,7 +75,10 @@ export function gitRun(root: string, args: string[], author?: string): { ok: boo
   if (COMMITS.has(args[0]) || args[0] === "add") clearStaleLock(root);
   // A commit never stops for git's own gc; the night pass packs instead (src/growth.ts).
   const quiet = COMMITS.has(args[0]) ? ["-c", "gc.auto=0", "-c", "maintenance.auto=false"] : [];
-  const r = Bun.spawnSync(["git", ...quiet, ...args], { cwd: root, env: authorEnv(root, author) });
+  // A commit made inside a hub request names it (src/reqid.ts), for `pocketbrain trace`.
+  const id = args[0] === "commit" ? requestId() : undefined;
+  const all = id ? ["commit", "--trailer", `Request-Id: ${id}`, ...args.slice(1)] : args;
+  const r = Bun.spawnSync(["git", ...quiet, ...all], { cwd: root, env: authorEnv(root, author) });
   return { ok: r.exitCode === 0, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() };
 }
 
@@ -76,6 +87,10 @@ export function gitRun(root: string, args: string[], author?: string): { ok: boo
 // as such and leaves nothing behind for a later commit to sweep up. Returns why, or undefined.
 export function commitPaths(root: string, paths: string[], message: string, author?: string): string | undefined {
   if (!existsSync(join(root, ".git"))) return undefined; // a brain without git (tests, cells) saves files only
+  // A path neither on disk nor tracked (a proposal file written straight into inbox/ and moved
+  // since) would fail the whole pathspec after the write already happened: it has nothing to record.
+  paths = paths.filter((p) => existsSync(join(root, p)) || Bun.spawnSync(["git", "ls-files", "--error-unmatch", "--", p], { cwd: root }).exitCode === 0);
+  if (!paths.length) return undefined;
   const add = gitRun(root, ["add", "-A", "--", ...paths]);
   // Only this write's own paths go in the commit, never whatever else was staged; a path with
   // no change (an empty disputes/) is left out so the pathspec can't fail on it.
@@ -113,3 +128,7 @@ export function headCommit(root: string, path?: string): string {
   if (tree.ok) pathCommits.set(`${root}\0${path}`, { tree: tree.out, commit });
   return commit;
 }
+
+// The path of one `git status --porcelain` line. git() trims its output, so the first line's
+// leading space is gone (" M rules/x" reads "M rules/x"): never cut a fixed three characters.
+export const porcelainPath = (line: string) => line.replace(/^[ MTADRCU?!]{1,2} /, "");

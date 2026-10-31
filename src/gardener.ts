@@ -11,8 +11,9 @@
 //   - the Anthropic side, through the `ant` CLI signed in under its own profile: deleting ended
 //     sessions (each holds a copy of what the gardener read) and rotating its token in the vault.
 //     pocketBrain stores no Anthropic key; the token goes to `ant` on stdin only.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { dirname, join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import YAML from "yaml";
 import { loadRules, readYaml, gardeners, type Rules } from "./rules";
@@ -20,13 +21,13 @@ import { loadHub } from "./hub";
 import { git } from "./git";
 import { alert, readJsonl, appendJsonl, sha256 } from "./util";
 import { issueToken, retainTokens, tokenInfo } from "./auth";
+import { spendRotateCode } from "./invite";
+import { gitSide } from "./quotes";
 
 export const SILENT_HOURS = 36;
-const DEFAULT_TZ = "America/Toronto";
-
-// The time the hub goes by. PB_NOW lets tests pin it; only the operator sets the environment.
-export const clock = () => (process.env.PB_NOW ? new Date(process.env.PB_NOW) : new Date());
-export const timezoneOf = (rules: Rules) => rules.policy.owner?.timezone?.trim() || DEFAULT_TZ;
+// The hub's clock and the owner's timezone live in src/clock.ts (one clock for every per-day rule).
+import { clock, timezoneOf } from "./clock";
+export { clock, timezoneOf };
 
 const runLog = (root: string) => join(root, "log", "gardener.jsonl");
 export interface RunEntry { at: string; agent: string; op: "upkeep_run" | "sleep_run" | "cleanup" | "rotate"; run?: string; [k: string]: unknown }
@@ -298,39 +299,90 @@ function gardenerAgentOr(root: string, cfg: GardenerConfig): string {
   try { return gardenerAgent(root, cfg); } catch { return "gardener"; }
 }
 
-// `pocketbrain gardener rotate`: a new token, into the vault on stdin, the old credential
-// archived, every older token revoked. If the vault doesn't take the new one, the new token is
-// revoked and the old one keeps working.
-export function rotate(root: string): { ok: boolean; message: string } {
-  const cfg = gardenerConfig(root);
-  if (!cfg) return { ok: false, message: "gardener rotate: no rules/gardener.yaml" };
-  const agent = gardenerAgent(root, cfg);
-  const url = cfg.mcp_url ?? (loadHub(root)?.public_url ? `${loadHub(root)!.public_url!.replace(/\/+$/, "")}/mcp` : undefined);
+// G240: the ant binary a rotation hands the gardener's token to, as one absolute file and its
+// sha256. The owner pins it with a rotation made with their one-time code (or the hub's first
+// scheduled rotation pins it); the pin lives outside git (.git/pb-gardener-ant.json).
+interface AntPin { path: string; sha: string }
+export function antBinary(cfg: GardenerConfig): AntPin | undefined {
+  const name = cfg.ant || "ant";
+  const found = name.includes("/") ? (isAbsolute(expandHome(name)) ? expandHome(name) : undefined) : Bun.which(name, { PATH: process.env.PATH ?? "" }) ?? undefined;
+  if (!found || !existsSync(found)) return undefined;
+  const path = realpathSync(found);
+  return { path, sha: createHash("sha256").update(readFileSync(path)).digest("hex") };
+}
+const pinFile = (root: string) => gitSide(root, "pb-gardener-ant.json");
+function antPin(root: string): AntPin | undefined {
+  try { const p = JSON.parse(readFileSync(pinFile(root), "utf8")); return typeof p?.path === "string" && typeof p?.sha === "string" ? p : undefined; } catch { return undefined; }
+}
+const savePin = (root: string, p: AntPin) => writeFileSync(pinFile(root), JSON.stringify(p), { mode: 0o600 });
+
+// `pocketbrain gardener rotate`: a new token, into the vault's credential for the door on stdin
+// (made if the vault has none), every older token revoked. If the vault doesn't take the new one, the new token is
+// revoked and the old one keeps working. G240: any program with a shell can run it, and the token
+// goes to whatever `ant` it finds, so from a terminal it needs the owner's one-time code (made on
+// the gardener's dashboard page, for rotation only), which also pins that ant. The hub's weekly
+// rotation (`scheduled`) sends the token only to the pinned ant; another file is refused with an
+// alert. Every rotation is a token_minted alert naming the ant.
+export function rotate(root: string, o: { code?: string; scheduled?: boolean } = {}): { ok: boolean; message: string } {
+  const cfg0 = gardenerConfig(root);
+  if (!cfg0) return { ok: false, message: "gardener rotate: no rules/gardener.yaml" };
+  const agent = gardenerAgent(root, cfg0);
+  if (!o.scheduled && o.code === undefined) return { ok: false, message: `gardener rotate: from a terminal this needs your yes. On the dashboard, open ${agent}'s page and press "Rotation code", then run: pocketbrain gardener rotate --code <code>` };
+  const url = cfg0.mcp_url ?? (loadHub(root)?.public_url ? `${loadHub(root)!.public_url!.replace(/\/+$/, "")}/mcp` : undefined);
   if (!url) return { ok: false, message: "gardener rotate: set mcp_url in rules/gardener.yaml (or public_url in hub.yaml)" };
-  const vault = lockIds(cfg)?.vault;
-  if (!vault) return { ok: false, message: `gardener rotate: no vault in ${cfg.lock_file}` };
+  const vault = lockIds(cfg0)?.vault;
+  if (!vault) return { ok: false, message: `gardener rotate: no vault in ${cfg0.lock_file}` };
+  const bin = antBinary(cfg0);
+  if (!bin) return fail(root, `ant (${cfg0.ant || "ant"}) isn't an installed file; give its absolute path as ant: in rules/gardener.yaml`);
+  const cfg = { ...cfg0, ant: bin.path };
+  const pin = antPin(root);
+  if (o.code !== undefined) {
+    const bad = spendRotateCode(root, o.code, agent);
+    if (bad) return { ok: false, message: `gardener rotate: ${bad} (a rotation code is made on ${agent}'s dashboard page and works once)` };
+    savePin(root, bin);
+  } else if (!pin) {
+    savePin(root, bin);
+    // A record, not a problem (alertOpen's INFO): the owner's home page counted it (2026-10-25).
+    alert(root, { agent, check: "gardener_ant_pinned", from: "rotate", detail: `gardener rotate: pinned ${bin.path} (sha256 ${bin.sha.slice(0, 12)}) as the ant that gets the gardener's token; from now on another one is refused` });
+  } else if (pin.path !== bin.path || pin.sha !== bin.sha) {
+    return fail(root, `ant changed since you last approved it (was ${pin.path}, sha256 ${pin.sha.slice(0, 12)}; now ${bin.path}, sha256 ${bin.sha.slice(0, 12)}), so no token was sent. If you updated ant yourself, open ${agent}'s dashboard page, press "Rotation code", then run: pocketbrain gardener rotate --code <code>`);
+  }
   const notReady = antReady(root, cfg, "rotate");
   if (notReady) return { ok: false, message: `gardener rotate: ${notReady}` };
   const listed = ant(cfg, ["beta:vaults:credentials", "list", "--vault-id", vault, "--format", "jsonl"]);
   if (listed.code !== 0) return fail(root, `couldn't list the vault's credentials (${listed.err.slice(0, 200)}); nothing changed`);
-  const old = jsonLines(listed.out).filter((c) => !c.archived_at && (c.auth as { mcp_server_url?: string } | undefined)?.mcp_server_url === url).map((c) => String(c.id));
+  // A vault holds one active credential per MCP server URL (a second create is a 409), matched as
+  // the vault matches it: scheme and host lowercased, default port and trailing slash dropped (G413).
+  const old = jsonLines(listed.out).filter((c) => !c.archived_at && sameMcpUrl((c.auth as { mcp_server_url?: string } | undefined)?.mcp_server_url, url)).map((c) => String(c.id));
 
   const token = issueToken(root, agent);
   const mine = sha256(token);
-  const made = ant(cfg, ["beta:vaults:credentials", "create", "--vault-id", vault, "--transform", "id", "-r"],
-    JSON.stringify({ display_name: `pocketBrain ${agent}`, auth: { type: "static_bearer", mcp_server_url: url, token } }));
+  // The door's credential, if the vault has one, takes the new token in place; otherwise one is made.
+  const [keep, ...extra] = old;
+  const made = keep
+    ? ant(cfg, ["beta:vaults:credentials", "update", "--vault-id", vault, "--credential-id", keep, "--transform", "id", "-r"], JSON.stringify({ auth: { type: "static_bearer", token } }))
+    : ant(cfg, ["beta:vaults:credentials", "create", "--vault-id", vault, "--transform", "id", "-r"],
+      JSON.stringify({ display_name: `pocketBrain ${agent}`, auth: { type: "static_bearer", mcp_server_url: url, token } }));
   const id = made.out.trim().split("\n").at(-1)?.replace(/^"|"$/g, "") ?? "";
   if (made.code !== 0 || !/^[A-Za-z0-9_-]+$/.test(id)) {
     retainTokens(root, agent, (h) => h !== mine);
-    return fail(root, `the vault didn't take the new token (${made.err.replace(token, "[token]").slice(0, 200)}); new token revoked, the old one still works`);
+    return fail(root, `the vault didn't take the new token (${made.err.replaceAll(token, "[token]").replace(/pb_[A-Za-z0-9-]+_[A-Za-z0-9_-]{8,}/g, "[token]").slice(0, 200)}); new token revoked, the old one still works`);
   }
+  // Only a key the vault took is news: one it refused was revoked above (a failing daily retry
+  // raised a token_minted each time, 2026-10-25).
+  alert(root, { agent, check: "token_minted", from: `gardener rotate${o.code !== undefined ? " with your one-time code" : " (the hub's weekly rotation)"} sent the gardener's new token to ${bin.path} (sha256 ${bin.sha.slice(0, 12)}). If that wasn't you: pocketbrain token --revoke ${agent}` });
   let archived = 0;
   const left: string[] = [];
-  for (const c of old) (ant(cfg, ["beta:vaults:credentials", "archive", "--vault-id", vault, "--credential-id", c]).code === 0 ? archived++ : left.push(c));
+  for (const c of extra) (ant(cfg, ["beta:vaults:credentials", "archive", "--vault-id", vault, "--credential-id", c]).code === 0 ? archived++ : left.push(c));
   const revoked = retainTokens(root, agent, (h) => h === mine);
   recordRun(root, { agent, op: "rotate", credential: id, archived, revoked });
   if (left.length) alert(root, { agent, check: "gardener_ant", from: "rotate", detail: `gardener rotate: archive ${left.join(", ")} by hand (its token is already revoked)` });
-  return { ok: true, message: `gardener rotate: new credential ${id}; ${archived} old credential(s) archived, ${revoked} old token(s) revoked` };
+  return { ok: true, message: `gardener rotate: ${keep ? `credential ${id} has the new token` : `new credential ${id}`}; ${archived ? `${archived} old credential(s) archived, ` : ""}${revoked} old token(s) revoked` };
+}
+
+function sameMcpUrl(a: string | undefined, b: string): boolean {
+  const norm = (u: string) => { try { const x = new URL(u); return `${x.protocol}//${x.host}${x.pathname.replace(/\/+$/, "")}${x.search}`; } catch { return u.replace(/\/+$/, ""); } };
+  return !!a && norm(a) === norm(b);
 }
 
 function fail(root: string, why: string) {
@@ -348,7 +400,7 @@ export function tokenAgeDays(root: string, agent: string, now = clock()): number
 // pass): cleanup at 05:15 daily and 12:15 on Sundays, rotation on Sundays at 13:00 once the
 // token is rotate_days old.
 const jobState = (root: string) => join(root, "log", "gardener-jobs.json");
-export function dueGardenerJobs(root: string, now = new Date()): ("cleanup" | "rotate")[] {
+export function dueGardenerJobs(root: string, now = new Date(), o: { retryRotate?: boolean } = {}): ("cleanup" | "rotate")[] {
   const cfg = gardenerConfig(root);
   if (!cfg) return [];
   let done: Record<string, string> = {};
@@ -362,9 +414,11 @@ export function dueGardenerJobs(root: string, now = new Date()): ("cleanup" | "r
     if (hm >= 5 * 60 + 15 && done.cleanup_am !== day) { out.push("cleanup"); mark("cleanup_am"); }
     if (now.getDay() === 0 && hm >= 12 * 60 + 15 && done.cleanup_noon !== day) { if (!out.includes("cleanup")) out.push("cleanup"); mark("cleanup_noon"); }
   }
-  if (now.getDay() === 0 && hm >= 13 * 60 && done.rotate !== day) {
+  // A rotation that failed is tried again each day at 13:00 until one goes through, so fixing its
+  // cause (mcp_url, the vault) closes the probe's gardener_rotate alert without a hand run.
+  if ((now.getDay() === 0 || o.retryRotate) && hm >= 13 * 60 && done.rotate !== day) {
     const age = tokenAgeDays(root, gardenerAgentOr(root, cfg), now);
-    if (age === undefined || age >= cfg.rotate_days - 1) out.push("rotate");
+    if (o.retryRotate || age === undefined || age >= cfg.rotate_days - 1) out.push("rotate");
     mark("rotate");
   }
   if (changed) { mkdirSync(join(root, "log"), { recursive: true }); writeFileSync(jobState(root), JSON.stringify(done)); }

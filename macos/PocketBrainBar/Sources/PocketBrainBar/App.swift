@@ -93,6 +93,8 @@ struct MenuContent: View {
         } else if let s = store.state {
             Text(s.hubUp ? "Hub running" : (s.installed ? "Hub not answering" : "Hub not installed"))
             Text(s.barLine).lineLimit(3)
+            // What the watchdog found from outside the hub, shown even when the hub is down.
+            ForEach(s.problems, id: \.self) { p in Text("⚠ \(p)").lineLimit(3) }
             Divider()
             // The CLI opens it: the signed-in link never passes through this app.
             if s.dashboard {

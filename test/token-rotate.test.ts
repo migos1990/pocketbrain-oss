@@ -9,6 +9,7 @@ import { makeBrain } from "./fixture";
 import { issueToken, rotateToken, tokenOwner, tokenInfo } from "../src/auth";
 import { doctor } from "../src/doctor";
 import { main } from "../src/cli";
+import { runAction } from "../src/dashboard/actions";
 
 afterEach(() => { delete process.env.PB_NOW; delete process.env.PB_TODAY; });
 const at = (iso: string) => { process.env.PB_NOW = iso; };
@@ -87,7 +88,9 @@ test("the command shows what it would do first; --yes prints the token once with
   expect(p.out).toContain("run the same command with --yes");
   expect(p.out).not.toMatch(/pb_planner_/);
   expect(tokensFile(root)).toBe(before);
-  const y = cli(["token", "rotate", "planner", "--yes", "--overlap", "6", "--url", "https://brain.example", "--brain", root]);
+  // planner is core, so from a terminal it takes the owner's one-time code (G184, mintFromShell).
+  const code = runAction({ root }, "token-code", { agent: "planner" }).match(/[0-9A-Z]{5}-[0-9A-Z]{5}/)![0];
+  const y = cli(["token", "rotate", "planner", "--yes", "--code", code, "--overlap", "6", "--url", "https://brain.example", "--brain", root]);
   expect(y.code).toBe(0);
   expect(y.out.match(/pb_planner_[A-Za-z0-9_-]+/g)!.length).toBeGreaterThan(0);
   expect(y.out).toContain("URL:    https://brain.example/mcp");
@@ -95,14 +98,26 @@ test("the command shows what it would do first; --yes prints the token once with
   expect(y.out).toContain("Paste the new token into planner now");
 });
 
-test("doctor warns on a token older than 90 days, naming the rotate command, and not on a fresh one", async () => {
+// Outside review 2026-10-25 (G419): a token never rotated used to live forever.
+test("a token expires 90 days after it was issued unless rotated; doctor warns 14 days ahead and names the expired one", async () => {
   const root = makeBrain();
   at("2026-06-01T10:00:00Z");
-  issueToken(root, "planner");
+  const old = issueToken(root, "planner");
+  at("2026-07-20T10:00:00Z");
+  const soon = issueToken(root, "steward");
   at("2026-10-16T10:00:00Z");
   process.env.PB_TODAY = "2026-10-16";
-  issueToken(root, "helper");
+  const fresh = issueToken(root, "helper");
+  expect(tokenOwner(root, old)).toBeUndefined();
+  expect(tokenOwner(root, soon)?.agent).toBe("steward");
+  expect(tokenOwner(root, fresh)?.agent).toBe("helper");
   const f = (await doctor(root, { offline: true })).filter((x) => x.area === "tokens");
-  expect(f.some((x) => x.level === "warn" && x.text.includes("planner") && x.text.includes("pocketbrain token rotate planner"))).toBe(true);
+  expect(f.some((x) => x.level === "warn" && x.text.includes("planner") && x.text.includes("expired") && x.text.includes("pocketbrain token rotate planner"))).toBe(true);
+  expect(f.some((x) => x.level === "warn" && x.text.includes("steward") && x.text.includes("expires") && x.text.includes("pocketbrain token rotate steward"))).toBe(true);
   expect(f.some((x) => x.level === "warn" && x.text.includes("helper"))).toBe(false);
+  // A rotation gives a fresh 90 days.
+  at("2026-10-17T10:00:00Z");
+  const next = rotateToken(root, "steward").token;
+  at("2026-12-01T10:00:00Z");
+  expect(tokenOwner(root, next)?.agent).toBe("steward");
 });

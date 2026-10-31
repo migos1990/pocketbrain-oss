@@ -1,0 +1,20 @@
+- main:
+  - paragraph: Thu 8 Oct
+  - heading "Ask" [level=1]
+  - link "You and your assistants":
+    - /url: /who
+    - text: R
+  - paragraph: Ask about anyone or anything in your memory, or tell it what changed. It answers here.
+  - text: Tell your memory something
+  - textbox "Tell your memory something":
+    - /placeholder: Ask your memory anything…
+  - button "Send"
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

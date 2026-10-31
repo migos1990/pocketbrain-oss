@@ -240,7 +240,7 @@ async function rebuild() {
 
   // Robin's own board-deck agent did its one task: the Activity page keeps its receipts.
   const rtok = readFileSync(join(TOKENS, "robin.txt"), "utf8").trim();
-  await call("robin", rtok, "search", { q: "board deck" });
+  await call("robin", rtok, "search", { query: "board deck" });
   for (const id of ["projects/board-prep", "notes/exec-staff", "projects/fy27-plan"]) await call("robin", rtok, "read", { id });
   say("robin: board-deck agent searched once and read 3 notes (its receipts)");
 

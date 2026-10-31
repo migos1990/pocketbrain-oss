@@ -8,7 +8,7 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
 import { handle } from "../src/server";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { setupOAuth, loadOAuth, listPending, clearJwksCache, PENDING_PER_HOUR } from "../src/oauth";
 import { previewNewAgent } from "../src/addagent";
 import { startFakeAS, connect } from "./fake-as";
@@ -30,11 +30,11 @@ async function setup() {
   const r = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = r.headers.get("set-cookie")!.split(";")[0];
   const get = async (path: string) => { const x = await d.handle(new Request(`http://${H}${path}`, { headers: { host: H, cookie } })); return { status: x.status, text: await x.text() }; };
-  const csrf = async () => (await get("/")).text.match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = async () => (await get("/overview")).text.match(/name="csrf" value="([^"]+)"/)![1];
   const act = async (action: string, fields: Record<string, string>) => {
     const x = await d.handle(new Request(`http://${H}/action/${action}`, { method: "POST", body: new URLSearchParams({ csrf: await csrf(), ...fields }), headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: `http://${H}` } }));
     const loc = x.headers.get("location") ?? "";
-    return { status: x.status, ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { status: x.status, ...flashOf(loc) };
   };
   return { root, mcp, signIn, get, act };
 }

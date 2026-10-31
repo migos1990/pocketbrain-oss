@@ -51,7 +51,7 @@ const { componentCases } = await import("./cases/components");
 const openGap = (c: Case) => c.gap && !GAPS[c.gap]?.closed ? c.gap : undefined;
 const optional = async (f: string, name: string, ...a: unknown[]): Promise<Case[]> => existsSync(join(HERE, "cases", f)) ? ((m) => typeof m === "function" ? m(...a) : m)((await import(`./cases/${f}`))[name]) : [];
 
-let cases: Case[] = ([...componentCases, ...(await optional("e2e.ts", "e2eCases")), ...(await optional("dashboard.ts", "dashboardCases")), ...(await optional("real.ts", "realCases")), ...(await optional("cells.ts", "cellCases")), ...(await optional("textline.ts", "textlineCases")), ...(await optional("retrieval.ts", "retrievalCases", useLlm)), ...(await optional("orientation.ts", "orientationCases")), ...(await optional("judge.ts", "judgeCases")), ...(await optional("steps.ts", "stepCases")), ...(await optional("redteam.ts", "redteamCases")), ...(await optional("act.ts", "actCases")), ...(await optional("usage.ts", "usageCases")), ...(await optional("agents.ts", "agentCases")), ...(await optional("onboarding.ts", "onboardingCases")), ...(await optional("switchday.ts", "switchDayCases")), ...(await optional("consent.ts", "consentCases"))]).map((c) => ({ ...c, gap: openGap(c) }));
+let cases: Case[] = ([...componentCases, ...(await optional("e2e.ts", "e2eCases")), ...(await optional("dashboard.ts", "dashboardCases")), ...(await optional("real.ts", "realCases")), ...(await optional("cells.ts", "cellCases")), ...(await optional("textline.ts", "textlineCases")), ...(await optional("retrieval.ts", "retrievalCases", useLlm)), ...(await optional("orientation.ts", "orientationCases")), ...(await optional("judge.ts", "judgeCases")), ...(await optional("steps.ts", "stepCases")), ...(await optional("fill.ts", "fillCases")), ...(await optional("redteam.ts", "redteamCases")), ...(await optional("act.ts", "actCases")), ...(await optional("usage.ts", "usageCases")), ...(await optional("agents.ts", "agentCases")), ...(await optional("handoff.ts", "handoffCases")), ...(await optional("onboarding.ts", "onboardingCases")), ...(await optional("switchday.ts", "switchDayCases")), ...(await optional("consent.ts", "consentCases")), ...(await optional("say.ts", "sayCases")), ...(await optional("loop.ts", "loopCases")), ...(await optional("demo.ts", "demoCases"))]).map((c) => ({ ...c, gap: openGap(c) }));
 if (!useLlm) cases = cases.filter((c) => !c.llm);
 if (only) cases = cases.filter((c) => c.id.startsWith(only));
 
@@ -67,9 +67,15 @@ async function runOne(c: Case): Promise<Scored> {
     try { results.push(await c.run()); } catch (e) { results.push({ pass: false as const, detail: `error: ${String((e as Error)?.stack ?? e).split("\n").slice(0, 3).join(" | ")}` }); }
   }
   const passes = results.filter((r) => r.pass === true).length;
-  const result = results.find((r) => r.pass === false) ?? results.find((r) => r.pass === true) ?? results[0];
+  const shown = results.find((r) => r.pass === false) ?? results.find((r) => r.pass === true) ?? results[0];
+  // With --k, a case's metrics are the mean over its runs (each key over the runs that report it), printed with the line.
+  const ms = results.map((r) => r.metrics).filter((m): m is Record<string, number> => !!m && Object.keys(m).length > 0);
+  const keys = [...new Set(ms.flatMap((m) => Object.keys(m)))];
+  const mean = (key: string) => { const xs = ms.map((m) => m[key]).filter((x) => typeof x === "number" && Number.isFinite(x)); return xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100 : undefined; };
+  const metrics = Object.fromEntries(keys.map((key) => [key, mean(key)]).filter(([, v]) => v !== undefined)) as Record<string, number>;
+  const result = { ...shown, ...(Object.keys(metrics).length ? { metrics } : {}) };
   const s: Scored = { ...c, result, ms: Date.now() - t0, ...(reps > 1 && results.some((r) => r.pass !== "n/a") ? { runs: { pass: passes, k: reps } } : {}) };
-  if (!flag("--json")) process.stderr.write(`${mark(s)} ${c.id}${s.runs ? ` (${passes}/${reps})` : ""}  ${result.detail ?? ""}\n`.slice(0, 400));
+  if (!flag("--json")) process.stderr.write(`${mark(s)} ${c.id}${s.runs ? ` (${passes}/${reps})` : ""}  ${result.detail ?? ""}`.slice(0, 400) + (reps > 1 && result.metrics ? ` | metrics: ${Object.entries(result.metrics).map(([key, v]) => `${key}=${v}`).join(" ")}` : "") + "\n");
   return s;
 }
 

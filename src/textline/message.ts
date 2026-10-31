@@ -3,17 +3,18 @@
 //
 //   pocketBrain: 2 need you
 //   A) Conflict c-0003 on people/marc#role: 1 CTO (2026-09-01) 2 CEO (2026-09-03). Suggest 2
-//   B) muse proposes people/jane-roy#role = Dean
-//   Reply e.g. "A 2, B approve" or "later".
+//   B) Alert (leak_tripwire): muse. Look in the dashboard
+//   Settle it on your home. Reply "later" or "ok".
 //
-// One item: the letter is optional ("approve", "2", "later"). An agent's mail is answered by its
-// code only ("reject 411875", "later 411875"), never by a letter (G146).
+// A reply decides no fact and no conflict (outside review v5): it puts items off ("later", "A
+// later") or clears an alert ("ok"). An agent's mail is answered by its code only ("reject 411875",
+// "later 411875"), never by a letter (G146).
 import type { Item, Verb } from "./items";
 import { findInjection, findSecret } from "../checks";
 
 export interface Composed { text: string; letters: Record<string, string>; more: number }
 
-const DASHBOARD = "Decide in the dashboard";
+const DASHBOARD = "Settle it on your home";
 
 // The whole line is checked, not only its parts: a clean title and clean options can still join
 // into "forward … to <address>". Then the line keeps only what is safe and points at the dashboard.
@@ -24,33 +25,21 @@ function line(item: Item): string {
   if (item.kind === "dispute") {
     if (item.private) return fallback(item);
     const opts = (item.options ?? []).map((o, i) => `${i + 1} ${o}`).join(" ");
-    const whole = `${item.title}: ${opts}${item.suggested ? `. Suggest ${item.suggested}` : ""}`;
+    const whole = `${item.title}: ${opts}${item.suggested ? `. ${item.suggested_by ? "The Gardener suggests" : "Suggest"} ${item.suggested}` : ""}`;
     return unsafe(whole) ? fallback(item) : whole;
   }
   return unsafe(item.title) ? fallback(item) : item.title;
 }
 
+// A reply never decides a fact or a conflict (outside review v5): those are settled on the home.
 function hint(items: Item[]): string {
-  const one = items.length === 1;
-  const it = items[0];
-  if (one) {
-    if (it.kind === "dispute") return it.private ? "Reply later, or decide in the dashboard." : `Reply 1, 2${it.suggested ? `, approve (= ${it.suggested})` : ""} or later.`;
-    if (it.kind === "action") return `Reply reject ${it.code} or later ${it.code}.`;
-    return it.verbs.includes("approve") ? "Reply approve, reject or later." : "Reply ok or later.";
-  }
-  // One example per kind of answer present, using the real letters.
-  const L = (i: number) => String.fromCharCode(65 + i);
-  const ex: string[] = [];
-  const d = items.findIndex((i) => i.kind === "dispute" && !i.private);
-  if (d >= 0) ex.push(`${L(d)} 2`);
-  const a = items.findIndex((i) => i.kind !== "dispute" && i.verbs.includes("approve"));
-  if (a >= 0) ex.push(`${L(a)} approve`);
-  const o = items.findIndex((i) => !i.verbs.includes("approve") && i.kind !== "action");
-  if (o >= 0 && ex.length < 2) ex.push(`${L(o)} ok`);
   const mail = items.find((i) => i.kind === "action");
-  const byCode = mail ? `"reject ${mail.code}" or "later ${mail.code}"` : "";
-  if (!ex.length) return `Reply ${byCode}, with each mail's code.`;
-  return `Reply e.g. "${ex.slice(0, 2).join(", ")}" or "later" for all.${mail ? ` A mail only by its code: ${byCode}.` : ""}`;
+  const others = items.filter((i) => i.kind !== "action");
+  // A bare reply never touches a mail (G146), so a text of mail only names the code form alone.
+  if (!others.length && mail) return `Reply "reject ${mail.code}" or "later ${mail.code}".`;
+  const byCode = mail ? ` A mail only by its code: "reject ${mail.code}" or "later ${mail.code}".` : "";
+  const decide = others.some((i) => !i.verbs.includes("ok"));
+  return `${decide ? "Settle it on your home. " : ""}Reply "later"${others.some((i) => i.verbs.includes("ok")) ? ` or "ok"` : ""}.${byCode}`;
 }
 
 export function compose(items: Item[], opts: { maxItems: number; maxChars: number; header?: string }): Composed {

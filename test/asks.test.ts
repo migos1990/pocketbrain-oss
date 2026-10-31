@@ -10,7 +10,7 @@ import { issueToken } from "../src/auth";
 import { askToSee, askStatus, approveAsk, declineAsk, listAsks, guardianApprover, bindingMessage, pollAsks, testPush, cancelAsks } from "../src/asks";
 import { loadRules } from "../src/rules";
 import { verifyChain, readEntries } from "../src/readlog";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 
 const MOM = `---
 id: people/mom
@@ -204,12 +204,12 @@ test("Guardian not set up: the ask still works from the dashboard, and the owner
   const H = "127.0.0.1:8788";
   const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = login.headers.get("set-cookie")!.split(";")[0];
-  const page = await (await d.handle(new Request(`http://${H}/`, { headers: { host: H, cookie } }))).text();
+  const page = await (await d.handle(new Request(`http://${H}/overview`, { headers: { host: H, cookie } }))).text();
   expect(page).toContain("asks to see");
   expect(page).toContain("reach your phone: ask_to_see.guardian.client_id is not set");
   const csrf = page.match(/name="csrf" value="([^"]+)"/)![1];
   const res = await d.handle(new Request(`http://${H}/action/ask-approve`, { method: "POST", body: new URLSearchParams({ csrf, id: r.request, note: "people/mom" }), headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: `http://${H}` } }));
-  expect(decodeURIComponent(res.headers.get("location") ?? "")).toContain("helper may read Mom once");
+  expect(flashOf(res.headers.get("location") ?? "").ok).toContain("helper may read Mom once");
   expect((await call("helper", "GET", `/v1/ask/${r.request}`)).json.status).toBe("approved");
 });
 
@@ -231,4 +231,20 @@ test("revoking an agent declines its waiting ask and voids an unused approval", 
   const states = Object.fromEntries(listAsks(root).map((a) => [a.id, a.state]));
   expect(states).toEqual({ [r1.request]: "expired", [r2.request]: "declined" });
   expect(verifyChain(join(root, "log", "asks.jsonl")).broken).toBeUndefined();
+});
+
+// G244: invariant 13 says an approval comes only from the dashboard or CIBA. The CLI's `ask approve`
+// was a shell-only widening (an agent with a shell could release a note to itself).
+test("G244: ask approve from the terminal is refused; the dashboard approves", async () => {
+  const { main } = await import("../src/cli");
+  const { root } = setup();
+  const r = await askToSee(root, "helper", { what: "Mom's appointment", why: "book a taxi" });
+  const log = console.log, err = console.error;
+  const out: string[] = [];
+  console.log = (...a: unknown[]) => { out.push(a.join(" ")); }; console.error = (...a: unknown[]) => { out.push(a.join(" ")); };
+  let code: number;
+  try { code = main(["ask", "approve", r.request, "--brain", root]); } finally { console.log = log; console.error = err; }
+  expect(code).toBe(1);
+  expect(out.join("\n")).toContain("dashboard");
+  expect(listAsks(root).find((x) => x.id === r.request)?.state).toBe("waiting");
 });

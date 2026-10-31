@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // PreToolUse guard for Claude Code sessions working in this repo (wired in .claude/settings.json).
 // Prose rules in CLAUDE.md guide; this file enforces the few that must never slip:
 //   1. no `git commit` or blanket `git add` on main (branch first, merge after review);

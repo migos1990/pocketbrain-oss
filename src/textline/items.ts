@@ -8,15 +8,17 @@ import YAML from "yaml";
 import { sha256 } from "../util";
 import { loadBrain, sensitivityRank, type Note, type FactRecord } from "../brain";
 import { loadRules, isOwnerWord } from "../rules";
-import { git } from "../git";
+import { pendingGardener, gardenerSeen, type GardenerReads } from "../gardener-hold";
+import { git, porcelainPath } from "../git";
 import { findInjection, findSecret, thirdPartySensitive, categoryWords } from "../checks";
 import { hasWord } from "../util";
-import { proposals, comms, disputes, upkeepRuns, jsonl } from "../dashboard/data";
+import { proposals, comms, disputes, upkeepRuns, jsonl, type DisputeRow } from "../dashboard/data";
 import type { Kind, EscalationPolicy } from "./policy";
 import { usageItem } from "../usage";
 import { heldCaptures, captureAgent } from "../capture";
 import { getQuote } from "../quotes";
 import { waitingActions } from "../act";
+import { sensitiveShape, reasonText } from "../shape";
 
 export type Verb = "approve" | "reject" | "later" | "ok" | "pick";
 
@@ -26,13 +28,15 @@ export interface Item {
   title: string; // safe for a text
   private: boolean; // private or above: values never in a text
   money: boolean;
-  verbs: Verb[]; // what a reply can do with it
+  verbs: Verb[]; // what a reply can do with it: never decide a fact or a conflict (outside review v5)
   options?: string[]; // dispute candidates, only when not private
   suggested?: number; // 1-based, a dispute's suggested answer
+  suggested_by?: string; // set when the gardener suggested it, not the resolver
   waiting_on_resolver?: boolean; // an open dispute the resolver may still settle
   at?: string; // when it appeared, if the item knows
   ref: string; // what the dashboard or CLI calls it (proposal file, mail id, dispute id)
   code?: string; // an agent's mail (kind action): the 6-digit code a reply must quote (G146)
+  check?: string; // an alert's check name, as the alert log records it
 }
 
 const short = (s: string, n = 60) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
@@ -65,6 +69,52 @@ function isCaptureProposal(root: string, file: string): boolean {
 // Alerts and agent commits to rules/ older than this are history, not news.
 const RECENT_DAYS = 7;
 
+// Refusals the hub makes on purpose, and notices, are the record of it working, not owner work
+// (owner, 2026-10-24: "73 need you", nearly all alerts): a runaway agent turned away by its
+// budget, a source item held or not matching its claim (both on the source doctor and Activity).
+// carve_widened stays: it is the weekly carve audit's only output (safety review, 2026-10-24).
+const BY_DESIGN = new Set(["request_budget", "source_held", "source_mismatch"]);
+// Records the hub keeps, never a problem (the gardener's first pinned ant).
+const INFO = new Set(["gardener_ant_pinned"]);
+
+// A failure alert closes by itself once its check passes again: the source read since, the probe
+// ok now, the hub ticking since it hung. Without a pass on record it stays open.
+// Whether an alert is still owner-facing: not a by-design refusal, and its check hasn't passed
+// since. One rule for the owner queue, the text and doctor's ops line.
+export function alertOpen(root: string): (a: Record<string, unknown>) => boolean {
+  const passed = passedSince(root);
+  return (a) => !BY_DESIGN.has(String(a.check)) && !INFO.has(String(a.check)) && !passed(a);
+}
+
+function passedSince(root: string): (a: Record<string, unknown>) => boolean {
+  let probe: Record<string, { ok?: boolean }> = {};
+  try { probe = JSON.parse(readFileSync(join(root, "log", "probe.json"), "utf8")); } catch { /* none yet */ }
+  const runs = jsonl(join(root, "log", "sources", "runs.jsonl"));
+  const beat = lastHeartbeat(root) ?? "";
+  return (a) => {
+    const check = String(a.check ?? ""), at = String(a.at ?? "");
+    if (check === "probe_hub_hung") return beat > at;
+    if (check.startsWith("probe_")) return probe[check.replace(/^probe_(warn_)?/, "")]?.ok === true;
+    // A failed rotation's own alert closes with its job check (src/probe.ts gardener_rotate).
+    if (check === "gardener_ant" && a.from === "rotate") return probe.gardener_rotate?.ok === true;
+    if (check === "source_failed") return runs.some((r) => `source:${r.source}` === a.agent && !r.refused && String(r.at) > at);
+    return false;
+  };
+}
+
+// A conflict waiting for the Gardener (src/gardener-hold.ts) isn't asked yet, unless it is on a
+// private note or reads like money, health or legal: that one asks the same day behind Show it.
+export { GARDENER_WAIT_H, gardenerSeen } from "../gardener-hold";
+export function heldForGardener(rules: ReturnType<typeof loadRules>, d: Pick<DisputeRow, "fact_key" | "status" | "suggestion" | "candidates" | "sensitivity" | "gardener_first" | "gardener_seen">, target: Note | undefined, seen: GardenerReads, now: Date): boolean {
+  return pendingGardener(d, seen, now) && !gardenerUrgent(rules, d, target);
+}
+// A conflict whose values never show without a tap: a private note, side or packet, money, or a
+// value that reads like money, health or legal.
+export const disputeSensitive = (rules: ReturnType<typeof loadRules>, d: Pick<DisputeRow, "fact_key" | "candidates" | "sensitivity">, target: Note | undefined) =>
+  isPrivate([d.sensitivity, target?.fm.sensitivity, ...d.candidates.map((c: FactRecord) => c.sensitivity)]) || isMoney(target, d.fact_key) || !!sensitiveShape(rules, d.fact_key, ...d.candidates.map((c: FactRecord) => c.value));
+const gardenerUrgent = (rules: ReturnType<typeof loadRules>, d: Pick<DisputeRow, "fact_key" | "candidates" | "sensitivity" | "gardener_first">, target: Note | undefined) =>
+  typeof d.gardener_first === "string" && disputeSensitive(rules, d, target);
+
 export function openItems(root: string, now = new Date()): Item[] {
   const since = new Date(now.getTime() - RECENT_DAYS * 86_400_000).toISOString();
   const notes = loadBrain(root);
@@ -72,24 +122,33 @@ export function openItems(root: string, now = new Date()): Item[] {
   const out: Item[] = [];
 
   // Disputes: open (the resolver may still settle), escalated (it gave up), answer-held.
+  const seen = gardenerSeen(root, rules);
   for (const d of disputes(notes)) {
     if (!["open", "escalated", "answer-held"].includes(d.status)) continue;
     const target = noteFor(notes, d.fact_key);
-    const priv = isPrivate([d.sensitivity, target?.fm.sensitivity, ...d.candidates.map((c: FactRecord) => c.sensitivity)]);
+    if (heldForGardener(rules, d, target, seen, now)) continue;
+    // One that asks at once for its shape keeps its values behind Show it (G416).
+    const priv = isPrivate([d.sensitivity, target?.fm.sensitivity, ...d.candidates.map((c: FactRecord) => c.sensitivity)]) || gardenerUrgent(rules, d, target);
     const money = isMoney(target, d.fact_key);
     const louisOnly = priv || d.candidates.some((c) => isOwnerWord(rules, target?.fm.area, c));
     const where = priv ? `a ${money ? "money" : "private"} fact` : d.fact_key;
     if (d.status === "answer-held") {
       const a = d.answer as { relayed_by?: string; value?: unknown } | undefined;
-      out.push({ key: `held-answer:${d.id}`, kind: "held-answer", ref: d.id, private: priv, money, verbs: ["approve", "reject", "later"],
+      out.push({ key: `held-answer:${d.id}`, kind: "held-answer", ref: d.id, private: priv, money, verbs: ["later"],
         title: `${a?.relayed_by ?? "the resolver"} says you answered ${d.id} on ${where}${priv ? "" : ` with ${show(a?.value)}`}. Confirm?` });
       continue;
     }
-    const s = (d.escalated as { suggested?: unknown } | undefined)?.suggested;
-    const suggested = typeof s === "number" || /^\d+$/.test(String(s ?? "")) ? Number(s) : undefined;
+    // The resolver's suggestion when it escalated, else the gardener's (backlog 239).
+    const num = (x: unknown) => typeof x === "number" || /^\d+$/.test(String(x ?? "")) ? Number(x) : undefined;
+    const fromResolver = num((d.escalated as { suggested?: unknown } | undefined)?.suggested);
+    const g = d.suggestion as { by?: string; choice?: unknown } | undefined;
+    // On a private fact the owner sees no values here, so a one-word approve of the gardener's pick
+    // would decide blind: he answers by number or in the dashboard (slice audit, 239).
+    const suggested = fromResolver ?? (priv ? undefined : num(g?.choice));
+    const suggested_by = fromResolver === undefined && suggested !== undefined ? g?.by : undefined;
     out.push({
       key: `dispute:${d.id}`, kind: "dispute", ref: d.id, private: priv, money, at: d.created || undefined,
-      verbs: ["pick", "approve", "later"], suggested,
+      verbs: ["later"], suggested, suggested_by,
       options: priv ? undefined : d.candidates.map((c) => `${show(c.value)} (${c.as_of ?? "?"})`),
       waiting_on_resolver: d.status === "open" && !louisOnly && !!rules.policy.resolver,
       title: `Conflict ${d.id} on ${where}`,
@@ -111,7 +170,10 @@ export function openItems(root: string, now = new Date()): Item[] {
     const money = isMoney(target, r.id ?? "") || r.type === "money" || MONEY_WORDS.test(`${p.reason} ${quote ?? ""}`)
       || (!!quote && (categoryWords(rules.checks).money ?? []).some((w) => hasWord(quote, w)));
     const sensitive = !!quote && !!thirdPartySensitive({ agent: p.by, id: "people/quoted", value: quote } as never);
-    const priv = isPrivate([target?.fm.sensitivity, r.sensitivity, rules.checks.types?.[r.type ?? ""]?.sensitivity]) || money || sensitive;
+    // An assistant's reason that reads like health, money or legal: private, as the dashboard keeps
+    // it behind Show it (G414).
+    const why = !pulled && !!p.reason && !!sensitiveShape(rules, reasonText(String(p.reason)));
+    const priv = isPrivate([target?.fm.sensitivity, r.sensitivity, rules.checks.types?.[r.type ?? ""]?.sensitivity]) || money || sensitive || why;
     const rawWhat = clean(`${r.id ?? r.title ?? "a new note"}${r.attribute ? `#${r.attribute}` : ""}`);
     const what = unsafe(rawWhat) ? "a note (name withheld)" : rawWhat;
     // Where it came from: the scheme of its first ref, only if it is a plain scheme name (G68).
@@ -122,7 +184,7 @@ export function openItems(root: string, now = new Date()): Item[] {
     const quoted = src && said && !unsafe(said) ? `${bare} ("${short(said, 70)}")` : bare;
     // Each part was checked alone; an instruction split across them shows only on the whole line (G96).
     const line = !unsafe(quoted) ? quoted : !unsafe(bare) ? bare : `${src ? `From ${src}: a` : `${p.by} proposes a`} change to ${short(what, 40)} (withheld: reads as instructions)`;
-    out.push({ key: `proposal:${p.file}`, kind: "proposal", ref: p.file, private: priv, money, at: p.at, verbs: ["approve", "reject", "later"],
+    out.push({ key: `proposal:${p.file}`, kind: "proposal", ref: p.file, private: priv, money, at: p.at, verbs: ["later"],
       title: priv ? `${src ? `From ${src}: a` : `${p.by} proposes a`} change to a ${money ? "money" : "private"} note` : line });
   }
 
@@ -132,7 +194,7 @@ export function openItems(root: string, now = new Date()): Item[] {
   for (const m of comms(root).filter((x) => x.verdict === "held")) {
     const why = m.reasons.join(" ");
     const kind = /canary/.test(why) ? "a canary" : /contains (a |an )?(card|password|key|token|secret|iban|account|pin)/i.test(why) ? "a secret" : /contains "/.test(why) ? `a value ${m.to} can't see` : /withheld/.test(why) ? "a withheld topic" : /the message /.test(why) ? "instructions" : "a problem";
-    out.push({ key: `mail:${m.id}`, kind: "mail", ref: m.id, private: /contains|canary/.test(why), money: /money|bank|card/i.test(why), at: m.at, verbs: ["approve", "reject", "later"],
+    out.push({ key: `mail:${m.id}`, kind: "mail", ref: m.id, private: /contains|canary/.test(why), money: /money|bank|card/i.test(why), at: m.at, verbs: ["later"],
       title: `Held mail ${named(m.from) ?? "an outside sender"} to ${named(m.to) ?? "an outside address"}: carries ${kind}. Release?` });
   }
 
@@ -154,19 +216,23 @@ export function openItems(root: string, now = new Date()): Item[] {
   const VIA: Record<string, string> = { mail: "the capture mailbox", drop: "your drop folder", cli: "the command line", import: "a memory import" };
   for (const c of held) {
     const from = c.via === "agent" ? clean(c.by ?? "an assistant") : VIA[c.via ?? ""] ?? "a capture channel";
-    out.push({ key: `capture:${c.file}`, kind: "capture", ref: c.file, private: true, money: false, verbs: ["approve", "reject", "later"],
+    out.push({ key: `capture:${c.file}`, kind: "capture", ref: c.file, private: true, money: false, verbs: ["later"],
       title: `Held capture from ${unsafe(from) ? "an assistant" : short(from, 30)}: it reads like instructions. Release?` });
   }
   const heldFiles = held.map((c) => c.file);
 
   // Alerts (leak tripwire, relay alerts): urgent, acknowledged with ok. A held capture's alert is
   // the capture item above while it is still held.
-  for (const a of jsonl(join(root, "log", "alerts.jsonl")).filter((x) => String(x.at) >= since)) {
-    // A runaway agent turned away by its request budget is a dashboard item, not an urgent text.
-    if (a.check === "request_budget") continue;
+  // One item per failing check (agent and check), its newest alert: a check that fails on every
+  // retry is one problem, not one a day (owner's home page, 2026-10-25: "5 problems", one cause).
+  const open = alertOpen(root);
+  const recent = jsonl(join(root, "log", "alerts.jsonl")).filter((x) => String(x.at) >= since && open(x));
+  const newest = new Map(recent.map((a) => [`${a.agent ?? ""}\u0000${a.check ?? ""}`, a]));
+  for (const a of recent) {
+    if (newest.get(`${a.agent ?? ""}\u0000${a.check ?? ""}`) !== a) continue;
     if (a.check === "capture_held" && heldFiles.some((f) => String(a.from ?? "").startsWith(f + " ") || String(a.from ?? "") === f)) continue;
     const who = String(a.agent ?? (a.from ? `${a.from} to ${a.to}` : "?"));
-    out.push({ key: `alert:${hash(JSON.stringify(a))}`, kind: "alert", ref: String(a.at), private: true, money: false, at: String(a.at), verbs: ["ok", "later"],
+    out.push({ key: `alert:${hash(JSON.stringify(a))}`, kind: "alert", check: String(a.check ?? ""), ref: String(a.at), private: true, money: false, at: String(a.at), verbs: ["ok", "later"],
       title: `Alert (${a.check}): ${who}. Look in the dashboard` });
   }
 
@@ -187,7 +253,7 @@ export function openItems(root: string, now = new Date()): Item[] {
     title: u.state === "over" ? "Account notice, action needed: open the dashboard" : "Account notice: open the dashboard when you can" });
 
   // rules/ touched outside Louis: uncommitted edits, or a commit by an agent.
-  const dirty = git(root, ["status", "--porcelain", "--", "rules"]).split("\n").filter(Boolean).map((l) => l.slice(3));
+  const dirty = git(root, ["status", "--porcelain", "--", "rules"]).split("\n").filter(Boolean).map(porcelainPath);
   if (dirty.length) out.push({ key: `rules:dirty:${hash(dirty.join())}`, kind: "rules", ref: dirty.join(","), private: false, money: false, verbs: ["ok", "later"],
     title: `rules/ changed outside git: ${short(dirty.join(", "), 50)}. Was it you?` });
   const agents = new Set(Object.keys(rules.policy.agents));

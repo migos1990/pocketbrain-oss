@@ -191,9 +191,14 @@ test("bl-not-agent-facing: only the CLI imports the belief radar", () => {
   const src = join(import.meta.dir, "..", "src");
   const files = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? files(join(d, e.name)) : e.name.endsWith(".ts") ? [join(d, e.name)] : []);
   const importers = (mod: string) => files(src).filter((f) => new RegExp(`from "\\.{1,2}\\/(\\.\\.\\/)?${mod}"`).test(readFileSync(f, "utf8"))).map((f) => f.slice(src.length + 1)).sort();
-  // The quiz budget (src/quizplan.ts) builds on the radar and is itself the CLI's only.
-  expect(importers("beliefs")).toEqual(["cli.ts", "quizplan.ts"]);
-  expect(importers("quizplan")).toEqual(["cli.ts"]);
+  // The quiz budget (src/quizplan.ts) builds on the radar. Besides the CLI, only the nightly pass
+  // (memsync.ts syncPass) uses it, to choose which facts to ask; the gardener that runs the pass
+  // gets counts only (test/quizplan.test.ts).
+  // The owner's home shows it too (G491): only from src/dashboard/, which serves the owner alone,
+  // never from server.ts, core.ts or any agent door.
+  expect(importers("beliefs")).toEqual(["cli.ts", "dashboard/home-beliefs.ts", "dashboard/server.ts", "quizplan.ts"]);
+  expect(importers("home-beliefs").every((f) => f.startsWith("dashboard/"))).toBe(true);
+  expect(importers("quizplan")).toEqual(["cli.ts", "memsync.ts"]);
 });
 
 // Red team of the belief radar (redteam-1015b-beliefs.md).

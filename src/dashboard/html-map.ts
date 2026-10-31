@@ -12,6 +12,8 @@ import { clientsOf, loadOAuth } from "../oauth";
 import { offboardingStatus } from "../offboard";
 import type { State } from "./data";
 import { esc, type Page } from "./html";
+import { previewSearch, previewRead, CoreError } from "../core";
+import { paged, pager, withParam } from "./paging";
 
 export type Cell = "all" | "part" | "ask" | "none";
 export interface MapColumn { agent: string; label: string; off?: string; cells: Map<string, Cell> }
@@ -67,26 +69,27 @@ const CELL: Record<Cell, string> = {
 
 // With `as`, one assistant's view: its column stands out, the others fade, and every note it can't
 // read fades too, so the page shows the brain as that assistant gets it. Same carve, read-only.
-export function mapGrid(s: State, as?: string): string {
+export function mapGrid(s: State, as?: string, page = 1): string {
   const m = accessMap(s);
+  const rows = paged(m.rows, page);
   const me = m.columns.find((c) => c.agent === as);
   const sees = (c: MapColumn) => [...c.cells.values()].filter((x) => x === "all" || x === "part").length;
   const cls = (c: MapColumn) => `${c.off ? " m-off" : ""}${me ? (c === me ? " m-me" : " m-dim") : ""}`;
   const head = m.columns.map((c) => `<th class="m-col${cls(c)}"><a href="${c === me ? "/map" : `/map?as=${encodeURIComponent(c.agent)}`}" title="${c === me ? "Back to every assistant" : `See the brain as ${esc(c.label)} sees it`}">${esc(c.label)}</a>${c.off ? `<div class="m-why">${esc(c.off)}</div>` : ""}</th>`).join("");
   let folder = "";
-  const body = m.rows.map((r) => {
+  const body = rows.rows.map((r) => {
     const sep = r.folder !== folder ? `<tr class="m-folder"><td colspan="${m.columns.length + 1}">${esc((folder = r.folder))}</td></tr>` : "";
     const lock = sensitivityRank(r.sensitivity as never) >= sensitivityRank("private") ? ` <span class="kind">${esc(r.sensitivity)}</span>` : "";
     const mine = me?.cells.get(r.id);
     const gone = me && mine !== "all" && mine !== "part";
-    return `${sep}<tr${gone ? ' class="m-gone"' : ""}><td title="${esc(r.id)}"><a href="/note/${esc(r.id)}">${esc(r.title)}</a>${lock}${me && mine === "part" ? ' <span class="sub">some facts cut</span>' : ""}</td>${m.columns.map((c) => `<td class="m-cell${cls(c)}">${CELL[c.cells.get(r.id)!]}</td>`).join("")}</tr>`;
+    return `${sep}<tr${gone ? ' class="m-gone"' : ""}><td title="${esc(r.id)}"><a href="/p/${r.id.split("/").map(encodeURIComponent).join("/")}">${esc(r.title)}</a>${lock}${me && mine === "part" ? ' <span class="sub">some facts cut</span>' : ""}</td>${m.columns.map((c) => `<td class="m-cell${cls(c)}">${CELL[c.cells.get(r.id)!]}</td>`).join("")}</tr>`;
   }).join("");
   const totals = m.columns.map((c) => `<td class="m-cell num${cls(c)}">${sees(c)}</td>`).join("");
   const n = me ? sees(me) : 0;
   const lede = !me ? "" : me.off
     ? `<p class="lede">${esc(me.label)} can't get in right now (${esc(me.off)}). The brain doesn't exist for it.</p>`
     : `<p class="lede">${esc(me.label)} can read <b>${n} of ${m.rows.length}</b> notes. The rest don't exist for it: it can't search them, open them or hear about them from another assistant.</p>`;
-  return `${lede}<div class="card wrap m-map"><table><thead><tr><th>Note</th>${head}</tr></thead><tbody>${body}<tr class="m-total"><td>Notes it can read</td>${totals}</tr></tbody></table></div>`;
+  return `${lede}<div class="card wrap m-map"><table><thead><tr><th>Note</th>${head}</tr></thead><tbody>${body}<tr class="m-total"><td>Notes it can read</td>${totals}</tr></tbody></table></div>${pager(rows, (n) => withParam("/map", new URLSearchParams(as ? { as } : {}), "page", n), "notes")}`;
 }
 
 const STYLE = `<style>
@@ -101,7 +104,9 @@ const STYLE = `<style>
 .m-map td,.m-map th{transition:background .4s,opacity .4s}
 .m-map th.m-col a{color:inherit;text-decoration:none}.m-map th.m-col a:hover{text-decoration:underline;text-decoration-color:var(--line-strong)}
 .m-map .m-dim{opacity:.25}.m-map th.m-me{font-weight:700;box-shadow:inset 0 -2px 0 var(--text)}.m-map td.m-me{background:var(--well)}
+.m-see{margin:8px 0}.m-as{white-space:pre-wrap;background:var(--well);padding:12px;border-radius:6px;overflow-x:auto}.m-hits li{margin:4px 0}
 .m-map tr.m-gone>td:first-child a{color:var(--muted);font-weight:400}.m-map tr.m-gone>td:first-child .kind{opacity:.5}
+@media (max-width:560px){.m-map td:first-child{min-width:120px}.m-map th.m-col{min-width:56px}}
 </style>`;
 
 const SCRIPT = `<script>
@@ -109,13 +114,34 @@ const SCRIPT = `<script>
 setInterval(function(){fetch("/map/grid"+location.search,{credentials:"same-origin"}).then(function(r){return r.ok?r.text():""}).then(function(t){if(t&&t!==g.innerHTML)g.innerHTML=t}).catch(function(){})},2000)})();
 </script>`;
 
-export function mapPage(s: State, as?: string): Page {
+// See as (backlog #313): search and open notes exactly as the chosen assistant gets them (its
+// snapshot, ranking and [withheld] marks, from previewSearch / previewRead in core.ts), without
+// it counting as that assistant's read. An error is what the assistant itself would be told.
+function seeAs(s: State, agent: string, label: string, q: string, read: string): string {
+  const link = (id: string) => `/map?as=${encodeURIComponent(agent)}&read=${encodeURIComponent(id)}`;
+  const said = (e: unknown) => { if (e instanceof CoreError) return `<p class="sub">${esc(label)} would be told: <b>${esc(e.message)}</b></p>`; throw e; };
+  let out = "";
+  if (read) {
+    try { out = `<h2>${esc(read)}, as ${esc(label)} reads it</h2><pre class="m-as">${esc(previewRead(s.root, agent, read).markdown)}</pre>`; }
+    catch (e) { out = said(e); }
+  } else if (q) {
+    try {
+      const hits = previewSearch(s.root, agent, q);
+      out = hits.length ? `<ol class="m-hits">${hits.map((h) => `<li><a href="${esc(link(h.id))}">${esc(h.title)}</a> <span class="sub">${esc(h.id)} · ${esc(h.match)}</span></li>`).join("")}</ol>` : `<p class="sub">${esc(label)} would find nothing for that.</p>`;
+    } catch (e) { out = said(e); }
+  }
+  return `<form method="get" action="/map" class="m-see"><input type="hidden" name="as" value="${esc(agent)}"><label>Search as ${esc(label)} <input type="search" name="q" value="${esc(q)}" maxlength="300"></label> <button>Search</button></form>
+<p class="sub">Exactly what ${esc(label)} gets back, ranking and [withheld] marks included. Looking here doesn't count as its read.</p>${out}`;
+}
+
+export function mapPage(s: State, as?: string, page = 1, see: { q?: string; read?: string } = {}): Page {
   const me = as ? s.agents.find((a) => a.name === as && !a.resolver) : undefined;
   const legend = `<span class="m-dot m-all"></span> the whole note · <span class="m-dot m-part"></span> part of it, some facts cut · <span class="m-ask"></span> outside its slice: it can only ask you for one read, and you decide each time · empty: never offered, it doesn't exist for that assistant.`;
   const head = me
     ? `<h1>As ${esc(me.label)} sees it</h1>`
     : `<h1>Who sees what</h1><p class="sub">Every note against every assistant, from the same rules that answer them. ${legend} Click an assistant to see the brain as it does. Updates by itself.</p>`;
   const body = `${STYLE}${head}
-<div id="map-grid">${mapGrid(s, me?.name)}</div>${me ? `<p class="sub">${legend}</p>` : ""}${SCRIPT}`;
+${me ? seeAs(s, me.name, me.label, (see.q ?? "").slice(0, 300), (see.read ?? "").slice(0, 300)) : ""}
+<div id="map-grid">${mapGrid(s, me?.name, page)}</div>${me ? `<p class="sub">${legend}</p>` : ""}${SCRIPT}`;
   return { title: me ? `As ${me.label} sees it` : "Who sees what", tab: "map", body };
 }

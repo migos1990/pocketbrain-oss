@@ -1,6 +1,6 @@
 - main:
   - heading "Remember a fact" [level=1]
-  - paragraph: "One fact per form, with its source. Same checks as anywhere else: outside your own area it waits for the owner."
+  - paragraph: "One fact per form, with its source. Same checks as anywhere else: it files itself, a different value for one the brain holds is filed as a conflict, and a fact on a private note waits for the owner."
   - text: Note id (e.g. people/jane-roy; leave empty for a new note)
   - textbox "Note id (e.g. people/jane-roy; leave empty for a new note)"
   - text: Title (new note only)

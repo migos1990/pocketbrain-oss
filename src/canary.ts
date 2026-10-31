@@ -26,7 +26,18 @@ const FILE = (root: string) => join(root, "rules", "canaries.yaml");
 const LEVELS: Sensitivity[] = ["personal", "private", "secret"];
 const FIRST = ["Halvard", "Orrin", "Tamsin", "Quillon", "Brevik", "Calloway", "Dunmore", "Fenwick", "Galloway", "Hollis", "Ingram", "Jessop", "Kendrick", "Lorimer", "Marlow", "Norcott", "Oakden", "Pellam", "Rendell", "Selwyn", "Thorne", "Varga", "Wexley", "Yarrow"];
 const SECOND = ["Quay", "Lantern", "Meadow", "Foundry", "Orchard", "Harbour", "Atlas", "Cobalt", "Juniper", "Saffron", "Tundra", "Willow", "Beacon", "Cedar", "Falcon", "Garnet"];
-const fresh = () => `${FIRST[randomInt(FIRST.length)]} ${SECOND[randomInt(SECOND.length)]} ${randomInt(1000, 10000)}`;
+// New canaries, never one already used, and no two sharing their pair of words: the leak matcher
+// counts two consecutive words as carrying a value (match.ts needleFor), so a personal decoy's
+// canary sharing its words with a private one was withheld as that one (G535).
+export function freshCanaries(n: number, used: Set<string>, pick: (min: number, max: number) => number = randomInt): string[] {
+  const out: string[] = [], names = new Set<string>();
+  while (out.length < n) {
+    const name = `${FIRST[pick(0, FIRST.length)]} ${SECOND[pick(0, SECOND.length)]}`, c = `${name} ${pick(1000, 10000)}`;
+    if (used.has(c) || names.has(name)) continue;
+    names.add(name); out.push(c);
+  }
+  return out;
+}
 
 export function loadCanaries(root: string): CanaryFile {
   const d = existsSync(FILE(root)) ? (YAML.parse(readFileSync(FILE(root), "utf8")) ?? {}) : {};
@@ -61,12 +72,8 @@ export function probeInit(root: string, opts: { rotate?: boolean } = {}): { plan
   if (opts.rotate || planted.length !== LEVELS.length) {
     retired = [...retired, ...planted.map((p) => p.canary)];
     const used = new Set([...retired, ...cur.canaries]);
-    planted = LEVELS.map((s) => {
-      let c = fresh();
-      while (used.has(c)) c = fresh();
-      used.add(c);
-      return { id: `notes/probe-${s}`, canary: c, sensitivity: s };
-    });
+    const fresh = freshCanaries(LEVELS.length, used);
+    planted = LEVELS.map((s, i) => ({ id: `notes/probe-${s}`, canary: fresh[i]!, sensitivity: s }));
   }
   for (const p of planted) if (opts.rotate || !intact(p)) saveNote(root, decoy(p.id, p.sensitivity, p.canary));
   if (needSlice) {

@@ -1,80 +1,201 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - link "Brain":
     - /url: /brain
   - text: /
-  - link "People":
-    - /url: /brain?kind=people
-  - heading "Jane Roy" [level=1]
-  - text: Person · work · updated 7 days ago by planner ·
+  - link "Projects":
+    - /url: /brain?kind=projects
+  - heading "Atlas launch" [level=1]
+  - text: Project · work · updated yesterday by you ·
   - link "History":
-    - /url: /history/people/jane-roy
-  - button "Forget"
+    - /url: /history/projects/atlas-launch
   - text: "Who can see this:"
-  - link "steward":
-    - /url: /agent/steward
-  - link "planner":
-    - /url: /agent/planner
+  - link "Claude":
+    - /url: /agent/claude
+  - link "ChatGPT":
+    - /url: /agent/chatgpt
+  - link "Gemini":
+    - /url: /agent/gemini
   - link "gardener":
     - /url: /agent/gardener
-  - link "helper":
-    - /url: /agent/helper
   - group: Change who can see it
   - textbox "What changed?"
   - button "Suggest"
-  - text: Role
+  - text: Status
   - link "Where from":
-    - /url: /why/people/jane-roy?fact=role
-  - link "Course coordinator":
-    - /url: /note/people/jane-roy?edit=role#f-role
-  - text: from an email · checked against a source · added by planner · dated 37 days ago Phones
+    - /url: /why/projects/atlas-launch?fact=status
+  - link "in beta":
+    - /url: /note/projects/atlas-launch?edit=status#f-status
+  - text: from an email · an assistant said so · added by capture · dated 26 days ago Lead
   - link "Where from":
-    - /url: /why/people/jane-roy?fact=phones
-  - text: +15145550100 from an email · checked against a source · added by planner · dated 37 days ago
-  - link "+ Add to phones":
-    - /url: /note/people/jane-roy?edit=phones#f-phones
+    - /url: /why/projects/atlas-launch?fact=lead
+  - link "Robin Lefebvre":
+    - /url: /note/projects/atlas-launch?edit=lead#f-lead
+  - text: from an email · an assistant said so · added by capture · dated 26 days ago Due
+  - link "Where from":
+    - /url: /why/projects/atlas-launch?fact=due
+  - link "2026-11-03":
+    - /url: /note/projects/atlas-launch?edit=due#f-due
+  - text: from an email · an assistant said so · added by capture · dated 26 days ago Next step
+  - link "Where from":
+    - /url: /why/projects/atlas-launch?fact=next_step
+  - text: two answers disagree
+  - link "Settle it":
+    - /url: /settle/c-0001
+  - link "freeze the beta build on 15 October":
+    - /url: /note/projects/atlas-launch?edit=next_step#f-next_step
+  - text: from an email · an assistant said so · added by capture · dated yesterday · check again in Oct 2026 People
+  - link "Where from":
+    - /url: /why/projects/atlas-launch?fact=people
+  - text: Maya Chen from an email · an assistant said so · added by capture · dated 26 days ago Omar Haddad from an email · an assistant said so · added by capture · dated 26 days ago Daniel Okoro from an email · an assistant said so · added by capture · dated 26 days ago Sofia Marquez from an email · an assistant said so · added by capture · dated 26 days ago Hannah Becker from an email · an assistant said so · added by capture · dated 26 days ago
+  - link "+ Add to people":
+    - /url: /note/projects/atlas-launch?edit=people#f-people
   - link "+ Add a fact":
-    - /url: /note/people/jane-roy?edit=_new#b-facts
+    - /url: /note/projects/atlas-launch?edit=_new#b-facts
   - heading "Notes" [level=2]
   - button "Edit the notes":
-    - text: Coordinates
-    - link "Course A":
-      - /url: /note/projects/course-a
-    - text: . Her number is in the phones fact.
+    - text: Atlas launch is in beta.
+    - superscript:
+      - link "[1]":
+        - /url: "#fn-1"
+    - text: The lead of Atlas launch is
+    - link "Robin Lefebvre":
+      - /url: /p/people/robin-lefebvre
+    - text: .
+    - superscript:
+      - link "[1]":
+        - /url: "#fn-1"
+    - text: "Due for Atlas launch: 3 Nov 2026."
+    - superscript:
+      - link "[1]":
+        - /url: "#fn-1"
+    - text: "Next for Atlas launch: freeze the beta build on 15 October."
+    - superscript:
+      - link "[2]":
+        - /url: "#fn-2"
+    - text: A different value is waiting to be checked. The people of Atlas launch are
+    - link "Maya Chen":
+      - /url: /p/people/maya-chen
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: ","
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
+    - text: and
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: .
+    - superscript:
+      - link "[1]":
+        - /url: "#fn-1"
+    - text: (Written by the hub from this page's facts.)
+    - heading "Earlier notes" [level=3]
+    - text: "The Atlas launch is the big one this fall: ten beta customers, a public launch on 3 November."
+    - link "Grace Liu":
+      - /url: /p/people/grace-liu
+    - text: collects what the beta customers say every Friday. With
+    - link "Robin Lefebvre":
+      - /url: /p/people/robin-lefebvre
+    - text: ","
+    - link "Maya Chen":
+      - /url: /p/people/maya-chen
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: ","
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
+    - text: and
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: ". Decided so far:"
+    - link "Atlas beta scope":
+      - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - text: and
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "[3]":
+        - /url: "#fn-3"
+    - heading "References" [level=3]
+    - list:
+      - listitem: Email, 12 Sep 2026
+      - listitem: Email, 7 Oct 2026
+      - listitem: Email, 12 Sep 2026
+  - group: Edit the Earlier notes section
+  - heading "Recent updates" [level=2]
+  - text: "Edited the notes of Atlas launch today by hub Added an Earlier notes section to Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide New page: Atlas launch 8 days ago by you"
   - heading "Connections" [level=2]
   - heading "Where it came from" [level=3]
   - link "An email":
-    - /url: https://mail.google.com/mail/u/0/#all/f000000000000001
-  - text: dated 1 Sep 2026 Gave
-  - link "role":
-    - /url: "#f-role"
+    - /url: https://mail.google.com/mail/u/0/#all/000000000000d027
+  - text: dated 12 Sep 2026 Gave
+  - link "status":
+    - /url: "#f-status"
   - text: ","
-  - link "phones":
-    - /url: "#f-phones"
+  - link "lead":
+    - /url: "#f-lead"
+  - text: ","
+  - link "due":
+    - /url: "#f-due"
+  - text: ","
+  - link "people":
+    - /url: "#f-people"
+  - link "An email":
+    - /url: https://mail.google.com/mail/u/0/#all/000000000000e1f7
+  - text: dated 7 Oct 2026 Gave
+  - link "next step":
+    - /url: "#f-next_step"
+  - heading "Mentioned in" [level=3]
+  - link "Atlas beta scope Decisions":
+    - /url: /p/decisions/2026-09-08-atlas-beta-scope
+  - link "Weekly Atlas review on Wednesdays Decisions":
+    - /url: /p/decisions/2026-10-01-weekly-team-review
+  - link "Daniel Okoro People":
+    - /url: /p/people/daniel-okoro
+  - link "Hannah Becker People":
+    - /url: /p/people/hannah-becker
+  - link "Maya Chen People":
+    - /url: /p/people/maya-chen
+  - link "Omar Haddad People":
+    - /url: /p/people/omar-haddad
+  - link "Robin Lefebvre People":
+    - /url: /p/people/robin-lefebvre
+  - link "Sofia Marquez People":
+    - /url: /p/people/sofia-marquez
   - heading "Links to" [level=3]
-  - link "Course A Projects":
-    - /url: /note/projects/course-a
+  - link "Robin Lefebvre People":
+    - /url: /p/people/robin-lefebvre
+  - link "Maya Chen People":
+    - /url: /p/people/maya-chen
+  - link "Omar Haddad People":
+    - /url: /p/people/omar-haddad
+  - link "Daniel Okoro People":
+    - /url: /p/people/daniel-okoro
+  - link "Sofia Marquez People":
+    - /url: /p/people/sofia-marquez
+  - link "Hannah Becker People":
+    - /url: /p/people/hannah-becker
+  - link "Grace Liu People":
+    - /url: /p/people/grace-liu
+  - link "Atlas beta scope Decisions":
+    - /url: /p/decisions/2026-09-08-atlas-beta-scope
+  - link "Weekly Atlas review on Wednesdays Decisions":
+    - /url: /p/decisions/2026-10-01-weekly-team-review
+  - group: Earlier values (1)
   - group: Edit file
+  - button "Forget"

@@ -10,6 +10,7 @@ FGA holds agent names and slice names only (`agent:town reader slice:area__hec`)
 - Every read, search, write check and relay check uses policy.yaml's slices narrowed to that answer.
 - Deleting a tuple in the FGA console cuts the slice on the next refresh. Adding it back restores it; no rebuild.
 - If FGA can't be reached for longer than `max_age_s` (default 120), outside assistants get no slices until it answers (fail closed). Assistants inside the wall are not affected.
+- The owner's merge of two notes (`docs/same-person.md`) is refused while FGA hasn't confirmed every slice policy.yaml gives every assistant: its checks compare what each assistant sees, and an assistant left with no slices would look like one that sees neither note.
 
 ## Setup
 

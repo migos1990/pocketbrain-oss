@@ -1,0 +1,12 @@
+# Test fixtures for the secret detectors (G521): fake keys a test needs whole, committed 2026-10-15/16.
+# None is a real credential (checked 2026-10-30: AWS doc-style example ids, truncated PEMs, a 127.0.0.1 test login key,
+# a base64 'secret-tunnel' string). New tests build secret-shaped strings at run time instead (CLAUDE.md, Shipping).
+16521274ee348df75e9f43b3fc7c0608192e4244:test/door.test.ts:generic-api-key:16
+33e891d0e2a152afbed50c52fc179b082853c5e0:test/ceilings.test.ts:aws-access-token:23
+33e891d0e2a152afbed50c52fc179b082853c5e0:test/ceilings.test.ts:generic-api-key:54
+33e891d0e2a152afbed50c52fc179b082853c5e0:test/ceilings.test.ts:private-key:31
+646527a359e461a2115e815c7425ab38f43c0078:test/owner-tasks.test.ts:generic-api-key:29
+7edff40a3780d14d68de9271ef46048330813cf5:test/support-bundle.test.ts:generic-api-key:23
+9fb2037e7974f49e52cb40e457faf02f6873e9a1:test/secret-parity.test.ts:private-key:54
+f1d21e9b9a2e613108943a00542764c895f1ca2a:test/secret-parity.test.ts:aws-access-token:21
+fd548c4fc9a96fb71705605a356ca3a6be1eb83a:test/ceilings.test.ts:private-key:76

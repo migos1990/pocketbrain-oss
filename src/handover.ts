@@ -346,6 +346,6 @@ ${openDisputes.length ? `${openDisputes.length} notes have a disputed fact (two 
 ## Known limits
 
 - Facts are only as fresh as their \`as_of\` dates. Anything with a shelf life (roles, balances, next steps) should be rechecked before you rely on it.
-- The pocketBrain tool still calls the owner's own messages \`louis:\` sources. Until it learns your name, cite yourself as \`louis:<date>/<topic>\`.
+- Cite your own word as \`owner:<date>/<topic>\` (a fact you tell an agent yourself).
 `;
 }

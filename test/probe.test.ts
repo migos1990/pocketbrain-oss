@@ -3,7 +3,7 @@ import { test, expect } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
-import { runChecks, record, probeOnce } from "../src/probe";
+import { runChecks, record, probeOnce, failingChecks } from "../src/probe";
 import { serve } from "../src/server";
 
 const alerts = (root: string) => { const f = join(root, "log", "alerts.jsonl"); return existsSync(f) ? readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []; };
@@ -91,4 +91,34 @@ test("absence: every note must be findable; a note filed under the wrong path or
   expect(unsearchable(root).join("\n")).toContain("people/jane-roy-copy.md");
   await runJob(root, "searchable", async () => { const p = unsearchable(root); if (p.length) throw new Error(`${p.length} note(s) can't be found: ${p[0]}`); }, 1000);
   expect(jobChecks(root).find((c) => c.name === "searchable")).toMatchObject({ ok: false });
+});
+
+// Bug hunt #134: a torn log/probe.json (crash mid-write) made every later probe throw before it
+// alerted, and failingChecks read it as "nothing failing".
+test("probe: a torn probe.json still alerts, reads as failing, and is rewritten whole", async () => {
+  const root = makeBrain();
+  writeFileSync(join(root, "rules", "hub.yaml"), "hub: mac\nepoch: 1\nsince: 2026-10-08\nreplicas: { mac: {} }\npublic_url: https://brain.example\n");
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(join(root, "log"), { recursive: true });
+  writeFileSync(join(root, "log", "probe.json"), '{\n  "local": { "ok": true, "since": "2026-10-0');
+  expect(failingChecks(root).map((c) => c.name)).toEqual(["probe"]);
+  await probeOnce(root, "http://hub", net({ "http://hub/health": new Response("{}") }));
+  expect(alerts(root).map((a) => a.check)).toContain("probe_door");
+  expect(() => JSON.parse(readFileSync(join(root, "log", "probe.json"), "utf8"))).not.toThrow();
+  expect(failingChecks(root).map((c) => c.name)).toContain("door");
+});
+
+test("probe: /health fails when the brain's rules can't be read, so the local check alerts", async () => {
+  const root = makeBrain();
+  const s = serve(root, 0);
+  const url = `http://127.0.0.1:${s.port}`;
+  try {
+    expect((await fetch(`${url}/health`)).status).toBe(200);
+    writeFileSync(join(root, "rules", "policy.yaml"), readFileSync(join(root, "rules", "policy.yaml"), "utf8") + "\nbad: [\n");
+    const h = await fetch(`${url}/health`);
+    expect(h.status).toBe(503);
+    expect(await h.text()).not.toContain("policy.yaml\n");
+    const checks = await runChecks(root, url);
+    expect(checks.find((c) => c.name === "local")?.ok).toBe(false);
+  } finally { s.stop(true); }
 });

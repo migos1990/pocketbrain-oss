@@ -32,8 +32,9 @@ test("the dashboard names agents by label and speaks plainly on the filmed scree
   const page = layout({ root }, overview(s, "x"));
   expect(page).toContain(">Robin&#39;s brain</span>");
   expect(page).toContain('<span title="helper">claude.ai</span>');
-  expect(page).toContain("claude.ai only proposes. Approve to apply.");
-  expect(page).toContain("from an email, Mar 9");
+  expect(page).toContain('From your assistant <span title="helper">claude.ai</span>');
+  expect(page).not.toContain("only proposes. Approve to apply.");
+  expect(page).toContain("found in an email, Mar 9");
   expect(page).toContain("which <span title=\"helper\">claude.ai</span> can't see");
   expect(page).toMatch(/mentions <span title="projects\/course-a#next_step">Course A: next step<\/span>/);
   expect(page).toContain("key was used at 8:37 am, outside its hours (3:25 to 5:00 am, or Sundays 9:55 am to 12:00 pm). It's paused.");

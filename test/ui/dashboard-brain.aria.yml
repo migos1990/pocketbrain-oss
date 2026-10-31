@@ -1,58 +1,58 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - heading "Brain" [level=1]
   - search:
-    - searchbox "Search or ask"
-    - button "Ask"
+    - searchbox "Search"
+    - button "Search"
   - paragraph:
     - text: "Your assistants:"
-    - link "steward":
-      - /url: /agent/steward
+    - link "Claude":
+      - /url: /agent/claude
     - text: ","
-    - link "planner":
-      - /url: /agent/planner
+    - link "ChatGPT":
+      - /url: /agent/chatgpt
+    - text: ","
+    - link "Gemini":
+      - /url: /agent/gemini
     - text: ","
     - link "gardener":
       - /url: /agent/gardener
-    - text: ","
-    - link "helper":
-      - /url: /agent/helper
     - text: . Each one sees only the notes you share with it.
   - heading "Browse" [level=2]
-  - link "People 2":
+  - link "People 61":
     - /url: /brain?kind=people
-  - link "Projects 2":
+  - link "Projects 14":
     - /url: /brain?kind=projects
-  - link "Money 1":
+  - link "Organisations 12":
+    - /url: /brain?kind=orgs
+  - link "Money 2":
     - /url: /brain?kind=money
-  - link "Decisions 1":
+  - link "Decisions 10":
     - /url: /brain?kind=decisions
   - heading "Changed this week" [level=2]
   - link "See every change":
     - /url: /history
-  - text: Nothing changed in the last 7 days. Changes your assistants save show up here.
+  - link "Antoine Lavoie Role, edited by you today":
+    - /url: /p/people/antoine-lavoie
+  - link "Hélène Lefebvre Prefers, filed from an email today":
+    - /url: /p/people/helene-lefebvre
+  - link "Hannah Becker Last contact, filed from an email today":
+    - /url: /p/people/hannah-becker
+  - link "Martin Leclerc Last contact, filed from an email today":
+    - /url: /p/people/martin-leclerc
+  - link "Lucas Fontaine Last contact, edited by you today":
+    - /url: /p/people/lucas-fontaine
+  - link "Kenji Watanabe Role, filed from an email yesterday":
+    - /url: /p/people/kenji-watanabe
+  - link "Maya Chen Last contact, filed from an email yesterday":
+    - /url: /p/people/maya-chen
+  - link "Sofia Marquez Role, filed from an email yesterday":
+    - /url: /p/people/sofia-marquez
   - heading "Needs a look" [level=2]
   - text: Everything has been checked recently.

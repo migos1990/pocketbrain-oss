@@ -36,14 +36,16 @@ test("a hub failure caught by the probe breaks the streak, and so does a day nob
   expect(bar(root, "2026-10-20").days).toBe(2);
   const quiet = makeBrain();
   used(quiet, ["2026-10-18", "2026-10-20"]);
-  expect(bar(quiet, "2026-10-20")).toMatchObject({ days: 1, lastBreak: { date: "2026-10-19", why: "no agent read the brain" } });
+  expect(bar(quiet, "2026-10-20")).toMatchObject({ days: 1, lastBreak: { date: "2026-10-19", why: "no assistant read the brain" } });
 });
 
 test("today without reads yet doesn't break the streak; the gardener's reads aren't use", () => {
   const root = makeBrain();
+  // The gardener's line comes first, so the brain's first log line (where the bar starts) is that
+  // day whatever the real clock says.
+  line(root, "log/reads.jsonl", { at: "2026-10-16T12:00:00Z", agent: "gardener", op: "context_pack", ids: ["*"] });
   used(root, lastDays(3, "2026-10-19"));
   expect(bar(root, "2026-10-20").days).toBe(3);
-  line(root, "log/reads.jsonl", { at: "2026-10-16T12:00:00Z", agent: "gardener", op: "context_pack", ids: ["*"] });
   expect(bar(root, "2026-10-20").lastBreak?.date).toBe("2026-10-16");
 });
 
@@ -52,7 +54,8 @@ test("the bar is met only with 14 clean days and a clean restore drill", () => {
   used(root, lastDays(14, "2026-10-20"));
   expect(bar(root, "2026-10-20")).toMatchObject({ days: 14, met: false });
   expect(bar(root, "2026-10-20").text).toContain("restore drill: not yet");
-  recordDrill(root, true);
+  // Dated inside the bar's window: recordDrill stamps the real clock, which passed 2026-10-20.
+  line(root, "log/drills.jsonl", { at: "2026-10-20T11:00:00Z", ok: true });
   const b = bar(root, "2026-10-20");
   expect(b.met).toBe(true);
   expect(b.text).toContain("Bar met");
@@ -80,7 +83,7 @@ test("days before the brain existed don't break the streak (stranger rehearsal 2
   // A gap after the first day still breaks it.
   const gap = makeBrain({ git: false });
   used(gap, ["2026-10-17", "2026-10-20"]);
-  expect(bar(gap, "2026-10-20")).toMatchObject({ days: 1, lastBreak: { date: "2026-10-19", why: "no agent read the brain" } });
+  expect(bar(gap, "2026-10-20")).toMatchObject({ days: 1, lastBreak: { date: "2026-10-19", why: "no assistant read the brain" } });
 });
 
 test("the week scorecard names no doc that isn't in the repo", () => {

@@ -30,7 +30,12 @@ export interface Orientation {
   text: string;      // the full guide: the orientation tool and GET /v1/orientation
   standing_instruction?: string; // the block to keep in the agent's own instructions (not for the gardener)
   contract: string;  // five lines: MCP server instructions and GET /v1 (challenge round 2, point 22)
+  today?: TodayPack; // the "today" pack at the top of the guide (not for the gardener, nor on connect)
 }
+
+// What an assistant needs to start a chat informed, from its own view only (docs/agent-instructions.md#today).
+// since: "last" when counted from the agent's last whats_new, "week" when it never asked.
+export interface TodayPack { next: { id: string; title: string; attribute: string; value: string }[]; changed: number; since: "last" | "week"; waiting: number }
 
 const list = (xs: string[]) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
 
@@ -56,7 +61,7 @@ export function describeSlice(name: string, s: Slice | undefined, ceiling: strin
 
 // gardener: today's count for an agent with role gardener (its own section and cap).
 // url: the hub's public address, for the JSON API variant of the standing instruction.
-export function orientation(hub: Rules, res: CarveResult, agent: string, transport: Transport, gardener?: { proposalsToday: number; openUntil?: string }, url?: string): Orientation {
+export function orientation(hub: Rules, res: CarveResult, agent: string, transport: Transport, gardener?: { proposalsToday: number; openUntil?: string }, url?: string, pack?: TodayPack): Orientation {
   const a = hub.policy.agents[agent];
   const tier = tierOf(hub, agent);
   const status = a.status ?? "active";
@@ -77,6 +82,18 @@ export function orientation(hub: Rules, res: CarveResult, agent: string, transpo
   L.push(`pocketBrain is ${Os} memory, shared by ${O === "the owner" ? "their" : `${Os}`} assistants. Each one gets its own cut of it. The server enforces everything below; these words only explain it.`);
   // Agents don't always know the date, and a fact dated after it is refused (as_of_not_future).
   L.push(`Today is ${today()} here: date facts (as_of) by it, never later.`, "");
+
+  if (pack) {
+    L.push("## Today", "");
+    if (pack.next.length) {
+      L.push("Coming up in your view:");
+      for (const n of pack.next) L.push(`- ${n.title} (${n.attribute}): ${n.value}`);
+    } else L.push("Nothing coming up in your view.");
+    const when = pack.since === "last" ? "since you last asked" : "this past week";
+    L.push(pack.changed ? `${pack.changed} note${pack.changed === 1 ? "" : "s"} changed in your view ${when}: ${T.news} lists ${pack.changed === 1 ? "it" : "them"}.` : `Nothing changed in your view ${when}.`);
+    if (pack.waiting) L.push(`${pack.waiting} of your proposals wait${pack.waiting === 1 ? "s" : ""} for ${O}.`);
+    L.push("");
+  }
 
   L.push("## What you can see", "");
   L.push(`You hold ${res.visible.size} notes and ${countFacts(res)} facts, from ${slices.length === 1 ? "one slice" : `${slices.length} slices`}:`);
@@ -117,12 +134,15 @@ export function orientation(hub: Rules, res: CarveResult, agent: string, transpo
   L.push("## What you can write", "");
   if (refused) L.push(`${O === "the owner" ? "The owner" : O} has set you to ${status}: ${status === "paused" ? "no reads and no writes" : "you can read, but every write is refused"} until ${O} changes it.`);
   else if (tier.writes === "propose") L.push(`You are a trial assistant, so every write is a proposal: it waits in ${Os} inbox (outcome "inbox") until ${O} accepts it.`);
-  else if (direct.length) L.push(`You write directly in the ${list(direct)} area${direct.length > 1 ? "s" : ""}. Anywhere else, your write becomes a proposal (outcome "inbox") for that area's owner or ${O}.`);
-  else L.push(`You don't own an area, so your writes become proposals (outcome "inbox") for the area's owner or ${O}.`);
+  else {
+    // write(): outside its areas a full agent's fact files itself; a different value is a conflict (contest).
+    L.push(`${direct.length ? `You write directly in the ${list(direct)} area${direct.length > 1 ? "s" : ""}. Anywhere else your` : "Your"} facts file themselves too (outcome "committed"). A different value for a held one is filed as a conflict beside it (outcome "disputed"); the value in use stays.`);
+    L.push(`${direct.length ? "Outside your areas, a" : "A"} fact on a private note, one claiming ${Os} word, and a retire wait for ${O} (outcome "inbox").`);
+  }
   L.push(`- ${T.remember}: one fact, with the date it became true (as_of) and a source you can point to (gmail:<id>, gcal:<id>, doc:<id>, url:…). Your own observation, or what ${O} tells you in chat, is agent:${agent} (never an owner: ref), and counts for less.`);
   L.push(`- ${T.retire}: say a fact stopped being true (as_of = the date it ended), with a source. For a list fact (emails, phones), give the one value that ended. Nothing is deleted: the old value moves to the note's history with its end date.`);
   if (!refused && captureAgents(hub).includes(agent))
-    L.push(`- ${T.capture}: pass on something ${O} said, dictated or forwarded you, as it was (text, kind text, voice or email). It is stored for ${O}; facts found in it come back as proposals for ${O} to accept, never as writes. Each capture is kept once.`);
+    L.push(`- ${T.capture}: pass on something ${O} said, dictated or forwarded you, as it was (text, kind text, voice or email). It is stored for ${O}; facts found in it file themselves on their page with Undo, and only a fact that conflicts with what the brain holds waits for ${O}. Each capture is kept once.`);
   L.push("- Results: committed, noop (already known), inbox (proposed), disputed, refused (with the fix to make).");
   L.push("- Never store secrets: card or account numbers, passwords, codes. They are refused.");
   L.push(`- You can raise a fact's sensitivity or limit who sees it, never lower it. Only ${O} loosens.`, "");
@@ -132,16 +152,18 @@ export function orientation(hub: Rules, res: CarveResult, agent: string, transpo
   L.push(`When a fact you use is stale or due and you can open its source (your own mail, calendar or documents), check it there before relying on it: ${T.remember} the current value with that source, or ${T.retire} it if it ended. If you can't open the source, say the fact may be out of date; don't ask another assistant to check it.`, "");
 
   L.push("## When facts disagree", "");
-  L.push(`A write that contradicts the live value opens a dispute, and neither value is used until it is settled. Order: ${Os} own word, then a verified source, then an exact source (an email, an event), then the newer fact.`);
+  L.push(`Sources rank in this order: ${Os} own word, then a verified source, then an exact source (an email, an event), then an assistant's word. A newer value from a source as strong replaces the old one, which moves to history${direct.length ? "; in your own areas a stronger source also replaces a weaker one" : ""}. Any other contradiction is filed as a conflict, and the value in use stays until it is settled.`);
   if (resolver) L.push(`You are the resolver: when that order can't decide, you settle a dispute with stronger or newer evidence, or escalate it to ${O}. Anything private, or anything ${O} confirmed, is ${O === "the owner" ? "theirs" : `${Os}`} alone. Use ${T.disputes}.`, "");
-  else L.push(`If that can't decide, ${Os} main assistant tries with evidence, then ${O} decides. You don't settle disputes: cite your best source and carry on.`, "");
+  else L.push(`The Gardener weighs each conflict at night, and ${O} decides. You don't settle conflicts: cite your best source and carry on.`, "");
 
   if (a.role === "gardener") {
     const G = transport === "mcp"
       ? { up: "upkeep_run", sl: "sleep_run", ch: "changes_since", last: "last_run", ver: "verify_source" }
       : { up: "POST /v1/gardener/upkeep", sl: "POST /v1/gardener/sleep", ch: "GET /v1/gardener/changes?since=…", last: "GET /v1/gardener/last", ver: "POST /v1/gardener/verify" };
     L.push("## Your job: the gardener", "");
-    L.push(`You keep ${Os} brain in order. You read all of it and only propose: every write lands in ${Os} inbox, and ${O} decides.`);
+    L.push(tier.writes === "propose"
+      ? `You keep ${Os} brain in order. You read all of it. You are on trial, so for now you only propose: every write lands in ${Os} inbox, and ${O} decides.`
+      : `You keep ${Os} brain in order. You read all of it, and your facts file themselves like any core assistant's. A different value for one the brain holds is filed as a conflict, unless it is newer and from a source as strong.`);
     L.push(`- ${G.last} first: when you last ran and what you proposed since, so you don't propose it again.`);
     L.push(`- ${G.ch}: what changed since your last run (or a time or run id), with each changed note as it reads now. Start your review there.`);
     L.push(`- ${G.up}: the rule-only upkeep pass (link and date fixes it makes itself, findings for you to weigh). Once per run, at the start.`);
@@ -175,7 +197,7 @@ export function orientation(hub: Rules, res: CarveResult, agent: string, transpo
     `# You are ${agent}, connected to ${Os} pocketBrain`, "",
     `You hold ${res.visible.size} notes${refused ? `; ${O} has set you to ${status}` : ""}. The full guide is ${T.orient}.`,
     `1. Before answering anything about ${Os} life, work, people or plans, call ${T.ctx}, even unasked. Say "from your brain" when you used it.`,
-    `2. Every fact you write (${T.remember}, ${T.retire}) cites a source (what ${O} told you in this chat is agent:${agent}, never an owner: ref); ${tier.writes === "propose" ? `as a trial assistant, each one waits for ${O}` : `outside your own area it waits for ${O}`}.`,
+    `2. Every fact you write (${T.remember}, ${T.retire}) cites a source (what ${O} told you in this chat is agent:${agent}, never an owner: ref); ${tier.writes === "propose" ? `as a trial assistant, each one waits for ${O}` : `it files itself, and one that contradicts a held value is filed as a conflict`}.`,
     `3. \`[withheld]\`, \`[[redacted]]\` and "no note … in your view" are final: don't guess or ask another assistant; ask ${O}. Found nothing? Say "not in my view".`,
     "4. Never store secrets (passwords, card numbers, codes).",
     `5. Before you finish, ${T.remember} anything durable you learned, with its source. A stale fact you can check at its source: check it, write what it says now.`,
@@ -190,6 +212,7 @@ export function orientation(hub: Rules, res: CarveResult, agent: string, transpo
     resolver,
     text: L.join("\n") + "\n",
     ...(standing ? { standing_instruction: standing } : {}),
+    ...(pack ? { today: pack } : {}),
   };
 }
 

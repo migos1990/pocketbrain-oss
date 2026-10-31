@@ -21,10 +21,9 @@ import { issueToken } from "../src/auth";
 import { upkeep, undoRun } from "../src/upkeep";
 
 const QUOTE = "Marc says the whole team must book the exam room B-201 before Friday";
-const original = captureModel;
 beforeAll(() => useCaptureModel(() => makeModel({ provider: "fake", model: "fake-1" }, { fake: (r: ModelRequest) =>
   JSON.stringify({ facts: /exam room B-201/.test(r.prompt) ? [{ entity: "Course A", type: "project", attribute: "next_step", value: "Book B-201", quote: QUOTE }] : [] }) })));
-afterAll(() => useCaptureModel((root) => original(root)));
+afterAll(() => useCaptureModel());
 
 const sh = (cwd: string, ...cmd: string[]) => Bun.spawnSync(cmd, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: "x", GIT_AUTHOR_EMAIL: "x@x", GIT_COMMITTER_NAME: "x", GIT_COMMITTER_EMAIL: "x@x" } }).stdout.toString();
 const slack = (ts: string, text: string) => ({ team: "T1", channel: "C9", channel_name: "#course-a", ts, user: "U1", text });
@@ -111,7 +110,7 @@ test("deciding one proposal never sweeps the quote of another that is still wait
 
 test("G95: a queued text stops being served, and loses its words, once nothing it asks about is open", async () => {
   const { root, file } = await pulled();
-  writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nbatch: { wait_minutes: 0 }\ntransport: { use: instinct }\n");
+  writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nbatch: { style: list, wait_minutes: 0 }\ntransport: { use: instinct }\n");
   sh(root, "git", "add", "-A");
   sh(root, "git", "commit", "-qm", "louis: escalation");
   await tick(root, { now: new Date("2026-10-08T18:00:00Z"), fetch: async () => new Response("{}") });

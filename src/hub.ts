@@ -40,6 +40,9 @@ export interface HubConfig {
   tunnel?: { kind?: "cloudflare" | "funnel" | "none"; name?: string; config?: string };
   port?: number; // the agent server's local port (default 8787)
   dashboard_port?: number; // default 8788
+  dashboard_tailnet?: boolean; // also serve the dashboard on this machine's Tailscale address (docs/dashboard-tailnet.md)
+  dashboard_tailnet_login?: string; // the owner's Tailscale login; only it gets in through `tailscale serve`
+  dashboard_tailnet_devices?: string[]; // the tailnet addresses (100.x) of the owner's own devices that may open it; none listed, none can
   tick_minutes?: number; // how often a serving hub ingests and replays (default 5)
   night?: "local" | "managed"; // who runs the nightly pass (src/gardener.ts); default local
 }

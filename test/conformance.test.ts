@@ -26,6 +26,22 @@ test("the reference server passes every check, none skipped", async () => {
   expect(results.length).toBeGreaterThanOrEqual(34);
 });
 
+// A slow full run saw the wait tick from 59 to 58 s between the hidden and the missing note's 429
+// (builder pre-push, 2026-10-22) and B1 called them different. Only the wait may differ.
+test("B1: two over-budget answers a second apart, the same but for the wait, pass", async () => {
+  const s = referenceServer(loadFixture());
+  let wait = 60;
+  const ticking = async (req: Request) => {
+    const r = await s.handle(req);
+    if (r.status !== 429) return r;
+    const w = String(wait--);
+    return new Response(JSON.stringify({ error: `too many requests from you; try again in ${w} s` }), { status: 429, headers: { "content-type": "application/json", "retry-after": w } });
+  };
+  const results = await runConformance((path, init) => ticking(new Request(`http://ref${path}`, init)), fx,
+    { name: "steward", token: s.issue("full") }, { name: "helper", token: s.issue("limited") }, { resolver: s.issue("full", "resolver"), waiting: s.issueWaiting() });
+  expect(results.find((r) => r.id === "B1")).toMatchObject({ ok: true });
+});
+
 // 0.2's checks, by id: each one runs, and the budget check found the reference server's budget.
 test("spec 0.2: handoffs, route-limited and waiting credentials and the request budget are checked", async () => {
   const s = referenceServer(loadFixture());

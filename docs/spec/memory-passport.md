@@ -1,6 +1,6 @@
 # Memory Passport: an open door to a personal memory server
 
-Status: draft 0.2, 2026-10 (0.2 adds handoffs, route-limited credentials, waiting sign-ins and the request budget). Implementation-neutral. pocketBrain is one implementation; [conformance/reference-server.ts](../../conformance/reference-server.ts) is a second, small one that shares no code with it. Notes on where pocketBrain stands are marked *pocketBrain*.
+Status: draft 0.2, 2026-10 (0.2 adds handoffs, route-limited credentials, waiting sign-ins and the request budget). Implementation-neutral. pocketBrain is one implementation; [conformance/reference-server.ts](../../conformance/reference-server.ts) is a second, small one that shares no code with it, and [conformance/reference_server.py](../../conformance/reference_server.py) a third, in Python with only its standard library, that shares neither code nor language with either. Notes on where pocketBrain stands are marked *pocketBrain*.
 
 A personal memory server holds one person's memory (the **owner**) and serves it to several AI assistants (**agents**), each limited to a **slice**. Memory Passport is the wire contract an assistant vendor implements once to connect to any such server: one URL in the assistant's settings, and the assistant reads and writes within its slice.
 
@@ -44,7 +44,7 @@ A server MAY issue an agent a credential that works on some routes only, for exa
 
 ### Request budget
 
-A server MAY cap how many requests one credential sends (a runaway loop retrying). Over the cap it MUST answer `429` with a `Retry-After` header (seconds or an HTTP date) and no memory. The budget counts requests, not what they ask for: over it, a visible, a hidden and a missing note all answer `429`, and a hidden and a missing one alike. One agent over its budget MUST NOT stop another.
+A server MAY cap how many requests one credential sends (a runaway loop retrying). Over the cap it MUST answer `429` with a `Retry-After` header (seconds or an HTTP date) and no memory. The budget counts requests, not what they ask for: over it, a visible, a hidden and a missing note all answer `429`, and a hidden and a missing one alike, but for the wait itself (the `Retry-After` value, and the same number in the body), which counts down while a client asks. One agent over its budget MUST NOT stop another.
 
 *pocketBrain:* 120 requests a minute and 300 writes an hour per agent and token role by default, on every door (`budget:` in policy.yaml, [hub.md](../hub.md#request-budget), src/budget.ts); B1 reaches it.
 
@@ -76,6 +76,7 @@ A JSON list of hits, best first: `[{ "id", "title", "type", "area" }]`. Only not
 
 - A note outside the slice MUST answer exactly like a missing note: `404`, with a body and headers that differ only by the id the agent asked for, however the id is written (encoded or plain slash, other case, trailing slash, `.md`).
 - A fact the agent may not see MUST be left out of `facts`.
+- A hidden value MUST be withheld in any letter case ("MAPLE trust bank" is the same value), and from a visible note's title and aliases as well as its text and facts; a search hit carries the withheld title (check R7).
 - A hidden value or a link to a hidden note inside visible text MUST be replaced with a marker. `[withheld]` is RECOMMENDED; orientation MUST say what the marker means.
 
 ### `POST /v1/remember`
@@ -130,9 +131,9 @@ A server MAY export memory as a JSON bundle, so the owner can leave or move it. 
 
 The suite checks discovery (D1, D2), credentials (A1, A2), orientation (O1), reads (R1 to R5), search (S1 to S3, R6), flags (F1 to F5), identity (I1 to I3) and writes (W1 to W5), reads before writes; then, from 0.2, handoffs (H1 to H3), route-limited credentials (P1, P2), waiting sign-ins (Q1) and, last, the request budget (B1: up to 400 reads as the limited agent; a server that never answers `429` passes, since a budget is optional). It exits 1 when a MUST check fails. It writes to the server, so run it on a throwaway copy.
 
-Each check that guards the one rule is shown to bite: [conformance/mutants.ts](../../conformance/mutants.ts) wraps the reference server with one plausible mistake at a time (a `403` for a hidden note written with a plain slash, a header saying why a note is missing, `include_hidden=true` honoured, `direct: true` skipping the owner, an `X-Agent` header or a query token taken as identity, the writer's name taken from the body, a handoff's sender told it was held, a handoff delivered unchecked under its sender's name, a resolver credential that reads, a waiting sign-in read as an agent, a `429` without `Retry-After`, a budget that skips hidden notes), and each mutant must fail exactly the checks named for it.
+Each check that guards the one rule is shown to bite: [conformance/mutants.ts](../../conformance/mutants.ts) wraps the reference server with one plausible mistake at a time (a visible note's title served as stored, a `403` for a hidden note written with a plain slash, a header saying why a note is missing, `include_hidden=true` honoured, `direct: true` skipping the owner, an `X-Agent` header or a query token taken as identity, the writer's name taken from the body, a handoff's sender told it was held, a handoff delivered unchecked under its sender's name, a resolver credential that reads, a waiting sign-in read as an agent, a `429` without `Retry-After`, a budget that skips hidden notes), and each mutant must fail exactly the checks named for it.
 
-To try it without a server of your own: `bun conformance/reference-server.ts 8790` prints four tokens (full, limited, resolver, waiting); pass them to `run.ts`. Its request budget is 300 requests per credential per minute.
+To try it without a server of your own: `bun conformance/reference-server.ts 8790` prints four tokens (full, limited, resolver, waiting); pass them to `run.ts`. Its request budget is 300 requests per credential per minute. `python3 conformance/reference_server.py 8791` does the same in Python, printing one JSON line with its url and the four tokens; `test/conformance-python.test.ts` runs the whole suite against it over real HTTP on every `bun test`. Both reference servers withhold a hidden value in any case and from a visible note's title and aliases too, and a direct writer's write to a fact hidden from it goes to the owner while answering like a new fact (`test/passport-reference-leaks.test.ts`, G530).
 
 *pocketBrain:* `test/conformance.test.ts` runs the suite in process against pocketBrain on `examples/brain` (plus the fixture's one extra note), with its resolver token and a waiting sign-in from a test authorization server, against the reference server and against every mutant, on every `bun test`. `bun run conformance` (CI job `conformance`) runs it over real HTTP against a reference server and a pocketBrain hub on a throwaway copy (Q1 skipped for the hub: a waiting sign-in needs a live authorization server). Both pass every check that runs, B1 included: each one's budget answers `429` within the suite's 400 reads. The fixture's limited agent writes through the owner's inbox; a run with a limited agent that writes directly would also exercise the hidden-fact write rule against a committed write, a case pocketBrain tracks as an open gap.
 

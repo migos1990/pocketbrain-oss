@@ -53,7 +53,8 @@ function brain(edit?: (p: any) => void, escalation = "health: { url: null }\nbat
 function sandboxed(edit: ((p: any) => void) | undefined, escalation: string): string {
   return sandbox("synthetic", (root) => {
     writeFileSync(join(root, "money", "holdings.md"), HOLDINGS);
-    writeFileSync(join(root, "rules", "escalation.yaml"), escalation);
+    // Replies by code and letter need the lettered list (batch style list).
+    { const doc = YAML.parse(escalation) ?? {}; writeFileSync(join(root, "rules", "escalation.yaml"), YAML.stringify({ ...doc, batch: { style: "list", ...(doc.batch ?? {}) } })); }
     const f = join(root, "rules", "policy.yaml");
     const p = YAML.parse(readFileSync(f, "utf8"));
     p.agents.planner.act = { send_mail: { to: structuredClone(LIST), max_per_day: 3, max_requests_per_day: 50 } };

@@ -6,8 +6,9 @@
 // English golden set (evals/fixtures/retrieval: fictional notes laid over the synthetic brain),
 // so CI and the cloud measure retrieval too, against a committed baseline. Plus synthetic cases
 // for what the golden sets don't cover yet (freshness).
-import { cpSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import YAML from "yaml";
 import { SRC } from "../lib/pb";
 import { realBrainPath, sandbox } from "../lib/sandbox";
@@ -15,6 +16,7 @@ import { forbiddenFor, findLeaks } from "../lib/oracle";
 import { ok, na, type Case, type Result } from "../lib/case";
 
 const core = existsSync(join(SRC, "core.ts")) ? await import(join(SRC, "core.ts")) : undefined;
+const semantic = existsSync(join(SRC, "semantic.ts")) ? await import(join(SRC, "semantic.ts")) : undefined;
 
 interface Q { id: string; kind: string; q: string; as?: string; want: string[]; answer?: string; forbid?: string[] }
 const GATE = 0.85; // held-out recall@5 (retrieval-capture.md section 2); under it is also the trigger for embeddings
@@ -46,6 +48,33 @@ function synthGolden(lexicon = false): Golden {
   synthMemo.set(lexicon, g);
   return g;
 }
+// The synthetic set through the hybrid search (src/semantic.ts): the real local model, vectors for
+// every view computed first (into a throwaway vector dir), each query embedded as a door would.
+let hybridMemo: Golden | undefined;
+async function synthHybrid(): Promise<Golden> {
+  if (hybridMemo) return hybridMemo;
+  const root = sandbox("synthetic", (r) => {
+    for (const d of ["people", "orgs", "projects", "decisions", "notes", "money"]) if (existsSync(join(SYNTH_DIR, d))) cpSync(join(SYNTH_DIR, d), join(r, d), { recursive: true });
+  });
+  const keep = process.env.PB_VECTOR_DIR;
+  const dir = mkdtempSync(join(tmpdir(), "pb-eval-vectors-"));
+  process.env.PB_VECTOR_DIR = dir;
+  try {
+    await core.vectorsReady(root);
+    const rows = [];
+    for (const g of YAML.parse(readFileSync(join(SYNTH_DIR, "questions.yaml"), "utf8")).questions as Q[]) {
+      const vector = await semantic.embedQuery(g.q, { waitMs: 120_000 });
+      if (!vector) throw new Error(`no vector for ${g.id}`);
+      const ids = core.search(root, g.as ?? "steward", g.q, 20, {}, { vector }).map((h: any) => h.id);
+      rows.push({ g, ids, pos: g.want.length ? ids.findIndex((id: string) => g.want.includes(id)) : -1, leaked: (g.forbid ?? []).filter((f) => ids.includes(f)) });
+    }
+    return (hybridMemo = { root, rows });
+  } finally {
+    if (keep === undefined) delete process.env.PB_VECTOR_DIR; else process.env.PB_VECTOR_DIR = keep;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function score(root: string, qs: Q[]): Golden {
   const rows = qs.map((g) => {
     const ids = core.search(root, g.as ?? "steward", g.q, 20).map((h: any) => h.id);
@@ -135,9 +164,17 @@ ${body}
 }
 
 // The question kinds (questions.yaml): direct and direct2 reuse a note's words; heldout and dev2
-// don't, but were written by whoever wrote the word map; blind2 was written by a separate writer
-// that never saw it, so the 85% gate is measured there.
-export const KINDS = ["direct", "heldout", "dev2", "direct2", "blind2"] as const;
+// don't, but were written by whoever wrote the word map; blind2 was written blind, but its misses
+// were read while widening the word map (2026-10-22), so it is a dev set now. blind3 (its own
+// notes, written blind, mostly sharing a word with the note) and blind4 (strict paraphrases of the
+// blind3 notes: no content word shared) were written by writers that saw neither the word map
+// nor any question; the 85% gate is measured on blind4. blind5 (new notes, strict paraphrases)
+// was written after semantic search was built and confirms it on questions nobody tuned against.
+export const KINDS = ["direct", "heldout", "dev2", "direct2", "blind2", "blind3", "blind4", "blind5"] as const;
+const GATE_KIND = "blind4";
+// Semantic search on blind4 reads 40/48 (83%) on main since a passed deadline reads stale and ranks
+// down on purpose (G374); the owner accepted that on 2026-10-23. Below it is a regression.
+const SEMANTIC_FLOOR = 0.83;
 const mode = (on: boolean) => (on ? "lexicon" : "plain");
 // What the synthetic set scored when committed, per mode and kind; a drop under it is a regression.
 const baseline = (): Record<string, Record<string, number>> => JSON.parse(readFileSync(join(SYNTH_DIR, "baseline.json"), "utf8")).recall5;
@@ -150,12 +187,12 @@ const ofKind = (g: Golden, k: string) => g.rows.filter((r) => r.g.kind === k);
 
 export function synthRetrievalCases(): Case[] {
   const unseen = (on: boolean) => () => {
-    const s = r5(ofKind(synthGolden(on), "blind2"));
+    const s = r5(ofKind(synthGolden(on), GATE_KIND));
     return ok(s.rate >= GATE, `${s.hit}/${s.n} (${pct(s.rate)}%) with the word map ${on ? "on" : "off"}`, { recall5: s.rate });
   };
   return [
-    synthCase("ret-synth-unseen", `synthetic FR/EN set: questions written blind, in the other language or other words, find a wanted note in the top 5 (gate ${GATE * 100}%, under it add semantic search)`, unseen(false), "G172"),
-    synthCase("ret-synth-unseen-lexicon", `synthetic FR/EN set: the same blind questions with the French-English word map on (PB_LEXICON=1), gate ${GATE * 100}%`, unseen(true), "G172"),
+    synthCase("ret-synth-unseen", `synthetic FR/EN set: strict paraphrases written blind (blind4), in the other language or other words, find a wanted note in the top 5 with the word map off (gate ${GATE * 100}%, under it add semantic search)`, unseen(false), "G172"),
+    synthCase("ret-synth-unseen-lexicon", `synthetic FR/EN set: the same blind4 questions with the French-English word map on (the default), gate ${GATE * 100}%`, unseen(true), "G172"),
     synthCase("ret-synth-baseline", "synthetic FR/EN set: recall@5 holds its committed baseline for every kind of question, word map off and on", () => {
       const b = baseline(), drops: string[] = [], now: string[] = [];
       for (const on of [false, true]) for (const k of KINDS) {
@@ -172,6 +209,21 @@ export function synthRetrievalCases(): Case[] {
       });
       return ok(lost.length === 0, lost.length ? `lost with the word map: ${lost.join(", ")}` : "no same-words question lost");
     }),
+    { id: "ret-synth-semantic", dimension: "retrieval", source: "synthetic", title: `synthetic FR/EN set with semantic search on (local bge-m3, fused with BM25): blind4 at the ${Math.round(SEMANTIC_FLOOR * 100)}% the owner accepted (bar ${GATE * 100}%, G374), no same-words question lost to words alone, no carve question returns a forbidden note; n/a without the model (pocketbrain search setup, PB_MODEL_DIR)`, run: async () => {
+      if (!core?.vectorsReady || !semantic?.fillVectors) return na("no semantic search at this commit");
+      if (process.env.PB_SEMANTIC === "0") return na("semantic search is off (PB_SEMANTIC=0)");
+      if (!semantic.modelPresent()) return na(`no model in ${semantic.modelDir()}`);
+      const h = await synthHybrid(), words = synthGolden(true);
+      const per = KINDS.map((k) => [k, r5(ofKind(h, k))] as const);
+      const lost = (["direct", "direct2"] as const).flatMap((k) => {
+        const w = new Map(ofKind(words, k).map((r) => [r.g.id, r.pos]));
+        return ofKind(h, k).filter((r) => { const p = w.get(r.g.id)!; return p >= 0 && p < 5 && !(r.pos >= 0 && r.pos < 5); }).map((r) => r.g.id);
+      });
+      const leaked = h.rows.filter((r) => r.leaked.length).map((r) => r.g.id);
+      const gate = per.find(([k]) => k === GATE_KIND)![1];
+      const detail = `${per.map(([k, s]) => `${k} ${pct(s.rate)}% (words ${pct(r5(ofKind(words, k)).rate)}%)`).join(", ")}${lost.length ? `; same-words lost: ${lost.join(", ")}` : ""}${leaked.length ? `; forbidden returned: ${leaked.join(", ")}` : ""}`;
+      return ok(gate.rate >= SEMANTIC_FLOOR && !lost.length && !leaked.length, detail, Object.fromEntries(per.map(([k, s]) => [`recall5_${k}`, s.rate])));
+    } },
     synthCase("ret-synth-no-forbidden", "synthetic FR/EN set: carve questions never return a note the asking agent may not see, word map off or on", () => {
       const bad = [false, true].flatMap((on) => synthGolden(on).rows.filter((r) => r.leaked.length).map((r) => `${r.g.id}(${mode(on)})`));
       return ok(bad.length === 0, bad.length ? `forbidden note returned for ${bad.join(", ")}` : `${synthGolden(false).rows.filter((r) => r.g.forbid?.length).length} carve questions clean in both modes`);

@@ -35,11 +35,13 @@ These are refused (403, or a tool error over MCP) for every other agent. Each ca
 
 | MCP tool | JSON API | What it does |
 |---|---|---|
-| `last_run` | `GET /v1/gardener/last` | When it last ran upkeep, the proposals it has made since, how many still wait (`waiting`), and your decisions on its proposals in the last 30 days (`decided`: key, accept or reject, date, value), only for facts and notes it can still see. |
-| `changes_since` | `GET /v1/gardener/changes?since=` | Notes changed since a time or a run id (default: its last upkeep run). For each note: the facts that changed, who wrote last, when, and the note as it reads now. |
-| `upkeep_run` | `POST /v1/gardener/upkeep` | The rule-only upkeep pass: link and date fixes (each its own undoable commit), plus findings. It also rechecks up to 20 due or stale facts at the source they cite and returns them under `rechecked` ([sources-pull.md](sources-pull.md)). |
+| `last_run` | `GET /v1/gardener/last` | When it last ran upkeep, the proposals it has made since, how many still wait (`waiting`), conflicts it may weigh and hasn't suggested on (`conflicts_to_weigh`), and your decisions on its proposals in the last 30 days (`decided`: key, accept or reject, date, value), only for facts and notes it can still see. |
+| `changes_since` | `GET /v1/gardener/changes?since=` | Notes changed since a time or a run id (default: its last upkeep run). For each note: the facts that changed, who wrote last, when, and the note as it reads now. The hub's own text-only commits (the page writer's paragraphs, link repoints) change no fact and aren't listed. |
+| `upkeep_run` | `POST /v1/gardener/upkeep` | The rule-only upkeep pass: link and date fixes (each its own undoable commit), plus findings. It also rechecks up to 20 facts at the source they cite, due or stale ones and weak ones agents read, most at stake first ([What gets rechecked first](sources-pull.md#what-gets-rechecked-first)), checks that up to 10 more cited items still exist ([Sources that vanish](sources-pull.md#sources-that-vanish)), and returns them under `rechecked` ([sources-pull.md](sources-pull.md)). |
 | `sleep_run` | `POST /v1/gardener/sleep` | Forgetting only: facts nobody used long past their shelf life move to history. No model, no journals. `pocketbrain undo --run <run>` brings them back. |
-| `verify_source` | `POST /v1/gardener/verify` | Checks one claim against one source item that a fact in its view cites (an email, an event, a message). The hub reads the item and answers match, no-match or unreachable with a short quote; the gardener never gets the source itself. Every fact in its view citing the item is checked too, by its own value: still said, it's re-confirmed; not said, it turns due (keys under `confirmed` and `due`; a person's value said only about someone else is under `elsewhere`, unconfirmed). 40 a day by default (`max_verifies_per_day`). See [sources-pull.md](sources-pull.md). |
+| `verify_source` | `POST /v1/gardener/verify` | Checks one claim against one source item that a fact in its view cites (an email, an event, a message). The hub reads the item and answers match, no-match or unreachable with a short quote and the item's own day (`dated`, the `as_of` for a newer value the quote states); the gardener never gets the source itself. Every fact in its view citing the item is checked too, by its own value: still said, it's re-confirmed; not said, it turns due (keys under `confirmed` and `due`; a person's value said only about someone else is under `elsewhere`, unconfirmed). 40 a day by default (`max_verifies_per_day`). See [sources-pull.md](sources-pull.md). |
+| `open_disputes` | (MCP only) | Open and escalated conflicts on facts it may see, each side numbered as you see it, with its sources (not which assistant wrote it) and whether it is your own word, and any suggestion it already made, plus a `next` line saying what to do with them. Only conflicts on facts it can read through its own slice are listed: not excluded from it, not shared away from it, no side above its level. |
+| `suggest_answer` | (MCP only) | Suggests which side of a conflict is true: the side number, 1 to 5 exact refs that back it (not `unverified`, links only over http(s), 200 characters each, no instruction or secret in them), and one plain line why (no instructions, no secrets, no claim that you approved). It is stored on the conflict and shown to you as "The Gardener suggests (n)" on the dashboard and as the "approve" answer on your phone (not on a private fact: there the message shows no values, so you answer by number or in the dashboard). It never settles: the conflict stays open, the fact doesn't change, and your tap is the answer. Its commit, and the one that stamps a held conflict it has read, carry a `Why:` line the hub writes from the change, never the Gardener's own words: the fact key, the side and the refs that back it, or the conflicts it read (G458). A resolver's own suggestion, when it escalates, takes precedence. When one side is your own word, it may only suggest that side. A conflict it can't see answers exactly like one that doesn't exist. The resolver sees the side number and each source's kind (`gmail:[withheld]`), never the reason or a source's text, which can quote notes outside its slice. |
 | `memory_sync` | `POST /v1/gardener/memory-sync` | After forgetting: scans readable assistant memories and quizzes the others ([memory-sync.md](memory-sync.md)). Drift becomes corrections for the owner; the gardener sees counts only. |
 
 There is deliberately no tool to read agents' journals. Journals stay readable only by their
@@ -67,11 +69,21 @@ author and you, so consolidating them stays on your machine.
 - **Out of the numbers.** Its reads don't count as "use", so they don't stop forgetting. It also
   stays out of the first-week scorecard's agent reads. Instead, `pocketbrain week` gives it its
   own line: runs, proposals (accepted, rejected, open), cap hits and tripwire trips.
+- **A cited source has to say it.** A proposal that cites an email or event (gmail:, gcal:,
+  discord: and the other source refs) for a new value is checked at that item by the hub, by the
+  same word check as `verify_source`, before it reaches your inbox. If the item doesn't say the
+  value (or is gone), it's refused: "gmail:<id> doesn't say \"<value>\". Propose only a value the
+  item's quote states, or name the fact in your log as \"source no longer supports
+  <note>#<attribute>\"" (check `source_says`). Only items a fact in its view cites are read, so it
+  is no way to read your mail. After 10 such refusals in a
+  day, every proposal citing a source waits for tomorrow. A value the word check can't judge (a
+  date, a short word, a list) or a source the hub can't reach goes on as before. Other agents
+  aren't affected.
 - **A claim of your word is flagged.** A proposal citing a message of yours that isn't in your
   registry says so in the inbox, as it does for any trial agent.
-- **The evidence on each proposal is the hub's.** Every inbox proposal (the gardener's or any
-  trial agent's) gets an `evidence` block written by the hub, not by the agent
-  (`src/evidence.ts`): the notes the change touches (its own and any note id named in its text
+- **The evidence on each proposal is the hub's.** Every proposal an agent's write sends to your inbox (the
+  gardener's or any trial agent's) gets an `evidence` block written by the hub, not by the agent
+  (`src/evidence.ts`; the capture pipeline's and the sleep pass's own proposals have none): the notes the change touches (its own and any note id named in its text
   or value that exists), the refs it cites, the value it would replace (with its sources and
   date), and the `verify_source` verdicts the hub logged for this exact value against a ref the
   fact being changed already cites, in the last 30 days (`log/sources/verify.jsonl` keeps a short hash of each claim, not its words).
@@ -80,6 +92,16 @@ author and you, so consolidating them stays on your machine.
   text reads as instructions (its quote withheld, G90) says "matches, but the email reads as
   instructions", so a planted email doesn't look like clean backing. Anything an agent puts in its
   own request under `evidence` stays in the request and is never shown as the hub's.
+
+## Letting the Gardener file
+
+A new gardener is on trial: it proposes, and its proposals wait. When you trust it to write,
+`pocketbrain agent tier gardener core` makes it core. Its facts then file themselves like any
+core agent's, and a conflict still waits for you. The command changes only the gardener's line in
+`rules/policy.yaml`: its `tier`, and going to core it also drops `max_proposals_per_day`. If the
+edit would move any other value, it refuses. It makes one commit as you, with a Why line, and an
+alert that names the way back (`pocketbrain agent tier gardener trial`). Add `--dry-run` to see
+the changed line first. Its hours, slices and the source check stay as they were.
 
 ## Who runs the night
 
@@ -96,7 +118,7 @@ Once the gardener is in `policy.yaml` and your brain has a public door (`public_
 
 ```sh
 pocketbrain tend --managed                 # writes ~/pocketbrain-agents/agents/..., sends nothing
-pocketbrain tend --managed --apply         # then runs them through ant, deployments paused
+pocketbrain tend --managed --apply --code <code>   # then runs them through ant, deployments paused
 ```
 
 - **What it writes** (in `--dir`, default `~/pocketbrain-agents`, outside both repos): the nightly
@@ -105,11 +127,18 @@ pocketbrain tend --managed --apply         # then runs them through ant, deploym
   minutes after the gardener's daily and weekly `windows` open, in `owner.timezone`, with budgets
   of 25 and 500 cents. The models default to `claude-haiku-5-5` nightly and `claude-opus-5-5`
   weekly (`--nightly-model`, `--weekly-model`). Files you already have are kept unless `--force`.
+- **What the agents may call**: the gardener tools (`last_run`, `changes_since`, `upkeep_run`,
+  `sleep_run`, `verify_source`) plus `orientation`, `context_pack`, `search`, `read`, `remember` and
+  `log_session`; nothing else is enabled (`memory_sync` stays off). Each night the gardener reads
+  `last_run`'s `decided` so it never re-proposes what you rejected, then checks up to 10 facts that
+  `upkeep_run` lists in `rechecked.due` against their source with `verify_source`
+  ([sources-pull.md](sources-pull.md)), and proposes a newer value only when the source's quote
+  states it. The weekly pass checks up to 15 single-source facts that matter most. On the wiki it syncs up to 20 changed pages a night and fills the first 10 pages missing a summary (weekly: 20), each summary in plain words with no reference marker (only a section's lines carry references); it writes every fix the evidence supports through `remember`, which files one that contradicts nothing with Undo and makes one that conflicts a conflict for you. These steps ship with the owner's switch of the gardener from `tier: trial` (every write a proposal) to a core writer; until then its writes still wait as proposals. Once it is core, the fact proposals it left while on trial file themselves on the hub's next tick the way a capture's do (on the page with Undo, or as a conflict; never a private or money one), so none waits as an ask. A fact its source now says about someone else (`elsewhere`) is named in the log as no longer supported, never given a guessed value. The nightly steps are under eval: `agents-gardener-v2-corroborate` (`bun evals/run.ts --llm --only agents-gardener`) runs them as a gardener's system prompt on a night where a fact's email changed. `agents-gardener-weekly` runs the weekly steps on a brain where one person's role email changed and three projects' emails still agree; it scores corroborations found (or the stale role flagged), false proposals, and proposals citing one of those emails for a value it doesn't say, so two models can be compared on it (`EVAL_AGENT_MODEL=<model> bun evals/run.ts --llm --k 3 --only agents-gardener-weekly`).
 - **What `--apply` does**, through `ant --profile <profile>` (default `pocketbrain`; sign in first
   with `ant auth login --profile pocketbrain` and pick the workspace): applies the agents,
   environment and vault; writes `rules/gardener.yaml` pointing at the new lock file (an owner
   commit; an existing one is used as it is); puts a new gardener token in the vault on stdin, the
-  way `pocketbrain gardener rotate` does (skipped if the vault already holds one for this door);
+  way `pocketbrain gardener rotate` does (so it takes the gardener's rotation code, `--code`, G240) (skipped if the vault already holds one for this door);
   fills in the vault id. A deployment is live from the moment it exists, so each one is created
   without its schedule, paused, and only then given its schedule (and paused again). If a pause
   fails, it stops, prints the command to pause it by hand and leaves a Needs-you item.
@@ -149,9 +178,36 @@ mcp_url: https://brain.example.com/mcp             # default: hub.yaml public_ur
   05:15 daily and 12:15 on Sundays. Each session holds a copy of what the gardener read; the
   run records stay.
 - `pocketbrain gardener rotate` rotates the token. `start` runs it on Sundays at 13:00 once the
-  token is `rotate_days` old. It issues a new token and sends it to the vault on **stdin only**,
-  never in arguments or logs. Then it archives the old credential and revokes the older tokens.
+  token is `rotate_days` old; a rotation that failed is tried again every day at 13:00 until one
+  goes through, so fixing its cause closes the probe's `gardener_rotate` alert (G394). It issues a new token and sends it to the vault on **stdin only**,
+  never in arguments or logs, into the vault's existing credential for the brain's MCP URL (a vault
+  holds one active credential per URL, so a second one would be refused with a 409; G413), or a new
+  credential when there is none. Then it revokes the older tokens.
   If the vault refuses the new token, the new token is revoked and the old one keeps working.
+- **From a terminal, rotation needs your yes (G240).** (Open, G279: a shell running as you can
+  start its own `pocketbrain dashboard` and press **Rotation code** itself.) Any program with a shell can run
+  `pocketbrain`, and rotation hands the gardener's token to whatever `ant` it finds. So
+  `pocketbrain gardener rotate` (and `tend --managed --apply`, which puts the first token in the
+  vault) need a rotation code: open the gardener's page on the dashboard, press **Rotation code**,
+  then `pocketbrain gardener rotate --code <code>` (or `tend --managed --apply --code <code>`).
+  The code works once, for 15 minutes, for rotation only; no other command takes it.
+- **The ant is pinned.** The code also records which `ant` got the token: its real path and a
+  sha256 of the file, in `.git/pb-gardener-ant.json`, outside git. The hub's Sunday rotation sends
+  the token only to that file. If `rules/gardener.yaml` names another `ant`, or the file changed
+  (an `ant` update, or something replaced it), nothing is sent and you get a `gardener_ant` alert
+  ("ant changed since you last approved it"); after an update you made yourself, rotate once with
+  a new code. If no rotation was ever approved, the first Sunday rotation pins the `ant` it finds
+  and records it (`gardener_ant_pinned`, on Activity, not a problem). Every rotation the vault
+  takes is a `token_minted` alert naming the `ant` and its hash; a key the vault refused is revoked
+  at once and raises none. A failed rotation's `gardener_ant` alert is one problem however often the
+  daily retry fails, and closes once a rotation goes through.
+  What the pin doesn't stop (G282, open): it is a file the same user's shell can rewrite, and
+  deleting it makes the next Sunday rotation pin whatever `ant` it finds; the hash is checked
+  before `ant` runs, not as it runs. If ant's error output echoes the token, every copy is masked
+  before it reaches an alert.
+  Operator task line, once after setup or an `ant` update: `pocketbrain task "Rotate the gardener
+  once with your code to pin ant" --cmd "pocketbrain gardener rotate --code <code from the
+  gardener's dashboard page>"`.
 - If `ant` is missing or its sign-in has expired, you get a Needs-you item, not silence.
 - If cleanup or rotation throws (a broken lock file, a broken `rules/gardener.yaml`), or returns
   without doing its job (no deployments in the lock file, `ant` missing or signed out, an `ant`
@@ -188,3 +244,17 @@ never a value, a quote, an alert's detail or a log line, so its output can be sh
 - For a while: pause it in the dashboard (Agents), or set `status: paused` on it in `policy.yaml`.
 - For good: `pocketbrain token --revoke gardener`, delete its deployments on the provider's
   side, and remove its line from `policy.yaml`. Set `night: local` again if you had changed it.
+
+## What it couldn't do
+
+A Gardener can run every night and still do nothing useful: with no source connected it has nothing to check facts against, and a managed Gardener without `rules/gardener.yaml` never gets its sessions cleaned up or its token rotated. So the hub says so (`src/blindspots.ts`):
+
+- **No source connected:** no fact can be re-confirmed or caught when its source changes. Fix: add Gmail or Calendar to `rules/sources.yaml`, then `pocketbrain sources connect <name>`.
+- **No check at a source in 7 days** (a read that failed, logged `unreachable`, doesn't count) while facts wait to be checked (the recheck candidates of [sources-pull.md](sources-pull.md#what-gets-rechecked-first)): a source's sign-in has likely lapsed. Fix: `pocketbrain doctor`, then `pocketbrain sources connect <name>`.
+- **Managed, no `rules/gardener.yaml`:** cleanup and rotation never run. Fix: `pocketbrain gardener setup`.
+
+`pocketbrain week` lists every one that holds. The digest says each once under **Needs you**, then again a week later if it still holds (`log/gardener/blind-told.json` remembers when). The missing `gardener.yaml` is left out of the digest, where the hub's own check already reports it every day. A paused Gardener, or none, has nothing to report.
+
+## Wiki sync
+
+The Gardener's `wiki_sync` tool rewrites a page's summary and sections from the page's own facts. It is report-only until the owner runs `pocketbrain wiki sync on`. What the hub checks before a rewrite lands is in [wiki.md](wiki.md#the-gardener-keeps-pages-in-sync). The nightly pass also writes up to 3 pages that have no summary yet (step 8, after its proposals so page writing never reframes them), from `last_run`'s `wiki_missing`, and the hub refuses any name or number none of the page's facts hold.

@@ -7,6 +7,7 @@ import { CoreError } from "../core";
 import { loadBrain, type Note } from "../brain";
 import type { StandingTier } from "../rules";
 import { loadStanding, setStanding, suggestStanding, approveSuggestion, dismissSuggestion, dismissedSuggestions, undismissSuggestion, standingProblem, unpinnedAddresses, confirmedAddresses, orphanStanding, TIERS, type Suggestion } from "../standing";
+import { samePersonProposals, mergeSamePerson, notSamePerson, undoPersonMerge, personMerges, type SamePerson } from "../sameperson";
 import { esc, button, type Page } from "./html";
 import type { State } from "./data";
 
@@ -19,7 +20,7 @@ const WHAT: Record<string, string> = {
 };
 
 const titleOf = (s: { notes: Note[] }, id: string) => s.notes.find((n) => n.fm.id === id)?.fm.title ?? id;
-const noteLink = (s: State, id: string) => `<a href="/note/${id.split("/").map(encodeURIComponent).join("/")}"><b>${esc(titleOf(s, id))}</b></a>`;
+const noteLink = (s: State, id: string) => `<a href="/p/${id.split("/").map(encodeURIComponent).join("/")}"><b>${esc(titleOf(s, id))}</b></a>`;
 
 function levelForm(csrf: string, person: string, tier: StandingTier | undefined, authority: string | undefined, label: string) {
   const opt = (v: string, l: string, on: boolean) => `<option value="${v}"${on ? " selected" : ""}>${esc(l)}</option>`;
@@ -35,6 +36,19 @@ function suggestionItem(s: State, csrf: string, x: Suggestion) {
   const via = x.via.map((v) => `${esc(v.address)} <span class="sub">(${v.confirmed ? "you confirmed it" : "from a source only, not confirmed by you"})</span>`).join(", ");
   return `<div class="item"><div class="what"><span class="kind">suggested: ${esc(LABEL[x.tier])}</span>${noteLink(s, x.person)}<div class="sub">${esc(x.why)}</div><div class="sub">Counted from ${via}</div></div>
 <div class="acts">${button(csrf, "standing-approve", { person: x.person, tier: x.tier }, `Make ${LABEL[x.tier]}`, "go")}${levelForm(csrf, x.person, x.tier, undefined, "Set")}${button(csrf, "standing-dismiss", { person: x.person, tier: x.tier }, "Not now")}</div></div>`;
+}
+
+// "Same person?": two person notes sharing a trusted address (src/sameperson.ts). Merge keeps the
+// older note; Swap keeps the other; Not the same hides the pair until a new shared address shows.
+// A pair the rules keep apart (areas, excludes by name, an open dispute) shows why, and no Merge
+// or Swap that way.
+function samePersonItem(s: State, csrf: string, p: SamePerson) {
+  // A private pair's reason is the card's first sentence ("a private note shares a phone number"),
+  // without the standing and blocked lines shown below.
+  const why = p.private ? esc(p.card.slice(p.card.indexOf(": ") + 2).split(".")[0])
+    : p.evidence.map((e) => `same ${esc(e.kind)} <b>${esc(e.address)}</b>: ${[p.keep, p.drop].map((id) => `${esc(titleOf(s, id))} from ${e.on[id].refs.map((r) => `<code>${esc(r)}</code>`).join(", ")}${e.on[id].added_by.length ? `, added by ${e.on[id].added_by.map(esc).join(", ")}` : ""}`).join("; ")}`).join(". ");
+  return `<div class="item"><div class="what"><span class="kind">same person?</span>${noteLink(s, p.keep)} and ${noteLink(s, p.drop)}<div class="sub">${why}.${p.standing_note ? ` ${esc(p.standing_note)}` : ""} ${p.blocked ? `<b>Can't merge here: ${esc(p.blocked)}.</b>` : `Merging moves ${esc(titleOf(s, p.drop))}'s facts onto ${esc(titleOf(s, p.keep))}; differing values become questions for you, and Undo puts both back.`}</div></div>
+<div class="acts">${p.blocked ? "" : button(csrf, "same-person-merge", { id: p.id }, "Merge", "go", `Merge ${titleOf(s, p.drop)} into ${titleOf(s, p.keep)}?`)}${p.swap_blocked ? "" : button(csrf, "same-person-merge", { id: p.id, swap: "1" }, `Keep ${titleOf(s, p.drop)} instead`, "", p.swap_moves_standing ? `Keep ${titleOf(s, p.drop)}? ${titleOf(s, p.keep)}'s standing moves to it.` : undefined)}${button(csrf, "same-person-not", { id: p.id }, "Not the same")}</div></div>`;
 }
 
 export function peoplePage(s: State, csrf: string): Page {
@@ -53,9 +67,13 @@ ${pins.length ? `<div class="sub">${pins.map((a) => button(csrf, "standing-pin",
 <div class="acts">${levelForm(csrf, id, e.tier, e.authority, "Change")}${button(csrf, "standing-set", { person: id, tier: "none" }, "Remove", "danger", `Take ${titleOf(s, id)} off the list? Their asks get no special weight.`)}</div></div>`;
   };
   const broken = standingProblem(s.root);
+  const same = samePersonProposals(s.root, s.notes);
+  const merged = personMerges(s.root).slice(-5);
   const body = `<h1>Who matters</h1>
 ${broken ? `<div class="flash err">${esc(broken)}. Until you fix it by hand, every sender counts as unknown and these buttons change nothing.</div>` : ""}
 <p class="sub">How much weight your assistants give someone's ask. It never changes what anyone can see, and a message counts only from an address you trust. Suggestions come from your own mail and texts; nothing changes until you click, and only you put someone in your inner circle.</p>
+${same.length || merged.length ? `<h2>Same person?${same.length ? ` (${same.length})` : ""}</h2>
+<div class="card">${same.map((p) => samePersonItem(s, csrf, p)).join("")}${merged.map((m) => `<div class="item"><div class="what"><span class="kind">merged</span>${esc(m.drop)} into ${noteLink(s, m.keep)}</div><div class="acts">${button(csrf, "same-person-undo", { id: m.id }, "Undo", "", `Put ${m.drop} back as its own note?`)}</div></div>`).join("")}</div>` : ""}
 <h2>Suggested${suggestions.length ? ` (${suggestions.length})` : ""}</h2>
 <div class="card">${suggestions.map((x) => suggestionItem(s, csrf, x)).join("") || '<div class="empty">No suggestions. They come from mail and texts the brain reads.</div>'}
 ${hidden.length ? `<div class="item"><div class="what"><span class="kind">not now</span>${hidden.map((id) => `${esc(titleOf(s, id))} ${button(csrf, "standing-undismiss", { person: id }, "Suggest again")}`).join(" ")}<div class="sub">Hidden at the level you dismissed; a higher level is still suggested.</div></div></div>` : ""}</div>
@@ -76,10 +94,21 @@ export function peopleNeedsYou(root: string, notes?: Note[]): string | undefined
   try { if (broken) throw new Error(broken); n = suggestStanding(root, notes).length; } catch (e) {
     return `<div class="item"><div class="what"><span class="kind">who matters</span>Can't read your standing list: ${esc((e as Error).message.slice(0, 200))}. Until it is fixed, every sender counts as unknown.</div><div class="acts"><a class="btn" href="/people">Open</a></div></div>`;
   }
-  return n ? `<div class="item"><div class="what"><span class="kind">who matters</span>${n} standing suggestion${n === 1 ? "" : "s"} from your mail and texts</div><div class="acts"><a class="btn" href="/people">Open</a></div></div>` : undefined;
+  let same = 0;
+  try { same = samePersonProposals(root, notes).length; } catch { /* the standing line above still shows */ }
+  const parts = [n ? `${n} standing suggestion${n === 1 ? "" : "s"} from your mail and texts` : "", same ? `${same} "same person?" question${same === 1 ? "" : "s"}` : ""].filter(Boolean);
+  return parts.length ? `<div class="item"><div class="what"><span class="kind">who matters</span>${parts.join("; ")}</div><div class="acts"><a class="btn" href="/people">Open</a></div></div>` : undefined;
 }
 
 // ---------- the buttons ----------
+
+export function samePersonAction(root: string, action: string, f: Record<string, string>, need: (k: string) => string): string {
+  const id = need("id");
+  if (action === "same-person-merge") return wrap(() => mergeSamePerson(root, id, { swap: f.swap === "1" }));
+  if (action === "same-person-not") return wrap(() => notSamePerson(root, id));
+  if (action === "same-person-undo") return wrap(() => undoPersonMerge(root, id));
+  throw new CoreError(404, `no action ${action}`);
+}
 
 function said(root: string, person: string, e: { tier: string; authority?: string } | undefined) {
   const title = titleOf({ notes: loadBrain(root) }, person);

@@ -1,27 +1,10 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - heading "Digest" [level=1]
   - button "Write today's digest"

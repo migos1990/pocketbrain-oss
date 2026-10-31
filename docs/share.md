@@ -15,13 +15,17 @@ nothing. Run it again with `--yes` to share. The yes is one owner commit (`Kind:
 is the record of what you shared, with whom, and until when.
 
 Her assistant then connects the usual way: a one-time code (`pocketbrain invite alice --url
-https://brain.example`), or, with the sign-in door, her own account
+https://brain.example` for a share of one area; a wider share's code comes from **One-time code** on
+alice's dashboard page, and `share add` says which), or, with the sign-in door, her own account
 (`pocketbrain oauth coworker add <subject> --name "Alice Roy" --agent alice`, see `docs/oauth.md`).
 
 - `pocketbrain share list`: who you share with, which slices, until when.
 - `pocketbrain share extend alice --days 14`: push the date (from the later of today and the old date).
 - `pocketbrain share end alice`: ends it now. Her keys are revoked, her sign-ins unbound, the agent
-  paused. The entry stays in `policy.yaml` with the day it ended.
+  paused. The entry stays in `policy.yaml` with the day it ended. The share is ended, the agent
+  paused and her sign-in let go before the keys are revoked, so if the keys can't be revoked yet
+  (another one-time code is being redeemed; the command says so and exits 1) the share is still
+  over; run it again to revoke the keys (G352).
 
 The morning digest lists active shares and those that ended in the last week, under Numbers.
 
@@ -37,7 +41,7 @@ Whatever `policy.yaml` says for an agent with a `collaborator:` entry:
 - **Not the resolver, not an area owner, not inside the wall, not the owner's text channel, and not
   named after an area.** Loading the rules fails until fixed.
 - **A date that isn't YYYY-MM-DD** (a hand edit) counts as past: the share is paused.
-- **No memory sync.** It isn't quizzed or asked for a memory dump; its memory is the person's. Any
+- **No memory sync, and not your assistant.** It isn't quizzed (by the weekly pass, the belief radar's Fix everywhere or any other path), sent a change feed, or asked for a memory dump; its memory is the person's. It isn't in the belief radar or under Your assistants on the home (`ownAssistant` in `src/rules.ts`, G529). Any
   read-only agent's memory dump keeps nothing.
 - **No ask to see.** It can't ask you for notes outside its slice; its slice is the whole deal.
 

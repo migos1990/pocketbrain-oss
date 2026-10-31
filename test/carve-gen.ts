@@ -135,11 +135,26 @@ export async function evolve(g: Generated, src: { mergeNotes: Function; handOff:
     // (the list becomes a dispute candidate with no sources; reported, merge.ts isn't this branch's), so skip those pairs.
     const shape = (f: any) => (f?.items ? "list" : "one");
     const clash = (a: any, b: any) => Object.keys(a.fm.facts ?? {}).some((k) => b.fm.facts?.[k] && shape(a.fm.facts[k]) !== shape(b.fm.facts[k]));
-    const pair = [...byType.values()].find((xs) => xs.length >= 2 && !clash(xs[0], xs[1]));
-    if (pair) {
+    // The merge refuses any pair some agent would see differently afterwards (docs/same-person.md),
+    // which most random pairs are. So first a real duplicate: one note copied under a second id (same
+    // area, flags and title), committed, then the random pairs in order until one merges (refusals write nothing).
+    const active = notes.filter((n) => n.fm.status === "active");
+    const orig = active.length ? r.pick(active) : undefined;
+    const pairs: (typeof notes)[] = [];
+    if (orig) {
+      const dupId = `${orig.fm.id}-dup`;
+      const text = readFileSync(join(g.root, `${orig.fm.id}.md`), "utf8").replace(/^id: .*$/m, `id: ${dupId}`);
+      writeFileSync(join(g.root, `${dupId}.md`), text);
+      const git = (args: string[]) => Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "-c", "commit.gpgsign=false", ...args], { cwd: g.root });
+      git(["add", `${dupId}.md`]); git(["commit", "-q", "-m", `carve-gen duplicate of ${orig.fm.id}`]);
+      pairs.push([orig, { fm: { ...orig.fm, id: dupId } }]);
+    }
+    pairs.push(...[...byType.values()].flatMap((xs) => xs.flatMap((a, i) => xs.slice(i + 1).map((b) => [a, b]))).filter(([a, b]) => !clash(a, b)));
+    for (const pair of pairs.slice(0, 40)) {
       const [keep, drop] = r.chance(0.5) ? [pair[0], pair[1]] : [pair[1], pair[0]];
       const m = src.mergeNotes(g.root, keep.fm.id, drop.fm.id, "owner");
       g.ops.push(`merge ${drop.fm.id} -> ${keep.fm.id}: ${m.ok ? "ok" : m.message}`);
+      if (m.ok) break;
     }
   }
   if (g.agents.length >= 2 && r.chance(0.6)) {

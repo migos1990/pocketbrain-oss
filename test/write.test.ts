@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { markSeen } from "../src/seen";
 import { test, expect } from "bun:test";
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -40,14 +41,15 @@ test("same value from a new source merges sources instead of duplicating", () =>
   expect(f.last_confirmed).toBe("2026-10-08");
 });
 
-test("trial agents only propose; non-owners propose", () => {
+test("trial agents only propose; a full agent outside its area files, a different value as a conflict held for the Gardener (G422)", () => {
   const root = makeBrain();
   const m = write(root, { ...base, agent: "helper", value: "Publish grades" });
   expect(m.outcome).toBe("inbox");
   expect(existsSync(join(root, m.file!))).toBe(true);
-  const i = write(root, { ...base, agent: "steward", value: "Publish grades" });
-  expect(i.outcome).toBe("inbox");
-  expect(i.message).toContain("owned by planner");
+  // A newer value from an as-strong source is an update; a weaker one is the conflict.
+  const i = write(root, { ...base, agent: "steward", value: "Publish grades", verification: "self-reported" as never });
+  expect(i.outcome).toBe("disputed");
+  expect(loadBrain(root).find((n) => n.fm.type === "dispute")!.fm.gardener_first).toBeTruthy();
 });
 
 test("refusals: secrets, rules/, laundering, approval without id, future as_of", () => {
@@ -110,7 +112,7 @@ test("entity resolution: exact title or alias reuses the id; a near name goes to
   expect(near.outcome).toBe("inbox");
   expect(near.message).toContain("people/jane-roy");
   const fresh = write(root, { agent: "planner", title: "Sam Carter", type: "person", area: "work", attribute: "role", value: "TA", as_of: "2026-09-01", sources: ["gmail:f000000000000004"] });
-  expect(fresh.fact_key).toBe("people/sam-carter#role");
+  expect(fresh.fact_key).toMatch(/^people\/sam-carter-[0-9a-f]{6}#role$/); // a new note always gets a suffix (G28)
 });
 
 test("leak tripwire: an agent writing a value it was never shown is refused and logged", () => {
@@ -187,6 +189,10 @@ test("third parties' health or school details are stored private, for the resolv
   const f = fact(root, "people/jane-roy", "relationship");
   expect(f.sensitivity).toBe("private");
   expect(f.share_with).toEqual(["steward"]);
+  expect(JSON.stringify(readNote(root, "planner", "people/jane-roy"))).not.toContain("medical treatment");
+  // Health-shaped, so held from everyone until the owner has seen it (phone UI spec §7); then the resolver's.
+  expect(JSON.stringify(readNote(root, "steward", "people/jane-roy"))).not.toContain("medical treatment");
+  markSeen(root, "people/jane-roy#relationship");
   expect(JSON.stringify(readNote(root, "planner", "people/jane-roy"))).not.toContain("medical treatment");
   expect(JSON.stringify(readNote(root, "steward", "people/jane-roy"))).toContain("medical treatment");
 });
@@ -406,7 +412,9 @@ test("an assistant's more precise date never replaces the owner's vaguer one (G1
   const r = write(root, { ...base, value: "2026-11-05", as_of: "2026-10-08" });
   expect(r.outcome).toBe("disputed");
   expect(r.step).toBe(6);
-  const f = fact(root, "projects/course-a", "next_step");
+  // The owner's value stays live; both sides wait in the packet (G425).
+  expect((fact(root, "projects/course-a", "next_step") as unknown as FactRecord).value).toBe("2026-11");
+  const f = { candidates: loadBrain(root).find((n) => n.fm.type === "dispute")!.fm.candidates as FactRecord[] };
   expect(f.candidates?.map((c) => [c.value, c.verification])).toEqual([["2026-11", "confirmed-by-owner"], ["2026-11-05", "verified-by-source"]]);
   // A vaguer assistant value still only adds its source to the owner's value.
   const root2 = makeBrain();
@@ -458,7 +466,8 @@ test("merge: max never takes an assistant's value over the owner's word; the own
   expect(write(root, { ...p, value: "2026-10-05", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-louis" }).outcome).toBe("committed");
   const r = write(root, { ...p, value: "2026-10-07", as_of: "2026-10-07", sources: ["gmail:f000000000000004"], verification: "verified-by-source" });
   expect([r.outcome, r.step]).toEqual(["disputed", 6]);
-  expect(fact(root, "people/jane-roy", "last_contact").candidates?.[0].value).toBe("2026-10-05");
+  expect((loadBrain(root).find((n) => n.fm.type === "dispute")!.fm.candidates as FactRecord[])[0].value).toBe("2026-10-05");
+  expect((fact(root, "people/jane-roy", "last_contact") as unknown as FactRecord).value).toBe("2026-10-05");
   // An older assistant value is still ignored, as before.
   const root2 = makeBrain();
   registerLouisMessages(root2, ["imsg:phonemsg-01FAKE0000000000000000000A", "imsg:phonemsg-01FAKE0000000000000000000B"]);
@@ -467,4 +476,26 @@ test("merge: max never takes an assistant's value over the owner's word; the own
   const own = write(root2, { ...p, value: "2026-10-07", as_of: "2026-10-07", sources: ["imsg:phonemsg-01FAKE0000000000000000000B"], verification: "confirmed-by-owner" });
   expect([own.outcome, own.step]).toEqual(["committed", 2]);
   expect(fact(root2, "people/jane-roy", "last_contact").value).toBe("2026-10-07");
+});
+
+test("a paused or read-only agent's refused write is still logged, so its attempts leave a trace", () => {
+  for (const status of ["paused", "read-only"]) {
+    const root = makeBrain();
+    const p = join(root, "rules/policy.yaml");
+    writeFileSync(p, readFileSync(p, "utf8").replace("planner: { tier: core,", `planner: { status: ${status}, tier: core,`));
+    expect(write(root, { ...base, value: "Publish grades" }).outcome).toBe("refused");
+    const log = readFileSync(join(root, "log", "writes.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(log.at(-1)).toMatchObject({ agent: "planner", key: "projects/course-a", outcome: "refused", checks: ["agent_status"] });
+  }
+});
+
+test("a new note's id looks the same whether its name is fresh or taken by a note the writer can't see (G28)", () => {
+  const root = makeBrain();
+  const mk = (title: string) => write(root, { ...base, id: undefined, type: "person", title, area: "work", attribute: "role", value: "Advisor" } as any);
+  const taken = mk("Paul Advisor"); // people/paul-advisor exists; Planner can't see it
+  const fresh = mk("Pat Nobody");
+  expect([taken.outcome, fresh.outcome]).toEqual(["committed", "committed"]);
+  const shape = (r: { fact_key?: string; message: string }, slug: string) => `${r.fact_key} ${r.message}`.replaceAll(slug, "S").replace(/S-[0-9a-f]{6}\b/g, "S-H");
+  expect(shape(taken, "paul-advisor")).toBe(shape(fresh, "pat-nobody"));
+  expect(fresh.fact_key).toMatch(/^people\/pat-nobody-[0-9a-f]{6}#role$/);
 });

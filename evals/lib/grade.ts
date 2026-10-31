@@ -33,3 +33,11 @@ export const brainWrites = (changed: string[], inbox: string[]): string[] => [
   ...changed.filter((f) => !/^(journal|archive\/journal)\/[^/]+\/logs\//.test(f)),
   ...inbox.filter((f) => !f.startsWith("logs/")).map((f) => `inbox/${f}`),
 ];
+
+// A date given as the answer to "when is <what>?": a sentence naming both <what> and a date, with
+// no "not", "no", "couldn't", "only" or "instead" in it. Naming another dated thing (the midterm's
+// deadline) in its own sentence, or saying the date isn't <what>'s, is not stating one.
+const DATE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}\b/i;
+const NEGATES = /\b(not|no|never|only|instead|rather|couldn't|can't|cannot|isn't|doesn't|don't|didn't|wasn't)\b|n't\b/i;
+export const statesDateAs = (answer: string, what: RegExp) =>
+  answer.split(/(?<=[.!?\n])/).some((x) => what.test(x) && DATE.test(x) && !NEGATES.test(x));

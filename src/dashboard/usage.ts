@@ -28,7 +28,7 @@ export function usagePage(root: string, csrf: string, month?: string): Page {
   const head = (first: string, extra = "") => `<thead><tr><th>${first}</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th class="num">Model time</th><th class="num">Cost</th>${extra}</tr></thead>`;
   const prices = p.prices ?? {};
   const body = `<h1>Model spend, ${esc(s.month)}</h1>
-<p class="sub">What the brain's own model steps cost you: sleep, the duplicate judge, capture and Ask. Reads and writes are never metered or capped. Agents never see this page or the cap.</p>
+<p class="sub">What the brain's own model steps cost you: sleep, the duplicate judge, capture and Ask. Reads and writes are never metered or capped. Assistants never see this page or the cap.</p>
 ${item ? `<div class="flash${item.state === "over" ? " err" : ""}">${esc(item.title)}</div>` : ""}
 <div class="card"><b>${m(s.total.cost)}</b> this month${cap.cap !== undefined ? ` of a ${m(cap.cap)} cap (${pct}%)` : ", no cap set"}${bar}
 <div class="sub">Past the cap, model steps pause and say so in the morning note; everything else keeps working. ${cap.cap !== undefined ? `You hear about it at ${Math.round(cap.alert_at * 100)}% and at 100%.` : ""}</div>

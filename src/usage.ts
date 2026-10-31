@@ -15,7 +15,8 @@
 //     currency: USD
 //     prices: { model_minute: 0 }   # token prices come from src/pricing.ts; set
 //                                   # model_input_per_million / model_output_per_million to override
-//     cap: { monthly: 20, alert_at: 0.8, steps: { capture.extract: 5 } }
+//     cap: { monthly: 20, alert_at: 0.8, steps: { capture.extract: 5 },
+//            daily_default: 2, daily: { dashboard.ask: 1 } }   # past a daily cap: the cheaper model
 import { appendFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
@@ -23,8 +24,8 @@ import { today } from "./brain";
 import { loadRules, type Rules } from "./rules";
 import { lastHash } from "./readlog";
 import type { Model, ModelReply, ModelRequest, DecisionRequest, DecisionReply } from "./model";
-import { makeModel, modelConfigFor, type Provider } from "./model";
-import { priceFor } from "./pricing";
+import { makeModel, modelConfigFor, MODEL_STEPS, type ModelConfig, type Provider } from "./model";
+import { priceFor, cheaperModel } from "./pricing";
 
 export interface UsageEvent {
   at: string;
@@ -40,12 +41,13 @@ export interface UsageEvent {
   unpriced?: boolean; // no price for this model in src/pricing.ts and none in policy.yaml: tokens cost 0 here
   seconds: number;
   cost: number; // at the price sheet in force when it ran
+  downgraded_from?: string; // the job was past its daily cap: this call ran on the cheaper model
 }
 
 export interface UsagePolicy {
   currency?: string;
   prices?: { model_minute?: number; model_input_per_million?: number; model_output_per_million?: number };
-  cap?: { monthly?: number; alert_at?: number; steps?: Record<string, number> };
+  cap?: { monthly?: number; alert_at?: number; steps?: Record<string, number>; daily?: Record<string, number>; daily_default?: number };
 }
 
 export const usageFile = (root: string) => join(root, "log", "usage.jsonl");
@@ -179,6 +181,26 @@ export function capState(root: string, rules = loadRules(root)): CapState {
   return { month, currency: p.currency ?? "USD", spent, cap, ratio, state, alert_at, steps };
 }
 
+// Daily caps per job (backlog 272): past one, the job runs on its provider's cheaper model for the
+// rest of the day instead of failing; a job already on the cheapest model pauses until tomorrow.
+// Every job has one: usage.cap.daily.<step>, else usage.cap.daily_default, else $2. 0 turns it off.
+// The built-in $2 only ever switches to a cheaper model; only a cap the owner set pauses a job.
+export const DAILY_DEFAULT = 2;
+const ownerSetDaily = (p: UsagePolicy, step: string) => p.cap?.daily?.[step] !== undefined || p.cap?.daily_default !== undefined;
+export const dailyCap = (p: UsagePolicy, step: string) => p.cap?.daily?.[step] ?? p.cap?.daily_default ?? DAILY_DEFAULT;
+export function dailySpent(root: string, step: string, day = today()): number {
+  return totals(usageEvents(root).filter((e) => e.day === day && e.step === step)).cost;
+}
+export function dailyState(root: string, rules = loadRules(root)) {
+  const p = usagePolicy(rules);
+  const steps = [...new Set([...MODEL_STEPS, ...Object.keys(p.cap?.daily ?? {})])];
+  return steps.map((step) => {
+    const cfg = modelConfigFor(root, step);
+    const cap = dailyCap(p, step), spent = dailySpent(root, step);
+    return { step, spent, cap, over: cap > 0 && spent >= cap, model: cfg.model, cheaper: cheaperModel(cfg.provider, cfg.model) };
+  });
+}
+
 // Why this step may not call its model now, or undefined.
 export function pausedReason(root: string, step: string, rules = loadRules(root)): string | undefined {
   const s = capState(root, rules);
@@ -198,29 +220,41 @@ const guess = (s: string) => Math.ceil(s.length / 4);
 
 // Wraps a model so each call is recorded (tokens and wall seconds) and refused once its cap is
 // reached. Callers already treat a model error as "held for later" and say so to the owner.
-export function metered(root: string, step: string, model: Model, by = "reflect"): Model {
+export function metered(root: string, step: string, model: Model, by = "reflect", make?: (cfg: ModelConfig) => Model): Model {
   const guard = () => { const why = pausedReason(root, step); if (why) throw new Error(why); };
-  const done = (t0: number, outcome: "ok" | "error", usage: ModelReply["usage"], provider: string, mdl: string, textIn: string, textOut: string) =>
+  // The model this call runs on: the step's own, or past its daily cap the cheaper one.
+  const pick = (): { m: Model; from?: string } => {
+    const rules = loadRules(root);
+    const cap = dailyCap(usagePolicy(rules), step);
+    if (!(cap > 0) || dailySpent(root, step) < cap) return { m: model };
+    const cheaper = cheaperModel(model.config.provider, model.config.model);
+    if (cheaper && make) return { m: make({ ...model.config, model: cheaper }), from: model.config.model };
+    if (!ownerSetDaily(usagePolicy(rules), step)) return { m: model };
+    throw new Error(`paused: ${step} reached its daily cap (${money(cap, usagePolicy(rules).currency)}) and has no cheaper model; it resumes tomorrow. Raise usage.cap.daily.${step} in rules/policy.yaml`);
+  };
+  const done = (m: Model, from: string | undefined, t0: number, outcome: "ok" | "error", usage: ModelReply["usage"], provider: string, mdl: string, textIn: string, textOut: string) =>
     record(root, { step, by, outcome, provider, model: mdl, tokens_in: usage?.input_tokens ?? guess(textIn), tokens_out: usage?.output_tokens ?? guess(textOut),
-      ...(usage ? {} : { estimated: true }), seconds: Math.round((performance.now() - t0) / 10) / 100 }, model.config.model);
-  const failed = (t0: number) => done(t0, "error", { input_tokens: 0, output_tokens: 0 }, model.config.provider, model.config.model, "", "");
+      ...(usage ? {} : { estimated: true }), seconds: Math.round((performance.now() - t0) / 10) / 100, ...(from ? { downgraded_from: from } : {}) }, m.config.model);
+  const failed = (m: Model, from: string | undefined, t0: number) => done(m, from, t0, "error", { input_tokens: 0, output_tokens: 0 }, m.config.provider, m.config.model, "", "");
   const out: Model = {
     config: model.config,
     async complete(req: ModelRequest) {
       guard();
+      const { m, from } = pick();
       const t0 = performance.now();
       let r: ModelReply;
-      try { r = await model.complete(req); } catch (e) { failed(t0); throw e; }
-      done(t0, "ok", r.usage, r.provider, r.model, req.system + req.prompt, r.text);
+      try { r = await m.complete(req); } catch (e) { failed(m, from, t0); throw e; }
+      done(m, from, t0, "ok", r.usage, r.provider, r.model, req.system + req.prompt, r.text);
       return r;
     },
   };
   if (model.decide) out.decide = async (req: DecisionRequest): Promise<DecisionReply> => {
     guard();
+    const { m, from } = pick();
     const t0 = performance.now();
     let r: DecisionReply;
-    try { r = await model.decide!(req); } catch (e) { failed(t0); throw e; }
-    done(t0, "ok", r.usage, r.provider, r.model, req.state + JSON.stringify(req.questions), JSON.stringify(r.answers));
+    try { r = await (m.decide ?? model.decide)!(req); } catch (e) { failed(m, from, t0); throw e; }
+    done(m, from, t0, "ok", r.usage, r.provider, r.model, req.state + JSON.stringify(req.questions), JSON.stringify(r.answers));
     return r;
   };
   return out;
@@ -228,7 +262,7 @@ export function metered(root: string, step: string, model: Model, by = "reflect"
 
 // The model for a step, from rules/models.yaml, metered and capped.
 export function modelFor(root: string, step: string, by?: string, opts: Parameters<typeof makeModel>[1] = {}): Model {
-  return metered(root, step, makeModel(modelConfigFor(root, step), opts), by);
+  return metered(root, step, makeModel(modelConfigFor(root, step), opts), by, (cfg) => makeModel(cfg, opts));
 }
 
 // ---------- telling the owner ----------
@@ -238,7 +272,7 @@ export function modelFor(root: string, step: string, by?: string, opts: Paramete
 // the state, so each crossing texts once.
 export function usageItem(root: string): { key: string; state: "warn" | "over"; title: string } | undefined {
   const s = capState(root);
-  if (s.state === "over") return { key: `usage:over:${s.month}`, state: "over", title: "Model spend reached this month's cap: sleep, the duplicate judge, capture and Ask are paused, and agent mail that needs the request check is held for you. Reads and writes are unaffected. Raise the cap on the Usage page" };
+  if (s.state === "over") return { key: `usage:over:${s.month}`, state: "over", title: "Model spend reached this month's cap: sleep, the duplicate judge, capture and Ask are paused, and assistant mail that needs the request check is held for you. Reads and writes are unaffected. Raise the cap on the Usage page" };
   if (s.state === "warn") return { key: `usage:warn:${s.month}`, state: "warn", title: `Model spend is at ${Math.floor((s.ratio ?? 0) * 100)}% of this month's cap` };
   const over = s.steps.filter((x) => x.over);
   if (over.length) return { key: `usage:step:${s.month}:${over.map((x) => x.step).join(",")}`, state: "over", title: `${over.map((x) => x.step).join(", ")} reached ${over.length > 1 ? "their" : "its"} monthly cap and ${over.length > 1 ? "are" : "is"} paused` };
@@ -255,4 +289,19 @@ export function usageDigest(root: string, since: string): { need: string[]; numb
   const recent = totals(usageEvents(root).filter((e) => e.at >= since));
   const numbers = [`- Model calls since the last digest: ${recent.calls} (${recent.tokens_in + recent.tokens_out}${recent.estimated ? "~" : ""} tokens, ${fmtMinutes(recent.seconds)}): ${money(recent.cost, s.currency)}; this month ${money(s.spent, s.currency)}${s.cap !== undefined ? ` of ${money(s.cap, s.currency)}` : " (no cap set)"}`];
   return { need, numbers };
+}
+
+// ---------- cost per job, week on week (backlog 272) ----------
+
+const shift = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+// Each job's cost over the 7 days ending `end` and the 7 before; doubled when this week is at
+// least twice last week's and last week cost something (a cent or more).
+export function costByJob(root: string, end = today()): { step: string; week: number; prior: number; doubled: boolean }[] {
+  const from = shift(end, -6), priorFrom = shift(end, -13), priorTo = shift(end, -7);
+  const events = usageEvents(root).filter((e) => e.day >= priorFrom && e.day <= end);
+  return group(events, (e) => e.step).map(([step, xs]) => {
+    const week = totals(xs.filter((e) => e.day >= from)).cost;
+    const prior = totals(xs.filter((e) => e.day <= priorTo)).cost;
+    return { step, week, prior, doubled: prior >= 0.01 && week >= 2 * prior };
+  });
 }

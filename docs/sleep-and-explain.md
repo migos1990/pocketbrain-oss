@@ -13,6 +13,8 @@ One command for cron: it runs `upkeep` first (links, dates, freshness, rechecks)
 | Duplicates | The existing judge step over near-duplicate notes | No: review items | Yes (`upkeep.duplicates`) |
 | Morning note | A few lines on top of the next digest | n/a | No |
 
+Only the hub sleeps. On a replica (`rules/hub.yaml`, see [hub.md](hub.md)) the pass writes nothing and its morning line names the hub.
+
 ### Forgetting is not ending
 
 Past its shelf life a fact is *unconfirmed*, not *false*. Jane's role, last confirmed 18 months ago, is probably still her role. Setting `valid_to` would write a claim about the world nobody made. So a forgotten fact moves to `history` with `retired: {at, by, why}` and no `valid_to`: the brain stops vouching for it, nothing more. It leaves every view and every cell (history is never served), and stays in the file and in git.
@@ -22,7 +24,7 @@ A fact is retired only when all of these hold:
 1. It is older than **3x its shelf life** (stale is 2x; the gap is the "fade" window where freshness already labels it stale in every answer).
 2. **Nobody used it for 90 days**: no agent was handed its note by a search, a read or a topic context pack, and no journal named the note.
 3. The read log is **at least 90 days old**. On a new install "unread" means nothing, so nothing is forgotten; the morning note says how many facts are waiting.
-4. It isn't **the owner's word**. A `confirmed-by-louis` fact is never retired; it comes back as "still true?".
+4. It isn't **the owner's word**. A `confirmed-by-owner` fact is never retired; it comes back as "still true?".
 
 **Two ways a fact ends, one place it goes.** An agent (or the owner) that knows a fact stopped being true uses the `retire` tool (`POST /v1/retire`): it gives the end date and a source, goes through the write path like any write, and the old value moves to history with `valid_to` and `ended_by` citing that source. The sleep pass has no end date and no source, only disuse, so it can't honestly go through that path: it would have to invent both. It writes the same history list with `retired` instead. `explain` lists every ended value from both paths, and the conflict steps' supersessions, with who ended it and why.
 
@@ -49,7 +51,8 @@ The judge step was already there; sleep runs it nightly and the morning note poi
 - a fact the kept note lacks moves across with its flags;
 - the same value merges sources (conflict step 1); list items are unioned;
 - a different value opens a dispute: merging never picks a winner;
-- flags only tighten: facts from a more sensitive note keep that level, and its names are not added as aliases (a name can be the secret);
+- flags only tighten: facts from a more sensitive note keep that level, and its names and tags are not added (a name can be the secret, a tag can widen a slice);
+- refused, before anything is written, unless every assistant sees both notes the same way (both or neither, nothing hidden on either but the same attributes; the resolver whole when a dispute would open), and when a carve of both notes for every agent before and after the merge shows any agent would read something it can't read today, when the notes are in different areas, when an exclude in `rules/policy.yaml` or `rules/slices.yaml` names the dropped note or one of its facts, while either note has an open dispute (a fact or a list item), or while OpenFGA hasn't confirmed every assistant's slices; see `docs/same-person.md`;
 - the dropped note becomes a pointer (`status: merged`, `merged_into`); upkeep repoints links to it.
 
 ### Contradictions between twin notes
@@ -87,6 +90,10 @@ Day by day (in `owner.timezone` from policy.yaml, else UTC), from the read log: 
 - **Unusual.** A day gets one line, "unusual: 3 of 4 notes outside its usual areas (personal)", when at least two of its notes, and at least half of them, sit in areas the agent wasn't handed any note from in the 28 days before. An agent with reads on fewer than 3 earlier days has no usual areas yet and is never flagged. It is a line to look at, not an alert: nothing is paused or changed.
 - **Owner only**, like `explain`: never a tool or an API route. Search words are the agent's own, so control characters and line breaks are printed as spaces.
 - A note deleted since shows as `(gone)` and counts as outside the usual areas.
+
+## See as, on the dashboard
+
+`explain` says why a note or fact is in or out. To see what an assistant is actually handed, open Who sees what (`/map`) and click the assistant. The search box there runs that assistant's own search (`previewSearch` in `src/core.ts`): the same snapshot (its cell when the hub serves cells), the same ranking and the same `[withheld]` and `[[redacted]]` marks. Each hit opens the note exactly as its read returns it (`previewRead`), and a note outside its view says what the assistant would be told ("no note … in your view"). A paused assistant shows its pause message. Looking here is not logged as the assistant's read, so it never shows up in `reads`, `explain` or the forgetting signal, and it raises no served-text alert. Only the owner's dashboard calls these functions; no agent door does (`test/see-as.test.ts`).
 
 ## Decisions recorded
 

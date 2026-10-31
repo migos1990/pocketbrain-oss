@@ -74,7 +74,7 @@ export const orientationCases: Case[] = [
       ["...and retire lands in the inbox too", retire?.outcome === "inbox"],
       ["names no other agent", OTHERS.every((a) => !new RegExp(`\\b${a}\\b`).test(lower))],
       ["names nothing it can't see", !/maple|main-bank|compensation|finance/.test(lower)],
-      [`short enough to read in full (${viaTool.length})`, viaTool.length < 6000],
+      [`short enough to read in full (${viaTool.length})`, viaTool.length < 6400], // 6000, plus the today pack (docs/agent-instructions.md "Today")
     ]);
   }) },
   { id: "e2e-orientation-api-resolver", dimension: "e2e", kind: "benign", title: "An API-only agent finds its orientation at GET /v1 and is told its resolver job", run: () => episode(async ({ url, tok }) => {

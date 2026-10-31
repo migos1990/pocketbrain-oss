@@ -108,7 +108,7 @@ test("private disputes can't be resolved by Steward; Robin's relayed answer is h
   await call("steward", "POST", `/v1/disputes/${d.id}/escalate`, { suggested: 1 });
   const a = await call("steward", "POST", `/v1/disputes/${d.id}/answer`, { choice: 2, message_id: "phonemsg-01FAKE0000000000000000000Z" });
   expect(a.json.status).toBe("answer-held");
-  expect((fact(root, "money/main-bank", "bank") as any).dispute).toBe(d.id);
+  expect((fact(root, "money/main-bank", "bank") as any).contested).toBe(d.id); // the live value stays, the conflict beside it (G425)
   confirmHeldAnswer(root, d.id, "confirm");
   const f = fact(root, "money/main-bank", "bank");
   expect(f.value).toBe("Other Bank");
@@ -125,20 +125,20 @@ test("an ordinary relayed answer settles at once as confirmed-by-louis", async (
   expect(f.verification).toBe("confirmed-by-owner");
 });
 
-test("MCP clients that can't send headers can put the token in the path", async () => {
+// Outside review 2026-10-25 (G419): a token in the URL ends up in tunnel and client logs. No
+// assistant used the path form (Mac log, 2026-10-25), so it is gone: a live token there gets 401.
+test("a token in the URL path is refused, even a live one", async () => {
   const { root, tok } = setup();
   const r = await handle(root, new Request(`http://pb/mcp/${tok.helper}`, { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
-  expect(r.status).toBe(200);
-  expect((await handle(root, new Request("http://pb/mcp/pb_helper_wrong", { method: "POST", body: "{}" }))).status).toBe(401);
+  expect(r.status).toBe(401);
+  expect((await handle(root, new Request(`http://pb/mcp/${tok.helper}/`, { method: "POST", body: "{}" }))).status).toBe(401);
 });
 
 test("/mcp answers with a trailing slash too", async () => {
-  const { tok, call } = setup();
+  const { call } = setup();
   const r = await call("helper", "POST", "/mcp/", { jsonrpc: "2.0", id: 1, method: "tools/list" });
   expect(r.status).toBe(200);
   expect(r.json.result.tools.length).toBeGreaterThan(0);
-  const p = await call(null, "POST", `/mcp/${tok.helper}/`, { jsonrpc: "2.0", id: 1, method: "tools/list" });
-  expect(p.status).toBe(200);
 });
 
 // G18: a core agent's token split into a reader and a resolver token.
@@ -176,4 +176,36 @@ test("a whole-view context_pack from an agent that asks by topic alerts the owne
   for (let i = 0; i < 5; i++) await call("planner", "GET", "/v1/context?topic=session");
   await call("planner", "GET", "/v1/context");
   expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toMatch(/whole_view_read.*planner took its whole view/);
+});
+
+// Bug hunt #133: /v1/enroll (no token needed) and every JSON route read the whole body before
+// checking its size, so a few 100 MB posts took the hub to a gigabyte. Bodies are now read as a
+// stream and cut off at the route's limit; a Content-Length over it is refused unread.
+function bigStream(totalMb: number) {
+  const chunk = new Uint8Array(64 * 1024).fill(0x61);
+  let pulled = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) { if (pulled >= totalMb * 1024 * 1024) return c.close(); pulled += chunk.length; c.enqueue(chunk); },
+  });
+  return { body, pulled: () => pulled };
+}
+
+test("enroll with no token: an oversized body is refused with 413 after reading only the limit", async () => {
+  const { root } = setup();
+  const s = bigStream(100);
+  const res = await handle(root, new Request("http://pb/v1/enroll", { method: "POST", body: s.body, duplex: "half" } as RequestInit));
+  expect(res.status).toBe(413);
+  expect(s.pulled()).toBeLessThan(1024 * 1024);
+  const declared = await handle(root, new Request("http://pb/v1/enroll", { method: "POST", body: "{}", headers: { "content-length": String(500 * 1024 * 1024) } }));
+  expect(declared.status).toBe(413);
+});
+
+test("an agent's oversized JSON body is cut off at the route's limit, not read whole", async () => {
+  const { root, tok } = setup();
+  for (const path of ["/mcp", "/v1/remember"]) {
+    const s = bigStream(100);
+    const res = await handle(root, new Request(`http://pb${path}`, { method: "POST", body: s.body, duplex: "half", headers: { authorization: `Bearer ${tok.helper}` } } as RequestInit));
+    expect(res.status).toBe(413);
+    expect(s.pulled()).toBeLessThan(2 * 1024 * 1024);
+  }
 });

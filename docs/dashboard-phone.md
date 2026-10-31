@@ -1,0 +1,13 @@
+# The dashboard on a phone
+
+The owner reads the dashboard on his phone (2026-10-24: "bad UIs on phone"). The new-user run (docs/ease-of-use.md) checks every page at 390 x 844. What each page does about it:
+
+- **Menu.** No tab bar: the top row is Home and Settings. Settings (`/overview`) links every other page (Brain, Assistants with the off switches, Who sees what, Who matters, Activity, History, Digest, Upkeep, Spend; `SETTINGS` in `src/dashboard/html.ts`).
+- **Home.** Only conflicts are asked, counted by the home's own function (`waitingCount` in `src/dashboard/home.ts`); everything else still open is listed one by one on Settings, never counted.
+- **Digest.** The digest file is written for the record and the command line. The page reads it for the owner: *Needs you* is the live count from the home page, linked, not the file's own count; note ids become note names; commit hashes and commands go ("Undo any of these in History." instead); *The numbers* fold. A table is never shown as pipes: the week's day columns become one line per measure ("0 every day", or the days that differ and "0 the other days"), "a / b / c" counts are one labelled measure each, and any other table is one line per row (`miniMarkdown` in `src/dashboard/html.ts`).
+- **Who sees what.** The grid scrolls inside its box, which never runs past the screen; on a phone its columns are narrower.
+- **Brain.** A "Needs a look" row wraps on a phone, so its buttons go under the text instead of over it. A page's facts sit together under its title, shown once (two facts of one project read as a conflict when each row repeated the title). The assistants' folder is "Assistants' notes", so its count reads as notes, not assistants. "Changed this week" lists changes only, each with why ("Role, filed from an email", "edited by you", "tidied by" the Gardener, "noted by" an assistant); a source check that changed nothing (confirmed, due again) is the trust audit's, not a change.
+- **Still open.** A proposal's question says what it would save ("Save \"Room: B-204\" to Course A?"), unless the value is private or money.
+- **Why a proposal waits.** A write outside an assistant's own area says who looks after it, on Settings (`ownAreaWords` in `src/dashboard/labels.ts`), never the code word.
+
+Tests: `test/home-today.test.ts`, `test/digest-phone.test.ts`, `test/plain-reasons.test.ts`, `test/home-glance.test.ts`, `test/phone-brain.test.ts`, and the snapshots in `test/ui/`.

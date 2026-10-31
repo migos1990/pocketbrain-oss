@@ -35,7 +35,8 @@ test("the digest leads with what needs Robin", () => {
   write(root, { ...base, agent: "planner", value: "Other plan", as_of_approx: true }); // dispute
   write(root, { ...base, agent: "planner", value: "Ask Maple Trust Bank" }); // tripwire alert
   const d = digest(root, "2000-01-01");
-  expect(d.needsLouis).toBe(3);
+  expect(d.needsLouis).toBe(1); // the dispute, as the home counts it: the proposal, the tripwire alert and the Gardener's blind spot are listed, not counted (backlog 402, outside review v5)
+  expect(d.text).toContain("Gardener blind spot");
   expect(d.text.indexOf("## Needs you")).toBeLessThan(d.text.indexOf("## Numbers"));
   expect(d.text).toContain("Dispute c-0001");
   expect(d.text).toContain("Proposal");

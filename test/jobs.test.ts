@@ -140,6 +140,32 @@ test("a rotation that reports failure without throwing also fails the probe", ()
   expect(byName(root).gardener_rotate.detail).toContain("no vault");
 });
 
+// Mac 2026-10-25: a Sunday rotation failed for want of mcp_url; the owner set it, but rotation runs
+// only on Sundays (and only for an old token), so the alert stayed open. A failed one is retried daily.
+test("a failed rotation is tried again the next day at 13:00, so fixing its cause closes it", () => {
+  const root = makeBrain();
+  const lock = join(mkdtempSync(join(tmpdir(), "pb-lock-")), "claude-lock.json");
+  writeFileSync(lock, JSON.stringify({ resources: {} }));
+  const cfg = `ant_profile: pocketbrain\nlock_file: ${lock}\n`;
+  writeFileSync(join(root, "rules", "gardener.yaml"), cfg);
+  tendOnce(root, () => {}, new Date(2026, 9, 18, 13, 30)); // Sunday 13:30: rotation is due
+  expect(byName(root).gardener_rotate.detail).toContain("mcp_url");
+  writeFileSync(join(root, "rules", "gardener.yaml"), `${cfg}mcp_url: https://brain.example.com/mcp\n`);
+  tendOnce(root, () => {}, new Date(2026, 9, 19, 12, 0)); // Monday before 13:00: not yet
+  expect(byName(root).gardener_rotate.detail).toContain("mcp_url");
+  tendOnce(root, () => {}, new Date(2026, 9, 19, 13, 30)); // Monday 13:30: tried again, now past mcp_url
+  expect(byName(root).gardener_rotate.detail).toContain("no vault");
+});
+
+test("without a failed rotation, rotation still runs only on Sundays", () => {
+  const root = makeBrain();
+  const lock = join(mkdtempSync(join(tmpdir(), "pb-lock-")), "claude-lock.json");
+  writeFileSync(lock, JSON.stringify({ resources: {} }));
+  writeFileSync(join(root, "rules", "gardener.yaml"), `ant_profile: pocketbrain\nlock_file: ${lock}\nmcp_url: https://brain.example.com/mcp\n`);
+  tendOnce(root, () => {}, new Date(2026, 9, 19, 13, 30)); // Monday 13:30
+  expect(byName(root).gardener_rotate).toBeUndefined();
+});
+
 // Mac audit 2026-10-16: session cleanup had never run, yet its check was green. A cleanup that
 // returns without running (no deployments, no ant CLI) is a failing check, not a quiet success.
 test("a gardener cleanup that couldn't run fails the probe, with why", () => {

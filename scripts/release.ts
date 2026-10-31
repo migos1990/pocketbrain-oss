@@ -3,8 +3,8 @@
 //   bun scripts/release.ts check [--no-run]                    is main's tip releasable? (RELEASABLE or NOT RELEASABLE)
 //   bun scripts/release.ts cut [patch|minor|major] [--no-run]  dated CHANGELOG section + package.json version on a
 //                                                              claude/release-X.Y.Z branch, merged into main, tag vX.Y.Z
-//   bun scripts/release.ts notes <tag>                         the CHANGELOG section for a tag (the GitHub release text)
-//   bun scripts/release.ts verify-tag <tag>                    the tag matches package.json and a dated section (CI)
+//   bun scripts/release.ts notes <tag>                         a tag's release notes from its CHANGELOG section (releaseNotes)
+//   bun scripts/release.ts verify-tag <tag>                    the tag matches package.json, README's status line and a dated section with entries (CI)
 //   bun scripts/release.ts due                                 the tag CI should make on this commit, if any (CI)
 // Nothing here pushes: `git push origin main` is a separate step (docs/release.md says who may run it), and
 // CI makes the tag on GitHub (cloud sessions can push branches but not tags).
@@ -50,16 +50,51 @@ export function cutChangelog(text: string, o: { current: string; bump: Bump; dat
   const after = s[s.indexOf(u) + 1];
   const cutEnd = p.version ? after.end : u.end;
   const out = `${text.slice(0, u.start)}## [Unreleased]\n\n## [${version}] - ${o.date}\n\n${p.body}\n\n${text.slice(cutEnd).replace(/^\n+/, "")}`;
-  return { text: out.replace(/\n+$/, "\n"), version, notes: p.body };
+  return { text: out.replace(/\n+$/, "\n"), version, notes: releaseNotes(p.body) };
+}
+
+// The notes a release carries (tag message, GitHub release), from a section's body: any opening
+// prose, then "Before you update" (steps the owner must take, such as a rules/ change) first, then
+// the usual groups, then any others in their order; a group named twice (keep-both merges) is one
+// group, and entries under no heading go last as "Other changes". Entries keep their own lines.
+const FIRST = ["Before you update", "Security", "Changed", "Added", "Fixed", "Removed", "Deprecated"];
+export function releaseNotes(body: string): string {
+  const prose: string[] = [], groups = new Map<string, string[][]>(), stray: string[][] = [];
+  let group: string[][] | undefined, entry: string[] | undefined;
+  for (const line of body.split("\n")) {
+    const h = line.match(/^### (.+?)\s*$/);
+    if (h) { group = groups.get(h[1]) ?? []; groups.set(h[1], group); entry = undefined; continue; }
+    if (/^[-*] /.test(line)) { entry = [line]; (group ?? stray).push(entry); continue; }
+    if (line.trim() && entry && /^\s/.test(line)) { entry.push(line); continue; }
+    entry = undefined;
+    if (line.trim() && !group) prose.push(line);
+  }
+  const lines = (es: string[][]) => es.map((e) => e.join("\n")).join("\n");
+  const names = [...FIRST.filter((n) => groups.has(n)), ...[...groups.keys()].filter((n) => !FIRST.includes(n))];
+  return [
+    ...(prose.length ? [prose.join("\n")] : []),
+    ...names.filter((n) => groups.get(n)!.length).map((n) => `### ${n}\n\n${lines(groups.get(n)!)}`),
+    ...(stray.length ? [`### Other changes\n\n${lines(stray)}`] : []),
+  ].join("\n\n");
 }
 
 export function notesFor(text: string, version: string): string {
   const s = sections(text).find((x) => x.name === version.replace(/^v/, ""));
   if (!s) throw new Error(`CHANGELOG.md has no section for ${version}`);
-  return s.body;
+  return releaseNotes(s.body);
 }
 
-export function verifyTag(tag: string, pkgVersion: string, changelog: string): string[] {
+// The README's status line, "**Status: early (X.Y.Z, see ...", names the released version: the public
+// repo and the site are read by people who never open package.json (docs/release.md).
+const README_VERSION = /(\*\*Status: early \()(\d+\.\d+\.\d+)/;
+export function readmeVersion(readme: string): string | undefined {
+  return readme.match(README_VERSION)?.[2];
+}
+export function stampReadme(readme: string, version: string): string {
+  return readme.replace(README_VERSION, `$1${version}`);
+}
+
+export function verifyTag(tag: string, pkgVersion: string, changelog: string, readme?: string): string[] {
   const v = tag.replace(/^v/, "");
   const fail: string[] = [];
   if (!/^v\d+\.\d+\.\d+$/.test(tag)) fail.push(`tag ${tag} is not vX.Y.Z`);
@@ -67,6 +102,12 @@ export function verifyTag(tag: string, pkgVersion: string, changelog: string): s
   const s = sections(changelog).find((x) => x.name === v);
   if (!s) fail.push(`CHANGELOG.md has no ## [${v}] section`);
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(s.date)) fail.push(`CHANGELOG.md's ${v} section is not dated (${s.date || "no date"})`);
+  if (s && !/^[-*] /m.test(s.body)) fail.push(`CHANGELOG.md's ${v} section has no entries (- lines), so the release would have no notes`);
+  if (readme !== undefined) {
+    const r = readmeVersion(readme);
+    if (!r) fail.push(`README.md has no "Status: early (X.Y.Z" line naming the version`);
+    else if (r !== v) fail.push(`README.md's status line says ${r}, the tag says ${v}`);
+  }
   return fail;
 }
 
@@ -111,9 +152,9 @@ function main(argv: string[]): number {
   const bump = (["patch", "minor", "major"].includes(arg) ? arg : "patch") as Bump;
   if (cmd === "notes" && arg) { console.log(notesFor(readFileSync("CHANGELOG.md", "utf8"), arg)); return 0; }
   if (cmd === "verify-tag" && arg) {
-    const fail = verifyTag(arg, pkg().version, readFileSync("CHANGELOG.md", "utf8"));
+    const fail = verifyTag(arg, pkg().version, readFileSync("CHANGELOG.md", "utf8"), readFileSync("README.md", "utf8"));
     for (const f of fail) console.log(`✗ ${f}`);
-    console.log(fail.length ? "TAG DOES NOT MATCH" : `tag ${arg} matches package.json and CHANGELOG.md`);
+    console.log(fail.length ? "TAG DOES NOT MATCH" : `tag ${arg} matches package.json, CHANGELOG.md and README.md`);
     return fail.length ? 1 : 0;
   }
   if (cmd === "due") {
@@ -133,8 +174,9 @@ function main(argv: string[]): number {
     writeFileSync("CHANGELOG.md", c.text);
     const p = pkg(); p.version = c.version;
     writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
-    git("add", "CHANGELOG.md", "package.json");
-    git("commit", "-q", "-m", `Release ${c.version}`, "-m", "No-Test: version and changelog only");
+    writeFileSync("README.md", stampReadme(readFileSync("README.md", "utf8"), c.version));
+    git("add", "CHANGELOG.md", "package.json", "README.md");
+    git("commit", "-q", "-m", `Release ${c.version}`, "-m", "No-Test: version, changelog and README status line only");
     git("switch", "main");
     git("merge", "--no-ff", "-q", "-m", `Merge ${branch}: release ${c.version}`, branch);
     git("tag", "-a", `v${c.version}`, "-m", `pocketBrain ${c.version}\n\n${c.notes}`);

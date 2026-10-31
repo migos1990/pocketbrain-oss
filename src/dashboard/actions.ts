@@ -15,15 +15,17 @@ import { digest } from "../digest";
 import { OWNER } from "../owner";
 import { addAgent } from "../addagent";
 import { bindClient, revokeClient, listPending, clientsOf, cutAtAuthServer, loadOAuth } from "../oauth";
-import { setFact, saveNoteText, saveNoteBody, confirmFact, undoOwnerEdit, setEditor, revertCommit, forgetNote, bringBack, markNeverRight, hideNoteFrom, showNoteTo, setNoteSensitivity } from "./edit";
+import { setFact, saveNoteText, saveNoteBody, saveSection, confirmFact, undoOwnerEdit, setEditor, revertCommit, forgetNote, bringBack, markNeverRight, markDone, forgetFact, hideNoteFrom, showNoteTo, setNoteSensitivity } from "./edit";
 import { decideCapture } from "../capture";
 import { recordReexplain, recordOwnerTime } from "../measure";
 import { setMonthlyCap } from "./usage";
 import { approveAsk, declineAsk, cancelAsks } from "../asks";
 import { approveAction, declineAction, cancelActions, clearLatch } from "../act";
 import { approve as approveFix, decline as declineFix } from "../memsync";
-import { standingAction } from "./people";
-import { later, undoAuto } from "../deck";
+import { standingAction, samePersonAction } from "./people";
+import { undoAuto } from "../filing";
+import { createInvite } from "../invite";
+import { refusalWords } from "./labels";
 
 const listPendingIds = (root: string) => listPending(root).map((p) => p.client_id);
 
@@ -76,7 +78,7 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       const shown = (f.twins ?? "").split(",").map((t) => t.trim()).filter(Boolean);
       if (shown.some((t) => !/^[A-Za-z0-9._-]+\.yaml$/.test(t))) throw new CoreError(400, "bad proposal name");
       const r = decideProposal(root, file, action === "proposal-accept" ? "accept" : "reject", undefined, shown);
-      if (r.outcome === "refused") throw new CoreError(422, r.message);
+      if (r.outcome === "refused") throw new CoreError(422, refusalWords(r.message));
       return action === "proposal-reject" ? `rejected ${file}` : r.message;
     }
     case "mail-release":
@@ -94,10 +96,33 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       if (!["active", "paused", "read-only"].includes(s)) throw new CoreError(400, "bad status");
       return setAgentStatus(root, need("agent"), s as AgentStatus);
     }
+    // G184: the owner's yes for a new token made in a terminal. A one-time code (an invite: 15
+    // minutes, works once, for this agent only); the terminal passes it as --code, or the agent
+    // redeems it itself at POST /v1/enroll. The server shows it on the page, never in a URL.
+    // G245: the code is for one kind of key (role: none, reader or resolver). G240: the gardener's
+    // code is for its rotation only.
+    case "token-code": {
+      const agent = need("agent");
+      const role = f.role === "reader" || f.role === "resolver" ? f.role : undefined;
+      const gardener = loadRules(root).policy.agents[agent]?.role === "gardener";
+      let inv: ReturnType<typeof createInvite>;
+      try { inv = createInvite(root, agent, { minutes: 15, role, ...(gardener ? { purpose: "rotate" as const } : {}) }); } catch (e) { throw new CoreError(400, (e as Error).message); }
+      const until = `works once, until ${inv.until.slice(11, 16)} UTC`;
+      if (gardener) return `Rotation code for ${agent}: ${inv.code} (${until}). In a terminal: pocketbrain gardener rotate --code ${inv.code} (or, setting it up, pocketbrain tend --managed --apply --code ${inv.code}).`;
+      const r = role ? ` --role ${role}` : "";
+      return `One-time code for ${agent}${role ? `'s ${role} key` : ""}: ${inv.code} (${until}). In a terminal: pocketbrain token --agent ${agent}${r} --code ${inv.code}${role === "resolver" ? "" : ` (or pocketbrain connect ${agent} --code ${inv.code})`}.${role ? "" : " The assistant can also redeem it itself at POST /v1/enroll."}`;
+    }
     case "agent-revoke": {
       const agent = need("agent");
       const ids = clientsOf(root, agent);
-      const n = revokeTokens(root, agent);
+      // G352: paused first (no lock needed), so a revoke that fails on a busy invites lock still
+      // leaves the agent cut off; it goes back to how it was only once the revoke went through.
+      const pa = loadRules(root).policy.agents[agent];
+      const was = !pa || pa.inside_wall ? "paused" : pa.status ?? "active"; // only an outside agent has a status to set
+      if (was !== "paused") setAgentStatus(root, agent, "paused");
+      let n: number;
+      try { n = revokeTokens(root, agent); } catch (e) { cancelAsks(root, agent); throw new CoreError(409, `${(e as Error).message} ${agent} is paused meanwhile.`); }
+      if (was !== "paused") setAgentStatus(root, agent, was as AgentStatus);
       cancelAsks(root, agent);
       cancelActions(root, agent, "access revoked");
       if (!ids.length || !loadOAuth(root)?.management_client_id) return `revoked ${n} token(s) for ${agent}`;
@@ -115,12 +140,18 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       return saveNoteText(root, need("id"), f.text ?? "");
     case "note-body-save":
       return saveNoteBody(root, need("id"), f.body ?? "");
+    case "section-save":
+      return saveSection(root, need("id"), need("heading"), f.text ?? "");
     case "fact-confirm":
       return confirmFact(root, need("id"), need("attribute"));
     case "note-forget":
       return forgetNote(root, need("id"));
     case "note-bring-back":
       return bringBack(root, need("hash"));
+    case "fact-done":
+      return markDone(root, need("id"), need("attribute"));
+    case "fact-forget":
+      return forgetFact(root, need("id"), need("attribute"));
     case "fact-wrong":
       return markNeverRight(root, need("id"), need("attribute"));
     case "note-hide":
@@ -135,8 +166,6 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       if (r.outcome === "refused") throw new CoreError(404, r.message);
       return r.message;
     }
-    case "deck-later":
-      return later(root, need("key"));
     case "owner-undo-auto":
       return undoAuto(root, need("key"));
     case "owner-undo":
@@ -182,6 +211,10 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
     case "standing-pin":
     case "standing-undismiss":
       return standingAction(root, action, f, need);
+    case "same-person-merge":
+    case "same-person-not":
+    case "same-person-undo":
+      return samePersonAction(root, action, f, need);
     case "digest":
       return `digest written: ${digest(root).needsLouis} item(s) need you`;
   }

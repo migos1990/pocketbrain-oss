@@ -65,14 +65,14 @@ const SYN = new Map<string, string[]>();
 for (const group of SYNONYMS) { const st = group.map(stem); for (const s of st) SYN.set(s, st); }
 
 // The French-English word map (src/lexicon.ts, gap G172), as stems: a word in several groups gets
-// all of their words. Off unless PB_LEXICON=1.
+// all of their words. On unless PB_LEXICON=0.
 const LEX = new Map<string, Set<string>>();
 for (const group of LEXICON) {
   const st = [...new Set(group.flatMap((w) => terms(w)))];
   for (const s of st) { const into = LEX.get(s) ?? new Set<string>(); for (const o of st) into.add(o); LEX.set(s, into); }
 }
 export const LEXICON_WEIGHT = 0.8;
-export const lexiconOn = () => process.env.PB_LEXICON === "1";
+export const lexiconOn = () => process.env.PB_LEXICON !== "0";
 
 export interface Chunk { note: string; head: boolean; text: string }
 interface Doc { id: string; title: string; type: string; area: string; tf: Map<string, number>; len: number; chunks: { chunk: Chunk; tf: Map<string, number> }[]; status?: string; stale: boolean; age: number }
@@ -99,6 +99,23 @@ function count(ts: string[], into = new Map<string, number>(), w = 1) {
 // Header (title, meta line, facts) is one chunk; the body splits on blank lines, headings
 // and list items, so one bullet of a long running log is one chunk. renderNote puts the
 // whole body in its last element when the agent is granted it.
+// The names a topic asks about (G503): its capitalized words, past the first word (which a
+// sentence capitalizes anyway), that aren't stop words, each with the stem the index holds.
+// "what's next with Jane" names Jane; "Jane's next step" names nothing, and is ranked as before.
+export function namesIn(q: string): { word: string; stem: string }[] {
+  const out = new Map<string, string>();
+  const words = q.split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/(?:'s|’s|['’-])+$/u, "").replace(/^['’-]+/, "")).filter(Boolean);
+  for (const w of words.slice(1)) {
+    if (!/^\p{Lu}/u.test(w)) continue;
+    const t = terms(w);
+    if (t.length !== 1) continue;
+    if (!out.has(t[0])) out.set(t[0], w);
+  }
+  return [...out].map(([stem, word]) => ({ word, stem }));
+}
+// Whether a note's indexed text (title, facts, body as the agent sees them) holds a stem.
+export const docHas = (idx: Index, id: string, stem: string) => !!idx.docs.find((d) => d.id === id)?.tf.has(stem);
+
 export function chunkNote(lines: string[], hasBody: boolean): { head: string; body: string[] } {
   const head = (hasBody ? lines.slice(0, -1) : lines).join("\n").trimEnd();
   const body: string[] = [];
@@ -109,6 +126,9 @@ export function chunkNote(lines: string[], hasBody: boolean): { head: string; bo
   for (const l of lines[lines.length - 1].split("\n")) {
     if (!l.trim()) { flush(); continue; }
     if (/^#{1,6} /.test(l)) { flush(); heading = l; continue; }
+    // The references a page ends with belong to no section: never repeat the last heading over
+    // them (demo-moment thread, 2026-10-29: "#### Earlier notes" twice in context_pack).
+    if (/^\[\^[^\]\s]+\]:/.test(l) && !cur.length) heading = "";
     if (/^\s*[-*] |^\s*\d+\. /.test(l)) flush();
     cur.push(l);
   }
@@ -127,6 +147,14 @@ export function buildIndex(res: CarveResult, rules: Rules, now = today()): Index
   return index;
 }
 
+// An index for one pass that only scores (foundBy): the same documents, terms and counts, but no
+// paragraphs kept for match text, and nothing remembered for the next build. The nightly check
+// builds one per agent over the whole brain; kept, they took the 50k-note hub over its memory
+// budget (docs/perf.md, "The night pass").
+export function scoringIndex(res: CarveResult, rules: Rules, now = today()): Index {
+  return makeIndex(res, rules, now, true);
+}
+
 // A note's document, kept while the note is the same object (a cell's notes are shared and
 // frozen, src/brain.ts) and nothing else its rendering reads changed: the day, the rules, what
 // is carved out and, for a note that names a note that came into or left the view, the link.
@@ -141,11 +169,11 @@ function contextOf(res: CarveResult, rules: Rules, now: string): string {
   return JSON.stringify([now, rest, res.grant, res.carvedValues ?? [], needlesOf(res).map((n) => [n.value, n.squashed, n.digits ?? "", n.parts]), res.hiddenFacts.map((h) => h.key).sort()]);
 }
 
-function makeIndex(res: CarveResult, rules: Rules, now: string): Index {
+function makeIndex(res: CarveResult, rules: Rules, now: string, lean = false): Index {
   const docs: Doc[] = [];
   const ctx = contextOf(res, rules, now);
   const ids = new Set(res.visible.keys());
-  const prev = lastIndex.get(ctx);
+  const prev = lean ? undefined : lastIndex.get(ctx);
   const moved = prev ? [...ids].filter((id) => !prev.ids.has(id)).concat([...prev.ids].filter((id) => !ids.has(id))) : [];
   const reuse = !!prev && moved.length <= 100;
   const df = reuse ? new Map(prev!.df) : new Map<string, number>();
@@ -166,17 +194,19 @@ function makeIndex(res: CarveResult, rules: Rules, now: string): Index {
     // field weights: title and aliases x3, header (meta and facts) x2, body x1
     count(terms([fm.title, ...(fm.aliases ?? [])].join(" ")), tf, 3);
     count(terms(head), tf, 2);
-    const chunks = [{ chunk: { note: fm.id, head: true, text: head }, tf: count(terms(head + " " + fm.title)) }];
-    for (const b of body) { const t = terms(b); count(t, tf, 1); chunks.push({ chunk: { note: fm.id, head: false, text: b }, tf: count(t) }); }
+    const chunks = lean ? [] : [{ chunk: { note: fm.id, head: true, text: head }, tf: count(terms(head + " " + fm.title)) }];
+    for (const b of body) { const t = terms(b); count(t, tf, 1); if (!lean) chunks.push({ chunk: { note: fm.id, head: false, text: b }, tf: count(t) }); }
     const len = [...tf.values()].reduce((a, b) => a + b, 0);
     const doc: Doc = { id: fm.id, title: fm.title, type: fm.type, area: fm.area, tf, len, chunks, status: (fm as { status?: string }).status, stale: /\[(stale|disputed)\]/.test(head), age: ageDays(v, res, now) };
-    if (Object.isFrozen(v.note)) docCache.set(v.note, { ctx, body: v.body, doc });
+    if (!lean && Object.isFrozen(v.note)) docCache.set(v.note, { ctx, body: v.body, doc });
     tally(doc, 1);
     docs.push(doc);
   }
   if (reuse) for (const d of prev!.docs) if (!kept.has(d)) tally(d, -1);
-  if (lastIndex.size > 16) lastIndex.clear();
-  lastIndex.set(ctx, { ids, docs: new Set(docs), df });
+  if (!lean) {
+    if (lastIndex.size > 16) lastIndex.clear();
+    lastIndex.set(ctx, { ids, docs: new Set(docs), df });
+  }
   const avgdl = docs.reduce((a, d) => a + d.len, 0) / Math.max(1, docs.length);
   return { docs, df, avgdl };
 }
@@ -205,25 +235,158 @@ export function bm25(tf: Map<string, number>, len: number, avgdl: number, qt: Qu
   return s;
 }
 
-export interface Ranked { id: string; title: string; type: string; area: string; score: number; match: string }
+// How a hit was found (backlog 303), so an agent can tell a weak match from a strong one: the
+// agent's own words it contains, the related words (synonyms, the French-English map) that carried
+// it, and strong (every word), partial (some) or weak (only related words). Shown as words, not
+// stems; the related words come from the fixed maps above, never from anyone's notes.
+export type Strength = "strong" | "partial" | "weak";
+export interface Why { matched: string[]; via: string[]; strength: Strength }
+const WORD = new Map<string, string>();
+for (const group of [...SYNONYMS, ...LEXICON]) for (const w of group) if (!WORD.has(stem(fold(w)))) WORD.set(stem(fold(w)), fold(w));
+// A word matched only by its stem is named by that stem ("coordinat*"), never by the query's
+// spelling: a carved value typed as a query must not come back in the answer (rt-search-side-channel).
+function why(q: string, qt: QueryTerm[], d: Doc): Why {
+  const { tf } = d;
+  const own = new Map<string, string>();
+  for (const w of fold(q).split(/[^\p{L}\p{N}]+/u)) if (w && !STOP.has(w) && (w.length > 1 || /\d/.test(w)) && !own.has(stem(w))) own.set(stem(w), w);
+  const shown = new Set(fold([d.title, ...d.chunks.map((c) => c.chunk.text)].join(" ")).split(/[^\p{L}\p{N}]+/u));
+  const matched = [...own].filter(([t]) => tf.has(t)).map(([t, w]) => (shown.has(w) ? w : `${t}*`));
+  const via = qt.filter(({ t, w }) => w < 1 && !own.has(t) && tf.has(t)).map(({ t }) => WORD.get(t) ?? t);
+  return { matched, via: [...new Set(via)], strength: matched.length === own.size ? "strong" : matched.length ? "partial" : "weak" };
+}
+// A hit only the embedding found (src/semantic.ts): none of the query's words, weak by definition.
+export const SIMILAR = "similar meaning";
+export const meaningOnly = (w: Why) => w.strength === "weak" && w.via.length === 1 && w.via[0] === SIMILAR;
+export function whyLine(w: Why): string {
+  if (meaningOnly(w)) return "Matched only by similar meaning, none of your words (weak: check it is what was asked before relying on it)";
+  return w.strength === "weak" ? `Matched only related words: ${w.via.join(", ")} (weak: check it is what was asked before relying on it)`
+    : `Matched: ${w.matched.join(", ")}${w.via.length ? `, and related words ${w.via.join(", ")}` : ""} (${w.strength})`;
+}
 
-export function rank(idx: Index, q: string, limit = 20, opts: { synonyms?: boolean } = {}): Ranked[] {
+export interface Ranked extends Why { id: string; title: string; type: string; area: string; score: number; match: string }
+
+function docScore(idx: Index, d: Doc, qt: QueryTerm[]): number {
+  let s = bm25(d.tf, d.len, idx.avgdl, qt, idx);
+  if (!s) return 0;
+  if (d.status === "archived" || d.status === "superseded") s *= 0.7;
+  // architecture 0.5: stale and disputed facts rank down, never out (the label still shows)
+  if (d.stale) s *= 0.9;
+  // recency (eval gap G15): up to +15% for a note confirmed this week, halving every 180
+  // days, so a newer note wins a near-tie but an exact older match still beats a vague newer one
+  return s * (1 + 0.15 * Math.pow(0.5, d.age / 180));
+}
+
+// For each term, the docs that hold it, and the largest recency boost any doc gets: built once
+// per index, the first time foundBy asks.
+const postingsOf = new WeakMap<Index, { at: Map<string, Doc>; terms: Map<string, Doc[]>; maxBoost: number }>();
+function postings(idx: Index) {
+  const hit = postingsOf.get(idx);
+  if (hit) return hit;
+  const p = { at: new Map<string, Doc>(), terms: new Map<string, Doc[]>(), maxBoost: 1.15 };
+  for (const d of idx.docs) {
+    p.at.set(d.id, d);
+    p.maxBoost = Math.max(p.maxBoost, 1 + 0.15 * Math.pow(0.5, d.age / 180));
+    for (const t of d.tf.keys()) (p.terms.get(t) ?? p.terms.set(t, []).get(t)!).push(d);
+  }
+  postingsOf.set(idx, p);
+  return p;
+}
+
+// Whether rank(idx, q, limit) would list `id`, without ranking every doc. The note's own score
+// comes first; a query term's share of any doc's score is under w * idf * (k1 + 1), so a doc
+// holding only the weakest terms, whose shares add up to less than that score, can't beat it and
+// is never looked at. The rest are scored exactly as rank scores them and counted when ahead.
+// The nightly check that every note can be found by its title (probe.ts unsearchable) asks once
+// per note per agent; with rank, which scores every doc and finds each hit's best paragraph,
+// that grew with the square of the brain and didn't finish at 10k notes (docs/perf.md).
+export function foundBy(idx: Index, q: string, id: string, limit = 20, opts: { synonyms?: boolean } = {}): boolean {
+  const p = postings(idx), me = p.at.get(id);
+  if (!me) return false;
+  const qt = queryTerms(q, opts.synonyms ?? true);
+  const mine = docScore(idx, me, qt);
+  if (!mine) return false;
+  const N = idx.docs.length;
+  const bound = qt.map(({ t, w }) => { const n = idx.df.get(t) ?? 0; return { t, ub: w * Math.log(1 + (N - n + 0.5) / (n + 0.5)) * 2.2 * p.maxBoost * (1 + 1e-9) }; }).sort((a, b) => a.ub - b.ub);
+  // The weakest terms whose bounds together stay under the note's score: a doc can't tie or beat
+  // it on those alone.
+  let weak = 0, sum = 0;
+  while (weak < bound.length && sum + bound[weak].ub < mine) sum += bound[weak++].ub;
+  const seen = new Set<Doc>([me]);
+  let ahead = 0;
+  for (const { t } of bound.slice(weak)) for (const d of p.terms.get(t) ?? []) {
+    if (seen.has(d)) continue;
+    seen.add(d);
+    const s = docScore(idx, d, qt);
+    if (s > mine || (s === mine && d.id.localeCompare(id) < 0)) if (++ahead >= limit) return false;
+  }
+  return true;
+}
+
+// The text a document is embedded from (src/semantic.ts): its chunks as the agent is shown them,
+// nothing else, so a vector can't carry what the view leaves out.
+const texts = new WeakMap<object, string>();
+export function docText(d: { chunks: { chunk: Chunk }[] }): string {
+  let t = texts.get(d);
+  if (t === undefined) { t = d.chunks.map((c) => c.chunk.text).join("\n"); texts.set(d, t); }
+  return t;
+}
+// Hybrid search: the query's vector and a lookup for each document's vector (none yet: no
+// semantic rank). Both rankings run over this index's documents only, the agent's own view.
+export interface Semantic { query: Float32Array; vectorOf: (text: string) => Float32Array | undefined }
+export const RRF_K = 60;
+// Only the nearest few documents get a semantic rank. bge-m3's cosines leave no floor that tells an
+// unrelated query from a paraphrase (on the synthetic set an unrelated query's best is 0.61 to 0.66,
+// a wanted note's 0.53 to 0.85). 10 kept every kind of question at or above BM25 alone on the
+// synthetic set; 5 lost some.
+export const SEMANTIC_TOP = 10;
+// A note found only by meaning is kept when its cosine stands MEANING_FLOOR above the median cosine
+// over the asker's view (G372): bge-m3 gives every note a fairly high cosine, so what tells a
+// paraphrase from noise is how far a note stands out from the rest, not its cosine. Chosen on
+// blind2 (dev) and 20 self-written unrelated or nonsense questions only: blind2 recall was the
+// same for every floor tried, and 0.07 is the least strict one that leaves under one weak hit per
+// unrelated question (0.3 on average, against 8.7 with no floor). The median comes from the
+// visible notes only, so hidden equals missing still holds.
+export const MEANING_FLOOR = 0.07;
+function cosine(a: Float32Array, b: Float32Array): number {
+  let s = 0;
+  for (let i = 0; i < a.length && i < b.length; i++) s += a[i] * b[i];
+  return s;
+}
+
+export function rank(idx: Index, q: string, limit = 20, opts: { synonyms?: boolean; semantic?: Semantic } = {}): Ranked[] {
   const qt = queryTerms(q, opts.synonyms ?? true);
   if (!qt.length) return [];
-  const out: Ranked[] = [];
+  const scored: { d: Doc; s: number }[] = [];
   for (const d of idx.docs) {
-    let s = bm25(d.tf, d.len, idx.avgdl, qt, idx);
+    const s = docScore(idx, d, qt);
     if (!s) continue;
-    if (d.status === "archived" || d.status === "superseded") s *= 0.7;
-    // architecture 0.5: stale and disputed facts rank down, never out (the label still shows)
-    if (d.stale) s *= 0.9;
-    // recency (eval gap G15): up to +15% for a note confirmed this week, halving every 180
-    // days, so a newer note wins a near-tie but an exact older match still beats a vague newer one
-    s *= 1 + 0.15 * Math.pow(0.5, d.age / 180);
-    const best = bestChunks(idx, d, qt, 1)[0];
-    out.push({ id: d.id, title: d.title, type: d.type, area: d.area, score: s, match: (best?.text ?? "").replace(/\s+/g, " ").slice(0, 160) });
+    scored.push({ d, s });
   }
-  return out.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, limit);
+  scored.sort((a, b) => b.s - a.s || a.d.id.localeCompare(b.d.id));
+  let ranked: { d: Doc; s: number; words: boolean }[] = scored.map((x) => ({ ...x, words: true }));
+  if (opts.semantic) {
+    // Reciprocal-rank fusion (k=60) of the word ranking and the cosine ranking.
+    const sem = opts.semantic;
+    const all = idx.docs.flatMap((d) => { const v = sem.vectorOf(docText(d)); return v ? [{ d, c: cosine(sem.query, v) }] : []; })
+      .sort((a, b) => b.c - a.c || a.d.id.localeCompare(b.d.id));
+    const median = all.length ? all[all.length >> 1].c : 0;
+    const near = all.slice(0, SEMANTIC_TOP);
+    const fused = new Map<Doc, { s: number; words: boolean; plausible: boolean }>();
+    scored.forEach(({ d }, r) => fused.set(d, { s: 1 / (RRF_K + r), words: true, plausible: true }));
+    near.forEach(({ d, c }, r) => { const f = fused.get(d); if (f) f.s += 1 / (RRF_K + r); else fused.set(d, { s: 1 / (RRF_K + r), words: false, plausible: c - median >= MEANING_FLOOR }); });
+    // A note found only by meaning stays only when it stands out from the view (G372, MEANING_FLOOR),
+    // so a question nothing in the view answers gets no weak hits and "not in my view" stays the answer.
+    ranked = [...fused].filter(([, f]) => f.words || f.plausible).map(([d, f]) => ({ d, s: f.s, words: f.words }))
+      .sort((a, b) => b.s - a.s || a.d.id.localeCompare(b.d.id));
+  }
+  // The snippet and the why only for the hits returned: on a common word most of the brain
+  // scores, and those two were most of a search (backlog #318).
+  return ranked.slice(0, limit).map(({ d, s, words }) => {
+    const base = { id: d.id, title: d.title, type: d.type, area: d.area, score: s };
+    if (!words) return { ...base, match: (d.chunks[1] ?? d.chunks[0]).chunk.text.replace(/\s+/g, " ").slice(0, 160), matched: [], via: [SIMILAR], strength: "weak" as const };
+    const best = bestChunks(idx, d, qt, 1)[0];
+    return { ...base, match: (best?.text ?? "").replace(/\s+/g, " ").slice(0, 160), ...why(q, qt, d) };
+  });
 }
 
 function bestChunks(idx: Index, d: Doc, qt: QueryTerm[], n: number): Chunk[] {
@@ -235,10 +398,12 @@ function bestChunks(idx: Index, d: Doc, qt: QueryTerm[], n: number): Chunk[] {
 
 // What context_pack returns for a topic: for each hit, its header and facts plus its best
 // matching paragraphs, in the note's own order, until the character budget is spent.
-export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNote?: number; budget?: number; synonyms?: boolean } = {}): { text: string; ids: string[] } {
-  const { notes = 8, chunksPerNote = 3, budget = 8000 } = opts;
+export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNote?: number; budget?: number; synonyms?: boolean; semantic?: Semantic; keep?: (id: string) => boolean; first?: (id: string) => boolean } = {}): { text: string; ids: string[]; blocks: string[]; left: string[]; meaningOnly: boolean } {
+  const { notes = 8, chunksPerNote = 3, budget = 8000, keep, first } = opts;
   const qt = queryTerms(q, opts.synonyms ?? true);
-  const hits = rank(idx, q, notes, opts);
+  // With a keep test (a topic that names someone, G503) the ranking is read further down, so the
+  // notes kept are still the best of those that pass; the notes the name is the title of lead.
+  const hits = keep ? rank(idx, q, notes * 5, opts).filter((h) => keep(h.id)).sort((a, b) => Number(!!first?.(b.id)) - Number(!!first?.(a.id))).slice(0, notes) : rank(idx, q, notes, opts);
   const parts: string[] = [];
   const ids: string[] = [];
   let used = 0;
@@ -246,14 +411,19 @@ export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNot
     const d = idx.docs.find((x) => x.id === h.id)!;
     // a short body comes whole; a long one (a running log) gives only its matching paragraphs
     const short = d.chunks.slice(1).reduce((a, c) => a + c.chunk.text.length, 0) <= 800;
-    const chosen = new Set(short ? d.chunks.slice(1).map((c) => c.chunk) : bestChunks(idx, d, qt, chunksPerNote));
+    // a long note found only by meaning has no matching paragraph: its first ones stand in
+    const best = short ? [] : bestChunks(idx, d, qt, chunksPerNote);
+    const chosen = new Set(short ? d.chunks.slice(1).map((c) => c.chunk) : best.length ? best : d.chunks.slice(1, 1 + chunksPerNote).map((c) => c.chunk));
     const body = d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => c.chunk.text);
     const omitted = d.chunks.length - 1 - body.length;
-    const block = [d.chunks[0].chunk.text, ...(body.length ? ["", ...body] : []), ...(omitted > 0 ? ["", `(${omitted} more paragraph${omitted > 1 ? "s" : ""} in this note; read \`${d.id}\` for all of it)`] : [])].join("\n");
+    const block = [d.chunks[0].chunk.text, whyLine(h), ...(body.length ? ["", ...body] : []), ...(omitted > 0 ? ["", `(${omitted} more paragraph${omitted > 1 ? "s" : ""} in this note; read \`${d.id}\` for all of it)`] : [])].join("\n");
     if (used && used + block.length > budget) break;
     parts.push(block);
     ids.push(d.id);
     used += block.length;
   }
-  return { text: parts.join("\n\n"), ids };
+  // Matches the character budget left out, best first (the context budget names them, src/context.ts).
+  const left = hits.slice(ids.length).map((h) => h.id);
+  // Every match found only by meaning: none of the query's words is in the view (G372).
+  return { text: parts.join("\n\n"), ids, blocks: parts, left, meaningOnly: hits.length > 0 && hits.every(meaningOnly) };
 }

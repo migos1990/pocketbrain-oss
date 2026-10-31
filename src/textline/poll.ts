@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The text channel's poller. Hosted agents can't be pushed to, so something has to look:
 // every cadence_minutes (5 by default) one tick on the hub
-//   1. reads Louis's replies and applies them (approve, reject, later, a number),
-//   2. under the server's write queue only (start), lets unanswered proposals expire (deck.ts),
+//   1. reads Louis's replies and applies them (later, ok, reject <code> for an agent's mail; a reply
+//      never decides a fact or a conflict, those are the home's),
+//   2. under the server's write queue only (start), lets unanswered proposals expire (filing.ts),
 //      skipping anything just answered,
 //   3. gathers every open item (items.ts) and the hub's health,
 //   4. applies rules/escalation.yaml (tiers, quiet hours, batching, resolver grace,
@@ -11,19 +12,17 @@
 // State lives in textline/ (not committed): what was texted when, snoozes, health streaks.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { today } from "../brain";
 import { loadRules } from "../rules";
-import { runAction } from "../dashboard/actions";
-import { answerDispute, ownerDecide, CoreError } from "../core";
+import { CoreError } from "../core";
 import { openItems, healthChecks, heartbeatFile, type Item, type Fetch, type HealthResult } from "./items";
 import { loadEscalation, inQuietHours, type EscalationPolicy, type Tier } from "./policy";
 import { compose, parseReply, type Command } from "./message";
 import { makeTransport, markOutbox, outbox, type TextTransport, type IncomingText } from "./transport";
-import { ownerRef } from "../owner";
 import { recordReexplain } from "../measure";
-import { appendJsonl } from "../util";
+import { appendJsonl, readJsonl } from "../util";
 import { declineAction } from "../act";
-import { runAuto } from "../deck";
+import { runAuto } from "../filing";
+import { waitingCount } from "../dashboard/home";
 
 interface ItemState { first_seen: string; last_texted?: string; texted?: number; snoozed_until?: string; done?: string }
 interface SentRecord { id: string; at: string; transport: string; letters: Record<string, string>; kind: "batch" | "ack" | "health" }
@@ -62,6 +61,23 @@ function saveState(root: string, s: TextState) {
 function audit(root: string, entry: Record<string, unknown>) {
   appendJsonl(join(root, "textline", "log.jsonl"), { at: new Date().toISOString(), ...entry });
 }
+// After FAIL_RUN failed sends in a row (every transport), the poller waits before trying again:
+// an hour, then doubling, at most 6 hours. Retrying a hung Messages every tick only kept the
+// hub waiting on it (G380); the failed-texts check reports the outage meanwhile, and a watchdog
+// relaunch of Messages after the last failure lets the next tick try at once.
+const FAIL_RUN = 3;
+export function sendBackoff(root: string, now: Date): string | undefined {
+  const log = readJsonl(join(root, "textline", "log.jsonl"));
+  const sends = log.filter((e) => e.sent !== undefined);
+  let n = 0;
+  while (n < sends.length && sends[sends.length - 1 - n].ok === false) n++;
+  if (n < FAIL_RUN) return undefined;
+  const last = String(sends.at(-1)!.at);
+  const relaunched = log.filter((e) => e.relaunched !== undefined).at(-1);
+  if (relaunched && String(relaunched.at) > last) return undefined;
+  const until = new Date(Date.parse(last) + Math.min(6 * 60, 60 * 2 ** (n - FAIL_RUN)) * 60_000);
+  return now < until ? until.toISOString() : undefined;
+}
 const minutes = (a: Date, b: string | undefined) => (b ? (a.getTime() - new Date(b).getTime()) / 60_000 : Infinity);
 
 // `lock`: the server's write queue (src/server.ts serial). Only a tick given it lets the hub decide
@@ -80,59 +96,24 @@ export function tierOf(p: EscalationPolicy, it: Item): Tier {
 
 interface Applied { line: string; changed: boolean }
 
-function act(root: string, p: EscalationPolicy, st: TextState, it: Item, c: Command, msg: IncomingText, trusted: boolean, now: Date): Applied {
+// A reply decides nothing on the owner's list (outside review v5): facts file themselves and a
+// conflict is settled on the owner's home (/home, /settle/<id>). What a reply still does: put an
+// item off, clear an alert from the texts, and reject an agent's mail by its code (tighten only).
+const ON_HOME = "a reply doesn't decide this; settle it on your home";
+function act(root: string, p: EscalationPolicy, st: TextState, it: Item, c: Command, msg: IncomingText, now: Date): Applied {
   const s = (st.items[it.key] ??= { first_seen: now.toISOString() });
-  const relayedOnly = (what: string) => ({ line: `${what} needs your own phone or the dashboard, not a relayed reply`, changed: false });
   const via = `text-${msg.id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60)}`;
   if (c.verb === "later") { s.snoozed_until = new Date(now.getTime() + p.snooze_hours * 3_600_000).toISOString(); return { line: `later (${p.snooze_hours}h)`, changed: false }; }
   try {
     switch (it.kind) {
-      case "proposal":
-        if (c.verb === "approve" || c.verb === "ok") {
-          if (!trusted && it.private) return relayedOnly("approving a private change");
-          return { line: `approved: ${runAction({ root }, "proposal-accept", { file: it.ref })}`, changed: true };
-        }
-        if (c.verb === "reject") return { line: runAction({ root }, "proposal-reject", { file: it.ref }), changed: true };
-        break;
-      case "mail":
-        if (c.verb === "approve" || c.verb === "ok") {
-          if (!trusted) return relayedOnly("releasing held mail");
-          return { line: runAction({ root }, "mail-release", { id: it.ref }), changed: true };
-        }
-        if (c.verb === "reject") return { line: runAction({ root }, "mail-drop", { id: it.ref }), changed: true };
-        break;
-      case "capture":
-        if (c.verb === "approve" || c.verb === "ok") {
-          if (!trusted) return relayedOnly("releasing a held capture");
-          return { line: runAction({ root }, "capture-release", { file: it.ref }), changed: true };
-        }
-        if (c.verb === "reject") return { line: runAction({ root }, "capture-discard", { file: it.ref }), changed: true };
-        break;
-      case "held-answer":
-        if (c.verb === "approve" || c.verb === "ok") {
-          if (!trusted) return relayedOnly("confirming a relayed answer");
-          return { line: runAction({ root }, "dispute-confirm", { id: it.ref }), changed: true };
-        }
-        if (c.verb === "reject") return { line: runAction({ root }, "dispute-reject", { id: it.ref }), changed: true };
-        break;
+      case "proposal": case "mail": case "capture": case "held-answer": case "dispute":
+        return { line: ON_HOME, changed: false };
       // An agent's mail (src/act.ts): approved in the dashboard only, never by text, trusted or
       // relayed (red team H1, M4). A reply quoting its code may reject it or put it off (G146,
       // applyReply); ok, yes or approve change nothing.
       case "action":
         if (c.verb === "reject") return { line: declineAction(root, it.ref, via), changed: true };
         return { line: `a mail is approved in the dashboard only; reply reject ${it.code} to drop it`, changed: false };
-      case "dispute": {
-        if (c.verb === "reject") return { line: "no change; reply a number, or decide in the dashboard", changed: false };
-        const choice = c.verb === "pick" ? c.choice : it.suggested;
-        if (!choice) return { line: "which one? reply 1 or 2", changed: false };
-        if (trusted) return { line: ownerDecide(root, it.ref, choice, via), changed: true };
-        // Relayed by the resolver: the same path as Instinct's own /answer. Private facts are
-        // held there until Louis confirms them himself.
-        const resolver = loadRules(root).policy.resolver;
-        if (!resolver) return relayedOnly("a dispute answer");
-        const r = answerDispute(root, resolver, it.ref, { choice, message_id: ownerRef(today(), via) });
-        return { line: r.status === "answer-held" ? `${it.ref}: noted, held until you confirm it in the dashboard` : `${it.ref}: settled (${choice})`, changed: true };
-      }
       default: // alert, upkeep, rules, health: information; ok clears it
         if (c.verb === "ok" || c.verb === "approve") { s.done = now.toISOString(); return { line: "ok, cleared", changed: false }; }
         if (c.verb === "reject") return { line: "still open; act in the dashboard", changed: false };
@@ -169,7 +150,7 @@ function applyReply(root: string, p: EscalationPolicy, st: TextState, open: Map<
       if (c.letter) out.push(`${c.letter.toUpperCase()} ignored: a code names the mail`);
       const it = [...open.values()].find((i) => i.kind === "action" && i.code === c.code);
       if (!it) { out.push(`${c.code}: no waiting mail with that code`); continue; }
-      const r = act(root, p, st, it, c, msg, trusted, now);
+      const r = act(root, p, st, it, c, msg, now);
       out.push(`${c.code}: ${r.line}`);
       if (r.changed) open.delete(it.key);
       continue;
@@ -191,7 +172,7 @@ function applyReply(root: string, p: EscalationPolicy, st: TextState, open: Map<
         askedWhich = true;
         continue;
       }
-      const r = act(root, p, st, it, c, msg, trusted, now);
+      const r = act(root, p, st, it, c, msg, now);
       out.push(`${letters.length > 1 ? `${L}: ` : ""}${r.line}`);
       if (r.changed) open.delete(key);
     }
@@ -214,13 +195,15 @@ export async function tick(root: string, opts: TickOptions = {}): Promise<TickRe
   const send = async (text: string, kind: SentRecord["kind"], letters: Record<string, string> = {}, prefer?: TextTransport): Promise<string | undefined> => {
     if (opts.dryRun) return "dry-run";
     const id = `t-${now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${st.sent.length}`;
+    const wait = sendBackoff(root, now);
+    if (wait) { audit(root, { at: now.toISOString(), skip: "send", why: `the last ${FAIL_RUN}+ texts failed; next try ${wait.slice(0, 16)}` }); return undefined; }
     const order = [prefer ?? primary, ...(prefer && prefer !== primary ? [primary] : []), ...(fallback ? [fallback] : [])];
     for (const t of order) {
       // Skip a stale Instinct only when something else can send; with no fallback the text
       // still queues, so Instinct sends it when it's back (and the digest lists it meanwhile).
       if (t.stale?.(now) && order.indexOf(t) < order.length - 1) { audit(root, { skip: t.name, why: "not pulled recently" }); continue; }
       const r = await t.send({ id, text, at: now.toISOString() });
-      audit(root, { sent: id, via: t.name, ok: r.ok, detail: r.detail, kind });
+      audit(root, { at: now.toISOString(), sent: id, via: t.name, ok: r.ok, detail: r.detail, kind });
       if (r.ok) {
         // A fallback took over: don't let Instinct send the stale copies later.
         if (t !== primary && primary.name === "instinct") for (const m of outbox(root).filter((x) => x.status === "queued")) markOutbox(root, m.id, "superseded");
@@ -246,7 +229,7 @@ export async function tick(root: string, opts: TickOptions = {}): Promise<TickRe
     }
   }
 
-  // 2. Proposals the owner left past their deadline expire (src/deck.ts), skipping anything he just
+  // 2. Proposals the owner left past their deadline expire (src/filing.ts), skipping anything he just
   // answered, and only inside the server's write queue.
   res.auto = [];
   if (!opts.dryRun && opts.lock) res.auto = (await opts.lock(() => runAuto(root, now, answered))).map((d) => d.key);
@@ -276,7 +259,11 @@ export async function tick(root: string, opts: TickOptions = {}): Promise<TickRe
   // An item's own timestamp counts only when it has a time (a bare date would skip the wait).
   for (const it of items) st.items[it.key] ??= { first_seen: it.at && it.at.includes("T") && it.at < now.toISOString() ? it.at : now.toISOString() };
 
+  const line = p.batch.style === "line";
   const due = items.filter((it) => {
+    // One line counts decisions only: the hub's own alerts wait on the dashboard, never in a text,
+    // except a leak, where hours on the dashboard is the damage (backlog row 1, safety review).
+    if (line && it.kind === "alert" && !LEAK.has(it.check ?? "")) return false;
     const s = st.items[it.key];
     if (s.done) return false;
     if (s.snoozed_until && s.snoozed_until > now.toISOString()) return false;
@@ -304,18 +291,32 @@ export async function tick(root: string, opts: TickOptions = {}): Promise<TickRe
   if (go) {
     const rank = (i: Item) => (tierOf(p, i) === "urgent" ? 0 : i.private || i.money ? 1 : tierOf(p, i) === "normal" ? 2 : 3);
     const list = [...urgent, ...normal, ...low].sort((a, b) => rank(a) - rank(b) || st.items[a.key].first_seen.localeCompare(st.items[b.key].first_seen));
-    const c = compose(list, { maxItems: p.batch.max_items, maxChars: p.batch.max_chars });
-    const via = await send(c.text, "batch", c.letters);
+    const c = line ? oneLine(root, now, urgent, list) : compose(list, { maxItems: p.batch.max_items, maxChars: p.batch.max_chars });
+    const via = c.text ? await send(c.text, "batch", c.letters) : undefined;
     if (via) audit(root, { batch: via, items: list.length, urgent: urgent.length });
     if (via) {
-      for (const k of Object.values(c.letters)) { const s = st.items[k]; s.last_texted = now.toISOString(); s.texted = (s.texted ?? 0) + 1; }
+      for (const k of line ? list.map((i) => i.key) : Object.values(c.letters)) { const s = st.items[k]; s.last_texted = now.toISOString(); s.texted = (s.texted ?? 0) + 1; }
       if (normal.length || low.length) st.last_batch = now.toISOString();
       for (const h of urgent.filter((i) => i.kind === "health")) st.health[h.ref].texted = true;
       res.sent = { text: c.text, via, keys: Object.values(c.letters) };
-    } else res.reason += "; every transport failed";
+    } else res.reason += c.text ? "; every transport failed" : "; nothing to decide today";
   }
   if (!opts.dryRun) saveState(root, st);
   return res;
+}
+
+const LEAK = new Set(["leak_tripwire", "canary", "canary_served"]);
+
+// The one-line text (batch style line): what the owner's home lists as waiting, so the phone and
+// the home never give two numbers (owner, 2026-10-24); the hub being down says so, as the home can't.
+function oneLine(root: string, now: Date, urgent: Item[], list: Item[]): { text: string; letters: Record<string, string> } {
+  const n = waitingCount(root, now);
+  const hub = urgent.find((i) => i.kind === "health");
+  const decide = n ? `${n} waiting on you, open your home` : "";
+  if (urgent.some((i) => i.kind === "alert" && LEAK.has(i.check ?? ""))) return { text: "pocketBrain: an assistant tried to pass on something it can't see. Open the dashboard now", letters: {} };
+  if (hub) return { text: `pocketBrain: ${hub.title}${decide ? `. ${decide}` : ""}`, letters: {} };
+  if (decide) return { text: `pocketBrain: ${decide}`, letters: {} };
+  return { text: urgent.length && list.length ? "pocketBrain: something to look at, open the dashboard" : "", letters: {} };
 }
 
 function safeMake(root: string, p: EscalationPolicy): TextTransport | undefined {

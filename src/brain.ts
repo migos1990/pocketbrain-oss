@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Loading and saving brain files: one Markdown file per thing, YAML frontmatter,
 // id = path without .md (memory-shape.md sections 2 and 3).
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync, renameSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import { appendFileSync, readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync, renameSync } from "node:fs";
+import { join, dirname, relative, basename } from "node:path";
 import YAML from "yaml";
+import { ownerToday } from "./clock";
 
 export type Sensitivity = "public" | "personal" | "private" | "secret";
 export const SENSITIVITY_ORDER: Sensitivity[] = ["public", "personal", "private", "secret"];
@@ -26,6 +27,9 @@ export interface FactRecord {
   last_confirmed?: string;
   sensitivity?: Sensitivity; // raises this one fact above the file's level, never lowers it
   share_with?: string[]; // if set, only these agents ever get this fact
+  sender?: "unknown"; // filed from a sender no person page holds (src/sender.ts); never the address
+  unseen?: boolean; // held: served to no agent until the owner has seen it (phone UI spec §7, src/seen.ts)
+  contested?: string; // a conflict waits beside this live value (disputes/<id>); readers keep using the value (G425)
   shared_by?: string; // the agent whose own write set share_with (none when the owner or the write path set it)
   review_after?: string;
   valid_to?: string;
@@ -55,7 +59,9 @@ export interface Frontmatter {
   id: string;
   type: string;
   title: string;
+  summary?: string; // one line under the title (src/wiki.ts)
   aliases?: string[];
+  parent?: string; // the page above this one in the wiki tree (src/wiki.ts)
   area: string;
   sensitivity: Sensitivity;
   status: string;
@@ -93,8 +99,151 @@ export function parseNote(text: string, path: string): Note {
   return { fm, body: m[2] ?? "", path };
 }
 
+// The restart snapshot (backlog 305): each note's parsed frontmatter, kept on disk by the hash of
+// its YAML text, so a restarted hub reads JSON instead of parsing YAML again (most of a restart at
+// 50k notes, docs/perf.md). Keyed by content, never by path or time: an edited note has a new hash
+// and is parsed again, so a stale entry is never used. One file per brain, in .cells/ (derived,
+// git-ignored, left out of backups), shared by the brain and its agents' cells. A file from
+// another version of the format or of the YAML parser is dropped whole; a line that doesn't read
+// is dropped alone. Only frontmatter that comes back from JSON the same is kept.
+// Bump the 1 when parseNote changes how it reads YAML (its options, what it keeps).
+const SNAPSHOT_HEAD = `pocketbrain-parse 1 yaml ${YAML_VERSION()}`;
+type Snapshot = { file: string; entries: Map<string, string>; used: Set<string>; dirty: boolean };
+const snapshots = new Map<string, Snapshot>();
+let snapshotOff = !!process.env.PB_NO_PARSE_SNAPSHOT;
+
+function YAML_VERSION(): string {
+  try { return JSON.parse(readFileSync(join(dirname(require.resolve("yaml")), "..", "package.json"), "utf8")).version; } catch { return "?"; }
+}
+
+function snapshotFile(root: string): string {
+  // A cell (root/.cells/<agent>) shares its brain's file.
+  return basename(dirname(root)) === ".cells" ? join(dirname(root), "parse.json") : join(root, ".cells", "parse.json");
+}
+
+function snapshotFor(root: string): Snapshot {
+  const file = snapshotFile(root);
+  let s = snapshots.get(file);
+  if (s) return s;
+  s = { file, entries: new Map(), used: new Set(), dirty: false };
+  snapshots.set(file, s);
+  let text = "";
+  try { text = readFileSync(file, "utf8"); } catch { return s; }
+  const lines = text.split("\n");
+  if (lines[0] !== SNAPSHOT_HEAD) { s.dirty = true; return s; }
+  for (let i = 1; i < lines.length; i++) {
+    const tab = lines[i].indexOf("\t");
+    if (tab === 44) s.entries.set(lines[i].slice(0, 44), lines[i].slice(45));
+    else if (lines[i]) s.dirty = true;
+  }
+  for (const k of droppedKeys(file)) if (s.entries.delete(k)) s.dirty = true;
+  return s;
+}
+
+// A forgotten person's frontmatter (src/forget.ts) must not live on in the cache: its keys go in
+// parse.drop beside the file, which every process honours when it loads and when it saves, so a
+// hub that read the note before the forget doesn't write it back. Hashes only, never the text.
+const dropFile = (snapshot: string) => join(dirname(snapshot), "parse.drop");
+function droppedKeys(snapshot: string): Set<string> {
+  try { return new Set(readFileSync(dropFile(snapshot), "utf8").split("\n").filter((l) => l.length === 44)); } catch { return new Set(); }
+}
+const yamlKey = (yaml: string) => new Bun.CryptoHasher("sha256").update(yaml).digest("base64");
+// `matching`: also drop every cached entry whose JSON holds one of these strings (renderings of
+// the note this process can't rebuild, like an agent cell's copy from an earlier commit).
+export function dropParsed(root: string, texts: string[], matching: string[] = []): void {
+  const file = snapshotFile(root);
+  const keys = texts.map((t) => t.match(/^---\n([\s\S]*?)\n---\n?/)?.[1]).filter((y): y is string => y !== undefined).map(yamlKey);
+  const scan = (k: string, v: string) => matching.some((m) => v.includes(m)) && keys.push(k);
+  try { for (const l of readFileSync(file, "utf8").split("\n")) if (l.charAt(44) === "\t") scan(l.slice(0, 44), l.slice(45)); } catch { /* no snapshot on disk */ }
+  for (const [k, v] of snapshots.get(file)?.entries ?? []) scan(k, v);
+  const had = droppedKeys(file), add = [...new Set(keys)].filter((k) => !had.has(k));
+  if (!keys.length) return;
+  mkdirSync(dirname(file), { recursive: true });
+  if (add.length) appendFileSync(dropFile(file), add.join("\n") + "\n");
+  const s = snapshots.get(file);
+  if (s) for (const k of keys) { s.entries.delete(k); s.used.delete(k); }
+  try {
+    const drop = new Set(keys);
+    const lines = readFileSync(file, "utf8").split("\n");
+    const kept = lines.filter((l) => !drop.has(l.slice(0, 44)));
+    if (kept.length !== lines.length) { writeFileSync(`${file}.${process.pid}.tmp`, kept.join("\n")); renameSync(`${file}.${process.pid}.tmp`, file); }
+  } catch { /* no snapshot on disk */ }
+}
+
+// Plain JSON data only: no number JSON can't hold, no key that names a prototype.
+function jsonSafe(v: unknown): boolean {
+  if (v === null || typeof v === "string" || typeof v === "boolean") return true;
+  if (typeof v === "number") return Number.isFinite(v) && !Object.is(v, -0);
+  if (Array.isArray(v)) return v.every(jsonSafe);
+  if (typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+    for (const [k, x] of Object.entries(v as object)) if (k === "__proto__" || k === "constructor" || k === "prototype" || !jsonSafe(x)) return false;
+    return true;
+  }
+  return false;
+}
+
+function snapshotParse(root: string, text: string, path: string): Note {
+  if (snapshotOff) return parseNote(text, path);
+  const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) throw new Error(`${path}: missing frontmatter`);
+  const s = snapshotFor(root);
+  const key = yamlKey(m[1]);
+  const kept = s.entries.get(key);
+  if (kept !== undefined) {
+    try {
+      const fm = JSON.parse(kept);
+      if (fm && typeof fm === "object" && !Array.isArray(fm)) { s.used.add(key); return { fm, body: m[2] ?? "", path }; }
+    } catch { /* parsed again below */ }
+  }
+  const fm = YAML.parse(m[1], { schema: "core" }) as Frontmatter;
+  if (fm && typeof fm === "object" && jsonSafe(fm)) {
+    s.entries.set(key, JSON.stringify(fm));
+    s.used.add(key);
+    s.dirty = true;
+    scheduleSnapshotSave();
+  }
+  return { fm, body: m[2] ?? "", path };
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let exitHooked = false;
+function scheduleSnapshotSave() {
+  if (!exitHooked) { exitHooked = true; process.on("exit", saveParseSnapshots); }
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => { saveTimer = undefined; saveParseSnapshots(); }, 300_000);
+  saveTimer.unref?.();
+}
+
+// Written on exit (and when serve is stopped, src/cli.ts) and, for a running hub, at most every
+// five minutes: a 50k brain's file is about 60 MB. Entries this process used are kept;
+// the rest only while the file stays under twice that plus 10k, so notes that went away drop out.
+export function saveParseSnapshots(): void {
+  for (const s of snapshots.values()) {
+    if (!s.dirty) continue;
+    s.dirty = false;
+    const keep = s.entries.size > 2 * s.used.size + 10_000 ? [...s.used] : [...s.entries.keys()];
+    const drop = droppedKeys(s.file);
+    const out = [SNAPSHOT_HEAD];
+    for (const k of keep) { const v = s.entries.get(k); if (v !== undefined && !drop.has(k)) out.push(`${k}\t${v}`); }
+    try {
+      const dir = dirname(s.file);
+      if (!existsSync(dir)) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, ".gitignore"), "*\n"); }
+      const tmp = `${s.file}.${process.pid}.tmp`;
+      writeFileSync(tmp, out.join("\n") + "\n");
+      renameSync(tmp, s.file);
+    } catch { /* a read-only brain just parses again next time */ }
+  }
+}
+
+// Tests: forget what this process loaded, as a restart would, or stop using the snapshot.
+export function resetParseSnapshots(o: { off?: boolean } = {}): void {
+  snapshots.clear();
+  parsed.clear();
+  if (o.off !== undefined) snapshotOff = o.off;
+}
+
 const FM_ORDER = [
-  "id", "type", "title", "aliases", "area", "sensitivity", "status", "created", "updated", "by",
+  "id", "type", "title", "summary", "aliases", "parent", "area", "sensitivity", "status", "created", "updated", "by",
   "decided_on", "options", "supersedes", "superseded_by", "merged_into", "verification",
   "sources", "tags", "legacy", "facts", "history",
 ];
@@ -126,9 +275,11 @@ function walk(dir: string): string[] {
 // themselves, frozen, so a mutation throws instead of reaching other readers: copying 10k notes
 // took a quarter of a second per load.
 const parsed = new Map<string, { text: string; note: Note }>();
-const PARSE_CACHE_MAX = 200_000;
+// The hub's notes plus every agent's cell: at 50k notes and four agents, about 220k files. A cache
+// smaller than that is cleared on every pass and each read parses everything again (docs/perf.md).
+const PARSE_CACHE_MAX = 1_000_000;
 
-function deepFreeze<T>(v: T): T {
+export function deepFreeze<T>(v: T): T {
   if (v && typeof v === "object" && !Object.isFrozen(v)) { Object.freeze(v); for (const x of Object.values(v)) deepFreeze(x); }
   return v;
 }
@@ -141,7 +292,7 @@ export function loadBrain(root: string, opts: { shared?: boolean } = {}): Note[]
       const text = readFileSync(file, "utf8");
       let hit = parsed.get(file);
       if (!hit || hit.text !== text || hit.note.path !== rel) {
-        hit = { text, note: deepFreeze(parseNote(text, rel)) };
+        hit = { text, note: deepFreeze(snapshotParse(root, text, rel)) };
         if (parsed.size >= PARSE_CACHE_MAX) parsed.clear();
         parsed.set(file, hit);
       }
@@ -149,6 +300,14 @@ export function loadBrain(root: string, opts: { shared?: boolean } = {}): Note[]
     }
   }
   return notes.sort((a, b) => a.fm.id.localeCompare(b.fm.id));
+}
+
+// A note from text read elsewhere (an old version from git, src/dashboard/history.ts): the cached,
+// frozen note when the file at `rel` was parsed from exactly this text, else a fresh parse. Most
+// of a past day's brain is the same text as today's files (backlog #295).
+export function parseShared(root: string, rel: string, text: string): Note {
+  const hit = parsed.get(join(root, rel));
+  return hit && hit.text === text && hit.note.path === rel ? hit.note : deepFreeze(parseNote(text, rel));
 }
 
 // `notes` (loaded shared from `root`) with the files at `paths` read again: added, changed or,
@@ -163,7 +322,7 @@ export function reloadNotes(root: string, notes: Note[], paths: string[]): Note[
     const text = readFileSync(file, "utf8");
     let hit = parsed.get(file);
     if (!hit || hit.text !== text || hit.note.path !== rel) {
-      hit = { text, note: deepFreeze(parseNote(text, rel)) };
+      hit = { text, note: deepFreeze(snapshotParse(root, text, rel)) };
       if (parsed.size >= PARSE_CACHE_MAX) parsed.clear();
       parsed.set(file, hit);
     }
@@ -200,7 +359,7 @@ export function slugify(s: string): string {
 }
 
 export function today(): string {
-  return process.env.PB_TODAY ?? new Date().toISOString().slice(0, 10);
+  return process.env.PB_TODAY ?? ownerToday(); // the owner's day (src/clock.ts)
 }
 
 // Every [[link]] in a string, without alias or anchor.

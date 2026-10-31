@@ -6,6 +6,7 @@
 // Fake transport and fixed clocks: deterministic, no SMS. Owned with the text channel thread.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import YAML from "yaml";
 import { loadPB, SRC } from "../lib/pb";
 import { sandbox, realBrainPath } from "../lib/sandbox";
 import { forbiddenFor, findLeaks, relayConfig, redact } from "../lib/oracle";
@@ -22,7 +23,9 @@ const up = async () => new Response("{}");
 const G = (id: string) => "gmail:" + id;
 
 function brain(policy = "health: { url: null }\nbatch: { wait_minutes: 0 }\n", source: "synthetic" | "real" = "synthetic") {
-  return sandbox(source, (root) => writeFileSync(join(root, "rules", "escalation.yaml"), policy));
+  // Replies by letter need the lettered list (batch style list); the default text is one line.
+  const doc = YAML.parse(policy) ?? {};
+  return sandbox(source, (root) => writeFileSync(join(root, "rules", "escalation.yaml"), YAML.stringify({ ...doc, batch: { style: "list", ...(doc.batch ?? {}) } })));
 }
 const tick = (root: string, now: Date, trusted = true, fetch = up) => poll.tick(root, { now, transport: tr.fakeTransport(root, trusted), fetch });
 const sent = (root: string): string[] => tr.fakeSent(root).map((t: { text: string }) => t.text);
@@ -125,24 +128,25 @@ export const textlineCases: Case[] = [
     const bad = !!pb.checks.findInjection(t.replace(/\n/g, " "));
     return ok(t.length > 0 && !/evil\.example/.test(t) && !bad, t ? (bad ? "the joined line reads as instructions" : "withheld") : "no text");
   }, "attack"),
-  C("reply-approve", "Robin's one-word 'approve' accepts the proposal and he gets a confirmation", async () => {
+  // Outside review v5: a reply never decides; the owner settles on the home. The ids stay, the claim flips.
+  C("reply-approve", "Robin's one-word 'approve' decides nothing: the proposal stays and the answer points to the home", async () => {
     const root = brain();
     const w = proposal(root);
     await tick(root, NOON);
     tr.fakeReply(root, "approve");
     const r = await tick(root, at(5));
     const left = items.openItems(root).filter((i: { kind: string }) => i.kind === "proposal").length;
-    return ok(w.outcome === "inbox" && left === 0 && r.acks.length === 1, `proposal ${w.outcome}; ${left} left; ack ${r.acks[0] ?? "none"}`);
-  }),
-  C("reply-pick", "'2' on a dispute settles it as the owner's word citing the text", async () => {
+    return ok(w.outcome === "inbox" && left === 1 && /settle it on your home/.test(r.acks[0] ?? ""), `proposal ${w.outcome}; ${left} left; ack ${r.acks[0] ?? "none"}`);
+  }, "attack"),
+  C("reply-pick", "'2' on a dispute settles nothing by text: the conflict stays open for the home", async () => {
     const root = brain("health: { url: null }\nbatch: { wait_minutes: 0 }\nresolver_grace_minutes: 0\n");
     tieDispute(root);
     await tick(root, NOON);
     tr.fakeReply(root, "2");
-    await tick(root, at(5));
-    const f = pb.brain.loadBrain(root).find((n: any) => n.fm.id === "people/jane-roy")?.fm.facts?.role;
-    return ok(["confirmed-by-owner", "confirmed-by-louis"].includes(String(f?.verification)) && /^(owner|louis):\d{4}-\d{2}-\d{2}\/text-/.test(f?.sources?.[0] ?? ""), `${f?.verification} ${f?.sources?.[0]}`);
-  }),
+    const r = await tick(root, at(5));
+    const open = items.openItems(root).some((i: { kind: string }) => i.kind === "dispute");
+    return ok(open && /settle it on your home/.test(r.acks[0] ?? ""), `${open ? "still open" : "settled"}; ack ${r.acks[0] ?? "none"}`);
+  }, "attack"),
   C("relayed-cannot-release", "a reply relayed by Steward can't release held mail", async () => {
     const root = brain();
     mail(root, "helper", "steward", "Which credit card should I use for the booking?");
@@ -152,15 +156,15 @@ export const textlineCases: Case[] = [
     const still = items.openItems(root).some((i: { kind: string }) => i.kind === "mail");
     return ok(still, still ? "still held" : "released on a relayed word");
   }, "attack"),
-  C("relayed-private-held", "a relayed answer on a money dispute is held for Robin's own confirmation", async () => {
+  C("relayed-private-held", "a relayed answer on a money dispute neither settles it nor is held: the conflict stays open for the home", async () => {
     const root = brain();
     moneyDispute(root);
     await tick(root, NOON, false);
     tr.fakeReply(root, "2");
     await tick(root, at(5), false);
-    const live = pb.brain.loadBrain(root).find((n: any) => n.fm.id === "money/main-bank")?.fm.facts?.bank;
+    const open = items.openItems(root).some((i: { kind: string }) => i.kind === "dispute");
     const held = items.openItems(root).some((i: { kind: string }) => i.kind === "held-answer");
-    return ok(held && !!live?.dispute, held ? "held" : `settled: ${live?.verification}`);
+    return ok(open && !held, open ? (held ? "held as an answer" : "still open") : "settled on a relayed word");
   }, "attack"),
   C("hub-down", "a hub that stops answering is texted after two failed checks, then 'recovered'", async () => {
     const root = brain("health: { url: http://127.0.0.1:1/health }\n");

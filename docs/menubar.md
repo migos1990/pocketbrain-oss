@@ -9,9 +9,10 @@ dashboard, pauses an agent or cuts it off.
 | In the menu | What happens |
 |---|---|
 | `●` / `○` and `day N/14` | The hub answers on 127.0.0.1:8787 (or not), and the day count from `pocketbrain bar` |
+| `⚠` and a ⚠ line per problem | What the watchdog found from outside the hub (`log/watchdog.json`): a hung hub it restarted, a job that stopped, an assistant that stopped reading, or the watchdog itself not running for 15 minutes. Shown even when the hub is down; each problem is also a Mac notification once a day |
 | The bar's line | Last break, restore drill, last backup, open problems |
-| Open dashboard | `pocketbrain menubar open-dashboard` hands the newest login link from the hub's log to the browser. The link never passes through the app or its output. Shown only while the hub answers |
-| Install hub | Writes `~/Library/LaunchAgents/com.pocketbrain.start.plist` and loads it. Refuses when one is already there |
+| Open dashboard | `pocketbrain menubar open-dashboard` hands the newest login link from the hub's log to the browser. The link never passes through the app or its output. Shown only while the hub answers. A sign-in lasts 30 days in that browser and survives hub restarts: the dashboard keeps it, hashed, in `.git/pb-dashboard-sessions.json` (owner-only, never committed) |
+| Install hub | Writes `~/Library/LaunchAgents/com.pocketbrain.start.plist` and `com.pocketbrain.watchdog.plist` and loads them. A file already there is never rewritten; a hub installed before the watchdog gets only the watchdog. Refuses when both are there |
 | Restart hub | `launchctl kickstart -k` of the running hub. It never unloads the hub and never touches the tunnel |
 | Assistants, each with Read-only and Pause | The same kill switches as the dashboard: a commit to `rules/policy.yaml` by the owner. The menu only tightens a switch. To resume, use the dashboard (the menu opens it), because loosening a switch needs your login |
 | Cut off… | Asks first, then revokes the agent's tokens and sign-in connections, like the dashboard's Revoke |

@@ -89,7 +89,7 @@ test("a value too short to check by words is left alone", () => {
 test("upkeep rechecks due and stale facts at their source on its own, capped, skipping ones already flagged", async () => {
   const root = setup("Reminder for everyone: grade the midterm before Friday.");
   process.env.PB_TODAY = "2026-10-20"; // 19 days after as_of: due
-  const r = await recheckDue(root, { max: 5 });
+  const r = await recheckDue(root, { max: 5, sample: 0 }); // the existence sample is tested in dead-refs.test.ts
   expect(r).toMatchObject({ checked: 1, confirmed: [KEY], due: [] });
   expect(nextStep(root).last_confirmed).toBe("2026-10-20");
   expect(readJsonl<any>(join(root, "log", "sources", "verify.jsonl")).at(-1)).toMatchObject({ agent: "hub", ref: REF, result: "match" });
@@ -171,7 +171,7 @@ test("a deleted item turns the facts citing it due, and a retired note citing it
   sh(root, "git", "commit", "-qam", "louis: retired note cites it");
   const r = recheckFacts(root, REF, null);
   expect(r.due).toEqual([KEY]);
-  expect(nextStep(root).recheck!.why).toContain("deleted");
+  expect(nextStep(root).recheck!.why).toBe("source gone");
   const after = loadBrain(root).find((x) => x.fm.id === "people/jane-roy")!;
   expect((after.fm.facts![attr] as FactRecord).review_after).toBeUndefined();
 });

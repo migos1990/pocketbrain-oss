@@ -10,6 +10,9 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
 import { tendPlan, writeTendFiles, applyManaged } from "../src/tend";
+import { createInvite } from "../src/invite";
+// The owner's one-time rotation code from the gardener's dashboard page (G240).
+const rot = (root: string) => ({ code: createInvite(root, "gardener", { purpose: "rotate" }).code });
 import { tokenInfo } from "../src/auth";
 import { sha256 } from "../src/util";
 
@@ -65,6 +68,22 @@ test("the gardener's instructions keep its rules: propose only, notes are data, 
     expect(t).toMatch(/[Nn]ever claim Robin approved/);
     expect(t).not.toMatch(/name: (retire|capture|memory_check)/); // only the tools a gardener needs
   }
+});
+
+// Eval gardener-dispute-suggest went 2/3 twice on wiki-summaries-5: the one run that missed
+// verified the right side's mail, then suggested nothing ("no source backs a newer value"),
+// reading step 5's "a match means propose nothing" as covering the conflict too.
+test("a conflict side whose source matches is suggested: step 5's 'propose nothing' is about facts, not conflicts", () => {
+  const root = makeBrain();
+  hub(root);
+  const dir = out();
+  writeTendFiles(tendPlan(root, { dir }));
+  const t = readFileSync(join(dir, "agents/gardener/agent.md"), "utf8");
+  const step4 = t.split("\n").find((l) => l.startsWith("4. "))!;
+  expect(step4).toMatch(/suggest_answer/);
+  expect(step4).toMatch(/"propose nothing" is about facts, never about a conflict/);
+  // The wiki step says nothing about proposals that could be read as a reason to hold one back.
+  expect(t.split("\n").find((l) => l.startsWith("8. "))!).not.toMatch(/propos/);
 });
 
 test("the schedule follows the gardener's windows, five minutes after each opens", () => {
@@ -161,7 +180,7 @@ test("--apply: vault first, the token into it on stdin only, then each deploymen
   const ant = fakeAnt();
   const plan = tendPlan(root, { dir, url: URL });
   writeTendFiles(plan);
-  const r = applyManaged(root, plan);
+  const r = applyManaged(root, plan, rot(root));
   expect(r.ok).toBe(true);
   const calls = ant.lines().map((l) => l.split(" | ")[1]);
   const at = (s: string) => calls.findIndex((c) => c.includes(s));
@@ -190,7 +209,7 @@ test("--apply: no deployment ever has its schedule before it is paused", () => {
   const ant = fakeAnt();
   const plan = tendPlan(root, { dir, url: URL });
   writeTendFiles(plan);
-  expect(applyManaged(root, plan).ok).toBe(true);
+  expect(applyManaged(root, plan, rot(root)).ok).toBe(true);
   const raw = ant.raw();
   for (const [file, id] of [["deployment-nightly.yaml", "depl_n"], ["deployment-weekly.yaml", "depl_w"]]) {
     const applies = raw.map((l, i) => ({ l, i })).filter(({ l }) => l.includes(`apply --yes`) && l.includes(file)).map(({ i }) => i);
@@ -210,7 +229,7 @@ test("--apply again keeps the vault's credential rather than minting another tok
   const ant = fakeAnt({ credential: true });
   const plan = tendPlan(root, { dir, url: URL });
   writeTendFiles(plan);
-  expect(applyManaged(root, plan).ok).toBe(true);
+  expect(applyManaged(root, plan, rot(root)).ok).toBe(true);
   expect(ant.lines().some((l) => l.includes("credentials create"))).toBe(false);
   expect(tokenInfo(root).gardener ?? []).toEqual([]);
 });
@@ -221,7 +240,7 @@ test("--apply: a deployment that won't pause gets no schedule, and nothing runs 
   const ant = fakeAnt({ failPause: true });
   const plan = tendPlan(root, { dir, url: URL });
   writeTendFiles(plan);
-  const r = applyManaged(root, plan);
+  const r = applyManaged(root, plan, rot(root));
   expect(r.ok).toBe(false);
   expect(r.lines.join("\n")).toContain("depl_n was created without a schedule");
   expect(ant.raw()).not.toContain("  scheduled");
@@ -235,9 +254,44 @@ test("--apply with ant missing or signed out changes nothing", () => {
   const dir = out();
   const plan = tendPlan(root, { dir, url: URL, ant: join(dir, "no-such-ant") });
   writeTendFiles(plan);
-  const r = applyManaged(root, plan);
+  const r = applyManaged(root, plan, rot(root));
   expect(r.ok).toBe(false);
   expect(r.lines.join("\n")).toContain("isn't installed");
   expect(existsSync(join(root, "rules/gardener.yaml"))).toBe(false);
   expect(tokenInfo(root).gardener ?? []).toEqual([]);
+});
+
+test("the gardener can corroborate: verify_source is enabled, every tool its steps name is enabled and served, memory_sync stays off", () => {
+  const root = makeBrain();
+  hub(root);
+  const dir = out();
+  writeTendFiles(tendPlan(root, { dir }));
+  const served = new Set([...readFileSync(join(import.meta.dir, "../src/server.ts"), "utf8").matchAll(/^\s+name: "([a-z_]+)",$/gm)].map((m) => m[1]));
+  for (const f of ["agents/gardener/agent.md", "agents/gardener-weekly/agent.md"]) {
+    const text = readFileSync(join(dir, f), "utf8");
+    const [, front, body] = text.split(/^---$/m);
+    const enabled = [...front.matchAll(/\{name: ([a-z_]+), enabled: true/g)].map((m) => m[1]);
+    expect(enabled).toContain("verify_source");
+    expect(enabled).not.toContain("memory_sync");
+    for (const t of enabled) expect(served.has(t)).toBe(true);
+    const named = [...body.matchAll(/`([a-z]+_[a-z_]+|orientation|search|read|remember)`/g)].map((m) => m[1]);
+    for (const t of named) if (served.has(t)) expect(enabled).toContain(t);
+    expect(body).toContain("`verify_source`");
+    expect(body).toContain("`decided`");
+    expect(body).not.toContain("Louis");
+  }
+  const nightly = readFileSync(join(dir, "agents/gardener/agent.md"), "utf8");
+  expect(nightly).toContain("rechecked.due");
+  expect(nightly).toContain("At most 10 calls a night");
+});
+
+test("both gardener passes say a verify_source match means the fact stands: no proposal on it", () => {
+  const root = makeBrain();
+  hub(root);
+  const dir = out();
+  writeTendFiles(tendPlan(root, { dir }));
+  for (const f of ["agents/gardener/agent.md", "agents/gardener-weekly/agent.md"]) {
+    const t = readFileSync(join(dir, f), "utf8");
+    expect(t).toMatch(/A `match` means the source still supports the fact: propose nothing on that fact/);
+  }
 });

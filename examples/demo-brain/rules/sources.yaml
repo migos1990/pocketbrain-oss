@@ -1,0 +1,5 @@
+consent: 2026-09-01 demo brain, a made-up mailbox
+sources:
+  mail:
+    kind: gmail
+    fixture: log/demo-mail.json

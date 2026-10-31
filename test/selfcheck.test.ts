@@ -80,6 +80,16 @@ test("five hub starts in six hours is a restart loop", () => {
   expect(byName(root).restarts.detail).toContain("5 times");
 });
 
+test("planned starts (updates, reboots, the watchdog's kickstarts) aren't a restart loop; unplanned ones still are", () => {
+  const root = makeBrain();
+  for (const h of [5, 4, 3, 2, 1]) line(root, "log/starts.jsonl", { at: ago(h), kind: "planned" });
+  expect(byName(root).restarts.ok).toBe(true);
+  for (const h of [4.5, 3.5, 2.5, 1.5]) line(root, "log/starts.jsonl", { at: ago(h), kind: h > 3 ? "crash" : "hand" });
+  recordStart(root, NOW, "crash");
+  expect(byName(root).restarts).toMatchObject({ ok: false });
+  expect(byName(root).restarts.detail).toContain("5 times");
+});
+
 test("main ahead of the release branch for over 7 days fails, from the auto-update's deploy.json", () => {
   const root = makeBrain();
   const cfg = join(root, "cfg");

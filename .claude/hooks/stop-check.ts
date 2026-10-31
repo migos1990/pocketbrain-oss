@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Stop hook (wired in .claude/settings.json): before a session ends its turn, if code changed,
 // the typecheck must pass. Deterministic and quick; the full gate is the merge-gate skill.
 // Blocks once (exit 2 with the errors); if Claude is already continuing from this hook, it lets go.

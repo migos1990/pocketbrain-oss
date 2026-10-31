@@ -51,7 +51,7 @@ title: Evening texts
 date: 2026-10-08             # the day the log is about
 received: 2026-10-08T21:58:02.114Z
 first_received: …            # only on an updated log
-fidelity: self-reported      # the agent's own account; "export" when Louis forwarded a vendor export
+fidelity: self-reported      # the agent's own account; "export" when the owner forwarded a vendor export
 via: mcp                     # mcp | api | import
 turns: 2
 bytes: 131
@@ -70,7 +70,7 @@ Body: an optional `## <title>`, then one block per turn, `**<role>** · <HH:MM>`
 
 Rules for whoever consolidates logs into facts:
 - Read only `journal/<agent>/logs/`, never `inbox/logs/` (held) and never `archive/`.
-- A fact drawn from a log is the author's observation: `source_type: agent_observation`, a source ref of `agent-log:<agent>/<hid>` (a known scheme, ranked as the agent's own memory), verification `self-reported`, unless the turn quotes the owner and the log's `fidelity` is `export`. Even then, the owner's words in an export are not an owner message id; they need the owner's confirmation to become `confirmed-by-louis`.
+- A fact drawn from a log is the author's observation: `source_type: agent_observation`, a source ref of `agent-log:<agent>/<hid>` (a known scheme, ranked as the agent's own memory), verification `self-reported`, unless the turn quotes the owner and the log's `fidelity` is `export`. Even then, the owner's words in an export are not an owner message id; they need the owner's confirmation to become `confirmed-by-owner`.
 - A promoted fact goes through the normal write path, into an area the author owns, so carving and the leak tripwire still apply. A log never shares anything by itself.
 
 ## 5. How each assistant's logs can actually get here

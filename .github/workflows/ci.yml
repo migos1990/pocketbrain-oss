@@ -39,9 +39,30 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      # The dependency gate (docs/release.md#dependencies): bun.lock frozen everywhere, every
+      # installed license on the AGPL-compatible allowlist, no high or critical advisory.
+      - run: bun scripts/deps.ts lock && bun scripts/deps.ts licenses
+      - name: advisories
+        run: bun audit --audit-level=high
       - run: sudo apt-get install -y openssh-client age   # ssh-keygen for signed-commit tests, age for backups
       - run: git config --global user.name ci && git config --global user.email ci@example.com
       - run: "! git grep -nE '^(<<<<<<<|>>>>>>>)( |$)'"   # no merge conflict markers
+      # The merge gate's rules (scripts/gate.ts), the same for every branch: test first, docs, recurring
+      # jobs. The slice-audit and agent-eval evidence lives in the builder's ledger, outside the repo,
+      # so here those print as notes (--no-ledger); the builder's own gate run still blocks on them.
+      - name: gate rules
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then base="origin/$BASE_REF"
+          elif [ "$REF" = refs/heads/main ]; then base="$BEFORE"
+          else base=origin/main; fi
+          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then echo "no base to compare with"; exit 0; fi
+          bun scripts/gate.ts "$base" --no-run --no-ledger | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
       - run: bun run typecheck
       - run: bun run deadcode   # unused files, dependencies, unlisted or unresolved imports (knip.json)
       - run: bunx playwright install --with-deps chromium   # before the tests: dashboard browser tests and eval episodes
@@ -73,8 +94,17 @@ jobs:
       - name: evals
         timeout-minutes: 10
         run: bun evals/run.ts --ci
+      # The north star on the sample brain (scripts/north-star.ts): a replayed week with 3 planted
+      # contradictions must ask exactly those 3, and touched pages must reach cited prose and a link.
+      - name: north star
+        timeout-minutes: 5
+        run: bun scripts/north-star.ts | tee -a "$GITHUB_STEP_SUMMARY"; exit "${PIPESTATUS[0]}"
       - name: demo on the fake brain
         run: bun run demo
+      # Backup and restore end to end on the sample brain with a throwaway age key (docs/backup.md).
+      - name: restore drill on the sample brain
+        timeout-minutes: 5
+        run: bun src/cli.ts drill --demo
   # Full-stack regression: a real hub on the sample brain, a fake assistant through each door
   # (pasted bearer, /b browser, OAuth, local), the same golden path on each, then the free
   # switch-day check. Answers are compared with test/e2e/doors.json. docs/release.md.

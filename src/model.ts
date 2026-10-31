@@ -60,6 +60,7 @@ export const KEY_ENV: Record<Provider, string> = {
 // Per-step defaults when models.yaml names none for the step: Jev for the classifier (typed
 // questions with probabilities) and per-step timeouts.
 const STEP_DEFAULTS: Record<string, Partial<ModelConfig>> = {
+  "say.read": { timeout_ms: 8_000, max_tokens: 300 }, // the owner waits on the screen
   "write.conflicts": { timeout_ms: 20_000 },
   "write.classify": { provider: "typesafe", model: "jev-latest", timeout_ms: 3_000 },
   "relay.flag": { timeout_ms: 20_000 },
@@ -81,13 +82,16 @@ export const STEP_ROLES: Record<string, Role> = {
   // judge compare (backlog 212), so it runs as an executor. Review keeps no step, so `roles: { review: ... }`
   // changes nothing today; a step's own line under `steps:` picks its model.
   "upkeep.duplicates": "executor",
+  // The box's reading (src/owner-say.ts): one short call per typed sentence, and code checks every
+  // part of the reading before a write, so it runs on the cheap model.
+  "say.read": "executor",
 };
 const ROLE_DEFAULTS: Record<Role, Partial<ModelConfig>> = {
   executor: { model: "claude-haiku-5-5" },
   review: { model: "claude-opus-5-5" },
 };
 // Every model step, for `pocketbrain models`.
-export const MODEL_STEPS = ["write.conflicts", "write.classify", "relay.flag", "capture.extract", "sleep.consolidate", "upkeep.duplicates", "dashboard.ask", "dashboard.edit"];
+export const MODEL_STEPS = ["write.conflicts", "write.classify", "relay.flag", "capture.extract", "sleep.consolidate", "upkeep.duplicates", "dashboard.ask", "dashboard.edit", "say.read"];
 
 type ModelsDoc = { default?: Partial<ModelConfig>; roles?: Partial<Record<Role, Partial<ModelConfig>>>; steps?: Record<string, Partial<ModelConfig>>; routing?: boolean | string };
 type Source = "steps" | "step default" | "roles" | "role default" | "default";

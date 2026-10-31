@@ -139,7 +139,8 @@ test("a write commits only its own files, never what else happened to be staged"
   Bun.spawnSync(["git", "-C", root, "add", "scratch.txt"]);
   expect(write(root, { ...base, value: "Book room 12" }).outcome).toBe("committed");
   const files = Bun.spawnSync(["git", "-C", root, "show", "--name-only", "--format=", "HEAD"]).stdout.toString().trim().split("\n");
-  expect(files).toEqual(["projects/course-a.md"]);
+  // The owner's diary line rides with the change (docs/owner-home.md).
+  expect(files).toEqual(["diary/2026-10.jsonl", "projects/course-a.md"]);
   expect(dirty(root)).toBe("A  scratch.txt");
 });
 

@@ -10,6 +10,7 @@ export const TOOLS: { name: string; why: string; install: string; present: () =>
   { name: "ssh-keygen", why: "signed hub commits", install: "apt install openssh-client (macOS has it)", present: () => onPath("ssh-keygen") },
   { name: "age", why: "encrypted backups", install: "brew install age, or apt install age", present: () => onPath("age") && onPath("age-keygen") },
   { name: "ffmpeg", why: "the video montage tests", install: "brew install ffmpeg, or apt install ffmpeg", present: () => onPath("ffmpeg") && onPath("ffprobe") },
+  { name: "python3", why: "the Python Memory Passport server's conformance run", install: "apt install python3 (macOS has it with the command line tools)", present: () => onPath("python3") },
   { name: "chromium", why: "the dashboard and UI tests", install: "bunx playwright install chromium", present: chromium },
 ];
 

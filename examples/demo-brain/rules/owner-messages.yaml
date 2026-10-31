@@ -1,0 +1,8 @@
+# The owner's own messages that facts may cite as the owner's word. Only the owner adds to this file.
+messages:
+  - id: owner:2026-09-01/notes
+    added: 2026-09-01
+    note: the owner's notes
+  - id: owner:2026-09-20/notes
+    added: 2026-09-20
+    note: the owner's notes

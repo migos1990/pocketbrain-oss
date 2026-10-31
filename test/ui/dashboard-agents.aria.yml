@@ -1,27 +1,10 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - heading "Assistants" [level=1]
   - paragraph: Pause cuts an assistant off completely (server and relay). Read-only lets it read its slice but refuses every write. Revoke access deletes its keys, so it has to be connected again. Every change is recorded in your brain's history.
@@ -38,61 +21,64 @@
         - cell "Memory exam"
         - cell
     - rowgroup:
-      - row "steward · pasted notes · settles conflicts active · trusted · 6 notes · 6 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
-        - cell "steward · pasted notes · settles conflicts":
-          - link "steward":
-            - /url: /agent/steward
-          - text: · pasted notes · settles conflicts
+      - row "Claude · connector active · trusted · 99 notes · 459 facts · 6 reads · 0 writes · last seen 70 min ago · access 1 key · memory exam watch Read-only Pause Revoke access":
+        - cell "Claude · connector":
+          - link "Claude":
+            - /url: /agent/claude
+          - text: · connector
         - cell "active"
         - cell "· trusted"
-        - cell "· 6 notes · 6 facts"
-        - cell "· 0 reads · 0 writes"
-        - cell "· last seen never"
-        - cell "· access none"
-        - cell "· memory exam no data"
-        - cell "Read-only Pause":
+        - cell "· 99 notes · 459 facts"
+        - cell "· 6 reads · 0 writes"
+        - cell "· last seen 70 min ago"
+        - cell "· access 1 key"
+        - cell "· memory exam watch"
+        - cell "Read-only Pause Revoke access":
           - button "Read-only"
           - button "Pause"
-      - row "planner · pasted notes active · trusted · 3 notes · 3 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
-        - cell "planner · pasted notes":
-          - link "planner":
-            - /url: /agent/planner
-          - text: · pasted notes
+          - button "Revoke access"
+      - row "ChatGPT · connector active · trusted · 97 notes · 454 facts · 3 reads · 1 write · last seen 2 h ago · access 1 key · memory exam fail Read-only Pause Revoke access":
+        - cell "ChatGPT · connector":
+          - link "ChatGPT":
+            - /url: /agent/chatgpt
+          - text: · connector
         - cell "active"
         - cell "· trusted"
-        - cell "· 3 notes · 3 facts"
-        - cell "· 0 reads · 0 writes"
-        - cell "· last seen never"
-        - cell "· access none"
-        - cell "· memory exam no data"
-        - cell "Read-only Pause":
+        - cell "· 97 notes · 454 facts"
+        - cell "· 3 reads · 1 write"
+        - cell "· last seen 2 h ago"
+        - cell "· access 1 key"
+        - cell "· memory exam fail"
+        - cell "Read-only Pause Revoke access":
           - button "Read-only"
           - button "Pause"
-      - row "gardener · pasted notes active · on trial · 6 notes · 6 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
+          - button "Revoke access"
+      - row "Gemini · connector active · on trial · 83 notes · 216 facts · 0 reads · 0 writes · last seen 3 days ago · access 1 key · memory exam no data Read-only Pause Revoke access":
+        - cell "Gemini · connector":
+          - link "Gemini":
+            - /url: /agent/gemini
+          - text: · connector
+        - cell "active"
+        - cell "· on trial"
+        - cell "· 83 notes · 216 facts"
+        - cell "· 0 reads · 0 writes"
+        - cell "· last seen 3 days ago"
+        - cell "· access 1 key"
+        - cell "· memory exam no data"
+        - cell "Read-only Pause Revoke access":
+          - button "Read-only"
+          - button "Pause"
+          - button "Revoke access"
+      - row "gardener · pasted notes active · on trial · 99 notes · 459 facts · 1 read · 0 writes · last seen 7 h ago · access none · memory exam no data Read-only Pause":
         - cell "gardener · pasted notes":
           - link "gardener":
             - /url: /agent/gardener
           - text: · pasted notes
         - cell "active"
         - cell "· on trial"
-        - cell "· 6 notes · 6 facts"
-        - cell "· 0 reads · 0 writes"
-        - cell "· last seen never"
-        - cell "· access none"
-        - cell "· memory exam no data"
-        - cell "Read-only Pause":
-          - button "Read-only"
-          - button "Pause"
-      - row "helper · pasted notes active · on trial · 3 notes · 3 facts · 0 reads · 0 writes · last seen never · access none · memory exam no data Read-only Pause":
-        - cell "helper · pasted notes":
-          - link "helper":
-            - /url: /agent/helper
-          - text: · pasted notes
-        - cell "active"
-        - cell "· on trial"
-        - cell "· 3 notes · 3 facts"
-        - cell "· 0 reads · 0 writes"
-        - cell "· last seen never"
+        - cell "· 99 notes · 459 facts"
+        - cell "· 1 read · 0 writes"
+        - cell "· last seen 7 h ago"
         - cell "· access none"
         - cell "· memory exam no data"
         - cell "Read-only Pause":
@@ -101,8 +87,8 @@
   - heading "Your editor" [level=2]
   - text: No editor. Every assistant's write that isn't its own area goes to your inbox. You can name one assistant (for example the one you talk to most) to edit on your behalf.
   - combobox "editor":
-    - option "steward" [selected]
-    - option "planner"
+    - option "claude" [selected]
+    - option "chatgpt"
+    - option "gemini"
     - option "gardener"
-    - option "helper"
   - button "Make it my editor"

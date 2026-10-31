@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A lock between processes on one brain: a file created with O_EXCL, holding the owner's pid and
 // time. Used where the hub's in-process write queue (serial() in src/server.ts) can't reach: a
-// second process (`pocketbrain deck auto`, a cron run) must not decide beside the hub (backlog
+// second process (`pocketbrain filing now`, a cron run) must not decide beside the hub (backlog
 // #263). A lock whose process is gone, that is older than STALE_MS, or that doesn't parse is
 // taken over. Never waits: busy returns undefined and the caller tries on its next tick.
 import { existsSync, openSync, writeSync, closeSync, readFileSync, unlinkSync } from "node:fs";

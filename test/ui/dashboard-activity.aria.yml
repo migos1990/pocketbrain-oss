@@ -1,43 +1,313 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - heading "Activity" [level=1]
-  - text: Reads and writes per assistant per day steward planner gardener helper
-  - img "Reads and writes per assistant per day": 0 1 2 10-09 10-10 10-11 10-12 10-13 10-14 10-15
+  - text: Reads and writes per assistant per day Claude ChatGPT Gemini gardener
+  - img "Reads and writes per assistant per day": 0 10 20 10-02 10-03 10-04 10-05 10-06 10-07 10-08
   - group: Table
   - combobox:
     - option "All agents" [selected]
-    - option "steward"
-    - option "planner"
+    - option "Claude"
+    - option "ChatGPT"
+    - option "Gemini"
     - option "gardener"
-    - option "helper"
   - combobox:
     - option "All reads" [selected]
-  - heading "Reads (0)" [level=2]
-  - text: No reads yet.
+    - option "loaded its notes"
+    - option "open disputes"
+  - heading "Reads (20)" [level=2]
+  - paragraph: "Log checks out: no line was changed since it was written."
+  - table:
+    - rowgroup:
+      - row "When Assistant What Notes":
+        - cell "When"
+        - cell "Assistant"
+        - cell "What"
+        - cell "Notes"
+    - rowgroup:
+      - row "2 h ago ChatGPT · loaded its notes \"Pinecrest pilot\" · Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ben Carter":
+        - cell "2 h ago"
+        - cell "ChatGPT"
+        - cell "· loaded its notes \"Pinecrest pilot\""
+        - cell "· Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ben Carter"
+      - row "3 h ago ChatGPT · loaded its notes \"Priya Shah\" · Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman":
+        - cell "3 h ago"
+        - cell "ChatGPT"
+        - cell "· loaded its notes \"Priya Shah\""
+        - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman"
+      - row "3 h ago ChatGPT · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Valérie Roy":
+        - cell "3 h ago"
+        - cell "ChatGPT"
+        - cell "· loaded its notes \"Mom's move\""
+        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Valérie Roy"
+      - row "70 min ago Claude · loaded its notes \"Product Discovery course\" · Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie":
+        - cell "70 min ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Product Discovery course\""
+        - cell "· Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie"
+      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent":
+        - cell "2 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Kitchen renovation\""
+        - cell "· Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent"
+      - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software":
+        - cell "2 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Grace Liu\""
+        - cell "· Grace Liu, Karen Liu, Harbourline Software"
+      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
+        - cell "2 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Q1 roadmap\""
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
+      - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch":
+        - cell "3 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Maya Chen\""
+        - cell "· Maya Chen, Senior designer hire, Atlas launch"
+      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Robin Lefebvre":
+        - cell "3 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Atlas launch\""
+        - cell "· Atlas launch, Atlas beta scope, Robin Lefebvre"
+      - row "7 h ago gardener · open disputes · Atlas launch, Grace Liu, Kitchen renovation":
+        - cell "7 h ago"
+        - cell "gardener"
+        - cell "· open disputes"
+        - cell "· Atlas launch, Grace Liu, Kitchen renovation"
+      - row "27 h ago ChatGPT · loaded its notes \"Senior designer hire\" · Hire a senior designer, not two juniors, Senior designer hire, Lucas Fontaine, Felix Moreau, Nina Petrova, Maya Chen +2":
+        - cell "27 h ago"
+        - cell "ChatGPT"
+        - cell "· loaded its notes \"Senior designer hire\""
+        - cell "· Hire a senior designer, not two juniors, Senior designer hire, Lucas Fontaine, Felix Moreau, Nina Petrova, Maya Chen +2"
+      - row "27 h ago Claude · loaded its notes \"Pinecrest pilot\" · Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ravi Menon, Ben Carter +1":
+        - cell "27 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Pinecrest pilot\""
+        - cell "· Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ravi Menon, Ben Carter +1"
+      - row "27 h ago Claude · loaded its notes \"Priya Shah\" · Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman":
+        - cell "27 h ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Priya Shah\""
+        - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman"
+      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre":
+        - cell "2 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Mom's move\""
+        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre"
+      - row "3 days ago Gemini · loaded its notes \"Product Discovery course\"":
+        - cell "3 days ago"
+        - cell "Gemini"
+        - cell "· loaded its notes \"Product Discovery course\""
+      - row "3 days ago ChatGPT · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier, Simone Laurent, Ahmed Saleh +2":
+        - cell "3 days ago"
+        - cell "ChatGPT"
+        - cell "· loaded its notes \"Kitchen renovation\""
+        - cell "· Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier, Simone Laurent, Ahmed Saleh +2"
+      - row "3 days ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre":
+        - cell "3 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Grace Liu\""
+        - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre"
+      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Robin Lefebvre, Julie Tran, Kenji Watanabe":
+        - cell "3 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Q1 roadmap\""
+        - cell "· Q1 roadmap, Robin Lefebvre, Julie Tran, Kenji Watanabe"
+      - row "6 days ago ChatGPT · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Harbourline Software +1":
+        - cell "6 days ago"
+        - cell "ChatGPT"
+        - cell "· loaded its notes \"Maya Chen\""
+        - cell "· Maya Chen, Senior designer hire, Atlas launch, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Harbourline Software +1"
+      - row "6 days ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker +2":
+        - cell "6 days ago"
+        - cell "Claude"
+        - cell "· loaded its notes \"Atlas launch\""
+        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker +2"
   - heading "Writes" [level=2]
-  - text: No writes yet.
+  - table:
+    - rowgroup:
+      - row "When Assistant Fact Result Checks it failed":
+        - cell "When"
+        - cell "Assistant"
+        - cell "Fact"
+        - cell "Result"
+        - cell "Checks it failed"
+    - rowgroup:
+      - 'row "20 min ago owner · Antoine Lavoie: role · saved"':
+        - cell "20 min ago"
+        - cell "owner"
+        - 'cell "· Antoine Lavoie: role"'
+        - cell "· saved"
+      - 'row "60 min ago capture · Martin Leclerc: last contact · saved"':
+        - cell "60 min ago"
+        - cell "capture"
+        - 'cell "· Martin Leclerc: last contact"'
+        - cell "· saved"
+      - 'row "60 min ago capture · Hannah Becker: last contact · saved"':
+        - cell "60 min ago"
+        - cell "capture"
+        - 'cell "· Hannah Becker: last contact"'
+        - cell "· saved"
+      - 'row "60 min ago capture · Hélène Lefebvre: prefers · saved"':
+        - cell "60 min ago"
+        - cell "capture"
+        - 'cell "· Hélène Lefebvre: prefers"'
+        - cell "· saved"
+      - 'row "14 h ago owner · Lucas Fontaine: last contact · saved"':
+        - cell "14 h ago"
+        - cell "owner"
+        - 'cell "· Lucas Fontaine: last contact"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Kitchen renovation: next step · disputed"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Kitchen renovation: next step"'
+        - cell "· disputed"
+      - 'row "17 h ago capture · Kitchen renovation: next step · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Kitchen renovation: next step"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Grace Liu: role · disputed"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Grace Liu: role"'
+        - cell "· disputed"
+      - 'row "17 h ago capture · Grace Liu: role · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Grace Liu: role"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Atlas launch: next step · disputed"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Atlas launch: next step"'
+        - cell "· disputed"
+      - 'row "17 h ago capture · Atlas launch: next step · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Atlas launch: next step"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Sofia Marquez: role · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Sofia Marquez: role"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Maya Chen: last contact · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Maya Chen: last contact"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Kenji Watanabe: role · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Kenji Watanabe: role"'
+        - cell "· saved"
+      - 'row "22 h ago ChatGPT · Diego Alvarez: prefers · saved"':
+        - cell "22 h ago"
+        - cell "ChatGPT"
+        - 'cell "· Diego Alvarez: prefers"'
+        - cell "· saved"
+      - 'row "2 days ago owner · Mom''s move: next step · saved"':
+        - cell "2 days ago"
+        - cell "owner"
+        - 'cell "· Mom''s move: next step"'
+        - cell "· saved"
+      - 'row "2 days ago capture · Mom''s move: next step · saved"':
+        - cell "2 days ago"
+        - cell "capture"
+        - 'cell "· Mom''s move: next step"'
+        - cell "· saved"
+      - 'row "2 days ago capture · Pinecrest pilot: next step · saved"':
+        - cell "2 days ago"
+        - cell "capture"
+        - 'cell "· Pinecrest pilot: next step"'
+        - cell "· saved"
+      - 'row "2 days ago capture · Guest lectures: next step · saved"':
+        - cell "2 days ago"
+        - cell "capture"
+        - 'cell "· Guest lectures: next step"'
+        - cell "· saved"
+      - 'row "2 days ago capture · Product Discovery course: next step · saved"':
+        - cell "2 days ago"
+        - cell "capture"
+        - 'cell "· Product Discovery course: next step"'
+        - cell "· saved"
+      - 'row "2 days ago Claude · Priya Shah: prefers · saved"':
+        - cell "2 days ago"
+        - cell "Claude"
+        - 'cell "· Priya Shah: prefers"'
+        - cell "· saved"
+      - 'row "3 days ago owner · Sam Patel: last contact · saved"':
+        - cell "3 days ago"
+        - cell "owner"
+        - 'cell "· Sam Patel: last contact"'
+        - cell "· saved"
+      - 'row "3 days ago capture · Laila Haddad: role · saved"':
+        - cell "3 days ago"
+        - cell "capture"
+        - 'cell "· Laila Haddad: role"'
+        - cell "· saved"
+      - 'row "3 days ago capture · Isabelle Roy: role · saved"':
+        - cell "3 days ago"
+        - cell "capture"
+        - 'cell "· Isabelle Roy: role"'
+        - cell "· saved"
+      - 'row "3 days ago capture · Senior designer hire: next step · saved"':
+        - cell "3 days ago"
+        - cell "capture"
+        - 'cell "· Senior designer hire: next step"'
+        - cell "· saved"
+      - 'row "3 days ago capture · Q1 roadmap: next step · saved"':
+        - cell "3 days ago"
+        - cell "capture"
+        - 'cell "· Q1 roadmap: next step"'
+        - cell "· saved"
+      - 'row "4 days ago capture · Emma Wilson: last contact · saved"':
+        - cell "4 days ago"
+        - cell "capture"
+        - 'cell "· Emma Wilson: last contact"'
+        - cell "· saved"
+      - 'row "4 days ago capture · Book club, November: next step · saved"':
+        - cell "4 days ago"
+        - cell "capture"
+        - 'cell "· Book club, November: next step"'
+        - cell "· saved"
+      - 'row "4 days ago Claude · Daniel Okoro: prefers · saved"':
+        - cell "4 days ago"
+        - cell "Claude"
+        - 'cell "· Daniel Okoro: prefers"'
+        - cell "· saved"
+      - 'row "5 days ago capture · Red River climbing trip: next step · saved"':
+        - cell "5 days ago"
+        - cell "capture"
+        - 'cell "· Red River climbing trip: next step"'
+        - cell "· saved"
+      - 'row "5 days ago capture · Choir winter concert: next step · saved"':
+        - cell "5 days ago"
+        - cell "capture"
+        - 'cell "· Choir winter concert: next step"'
+        - cell "· saved"
+      - 'row "6 days ago capture · Ravi Menon: last contact · saved"':
+        - cell "6 days ago"
+        - cell "capture"
+        - 'cell "· Ravi Menon: last contact"'
+        - cell "· saved"
+      - 'row "6 days ago capture · Pricing page refresh: next step · saved"':
+        - cell "6 days ago"
+        - cell "capture"
+        - 'cell "· Pricing page refresh: next step"'
+        - cell "· saved"
+      - 'row "6 days ago capture · Tomás Rivera: role · saved"':
+        - cell "6 days ago"
+        - cell "capture"
+        - 'cell "· Tomás Rivera: role"'
+        - cell "· saved"
   - heading "Mail between assistants, through the relay" [level=2]
   - text: No relayed mail yet.

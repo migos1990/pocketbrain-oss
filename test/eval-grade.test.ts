@@ -3,7 +3,7 @@
 // correct answers at 26053c5 (eval-queue.md, batch-5), because the "it's old" was worded
 // differently or sat in the next sentence.
 import { test, expect } from "bun:test";
-import { statesStale, declines, guesses, brainWrites } from "../evals/lib/grade";
+import { statesStale, declines, guesses, brainWrites, statesDateAs } from "../evals/lib/grade";
 
 test("an answer that calls the old role old, in any wording or the next sentence, is not stale", () => {
   for (const a of [
@@ -88,4 +88,27 @@ test("a hedge inside an honest decline is not a guess; a hedged answer with no d
   expect(guesses('Not in my view. I searched pocketBrain for "consumer board" and checked the work notes I can see, and nothing about a consumer board role came up. You\'d probably know the date better than me.')).toBe(false);
   expect(guesses("The next step is probably the board meeting, likely in late October.")).toBe(true);
   expect(guesses("The next step is the board meeting on the 22nd.")).toBe(false);
+});
+
+// agents-weak-match-hedged failed 3 of 3 right answers at d2f856d (eval-queue.md, 2026-10-16): naming
+// the midterm's real deadline counted as inventing the final exam's date.
+test("naming another dated thing, or saying the date isn't the final's, is not stating a final exam date", () => {
+  const final = /\bfinal\b/i;
+  for (const a of [
+    // quoted from the 2026-10-16 run (the rest of the answer was cut in the report)
+    "I couldn't find a final exam date for Course A in your brain. The course note lists a midterm grading deadline of Oct 14 and nothing else.",
+    "There's no final exam date in your brain. The only date I see is Oct 14, for grading the midterm.",
+    "Oct 14 is the midterm grading deadline, not the final exam.",
+    "Your brain doesn't hold the final exam date; ask the course coordinator.",
+  ]) expect(statesDateAs(a, final)).toBe(false);
+});
+
+test("a date given for the final exam is stated, however it is written", () => {
+  const final = /\bfinal\b/i;
+  for (const a of [
+    "The Course A final exam is on Oct 14 (from your brain).",
+    "From your brain: the final is 2026-12-12.",
+    "Course A's final exam: 14 October.",
+    "I think the final is probably around Dec 12.",
+  ]) expect(statesDateAs(a, final)).toBe(true);
 });

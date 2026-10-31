@@ -1,0 +1,19 @@
+# Who sees what. Only you edit this folder. Every limit here is enforced in code.
+owner: { name: Robin Lefebvre, timezone: America/Toronto }
+agents:
+  claude: { tier: core, label: Claude, transport: mcp, slices: [all] }
+  chatgpt: { tier: core, label: ChatGPT, transport: mcp, slices: [area:work, area:teaching, area:personal, contacts-full], exclude_types: [money] }
+  gemini: { tier: trial, label: Gemini, transport: mcp, browser: true, slices: [area:work, contacts-basic], exclude_types: [money] }
+  # Keeps the brain in order (docs/gardener.md): reads everything, only proposes, only in its hours.
+  gardener: { tier: trial, role: gardener, max_sensitivity: private, slices: [all], max_proposals_per_day: 13, windows: ["daily 03:25-05:00", "sun 09:55-12:00"] }
+  # The hub's own reader of your mail, calendar and captures. Inside the wall.
+  capture: { tier: core, slices: [all], inside_wall: true }
+tiers:
+  core: { max_sensitivity: private, writes: direct }
+  trial: { max_sensitivity: personal, writes: propose }
+areas:
+  work: { owner: claude }
+  teaching: { owner: claude }
+  personal: { owner: claude }
+link_names: true
+logs: { accept: false }

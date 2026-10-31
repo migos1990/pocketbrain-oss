@@ -8,13 +8,13 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
 import { loadRules } from "../src/rules";
-import { loadBrain, type FactRecord } from "../src/brain";
+import { loadBrain, saveNote, type FactRecord } from "../src/brain";
 import { carve, grantFor } from "../src/carve";
 import { write } from "../src/write";
 import { setFact } from "../src/dashboard/edit";
 import * as core from "../src/core";
 import { decideProposal } from "../src/write";
-import { louisMessages } from "../src/louis";
+import { louisMessages, registerLouisMessages } from "../src/louis";
 import { askToSee, listAsks, approveAsk, askStatus } from "../src/asks";
 import { sleep } from "../src/sleep";
 
@@ -154,7 +154,7 @@ test("an assistant's value never replaces either owner's word", () => {
   write(root, { ...SAM, value: "16:00", as_of: "2026-10-05" });
   const r = write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" });
   expect(r.outcome).toBe("disputed");
-  expect(fact(root, "projects/kids-pickup", "pickup_time").dispute).toBeDefined(); // held for the owners, not replaced
+  expect((fact(root, "projects/kids-pickup", "pickup_time") as { contested?: string }).contested).toBeDefined(); // held for the owners, not replaced; the live value stays (G425)
 });
 
 test("a hand-written co-owner verification by anyone else counts for nothing in a conflict", () => {
@@ -173,7 +173,7 @@ test("the resolver can't settle a dispute against a co-owner's word: it goes to 
   const root = household();
   write(root, { ...SAM, value: "16:00", as_of: "2026-10-05" });
   write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-05", sources: ["gmail:f000000000000006"], verification: "verified-by-source" });
-  const id = fact(root, "projects/kids-pickup", "pickup_time").dispute!;
+  const id = (fact(root, "projects/kids-pickup", "pickup_time") as { contested?: string }).contested!;
   expect(id).toBeDefined();
   let status = 0;
   try { core.resolveDispute(root, "steward", id, { value: "17:00", as_of: "2026-10-07", sources: ["gmail:f000000000000007"] }); } catch (e) { status = (e as core.CoreError).status; }
@@ -281,4 +281,183 @@ test("the owner's vaguer date never takes over her more precise one (slice audit
   expect(write(root, { ...SAM, attribute: "school_trip", value: "2026-11-05", as_of: "2026-10-08" }).outcome).toBe("committed");
   write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "school_trip", value: "2026-11", as_of: "2026-10-08", sources: ["owner:2026-10-08/dashboard"], verification: "confirmed-by-owner" });
   expect(fact(root, "projects/kids-pickup", "school_trip")).toMatchObject({ value: "2026-11-05", verification: "confirmed-by-co-owner", co_owner: "sam" });
+});
+
+// ---------- batch 29 slice audit: an owner's word joining an open dispute (G277, G278) ----------
+
+// The kids-pickup fixture with an assistant's sourced value instead of the owner's, so two
+// assistants can open a dispute the resolver may settle.
+function sourcedPickup() {
+  const root = household();
+  const f = join(root, "projects", "kids-pickup.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace(`sources: ["owner:2026-10-01/dashboard"], verification: confirmed-by-owner, by: owner`, `sources: ["gmail:f000000000000001"], verification: verified-by-source, by: steward`));
+  Bun.spawnSync(["git", "commit", "-qam", "sourced pickup"], { cwd: root });
+  return root;
+}
+const PICK = { id: "projects/kids-pickup", attribute: "pickup_time" };
+const packetText = (root: string, id: string) => readFileSync(join(root, "disputes", `${id}.md`), "utf8");
+
+for (const v of [
+  { name: "the owner's", req: { agent: "steward", sources: ["owner:2026-10-05/dashboard"], verification: "confirmed-by-owner" as const }, label: "confirmed-by-owner" },
+  { name: "a co-owner's", req: { ...SAM, sources: ["owner:2026-10-05/chat"] }, label: "confirmed-by-co-owner" },
+]) {
+  test(`${v.name} word added to an open dispute takes it from the resolver: 403, fact and packet unchanged (G277)`, () => {
+    const root = sourcedPickup();
+    expect(write(root, { agent: "steward", ...PICK, value: "17:00", as_of: "2026-10-01", sources: ["gmail:f000000000000006"], verification: "verified-by-source" }).outcome).toBe("disputed");
+    const id = fact(root, PICK.id, PICK.attribute).dispute!;
+    const r = write(root, { ...v.req, ...PICK, value: "16:00", as_of: "2026-10-05" });
+    expect([r.outcome, r.message]).toEqual(["disputed", `added to open dispute ${id}`]);
+    // The packet the owner answers lists the new side, so he picks among all of them.
+    expect((core.getDispute(root, "steward", id).candidates as FactRecord[]).map((c: FactRecord) => [c.value, c.verification])).toContainEqual(["16:00", v.label]);
+    expect(core.getDispute(root, "steward", id).louis_only).toBe("a side was confirmed by the owner");
+    const [f0, p0] = [readFileSync(join(root, "projects", "kids-pickup.md"), "utf8"), packetText(root, id)];
+    let status = 0;
+    try { core.resolveDispute(root, "steward", id, { value: "18:00", as_of: "2026-10-08", sources: ["gmail:f000000000000007"] }); } catch (e) { status = (e as core.CoreError).status; }
+    expect(status).toBe(403);
+    expect(readFileSync(join(root, "projects", "kids-pickup.md"), "utf8")).toBe(f0);
+    expect(packetText(root, id)).toBe(p0);
+  });
+}
+
+test("a packet written before the fix still goes to the owner: the live fact's sides are read too (G277)", () => {
+  const root = sourcedPickup();
+  write(root, { agent: "steward", ...PICK, value: "17:00", as_of: "2026-10-01", sources: ["gmail:f000000000000006"], verification: "verified-by-source" });
+  const id = fact(root, PICK.id, PICK.attribute).dispute!;
+  const before = packetText(root, id);
+  write(root, { ...SAM, ...PICK, value: "16:00", as_of: "2026-10-05" });
+  writeFileSync(join(root, "disputes", `${id}.md`), before); // the packet as an older build left it: two sides
+  Bun.spawnSync(["git", "commit", "-qam", "old packet"], { cwd: root });
+  let status = 0;
+  try { core.resolveDispute(root, "steward", id, { value: "18:00", as_of: "2026-10-08", sources: ["gmail:f000000000000007"] }); } catch (e) { status = (e as core.CoreError).status; }
+  expect(status).toBe(403);
+  expect((fact(root, PICK.id, PICK.attribute) as any).candidates.some((c: FactRecord) => c.value === "16:00" && c.verification === "confirmed-by-co-owner")).toBe(true);
+});
+
+test("settle refuses a packet when the live fact became a co-owner's word since it opened (G278)", async () => {
+  const root = sourcedPickup();
+  const { openDispute } = await import("../src/upkeep");
+  const note = loadBrain(root).find((n) => n.fm.id === PICK.id)!;
+  const cur = note.fm.facts!.pickup_time as FactRecord;
+  const id = openDispute(root, note, "pickup_time", [cur, { ...cur, value: "17:00", sources: ["gmail:f000000000000006"] }], "A live recheck contradicts it.");
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+  Bun.spawnSync(["git", "commit", "-qm", "recheck packet"], { cwd: root });
+  // She confirms the live value: it is her word now, while the packet beside it is still open.
+  expect(write(root, { ...SAM, ...PICK, value: "15:30", as_of: "2026-10-05" }).outcome).toBe("committed");
+  expect(fact(root, PICK.id, PICK.attribute)).toMatchObject({ value: "15:30", verification: "confirmed-by-co-owner" });
+  let status = 0;
+  try { core.resolveDispute(root, "steward", id, { value: "18:00", as_of: "2026-10-08", sources: ["gmail:f000000000000007"] }); } catch (e) { status = (e as core.CoreError).status; }
+  expect(status).toBe(409);
+  expect(fact(root, PICK.id, PICK.attribute)).toMatchObject({ value: "15:30", verification: "confirmed-by-co-owner" });
+});
+
+// ---------- slice audit of resolver-owner-word (G305-G307) ----------
+
+const SESSION = { id: "projects/kids-pickup", attribute: "schedule_changes" };
+const s6 = (date: string) => ({ session: 6, date });
+const resolveStatus = (root: string, id: string, value: unknown, as_of = "2026-10-08") => {
+  try { core.resolveDispute(root, "steward", id, { value, as_of, sources: ["gmail:f000000000000007"] }); return 0; } catch (e) { return (e as core.CoreError).status; }
+};
+const pickupFile = (root: string) => readFileSync(join(root, "projects", "kids-pickup.md"), "utf8");
+
+for (const v of [
+  { name: "the owner's", req: { agent: "steward", sources: ["owner:2026-10-05/dashboard"], verification: "confirmed-by-owner" as const } },
+  { name: "a co-owner's", req: { ...SAM, sources: ["owner:2026-10-05/chat"] } },
+]) {
+  for (const [mine, other] of [["2026-11-05", "2026-11-06"], ["2026-11-06", "2026-11-05"]]) {
+    test(`${v.name} word on one side of a disputed list item (${mine}) takes it from the resolver (G305)`, () => {
+      const root = sourcedPickup();
+      write(root, { agent: "steward", ...SESSION, value: s6("2026-11-05"), as_of: "2026-10-01", sources: ["gmail:f000000000000001"], verification: "verified-by-source" });
+      expect(write(root, { agent: "steward", ...SESSION, value: s6("2026-11-06"), as_of: "2026-10-01", sources: ["gmail:f000000000000006"], verification: "verified-by-source" }).outcome).toBe("disputed");
+      write(root, { ...v.req, ...SESSION, value: s6(mine), as_of: "2026-10-05" });
+      expect(readdirSync(join(root, "disputes")).filter((f) => f.endsWith(".md"))).toEqual(["c-0001.md"]); // no second dispute
+      expect(core.getDispute(root, "steward", "c-0001").louis_only).toBe("a side was confirmed by the owner");
+      const [f0, p0] = [pickupFile(root), packetText(root, "c-0001")];
+      expect(resolveStatus(root, "c-0001", s6(other))).toBe(403);
+      expect(pickupFile(root)).toBe(f0);
+      expect(packetText(root, "c-0001")).toBe(p0);
+    });
+  }
+}
+
+test("a disputed list item from a packet written before the fix still goes to the owner (G305)", () => {
+  const root = sourcedPickup();
+  write(root, { agent: "steward", ...SESSION, value: s6("2026-11-05"), as_of: "2026-10-01", sources: ["gmail:f000000000000001"], verification: "verified-by-source" });
+  write(root, { agent: "steward", ...SESSION, value: s6("2026-11-06"), as_of: "2026-10-01", sources: ["gmail:f000000000000006"], verification: "verified-by-source" });
+  const before = packetText(root, "c-0001");
+  write(root, { ...SAM, ...SESSION, value: s6("2026-11-05"), as_of: "2026-10-05", sources: ["owner:2026-10-05/chat"] });
+  writeFileSync(join(root, "disputes", "c-0001.md"), before);
+  Bun.spawnSync(["git", "commit", "-qam", "old packet"], { cwd: root });
+  expect(resolveStatus(root, "c-0001", s6("2026-11-06"))).toBe(403);
+});
+
+// Opens c-0001 on pickup_time (15:30 against 17:00), as an assistant's two sourced values.
+function pickupDispute() {
+  const root = sourcedPickup();
+  write(root, { agent: "steward", ...PICK, value: "17:00", as_of: "2026-10-01", sources: ["gmail:f000000000000006"], verification: "verified-by-source" });
+  return root;
+}
+// A third side kept on the fact only, as an older build left it; `edit` changes it there.
+function staleThirdSide(root: string, side: Record<string, unknown>, edit: (c: FactRecord) => void = () => {}) {
+  const before = packetText(root, "c-0001");
+  write(root, { agent: "steward", ...PICK, sources: ["gmail:f000000000000004"], verification: "verified-by-source", ...side } as any);
+  writeFileSync(join(root, "disputes", "c-0001.md"), before);
+  const n = loadBrain(root).find((x) => x.fm.id === PICK.id)!;
+  edit((n.fm.facts!.pickup_time as any).candidates[2]);
+  saveNote(root, n);
+  Bun.spawnSync(["git", "commit", "-qam", "old packet"], { cwd: root });
+}
+
+test("joinPacket writes an agent's value into the body literally: no $-patterns (G306)", () => {
+  const root = pickupDispute();
+  write(root, { agent: "steward", ...PICK, value: "16:00 $` x $&", as_of: "2026-10-01", sources: ["gmail:f000000000000004"], verification: "verified-by-source" });
+  const body = packetText(root, "c-0001");
+  expect(body).toContain("3. 16:00 $` x $&");
+  expect(body.match(/^1\. /gm)!.length).toBe(1);
+});
+
+test("a side replaced in place gets its numbered body line rewritten (G306)", () => {
+  const root = pickupDispute();
+  write(root, { agent: "steward", ...PICK, value: "17:00", as_of: "2026-10-05", sources: ["owner:2026-10-05/dashboard"], verification: "confirmed-by-owner" });
+  const line2 = packetText(root, "c-0001").split("\n").find((l) => l.startsWith("2. "))!;
+  expect(line2).toContain("confirmed-by-owner");
+  expect(line2).toContain("owner:2026-10-05/dashboard");
+});
+
+test("an owner ref merged into a value never swaps its label for the incoming weaker one (G306)", () => {
+  const root = sourcedPickup();
+  write(root, { agent: "steward", ...PICK, value: "15:30", as_of: "2026-10-01", sources: ["owner:2026-10-05/dashboard"], verification: "self-reported" });
+  expect(fact(root, PICK.id, PICK.attribute).verification).toBe("verified-by-source");
+});
+
+test("resolveDispute weighs a side only the fact holds: evidence older than it doesn't settle (G306)", () => {
+  const root = pickupDispute();
+  staleThirdSide(root, { value: "16:45", as_of: "2026-10-08" });
+  const f0 = pickupFile(root);
+  expect(resolveStatus(root, "c-0001", "18:00", "2026-10-07")).toBe(422);
+  expect(pickupFile(root)).toBe(f0);
+});
+
+test("a side only the fact holds keeps a share_with or private level over the whole packet (G306)", () => {
+  const away = pickupDispute();
+  staleThirdSide(away, { value: "16:45", as_of: "2026-10-01" }, (c) => { c.share_with = ["planner"]; });
+  expect(core.getDispute(away, "steward", "c-0001").louis_only).toBe("the fact is shared only with planner");
+  expect(JSON.stringify(core.getDispute(away, "steward", "c-0001").candidates)).not.toContain("17:00");
+  expect(resolveStatus(away, "c-0001", "18:00")).toBe(403);
+  const priv = pickupDispute();
+  staleThirdSide(priv, { value: "16:45", as_of: "2026-10-01" }, (c) => { c.sensitivity = "private"; });
+  expect(resolveStatus(priv, "c-0001", "18:00")).toBe(403);
+  // A list the resolver is on still narrows the settled fact to it.
+  const narrow = pickupDispute();
+  staleThirdSide(narrow, { value: "16:45", as_of: "2026-10-01" }, (c) => { c.share_with = ["steward", "planner"]; });
+  expect(resolveStatus(narrow, "c-0001", "18:00")).toBe(0);
+  expect(fact(narrow, PICK.id, PICK.attribute)).toMatchObject({ value: "18:00", share_with: ["steward", "planner"] });
+});
+
+test("a side backed by a registered owner message counts as the owner's word to the resolver (G307)", () => {
+  const root = pickupDispute();
+  registerLouisMessages(root, ["imsg:phonemsg-01FAKE0000000000000000000H"]);
+  write(root, { agent: "steward", ...PICK, value: "16:30", as_of: "2026-10-05", sources: ["gmail:f000000000000004", "imsg:phonemsg-01FAKE0000000000000000000H"], verification: "verified-by-source" });
+  const side = (fact(root, PICK.id, PICK.attribute) as any).candidates.find((c: FactRecord) => c.value === "16:30");
+  expect(side).toBeDefined();
+  expect(resolveStatus(root, "c-0001", "18:00")).toBe(403);
 });

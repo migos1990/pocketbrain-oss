@@ -71,7 +71,7 @@ test("as one assistant sees it: its column stands out, the notes it can't read f
   expect(grid).toContain(`can read <b>${readable} of ${m.rows.length}</b> notes`);
   expect(grid).toContain('<tr class="m-gone"><td title="money/exec-comp">');            // never offered: faded
   expect(grid).not.toContain('<tr class="m-gone"><td title="projects/board-prep">');    // its own: not faded
-  expect(grid).toContain('<tr><td title="people/priya-nair"><a href="/note/people/priya-nair">Priya Nair</a> <span class="sub">some facts cut</span>');
+  expect(grid).toContain('<tr><td title="people/priya-nair"><a href="/p/people/priya-nair">Priya Nair</a> <span class="sub">some facts cut</span>');
   // A paused assistant gets nothing; an unknown name or the resolver falls back to everyone.
   expect(mapGrid(s, "gardener")).toContain("can't get in right now (paused)");
   expect(mapPage(s, "steward").title).toBe("Who sees what");

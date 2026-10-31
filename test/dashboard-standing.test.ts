@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { brain, traffic } from "./standing-fixture";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { loadStanding, suggestStanding } from "../src/standing";
 import { git } from "../src/git";
 import { digest } from "../src/digest";
@@ -21,7 +21,7 @@ function setup(standing?: Record<string, unknown>) {
     const body = fields ? new URLSearchParams(fields) : undefined;
     const r = await d.handle(new Request(`http://${H}${path}`, { method, body, headers: { host: H, cookie, origin: `http://${H}`, referer: `http://${H}${from}`, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) } }));
     const loc = r.headers.get("location") ?? "";
-    return { status: r.status, text: await r.text(), loc, ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { status: r.status, text: await r.text(), loc, ...flashOf(loc) };
   };
   const login = async () => { const r = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } })); cookie = r.headers.get("set-cookie")!.split(";")[0]; };
   const csrf = async () => (await req("GET", "/people")).text.match(/name="csrf" value="([^"]+)"/)![1];
@@ -168,10 +168,10 @@ test("on a replica the buttons say where standing is set, and write nothing", as
 test("the overview says when suggestions wait, and the tab is there", async () => {
   const { root, req, login } = setup();
   await login();
-  expect((await req("GET", "/")).text).not.toContain("standing suggestion");
+  expect((await req("GET", "/overview")).text).not.toContain("standing suggestion");
   traffic(root, "Sam <sam@example.com>", 20, 20, 10);
   traffic(root, "jane@northfield.example", 3, 2, 600);
-  const home = (await req("GET", "/")).text;
+  const home = (await req("GET", "/overview")).text;
   expect(home).toContain("2 standing suggestions");
   expect(home).toContain('href="/people"');
 });
@@ -236,7 +236,7 @@ test("a broken standing file shows as one line on the overview, not a broken pag
   const { root, req, login } = setup();
   await login();
   writeFileSync(join(root, "rules", "standing.yaml"), "people: [unclosed\n");
-  const r = await req("GET", "/");
+  const r = await req("GET", "/overview");
   expect(r.status).toBe(200);
   expect(r.text).toContain("Can't read your standing list");
 });

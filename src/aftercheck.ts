@@ -28,6 +28,7 @@ import { modelConfigFor, KEY_ENV, logJudgment, parseJson, type Model, type Answe
 import { modelFor } from "./usage";
 import { readJsonl, appendJsonl, alert } from "./util";
 import { isOwnerId } from "./owner";
+import { asRequest } from "./reqid";
 
 export const CONFLICT_STEP = "write.conflicts";
 export const CLASSIFY_STEP = "write.classify";
@@ -45,7 +46,7 @@ export const aftercheckPolicy = (rules: Rules): Required<AftercheckPolicy> =>
   ({ conflicts: rules.policy.aftercheck?.conflicts ?? true, classify: rules.policy.aftercheck?.classify ?? false });
 
 const queueFile = (root: string) => join(root, "log", "aftercheck.jsonl");
-interface QueueEvent { at: string; key: string; agent?: string; event: "queued" | "done" | "error"; step?: string; detail?: string }
+interface QueueEvent { at: string; key: string; agent?: string; event: "queued" | "done" | "error"; step?: string; detail?: string; request_id?: string }
 
 // Called by the server after an agent's write commits.
 export function queueAftercheck(root: string, agent: string, key: string | undefined) {
@@ -71,10 +72,10 @@ export function requeueMissed(root: string, days = 2): string[] {
   return out;
 }
 
-export function pendingChecks(root: string): { key: string; agent?: string; attempts: number }[] {
-  const state = new Map<string, { key: string; agent?: string; attempts: number; done: boolean }>();
+export function pendingChecks(root: string): { key: string; agent?: string; attempts: number; request_id?: string }[] {
+  const state = new Map<string, { key: string; agent?: string; attempts: number; done: boolean; request_id?: string }>();
   for (const e of readJsonl<QueueEvent>(queueFile(root))) {
-    if (e.event === "queued") state.set(e.key, { key: e.key, agent: e.agent, attempts: 0, done: false });
+    if (e.event === "queued") state.set(e.key, { key: e.key, agent: e.agent, attempts: 0, done: false, ...(e.request_id ? { request_id: e.request_id } : {}) });
     const s = state.get(e.key);
     if (!s) continue;
     if (e.event === "done") s.done = true;
@@ -118,10 +119,11 @@ async function drainOnce(root: string, models: AftercheckModels, lock: Lock): Pr
   const pol = aftercheckPolicy(rules);
   const conflictModel = !pol.conflicts ? undefined : models.conflicts === undefined ? keyedModel(root, CONFLICT_STEP) : models.conflicts ?? undefined;
   const classifyModel = !pol.classify ? undefined : models.classify === undefined ? keyedModel(root, CLASSIFY_STEP) : models.classify ?? undefined;
-  for (const p of pending) {
+  // Each check runs under the id of the request that queued it (src/reqid.ts), for `pocketbrain trace`.
+  for (const p of pending) await asRequest(p.request_id, async () => {
     const mark = (event: "done" | "error", step?: string, detail?: string) =>
       appendJsonl(queueFile(root), { at: new Date().toISOString(), key: p.key, event, ...(step ? { step } : {}), ...(detail ? { detail } : {}) } satisfies QueueEvent);
-    if (!conflictModel && !classifyModel) { mark("done", undefined, "no model step on"); out.skipped.push(p.key); continue; }
+    if (!conflictModel && !classifyModel) { mark("done", undefined, "no model step on"); out.skipped.push(p.key); return; }
     try {
       if (conflictModel) { const c = await checkConflicts(root, conflictModel, p.key, p.agent); if (c) out.conflicts.push(c); }
       if (classifyModel) { const c = await classifyFact(root, classifyModel, p.key, p.agent, lock); out.raised.push(...c.raised); out.review.push(...c.review); }
@@ -131,7 +133,7 @@ async function drainOnce(root: string, models: AftercheckModels, lock: Lock): Pr
       mark("error", undefined, (e as Error).message.slice(0, 200));
       out.errors.push(`${p.key}: ${(e as Error).message}`);
     }
-  }
+  });
   return out;
 }
 

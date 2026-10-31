@@ -14,7 +14,7 @@ It shows what `nova` would see, starting from `planner`'s carve, and grants noth
 - is **trial** whatever `planner` is: it sees up to personal (or less, if `planner` sees less) and its writes wait for you. `planner`'s read-only setting, hours (`windows`) and proposal cap carry over too. Its tier, a ceiling above personal, area ownership, the browser door and a pause never do;
 - gets a one-time invite code (`--door` picks another door) and prints the standing instruction, for an assistant that can't save it itself.
 
-`--slices` adds slices to the copy and `--exclude-types` adds leave-outs; neither can drop one of `planner`'s. `--like` refuses an agent with the `all` slice, the gardener, an agent inside the wall and a share with a person. Once `nova` answers from your brain, cut the old one off with `pocketbrain token --revoke planner`.
+`--slices` adds slices to the copy and `--exclude-types` adds leave-outs; neither can drop one of `planner`'s. `--like` refuses an agent with the `all` slice, the gardener, an agent inside the wall and a share with a person. From a terminal, a copy that reaches more than one area or keeps money in is refused before anything is granted, since its invite code would be a token for that reach (G241); add it with `--door oauth`, or on the dashboard. Once `nova` answers from your brain, cut the old one off with `pocketbrain token --revoke planner`.
 
 ## The eval
 

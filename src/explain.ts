@@ -15,7 +15,7 @@ import { carve, grantFor, records, type CarveResult, type Grant } from "./carve"
 import { factFreshness } from "./freshness";
 import { refString } from "./sources";
 import { buildIndex, rank } from "./retrieve";
-import { readEntries, specificReads, verifyChain, type ReadEntry } from "./readlog";
+import { readEntries, specificReads, verifyReadLog, type ReadEntry } from "./readlog";
 import { join } from "node:path";
 import { OWNER } from "./owner";
 
@@ -119,9 +119,9 @@ export function explainAgent(root: string, agent: string, topic?: string, opts: 
   const notes = loadBrain(root);
   const grant = grantFor(rules, agent);
   const res = carve(notes, rules, grant);
-  const entries = readEntries(root);
+  const entries = readEntries(root, { all: true });
   const byNote = specificReads(entries);
-  const chain = verifyChain(join(root, "log", "reads.jsonl"));
+  const chain = verifyReadLog(root);
   const pulls = entries.filter((e) => e.agent === agent && (e.ids ?? []).includes("*"));
 
   const lines = [

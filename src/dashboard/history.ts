@@ -5,8 +5,8 @@
 // upkeep-undo), and they keep their own checks.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { isDisputed, isList, parseNote, sensitivityRank, CONTENT_DIRS, type Fact, type FactRecord, type Note, type SourceRef } from "../brain";
-import { git } from "../git";
+import { isDisputed, isList, parseNote, parseShared, sensitivityRank, CONTENT_DIRS, type Fact, type FactRecord, type Note, type SourceRef } from "../brain";
+import { git, gitTime } from "../git";
 import { OWNER } from "../owner";
 import type { Rules } from "../rules";
 
@@ -24,7 +24,7 @@ function parseLog(out: string): (Commit & { files: string[] })[] {
   return out.split(RS).filter((x) => x.trim()).map((rec) => {
     const [hash, at, author, email, message, rest = ""] = rec.split(FS);
     return {
-      hash, at, author, email, message: message.trim(),
+      hash, at: gitTime(at), author, email, message: message.trim(),
       kind: message.match(/^Kind: (.+)$/m)?.[1].trim(), run: message.match(/^Run: (\S+)$/m)?.[1],
       files: rest.split("\n").map((l) => l.trim()).filter(Boolean),
     };
@@ -214,6 +214,7 @@ export function brainAt(root: string, at: string): { at: string; notes: Note[] }
   if (!/^[0-9a-f]{40}$/.test(commit)) return undefined;
   const files = git(root, ["ls-tree", "-r", "--name-only", commit, "--", ...CONTENT]).split("\n").filter((f) => f.endsWith(".md"));
   const texts = blobs(root, files.map((f) => `${commit}:${f}`));
-  const notes = files.map((f, i) => parse(texts[i], f.replace(/\.md$/, ""))).filter((n): n is Note => !!n);
-  return { at: git(root, ["log", "-1", "--format=%aI", commit]), notes };
+  // Read only (brainOnPage): an unchanged note is the one already parsed from today's file.
+  const notes = files.map((f, i) => { const t = texts[i]; if (t === undefined) return undefined; try { return parseShared(root, f, t); } catch { return undefined; } }).filter((n): n is Note => !!n);
+  return { at: gitTime(git(root, ["log", "-1", "--format=%aI", commit])), notes };
 }

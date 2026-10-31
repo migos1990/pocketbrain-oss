@@ -11,6 +11,7 @@
 //                signed by that machine (the phone signs nothing); the hub stores it.
 // Both end in capture(): same secret removal, size and daily limits, injection hold and dedupe.
 // The agent route (MCP `capture`, POST /v1/capture) is in src/core.ts.
+import { alert } from "./util";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join, basename, extname } from "node:path";
 import { homedir } from "node:os";
@@ -186,10 +187,9 @@ export function mailSourceFor(cfg: MailConfig | undefined, env = process.env): M
   return { error: `unknown capture.mail.provider ${(cfg as { provider?: string }).provider}` };
 }
 
-function alert(root: string, check: string, from: string) {
-  mkdirSync(join(root, "log"), { recursive: true });
-  appendFileSync(join(root, "log", "alerts.jsonl"), JSON.stringify({ at: new Date().toISOString(), agent: "capture", check, from }) + "\n");
-}
+// Through util.alert, the one writer of log/alerts.jsonl (G312): a sender's From address is a
+// stranger's text, and log/ is committed.
+const captureAlert = (root: string, check: string, from: string) => alert(root, { agent: "capture", check, from });
 
 export interface IntakeItem { name: string; outcome: "stored" | "queued" | "duplicate" | "held" | "refused" | "ignored" | "failed"; detail: string; file?: string }
 
@@ -206,7 +206,7 @@ export async function mailOnce(root: string, source: MailSource, cfg: MailConfig
   for (const m of source.fetchNew()) {
     const sender = addressOf(m.from);
     if (!allowed.has(sender)) {
-      alert(root, "capture_mail_sender", `${sender || "(no sender)"}: not in capture.mail.allowed_from; dropped`);
+      captureAlert(root, "capture_mail_sender", `${sender || "(no sender)"}: not in capture.mail.allowed_from; dropped`);
       out.push({ name: m.id, outcome: "ignored", detail: `${sender} isn't one of the owner's addresses` });
       source.done(m);
       continue;

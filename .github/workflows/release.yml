@@ -52,6 +52,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: the SBOM of what the package pulls in (CycloneDX, docs/release.md#dependencies)
+        run: bun scripts/deps.ts sbom > sbom.cdx.json
       - name: the tag matches package.json and a dated CHANGELOG section
         run: bun scripts/release.ts verify-tag "$TAG"
       - name: the commit is on main
@@ -68,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           bun scripts/release.ts notes "$TAG" > notes.md
-          gh release create "$TAG" --verify-tag --title "pocketBrain ${TAG#v}" --notes-file notes.md
+          gh release create "$TAG" --verify-tag --title "pocketBrain ${TAG#v}" --notes-file notes.md sbom.cdx.json
       # Fast-forward only: a release older than the one deployed is refused here, not on the Mac.
       - name: move the release branch to the tag (the Mac follows it)
         run: git push origin "$GITHUB_SHA:refs/heads/release"

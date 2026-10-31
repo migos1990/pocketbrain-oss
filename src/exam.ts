@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The memory exam (docs/memory-sync.md, "Memory exam"): one scorecard per agent, from the logs
-// alone. It answers four questions about each assistant over a window (7 days by default):
+// alone. It answers five questions about each assistant over a window (7 days by default):
 // - Memory: when quizzed (memory_check), does its own memory agree with the brain? Answers are
 //   graded by memsync's rules when they arrive; the exam only counts the verdicts.
 // - Brain first: did it read a note (or search) before writing to it?
 // - Citations: how many of its writes were refused for their source?
 // - Slice: did it ask for notes outside its view, or trip a leak alert?
+// - Sync routine: does it call memory_check on its own, or only when asked?
 // Owner-only and rule-only: no model, nothing served to an agent, and the report names fact keys
 // and counts, never a value. Fresh questions come from memsync (the gardener's nightly
 // memory_sync, or `pocketbrain exam --quiz`); the exam itself never asks or changes anything
@@ -13,6 +14,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadRules } from "./rules";
+import { ownerClock, ownerDay } from "./clock";
 import { state, brainFirst } from "./memsync";
 import { appendChained } from "./readlog";
 import { readJsonl } from "./util";
@@ -27,6 +29,11 @@ const SOURCE_CHECKS = new Set(["source_present", "source_resolvable", "source_ex
 const SLICE_ALERTS = new Set(["leak_tripwire", "withheld_category"]);
 // Over this share of writes made without reading first, the agent answers from somewhere else.
 const UNREAD_SHARE = 0.25;
+// An agent that uses the brain but hasn't called memory_check for this long isn't syncing on its
+// own: nothing wakes a hosted assistant, so its own scheduled routine has to.
+const CHECK_DAYS = 2;
+// memory_check and its reply as each door names them in log/calls.jsonl (src/calls.ts).
+const CHECK_CALLS = new Set(["memory_check", "memory_check_reply", "GET /v1/memory-check", "POST /v1/memory-check", "GET /b/memory-check", "POST /b/memory-check"]);
 
 export type Grade = "pass" | "watch" | "fail" | "no data";
 
@@ -38,6 +45,7 @@ export interface ExamRow {
   citations: { writes: number; refused: number };
   slice: { probes: number; alerts: number };
   sync: { sent: number; confirmed: number; unconfirmed: number }; // live change lists (memory_check)
+  routine: { said?: string; lastCheck?: string; paused?: boolean }; // its sync routine, and its last memory_check
   grade: Grade;
   why: string[];
 }
@@ -54,14 +62,23 @@ export function exam(root: string, days = 7): ExamRow[] {
   const since = new Date(Date.parse(now) - days * DAY).toISOString();
   const late = new Date(Date.parse(now) - ANSWER_HOURS * 3_600_000).toISOString();
   const s = state(root);
+  const rules = loadRules(root);
   const bf = new Map(brainFirst(root, days).map((u) => [u.agent, u]));
   const writes = readJsonl<{ at: string; agent: string; key?: string; outcome?: string; checks?: string[] }>(join(root, "log", "writes.jsonl")).filter((w) => w.at >= since && w.key && !w.key.startsWith("agents/"));
   const reads = readJsonl<{ at: string; agent: string; asked?: string }>(join(root, "log", "reads.jsonl")).filter((r) => r.at >= since && r.asked);
+  // The last memory_check (or reply) each agent made through any door, from the call log, which
+  // has every door's calls since before the routine existed. A refused call doesn't count; an
+  // answer graded in memsync's own log counts too.
+  const lastCheck = new Map<string, string>();
+  const saw = (agent: string, at?: string) => { if (at && at > (lastCheck.get(agent) ?? "")) lastCheck.set(agent, at); };
+  for (const q of s.quizzes) saw(q.agent, q.answered);
+  for (const c of readJsonl<{ at: string; agent: string; tool: string; refused?: string }>(join(root, "log", "calls.jsonl")))
+    if (CHECK_CALLS.has(c.tool) && !c.refused) saw(c.agent, c.at);
   const alerts = readJsonl<{ at: string; agent?: string; check?: string }>(join(root, "log", "alerts.jsonl")).filter((a) => String(a.at) >= since && SLICE_ALERTS.has(String(a.check)));
 
   return examined(root).map((agent) => {
     // Rechecks (asked again after a correction) count toward the correction, not the memory.
-    const qs = s.quizzes.filter((q) => q.agent === agent && q.at >= since && !q.recheck);
+    const qs = s.quizzes.filter((q) => q.agent === agent && q.at >= since && !q.recheck && !q.feed);
     const answered = qs.filter((q) => q.state === "answered");
     const verdict = (v: string) => answered.filter((q) => q.verdict === v).length;
     const unanswered = qs.filter((q) => q.state !== "answered" && q.at <= late).length;
@@ -85,6 +102,7 @@ export function exam(root: string, days = 7): ExamRow[] {
       citations: { writes: mine.length, refused: mine.filter((w) => w.outcome === "refused" && (w.checks ?? []).some((c) => SOURCE_CHECKS.has(c))).length },
       slice: { probes: reads.filter((r) => r.agent === agent).length, alerts: alerts.filter((a) => a.agent === agent).length },
       sync: syncRow(s.feeds.filter((f) => f.agent === agent && f.at >= since), late),
+      routine: { said: s.routines.get(agent)?.routine, lastCheck: lastCheck.get(agent), ...(rules.policy.agents[agent].status === "paused" ? { paused: true } : {}) },
       grade: "no data",
       why: [],
     };
@@ -114,6 +132,9 @@ function gradeRow(r: ExamRow): ExamRow {
   if (r.sync.unconfirmed) watch.push(`${r.sync.unconfirmed} changed fact(s) not confirmed for a day: its own memory may still hold the old values`);
   if (r.slice.probes) watch.push(`${r.slice.probes} ask(s) for notes outside its view`);
   const evidence = r.memory.answered + r.memory.unanswered + r.brainFirst.writes + r.citations.writes + r.slice.probes + r.slice.alerts + r.corrections.verified + r.corrections.open + r.sync.sent;
+  // Only an agent that uses the brain is chased: an idle or paused one stays as it is.
+  const quiet = !r.routine.lastCheck || Date.parse(iso()) - Date.parse(r.routine.lastCheck) > CHECK_DAYS * DAY;
+  if (evidence && quiet && !r.routine.paused) watch.push(`hasn't called memory_check in ${CHECK_DAYS} days: it isn't syncing on its own (sync routine: ${r.routine.said ?? "not set up"})`);
   r.grade = fail.length ? "fail" : watch.length ? "watch" : evidence ? "pass" : "no data";
   r.why = [...fail, ...watch];
   return r;
@@ -124,8 +145,8 @@ const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : "n/
 export function examText(rows: ExamRow[], days: number, at = iso()): string {
   const L = [`# Memory exam, ${at.slice(0, 10)} (last ${days} days)`, "",
     "Each assistant's own memory against the brain, and whether it reads the brain first. Keys and counts only. Fix drift with `pocketbrain memsync list`.", "",
-    "| Agent | Grade | Memory in sync | Stale | Unanswered | Writes read first | Source refusals | Slice probes / alerts |", "|---|---|---|---|---|---|---|---|"];
-  for (const r of rows) L.push(`| ${r.agent} | ${r.grade} | ${r.memory.inSync}/${r.memory.answered} | ${r.memory.stale.length} | ${r.memory.unanswered} | ${pct(r.brainFirst.writes - r.brainFirst.unread, r.brainFirst.writes)} | ${r.citations.refused} | ${r.slice.probes} / ${r.slice.alerts} |`);
+    "| Agent | Grade | Memory in sync | Stale | Unanswered | Writes read first | Source refusals | Slice probes / alerts | Sync routine | Last memory_check |", "|---|---|---|---|---|---|---|---|---|---|"];
+  for (const r of rows) L.push(`| ${r.agent} | ${r.grade} | ${r.memory.inSync}/${r.memory.answered} | ${r.memory.stale.length} | ${r.memory.unanswered} | ${pct(r.brainFirst.writes - r.brainFirst.unread, r.brainFirst.writes)} | ${r.citations.refused} | ${r.slice.probes} / ${r.slice.alerts} | ${r.routine.said ?? "not set up"} | ${r.routine.lastCheck?.slice(0, 10) ?? "never"} |`);
   const notes = rows.filter((r) => r.why.length);
   if (notes.length) { L.push("", "## Why"); for (const r of notes) L.push("", `**${r.agent}** (${r.grade})`, ...r.why.map((w) => `- ${w}`)); }
   return L.join("\n") + "\n";
@@ -158,10 +179,11 @@ export function examLines(root: string): { numbers: string[]; need: string[] } {
 }
 
 // Weekly: on Sundays, or as soon as the last run is over a week old (a hub that slept through
-// Sunday catches up). A new hub waits for its first Sunday.
+// Sunday catches up). A new hub waits for its first Sunday. Sunday and "once a day" are the
+// owner's, in owner.timezone (src/clock.ts), not the machine's zone or UTC.
 export function examDue(root: string, now = new Date()): boolean {
-  const last = readJsonl<{ at: string }>(examLog(root)).at(-1);
-  const day = now.toISOString().slice(0, 10);
-  if (!last) return now.getDay() === 0;
-  return last.at.slice(0, 10) !== day && (now.getDay() === 0 || now.getTime() - Date.parse(last.at) > 7 * DAY);
+  const rules = loadRules(root), last = readJsonl<{ at: string }>(examLog(root)).at(-1);
+  const { day, dow } = ownerClock(rules, now);
+  if (!last) return dow === 0;
+  return ownerDay(rules, last.at) !== day && (dow === 0 || now.getTime() - Date.parse(last.at) > 7 * DAY);
 }

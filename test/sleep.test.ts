@@ -7,7 +7,7 @@ import { makeBrain } from "./fixture";
 import { handle } from "../src/server";
 import { issueToken } from "../src/auth";
 import { sleep } from "../src/sleep";
-import { mergeNotes } from "../src/merge";
+import { mergeNotes, planMerge } from "../src/merge";
 import { upkeep, undoRun } from "../src/upkeep";
 import { decideProposal, write } from "../src/write";
 import { digest } from "../src/digest";
@@ -128,6 +128,33 @@ test("forgets a fact nobody used far past its shelf life: kept in history, out o
   expect((await sleep(root, { now: "2027-06-01" })).retired).toEqual([]); // suppressed after undo
 });
 
+test("one sleep pass forgets across many notes in one commit, and undo brings every note back", async () => {
+  // At 50k notes a commit per note made the pass take half an hour (docs/perf.md).
+  const root = makeBrain();
+  const a = readFileSync(join(root, "projects/course-a.md"), "utf8");
+  for (const x of ["y", "z"]) writeFileSync(join(root, `projects/course-${x}.md`), a.replace("id: projects/course-a", `id: projects/course-${x}`).replace(/^title: .*$/m, `title: Course ${x.toUpperCase()}`));
+  commitAll(root);
+  oldReadLog(root);
+  process.env.PB_TODAY = "2027-06-01";
+  const r = await sleep(root, { now: "2027-06-01" });
+  expect(r.retired.map((x) => x.key).sort()).toEqual(["projects/course-a#next_step", "projects/course-y#next_step", "projects/course-z#next_step"]);
+  const commits = Bun.spawnSync(["git", "log", "--format=%s", "--grep", `^Run: ${r.run}$`], { cwd: root }).stdout.toString().trim().split("\n").filter((l) => l.includes("forget"));
+  expect(commits).toEqual(["reflect: forget 3 unused fact(s) in 3 note(s)"]);
+  expect(undoRun(root, r.run)).toContain("reverted 1");
+  for (const id of ["projects/course-a", "projects/course-y", "projects/course-z"]) expect((note(root, id).fm.facts!.next_step as FactRecord).value).toBe("Grade the midterm");
+});
+
+test("forgetting works in a brain that is a git worktree (.git is a file there)", async () => {
+  const main = makeBrain();
+  const wt = `${main}-wt`;
+  Bun.spawnSync(["git", "worktree", "add", "-q", "--detach", wt], { cwd: main });
+  oldReadLog(wt);
+  process.env.PB_TODAY = "2027-06-01";
+  const r = await sleep(wt, { now: "2027-06-01" });
+  expect(r.retired.map((x) => x.key)).toEqual(["projects/course-a#next_step"]);
+  expect(Bun.spawnSync(["git", "status", "--porcelain", "projects"], { cwd: wt }).stdout.toString()).toBe("");
+});
+
 test("saying a forgotten fact again revives it instead of being a no-op", async () => {
   const root = makeBrain();
   oldReadLog(root);
@@ -212,12 +239,17 @@ test("merge never picks a winner, and a private duplicate can't loosen into a pe
   expect(r.disputes[0]).toContain("c-0001");
   expect((note(root, "people/jane-roy").fm.facts!.role as unknown as { candidates: FactRecord[] }).candidates.map((c) => c.value)).toEqual(["Course coordinator", "Dean"]);
 
+  // A private duplicate of a personal note: assistants see the two differently, so the merge is
+  // refused (docs/same-person.md); the merge itself, built in memory, still only raises.
   root = withDuplicate("private");
   const p = mergeNotes(root, "people/jane-roy", "people/jane-r");
-  const keep = note(root, "people/jane-roy");
-  expect((keep.fm.facts!.emails as { items: FactRecord[] }).items[0].sensitivity).toBe("private");
-  expect(keep.fm.aliases).toEqual(["Jane"]);
-  expect(p.namesHeld).toEqual(["Jane R.", "Jane Roy-Tremblay"]);
+  expect(p.ok).toBe(false);
+  expect(p.message).toContain("see one of these notes but not the other");
+  expect(note(root, "people/jane-r").fm.status).toBe("active");
+  const plan = planMerge(note(root, "people/jane-roy"), note(root, "people/jane-r"), () => "c-x");
+  expect((plan.keep.fm.facts!.emails as { items: FactRecord[] }).items[0].sensitivity).toBe("private");
+  expect(plan.keep.fm.aliases).toEqual(["Jane"]);
+  expect(plan.r.namesHeld).toEqual(["Jane R.", "Jane Roy-Tremblay"]);
   expect(contextPack(root, "helper")).not.toContain("jane@example.org");
 });
 
@@ -232,4 +264,31 @@ test("sleep runs the judge step and points at merge in the morning note", async 
   expect(r.morning.join()).toContain("pocketbrain merge <keep> <drop>");
   expect(readdirSync(join(root, "inbox/sleep")).length).toBe(1);
   expect(existsSync(join(root, r.file))).toBe(true);
+});
+
+// Bug hunt #125: the nightly pass on a replica rewrote notes, then the hub gate refused its
+// commit, leaving a dirty tree that every later `hub sync` tripped over.
+test("sleep on a replica changes nothing: the hub sleeps, the replica keeps following it", async () => {
+  const hub = await import("../src/hub");
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const sh = (cwd: string, ...c: string[]) => Bun.spawnSync(c, { cwd }).stdout.toString().trim();
+  const home = makeBrain();
+  hub.init(home, { name: "home", git: home });
+  const laptop = join(mkdtempSync(join(tmpdir(), "pb-test-laptop-")), "b");
+  sh(tmpdir(), "git", "clone", "-q", home, laptop);
+  hub.init(laptop, { name: "laptop", git: laptop });
+  hub.addReplica(home, "laptop", { git: laptop });
+  expect(hub.sync(laptop).problems).toEqual([]);
+  appendChained(join(laptop, "log/reads.jsonl"), { at: "2027-01-01T09:00:00.000Z", agent: "planner", op: "search", ids: ["people/jane-roy"] });
+  process.env.PB_TODAY = "2027-06-01";
+  try {
+    const before = JSON.stringify(note(laptop, "projects/course-a").fm.facts);
+    const r = await sleep(laptop, { now: "2027-06-01" });
+    expect(r.retired).toEqual([]);
+    expect(r.morning.join(" ")).toMatch(/home/);
+    expect(JSON.stringify(note(laptop, "projects/course-a").fm.facts)).toBe(before);
+    expect(sh(laptop, "git", "status", "--porcelain", "--untracked-files=no")).toBe("");
+    expect(hub.sync(laptop).problems).toEqual([]);
+  } finally { process.env.PB_TODAY = "2026-10-08"; }
 });

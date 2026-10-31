@@ -160,11 +160,10 @@ export function findCarried(text: string, needles: Needle[]): Needle | undefined
 export function withholdIn(name: string, needles: Needle[]): string {
   const whole = (t: string) => { const q = squash(t); return needles.some((n) => n.squashed.length >= 6 && q.includes(n.squashed)); };
   const any = (t: string) => !!findCarried(t, needles);
-  // Most names carry nothing: a squashed look and no encoded run settle it without the full matcher.
-  if (!/[A-Za-z0-9+/_-]{12,}|%[0-9a-f]{2}/i.test(name)) {
-    const q = squash(name), digits = name.replace(/[^\d]/g, "");
-    if (!needles.some((n) => (n.squashed.length >= 6 && q.includes(n.squashed)) || (n.digits && digits.includes(n.digits)))) return name;
-  }
+  // Most names carry nothing: one indexed look settles it (the loop below changes a name only where
+  // findCarried finds a needle). Trying every needle on every name made a large carve's names pass
+  // take seconds (docs/perf.md).
+  if (!needles.length || !findCarried(name, needles)) return name;
   let out = name;
   for (let guard = 0; guard < 8 && needles.length && any(out); guard++) {
     const words = [...out.matchAll(/[\p{L}\p{N}]+/gu)];

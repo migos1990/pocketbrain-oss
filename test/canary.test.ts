@@ -7,7 +7,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
-import { probeInit, loadCanaries, findCanaries } from "../src/canary";
+import { probeInit, loadCanaries, findCanaries, freshCanaries } from "../src/canary";
 import { loadBrain } from "../src/brain";
 import { loadRules } from "../src/rules";
 import { carve, grantFor } from "../src/carve";
@@ -142,9 +142,26 @@ test("a read that would hand out a canary the agent's carve doesn't hold alerts 
   // Someone copied a decoy's canary into a note helper does see.
   const f = join(root, "projects", "course-a.md");
   writeFileSync(f, readFileSync(f, "utf8") + `\nRef ${r.planted[0].canary}\n`);
-  contextPack(root, "helper");
-  readNote(root, "helper", "projects/course-a");
-  expect(alerts(root).filter((a) => a.check === "canary_served").map((a) => [a.agent, a.from])).toEqual([["helper", r.planted[0].id], ["helper", r.planted[0].id]]);
+  // Each step on its own, so a failure says which one: the planted file, each read handing the
+  // canary out, then one alert per read.
+  expect(loadCanaries(root).planted.map((p) => p.canary), "canaries.yaml holds what probe init planted").toContain(r.planted[0].canary);
+  const served = alerts(root).filter((a) => a.check === "canary_served");
+  expect(served, "no canary_served before the reads").toEqual([]);
+  expect(contextPack(root, "helper"), "the whole-view pack hands the canary out").toContain(r.planted[0].canary);
+  expect(alerts(root).filter((a) => a.check === "canary_served").map((a) => [a.agent, a.from]), "after the pack").toEqual([["helper", r.planted[0].id]]);
+  expect(readNote(root, "helper", "projects/course-a").markdown, "the note hands the canary out").toContain(r.planted[0].canary);
+  expect(alerts(root).filter((a) => a.check === "canary_served").map((a) => [a.agent, a.from]), "after the read").toEqual([["helper", r.planted[0].id], ["helper", r.planted[0].id]]);
+});
+
+test("whats_new runs the same tripwire: a changed note carrying a canary the agent's carve doesn't hold alerts (canary_served, backlog 312)", () => {
+  const { setFact } = require("../src/dashboard/edit");
+  const { whatsNew } = require("../src/core");
+  const root = makeBrain();
+  const r = probeInit(root);
+  setFact(root, "projects/course-a", "next_step", `Ref ${r.planted[0].canary}`);
+  const w = whatsNew(root, "helper", "2000-01-01T00:00:00Z");
+  expect(JSON.stringify(w)).toContain(r.planted[0].canary);
+  expect(alerts(root).filter((a) => a.check === "canary_served").map((a) => [a.agent, a.from])).toEqual([["helper", r.planted[0].id]]);
 });
 
 test("a prober reads its personal decoy through its cell too (serve answers from cells)", () => {
@@ -161,4 +178,17 @@ test("a prober reads its personal decoy through its cell too (serve answers from
       for (const p of r.planted.filter((x) => x !== personal)) expect(() => readNote(root, "auditor", p.id), `cells ${on}`).toThrow(`no note ${p.id} in your view`);
     }
   } finally { useCells(was); }
+});
+
+// G535: two consecutive words carry a value for the leak matcher (match.ts needleFor), so a
+// personal decoy's canary sharing its words with the private one's was withheld as that one, and
+// the canary_served test above failed about once in two hundred runs. No two canaries share them.
+test("new canaries never share their pair of words, nor repeat a used one", () => {
+  // The first tries all land on the same two words; then on others.
+  const script = [0, 0, 1000, 0, 0, 1001, 0, 0, 1002, 1, 1, 1003, 1, 1, 1003, 2, 2, 1004, 0, 3, 1005];
+  let at = 0;
+  const got = freshCanaries(3, new Set(["Orrin Lantern 1003"]), () => script[at++]!);
+  expect(got).toEqual(["Halvard Quay 1000", "Tamsin Meadow 1004", "Halvard Foundry 1005"]);
+  const words = got.map((c) => c.split(" ").slice(0, 2).join(" "));
+  expect(new Set(words).size).toBe(3);
 });

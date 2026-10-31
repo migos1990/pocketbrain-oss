@@ -1,0 +1,11 @@
+# Hashes of the live server's per-agent tokens. Only the owner edits this file (pocketbrain token).
+agents:
+  claude:
+    - hash: 696328ccd94921d5257ba67b90528a5dfd73e899922fa10629f28b05459429b6
+      issued: 2026-09-30
+  chatgpt:
+    - hash: 38363f55e087128d826157c37443bf3609d412d83c8b0cd8f8040e0bbafbeec2
+      issued: 2026-09-30
+  gemini:
+    - hash: 85b67f7bbfec8c1fedf408e7ff20a609bb350f611b2caad3b09822ba84c0f002
+      issued: 2026-09-30

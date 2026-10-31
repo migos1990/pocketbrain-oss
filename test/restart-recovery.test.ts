@@ -24,8 +24,7 @@ import { tmpdir } from "node:os";
 
 const sh = (cwd: string, ...cmd: string[]) => Bun.spawnSync(cmd, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: "x", GIT_AUTHOR_EMAIL: "x@x", GIT_COMMITTER_NAME: "x", GIT_COMMITTER_EMAIL: "x@x" } }).stdout.toString().trim();
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const original = captureModel;
-afterAll(() => useCaptureModel((root) => original(root)));
+afterAll(() => useCaptureModel());
 // A model call that never returns: the hub is killed while it waits.
 const hung = (): Model => ({ config: { provider: "fake", model: "hung" } as Model["config"], complete: () => new Promise(() => {}) });
 const extracting = (seen: string[]) => makeModel({ provider: "fake", model: "fake-1" }, { fake: (r: ModelRequest) => {

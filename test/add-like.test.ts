@@ -105,9 +105,11 @@ test("pocketbrain add --like previews first, then adds with an invite and the da
   expect(r.out).toContain("pocketbrain token --revoke planner");
   expect(r.out).not.toMatch(/pb_nova_/);
   // Extra --slices add to the copy; they never replace it.
-  const extra = run(root, "add", "orbit", "--like", "helper", "--slices", "area:personal", "--yes");
-  expect(extra.code).toBe(0);
-  expect(policy(root).orbit.slices).toEqual(["area:work", "contacts-basic", "area:personal"]);
+  expect(run(root, "add", "orbit", "--like", "helper", "--slices", "area:personal").out).toContain("orbit like helper: area:work, contacts-basic, area:personal");
+  // Two areas: a terminal makes no invite for that (G241, claude/cli-token-pem), so --yes is
+  // refused and nothing is granted (the owner adds it with the sign-in door, or on the dashboard).
+  expect(run(root, "add", "orbit", "--like", "helper", "--slices", "area:personal", "--yes").code).toBe(1);
+  expect(policy(root).orbit).toBeUndefined();
   expect(run(root, "add", "dup", "--like", "steward", "--yes").code).toBe(1);
 });
 

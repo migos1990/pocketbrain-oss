@@ -1,0 +1,59 @@
+# Same person?
+
+One person often lands in the brain as several person notes: one made from an email, one from a text, one from a Discord handle. The brain asks the owner once, "Same person?", shows why, and merges on one click. Undo puts both notes back. Code: `src/sameperson.ts`; the merge itself is `mergeNotes` in `src/merge.ts`.
+
+## When the brain asks
+
+Two active person notes are a proposal only when they share an address that both notes trust:
+
+- an email (`emails`/`email`, or any person attribute with `normalize: email` in `rules/checks.yaml`), a phone number (`phones`/`phone`, or any attribute with `normalize: e164`, compared as E.164) or a handle (`handles`/`handle`, written `scheme:name`, e.g. `discord:jroy`, compared without case);
+- on each note, the value is current (no `valid_to`, not forgotten), not disputed, and confirmed by the owner or verified by a source whose ref the connector hasn't found missing (`log/refs-checked.jsonl`). A self-reported address never counts.
+
+The score is the strongest shared address (email or phone 0.9, handle 0.7) plus 0.1 when the names also match (title or alias). Only a score of 0.9 or more is shown (`SAME_PERSON_BAR`). A shared handle alone, even with the same name, stays below the bar, and a name alone is upkeep's `possible-duplicate` line, never a proposal.
+
+Nothing merges by itself, whatever the score. The owner clicks.
+
+## What the owner sees
+
+The Who matters page (`/people`) and `pocketbrain same-person` list each proposal: both notes, and for each shared address the source refs that vouch for it and who wrote it, note by note. When either note is private, the card says "a private note shares a phone number" without the address; the note pages still show it. Needs you counts the questions. `pocketbrain same-person --json` prints the proposals (with `blocked` and `swap_blocked` when set) and the merges that can still be undone, for scripts.
+
+| Button / command | What happens |
+|---|---|
+| Merge / `same-person merge <id>` | The other note merges into the one you placed in standing, or else into the older one: facts move across, the same value combines its sources, a different single value becomes a dispute for the owner. One owner commit. |
+| Keep the other instead / `--swap` | The same, the other way round. When that moves a standing, the button asks first. |
+| Not the same / `same-person not <id>` | The pair is hidden until the two notes share an address the owner hasn't seen yet. |
+| Undo / `same-person undo <id>` | Reverts the merge commit as the owner, together with upkeep's link repoints made since (links that turned `[[dropped]]` into `[[kept]]` in any note go back, so an agent that saw `[[redacted]]` sees it again), in one owner commit. Both notes and the other notes' links come back exactly as they were, and the pair counts as not the same. Refused when either note, or this pair's standing entries, changed since the merge by anything other than those repoints; undo or fix that first. Someone else's standing changing meanwhile doesn't block it. The Who matters page shows Undo for the last 5 merges; older ones are undone with `pocketbrain same-person undo <id>` (the ids are in `same-person --json`). |
+
+## When a merge is refused
+
+A merge moves the dropped note's facts and names under the kept note's id, so it goes ahead only when no assistant could learn anything from it. One rule decides (`carveParity` in `src/merge.ts`), in either direction, and the plain `pocketbrain merge` follows it too:
+
+**Every assistant must see the two notes the same way.** For each agent in `rules/policy.yaml` (collaborators included), and for each agent's reader token as well (it reads the slice capped below private; the card names it "planner (reader token)"): it sees both notes or neither; if both, with the same body access and the same set of attributes, the same attribute names left out of both by the slices (`only_attributes`, `exclude_attributes`), and nothing hidden on either note except those attributes (a slice like `contacts-basic` showing only `org` and `role` hides the same attributes on both notes, and they stay hidden on the merged one). A fact hidden by name, by `share_with` or by its own sensitivity refuses the merge, and so do notes of different sensitivity (the merge would have to hold names back). When the merge would open a dispute, the resolver and the owner's text channel must see both notes whole, because the packet shows them both values.
+
+The card says: "Can't merge here: helper, planner see one of these notes but not the other (or not all of it); make their access the same first." The pair is still listed, no Merge is offered the way it is refused, and nothing is written. An agent that sees neither note must be left untouched: links to either stay `[[redacted]]` after upkeep repoints them (an agent that sees the kept note reads a link to the dropped one as a link to the kept one right away, before upkeep rewrites it; a link to a merged note always shows the note it finally became when the agent sees it, else `[[redacted]]`), and a merged note is carved for it exactly as the note it finally merged into is (through any chain of merges: A into B, then B into C, is carved like C). If it sees that note, only names the merge held back stay scrubbed from other notes; if that note is kept from it on purpose (its type, an exclude by name, its ceiling), the merged note's names and fact values stay scrubbed too; if that note is merely outside its slices, nothing is scrubbed, as for any note it doesn't read. The rendered check below also refuses a merge after which anything scrubbed from an agent's prose today would no longer be, and one after which anything it reads today would be newly scrubbed: "Can't merge here: scout would find names or values of these notes newly [withheld] in notes it reads today; change the slices or move the note first." That happens when the kept note is kept from an agent on purpose and the dropped one is merely outside its slices, and when both notes are kept from it but have different titles (the dropped note's title becomes an alias of the kept one, and a hidden note's aliases are scrubbed): two private notes named differently can't merge while an assistant below private reads the brain.
+
+**Notes holding private or limited-share facts can't be merged yet.** A fact some assistants can't see, because it is private (above their ceiling) or carries `share_with`, would have to stay hidden under the merged note from exactly the same assistants, and today's rule can't show that. Such a pair is refused with its own reason: "Can't merge here: J. Roy has a fact some assistants can't see (private or shared with only some); the owner can merge these by hand later." When other assistants also see the two notes differently, the reason names them after it.
+
+With OpenFGA on (`docs/fga.md`), the checks need its confirmation of every slice `rules/policy.yaml` gives every assistant. While its copy is stale (OpenFGA unreachable for longer than `max_age_s`) or holds fewer slices than policy.yaml, the merge is refused: "Can't merge here: OpenFGA hasn't confirmed lately what helper may read, so these checks can't tell who sees the notes; try again once it has caught up." An assistant left with no slices would otherwise look like one that sees neither note.
+
+Some cases are named in their own words first: notes in different areas ("the notes are in different areas (personal, work); move one first"), an exclude in `rules/policy.yaml` or `rules/slices.yaml` naming the dropped note or one of its facts ("change the exclude first"), and an open dispute on either note, on a fact or a list item ("settle it first").
+
+As a second layer, `mergeLeaks` builds the merged notes in memory exactly as the merge would write them (`planMerge`, shared with the real merge, with every earlier merged note that points at either one), renders what each agent would read of them (`renderNote`), and refuses if anything there isn't in what it read of the two notes today: the kept note newly in view, a body or note-level line, a name, a standing line the merge moves, or a fact record compared under its attribute. It also refuses when a value or name an agent reads on either note, as written, wouldn't be on the merged note while another note in the brain holds that same string: the merge keeps one of two spellings that compare equal ("Café Roy" and "Cafe Roy"), and the other would stop counting as shown, so another note's copy of it could start being withheld. The card names the spelling: make the two notes spell it the same first.
+
+Before it writes anything, the merge itself runs a last check over the whole brain (`brainChanges`): for every agent, its reader token, the resolver and the owner's text channel, it carves every note as the brain is and as the merge would leave it, and refuses if what that agent reads elsewhere would change at all: the values withheld from its prose, the patterns that withhold disguised forms of them, and every other note it can see, rendered as its view and read give it and as its cell holds it (a link to the dropped note counts as a link to the kept one, which is what the merge makes it). Only notes the cells' own update test can't rule out are rendered. "Can't merge: helper would find other notes changed (a name or value newly [withheld], or no longer); nothing was merged." On the sample brain it takes a few milliseconds; on the synthetic brains of `bun run perf`, about 0.6 seconds at 1,000 notes and 7 seconds at 10,000.
+
+The proposal card names the most common cause first. A title's words count as shown to an agent (so a longer hidden name that holds them withholds only itself), but an alias's words don't: when the dropped note's title would be only a name on the kept note, and another note's name holds its words, the card says "Jaylen Fournier would be only a name on Jane Roy, so "jaylen", "fournier" would no longer count as shown, and another note's name holds them". If the merge's commit fails, the two notes and any pointer it repointed go back to the last commit and the merge says it wasn't saved.
+
+A merge also points earlier merged notes at the kept note: one that pointed at the dropped note gets `merged_into: <kept>` in the same commit (unless its file has uncommitted changes; carve follows the chain either way). Undo puts them back with the rest, and a later change to one of them blocks the undo like a change to either note.
+
+Undo counts a later commit as upkeep's link repoint only when `reflect` wrote it, with upkeep's `Agent: reflect` and `Kind: auto-fix` trailers, touching one note file, and turning `[[dropped]]` links into `[[kept]]`. It also takes back the page writer's text written since (docs/wiki.md, "Every page gets text"): a commit by `hub` with `Kind: page-writer` that touches only page files; the next night writes the text again. Any other commit, whatever its message says, blocks the undo like any later change.
+
+## Standing follows the person
+
+By default the note you placed in standing (`docs/standing.md`) is the one kept. If the dropped note's standing applies and the kept one has none, the entry moves to the kept note in the same commit, and Undo moves it back. When both have the same standing, their pinned addresses combine. If both have different standings, the merge is refused until the owner sets one standing for the person. An entry left from an earlier note under the same id (its `note_created` doesn't match) never moves: a recreated note can't bring an old standing back through a merge.
+
+On a replica, a merge is refused before anything is written; do it on the hub.
+
+## Agents
+
+Agents never see proposals and can't merge. After a merge, the dropped note is a pointer like any merged note. The record of merges and "not the same" answers lives in `log/people/merges.jsonl` and `log/people/not-same.json`.

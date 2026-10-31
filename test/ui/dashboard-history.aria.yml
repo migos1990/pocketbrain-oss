@@ -1,44 +1,217 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - link "Brain":
     - /url: /brain
   - heading "What changed this week" [level=1]
-  - text: 6 saves in the last 7 days See the brain on
+  - text: 98 saves in the last 7 days See the brain on
   - textbox "See the brain on"
   - button "Go"
-  - heading "Thu 8 Oct 2026" [level=2]
-  - link "Pick a bank Decisions You created the note 12:00":
-    - /url: /history/decisions/2026-09-01-pick-bank
-  - link "Main bank Money You created the note 12:00":
-    - /url: /history/money/main-bank
-  - link "Jane Roy People You created the note 12:00":
-    - /url: /history/people/jane-roy
-  - link "Paul Advisor People You created the note 12:00":
-    - /url: /history/people/paul-advisor
-  - link "Course A Projects You created the note 12:00":
-    - /url: /history/projects/course-a
-  - link "Course B Projects You created the note 12:00":
-    - /url: /history/projects/course-b
+  - heading "Today" [level=2]
+  - link "Antoine Lavoie People The hub edited the notes text 09:40":
+    - /url: /history/people/antoine-lavoie
+  - 'link "Antoine Lavoie People You changed role Role: teaching assistant to head TA 09:40"':
+    - /url: /history/people/antoine-lavoie
+  - 'link "Martin Leclerc People auto-decide changed last contact Last contact: 2026-09-09 to 2026-10-08 09:00"':
+    - /url: /history/people/martin-leclerc
+  - 'link "Hannah Becker People auto-decide changed last contact Last contact: 2026-08-30 to 2026-10-08 09:00"':
+    - /url: /history/people/hannah-becker
+  - 'link "Hélène Lefebvre People auto-decide added prefers Prefers: visits in the morning until the hip surgery on 20 November 09:00"':
+    - /url: /history/people/helene-lefebvre
+  - heading "Yesterday" [level=2]
+  - link "Fernwood Climbing Gym Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/fernwood-climbing
+  - link "Lakeshore College Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/lakeshore-college
+  - link "Maison des Pins Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/maison-des-pins
+  - link "Parc Avenue Books Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/parc-avenue-books
+  - link "Rosemont Children's Choir Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/rosemont-choir
+  - link "Ahmed Saleh People The hub edited the notes text 23:30":
+    - /url: /history/people/ahmed-saleh
+  - link "Aisha Rahman People The hub edited the notes text 23:30":
+    - /url: /history/people/aisha-rahman
+  - link "Antoine Lavoie People The hub edited the notes text 23:30":
+    - /url: /history/people/antoine-lavoie
+  - link "Ben Carter People The hub edited the notes text 23:30":
+    - /url: /history/people/ben-carter
+  - link "Chloé Gagnon People The hub edited the notes text 23:30":
+    - /url: /history/people/chloe-gagnon
+  - link "Claire Dubois People The hub edited the notes text 23:30":
+    - /url: /history/people/claire-dubois
+  - link "Diego Alvarez People The hub edited the notes text 23:30":
+    - /url: /history/people/diego-alvarez
+  - link "Felix Moreau People The hub edited the notes text 23:30":
+    - /url: /history/people/felix-moreau
+  - link "Grace Liu People The hub edited the notes text 23:30":
+    - /url: /history/people/grace-liu
+  - link "Hannah Becker People The hub edited the notes text 23:30":
+    - /url: /history/people/hannah-becker
+  - link "Isabelle Roy People The hub edited the notes text 23:30":
+    - /url: /history/people/isabelle-roy
+  - link "Jordan Ellis People The hub edited the notes text 23:30":
+    - /url: /history/people/jordan-ellis
+  - link "Julie Tran People The hub edited the notes text 23:30":
+    - /url: /history/people/julie-tran
+  - link "Kenji Watanabe People The hub edited the notes text 23:30":
+    - /url: /history/people/kenji-watanabe
+  - link "Laila Haddad People The hub edited the notes text 23:30":
+    - /url: /history/people/laila-haddad
+  - link "Luc Gauthier People The hub edited the notes text 23:30":
+    - /url: /history/people/luc-gauthier
+  - link "Maya Chen People The hub edited the notes text 23:30":
+    - /url: /history/people/maya-chen
+  - link "Nina Petrova People The hub edited the notes text 23:30":
+    - /url: /history/people/nina-petrova
+  - link "Omar Haddad People The hub edited the notes text 23:30":
+    - /url: /history/people/omar-haddad
+  - link "Peter Novak People The hub edited the notes text 23:30":
+    - /url: /history/people/peter-novak
+  - link "Priya Shah People The hub edited the notes text 23:30":
+    - /url: /history/people/priya-shah
+  - link "Robin Lefebvre People The hub edited the notes text 23:30":
+    - /url: /history/people/robin-lefebvre
+  - link "Simone Laurent People The hub edited the notes text 23:30":
+    - /url: /history/people/simone-laurent
+  - link "Sofia Marquez People The hub edited the notes text 23:30":
+    - /url: /history/people/sofia-marquez
+  - link "Zoe Harper People The hub edited the notes text 23:30":
+    - /url: /history/people/zoe-harper
+  - link "Atlas launch Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/atlas-launch
+  - link "Senior designer hire Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/designer-hire
+  - link "Guest lectures Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/guest-lecture-series
+  - link "Kitchen renovation Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/kitchen-renovation
+  - link "Pinecrest pilot Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/pinecrest-partnership
+  - link "Product Discovery course Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/product-discovery-course
+  - link "Q1 roadmap Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/q1-roadmap
+  - link "Northgate Design Studio Organisations The hub edited the notes text 20:30":
+    - /url: /history/orgs/northgate-design
+  - link "Lucas Fontaine People The hub edited the notes text 20:30":
+    - /url: /history/people/lucas-fontaine
+  - 'link "Lucas Fontaine People You changed last contact Last contact: 2026-09-14 to 2026-10-07 20:30"':
+    - /url: /history/people/lucas-fontaine
+  - 'link "Kitchen renovation Projects auto-decide changed next step Next step: confirm the tile delivery date to take the tile delivery on 12 October 17:30"':
+    - /url: /history/projects/kitchen-renovation
+  - 'link "Grace Liu People auto-decide changed role Role: customer success lead to customer success director 17:30"':
+    - /url: /history/people/grace-liu
+  - 'link "Atlas launch Projects auto-decide changed next step Next step: freeze the beta build to freeze the beta build on 15 October 17:30"':
+    - /url: /history/projects/atlas-launch
+  - 'link "Sofia Marquez People auto-decide changed role Role: product marketing manager to senior product marketing manager 17:30"':
+    - /url: /history/people/sofia-marquez
+  - 'link "Maya Chen People auto-decide changed last contact Last contact: 2026-08-25 to 2026-10-07 17:30"':
+    - /url: /history/people/maya-chen
+  - 'link "Kenji Watanabe People auto-decide changed role Role: data analyst to senior data analyst 17:30"':
+    - /url: /history/people/kenji-watanabe
+  - 'link "Diego Alvarez People ChatGPT added prefers Prefers: long novels nobody else has read 12:15"':
+    - /url: /history/people/diego-alvarez
+  - heading "Tue 6 Oct 2026" [level=2]
+  - link "Hélène Lefebvre People The hub edited the notes text 21:10":
+    - /url: /history/people/helene-lefebvre
+  - link "Marc Lefebvre People The hub edited the notes text 21:10":
+    - /url: /history/people/marc-lefebvre
+  - link "Robin Lefebvre People The hub edited the notes text 21:10":
+    - /url: /history/people/robin-lefebvre
+  - link "Valérie Roy People The hub edited the notes text 21:10":
+    - /url: /history/people/valerie-roy
+  - link "Mom's move Projects The hub edited the notes text 21:10":
+    - /url: /history/projects/moms-move
+  - 'link "Mom''s move Projects You changed next step Next step: sign the lease at Maison des Pins on 15 October to book the movers 21:10"':
+    - /url: /history/projects/moms-move
+  - 'link "Mom''s move Projects auto-decide changed next step Next step: book the movers to sign the lease at Maison des Pins on 15 October 17:30"':
+    - /url: /history/projects/moms-move
+  - 'link "Pinecrest pilot Projects auto-decide changed next step Next step: agree on the pilot success numbers to send the export sample to Ben by 9 October 17:30"':
+    - /url: /history/projects/pinecrest-partnership
+  - 'link "Guest lectures Projects auto-decide changed next step Next step: confirm Zoe''s date to send Zoe the room details for 17 November 17:30"':
+    - /url: /history/projects/guest-lecture-series
+  - 'link "Product Discovery course Projects auto-decide changed next step Next step: grade the midterm reflections to return the midterm reflections on 13 October 17:30"':
+    - /url: /history/projects/product-discovery-course
+  - 'link "Priya Shah People Claude added prefers Prefers: the decision in the first line of an email 12:15"':
+    - /url: /history/people/priya-shah
+  - heading "Mon 5 Oct 2026" [level=2]
+  - link "Sam Patel People The hub edited the notes text 19:40":
+    - /url: /history/people/sam-patel
+  - 'link "Sam Patel People You changed last contact Last contact: 2026-09-19 to 2026-10-05 19:40"':
+    - /url: /history/people/sam-patel
+  - 'link "Laila Haddad People auto-decide changed role Role: associate product manager to product manager 17:30"':
+    - /url: /history/people/laila-haddad
+  - 'link "Isabelle Roy People auto-decide changed role Role: course coordinator to registrar 17:30"':
+    - /url: /history/people/isabelle-roy
+  - 'link "Senior designer hire Projects auto-decide changed next step Next step: send the offer decision to Felix to decide between Lucas and Nina by 14 October 17:30"':
+    - /url: /history/projects/designer-hire
+  - 'link "Q1 roadmap Projects auto-decide changed next step Next step: share the first draft with Priya to share the first draft with Priya by 16 October 17:30"':
+    - /url: /history/projects/q1-roadmap
+  - heading "Sun 4 Oct 2026" [level=2]
+  - link "Harbourline Software Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/harbourline
+  - link "Pinecrest Labs Organisations The hub edited the notes text 23:30":
+    - /url: /history/orgs/pinecrest-labs
+  - link "Daniel Okoro People The hub edited the notes text 23:30":
+    - /url: /history/people/daniel-okoro
+  - link "Diego Alvarez People The hub edited the notes text 23:30":
+    - /url: /history/people/diego-alvarez
+  - link "Elena Rossi People The hub edited the notes text 23:30":
+    - /url: /history/people/elena-rossi
+  - link "Emma Wilson People The hub edited the notes text 23:30":
+    - /url: /history/people/emma-wilson
+  - link "Inès Bouchard People The hub edited the notes text 23:30":
+    - /url: /history/people/ines-bouchard
+  - link "Kai Nakamura People The hub edited the notes text 23:30":
+    - /url: /history/people/kai-nakamura
+  - link "Léa Lefebvre People The hub edited the notes text 23:30":
+    - /url: /history/people/lea-lefebvre
+  - link "Lina Sato People The hub edited the notes text 23:30":
+    - /url: /history/people/lina-sato
+  - link "Marcus Webb People The hub edited the notes text 23:30":
+    - /url: /history/people/marcus-webb
+  - link "Martin Leclerc People The hub edited the notes text 23:30":
+    - /url: /history/people/martin-leclerc
+  - link "Rachel Adler People The hub edited the notes text 23:30":
+    - /url: /history/people/rachel-adler
+  - link "Ravi Menon People The hub edited the notes text 23:30":
+    - /url: /history/people/ravi-menon
+  - link "Robin Lefebvre People The hub edited the notes text 23:30":
+    - /url: /history/people/robin-lefebvre
+  - link "Sofia Marquez People The hub edited the notes text 23:30":
+    - /url: /history/people/sofia-marquez
+  - link "Tomás Rivera People The hub edited the notes text 23:30":
+    - /url: /history/people/tomas-rivera
+  - link "Book club, November Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/book-club-november
+  - link "Choir winter concert Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/choir-winter-concert
+  - link "Pricing page refresh Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/pricing-page-refresh
+  - link "Red River climbing trip Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/red-river-trip
+  - 'link "Emma Wilson People auto-decide changed last contact Last contact: 2026-08-25 to 2026-10-04 17:30"':
+    - /url: /history/people/emma-wilson
+  - 'link "Book club, November Projects auto-decide changed next step Next step: finish the book to finish the book before the 25th 17:30"':
+    - /url: /history/projects/book-club-november
+  - 'link "Daniel Okoro People Claude added prefers Prefers: a written spec before any meeting 12:15"':
+    - /url: /history/people/daniel-okoro
+  - heading "Sat 3 Oct 2026" [level=2]
+  - 'link "Red River climbing trip Projects auto-decide changed next step Next step: book the cabin to book the cabin for 9 to 16 April 17:30"':
+    - /url: /history/projects/red-river-trip
+  - 'link "Choir winter concert Projects auto-decide changed next step Next step: buy the concert tickets for the grandparents to buy the concert tickets for the grandparents by 1 November 17:30"':
+    - /url: /history/projects/choir-winter-concert
+  - heading "Fri 2 Oct 2026" [level=2]
+  - 'link "Ravi Menon People auto-decide changed last contact Last contact: 2026-08-30 to 2026-10-02 17:30"':
+    - /url: /history/people/ravi-menon
+  - 'link "Pricing page refresh Projects auto-decide changed next step Next step: review the second round of mockups to review the second round of mockups on 9 October 17:30"':
+    - /url: /history/projects/pricing-page-refresh
+  - 'link "Tomás Rivera People auto-decide changed role Role: backend engineer to senior backend engineer 17:30"':
+    - /url: /history/people/tomas-rivera

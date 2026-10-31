@@ -182,11 +182,23 @@ export function twilioTransport(root: string, cfg: NonNullable<TransportConfig["
 
 // ---------- imessage (the Mac that runs the hub) ----------
 
-export type Spawn = (cmd: string[]) => { exitCode: number; stdout: string; stderr: string };
-const spawn: Spawn = (cmd) => {
-  const r = Bun.spawnSync(cmd);
-  return { exitCode: r.exitCode ?? 1, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
-};
+export type Spawn = (cmd: string[]) => { exitCode: number; stdout: string; stderr: string } | Promise<{ exitCode: number; stdout: string; stderr: string }>;
+// A hung Messages holds an AppleEvent for its 2-minute default. The send runs as a child process
+// the hub awaits, never a sync spawn (which froze the hub's event loop, so /health stopped
+// answering and the watchdog restarted the hub twice on 2026-10-24), and gives up after
+// SEND_TIMEOUT_MS ("no answer"), which counts as a failed send that the watchdog acts on.
+const SEND_TIMEOUT_MS = 30_000;
+export async function runWithTimeout(cmd: string[], ms: number): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; p.kill(); }, ms);
+  try {
+    const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+    return { exitCode: timedOut ? 1 : code, stdout, stderr: timedOut ? `no answer from Messages in ${Math.round(ms / 1000)} s` : stderr };
+  } finally { clearTimeout(timer); }
+}
+const spawn: Spawn = (cmd) => runWithTimeout(cmd, SEND_TIMEOUT_MS);
+
 // AppleScript string literal: backslashes and quotes escaped, so text can't break out.
 const as = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
@@ -203,7 +215,7 @@ export function imessageTransport(root: string, cfg: NonNullable<TransportConfig
     name: "imessage", trusted: true,
     async send(t) {
       const script = `tell application "Messages" to send ${as(t.text)} to participant ${as(cfg.to)} of (1st account whose service type = iMessage)`;
-      const r = run(["osascript", "-e", script]);
+      const r = await run(["osascript", "-e", script]);
       return r.exitCode === 0 ? { ok: true, id: t.id } : { ok: false, detail: `osascript: ${r.stderr.trim().slice(0, 120)}` };
     },
     async replies() {

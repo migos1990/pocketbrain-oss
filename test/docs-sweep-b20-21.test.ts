@@ -29,7 +29,7 @@ test("the review role has no step, so no doc says a role moves a step onto it", 
 
 test("relay docs: held mail names each side separately, alerts are per message and cause", () => {
   expect(text("docs/text-channel.md")).toContain("Held mail names each side only when it is an agent in `policy.yaml`");
-  expect(text("docs/overview.md")).toContain("once a day per message and cause");
+  expect(text("README.md")).toContain("once a day per message and cause");
 });
 
 test("consent docs: the eval model is pinned on Anthropic, and no comment names a variable nothing reads", () => {
@@ -42,9 +42,12 @@ test("silent sources wait for silent_after_hours, not a fixed 72 hours", () => {
   expect(text("docs/sources-pull.md")).toContain("watched from its `silent_after_hours` (default 72)");
 });
 
-test("backup.md doesn't claim relayed mail or handoffs are secret-checked", () => {
+// Since G201 and G280 (claude/cli-token-pem), comms and handoff records and alerts are redacted
+// before they are committed, and backup.md says so instead of "not checked yet".
+test("backup.md says what keeps relayed mail, handoffs and alerts from stopping a backup", () => {
   expect(text("docs/backup.md")).not.toContain("so no agent write can stop your backups");
-  expect(text("docs/backup.md")).toContain("Relayed mail (`comms/`) and handoff tasks are not checked yet");
+  expect(text("docs/backup.md")).toContain("can't stop them either (G201)");
+  expect(text("docs/backup.md")).toContain("(G280)");
 });
 
 test("CHANGELOG lists the belief radar once, with its stale-value and one-line rules", () => {

@@ -90,7 +90,7 @@ Retention (decided by Louis, 2026-10-08): journal files older than **60 days** a
 | `area` | an area the policy knows; own area → direct, other area → `inbox/` | `own_area` (0.6) |
 | `source_type` | one of: `louis_message`, `email`, `calendar`, `document`, `web`, `call`, `agent_observation`, `import` | `schema_valid` |
 | `source_ref` | **resolvable** for every type except `agent_observation`: `phonemsg-…` id, Gmail message/thread id, calendar event id, URL, file path, or a `call:YYYY-MM-DD:with` stub | `source_resolvable` |
-| `source_type` ↔ `source_ref` | the ref's shape must match the type: a `louis_message` needs a `phonemsg-` id (or another channel id Louis uses); an `email` needs a Gmail id; a ref that names an agent's memory must be `agent_observation` | **`source_matches_type`** (new, fixes N5) |
+| `source_type` ↔ `source_ref` | the ref's shape must match the type: a `louis_message` needs a `phonemsg-` id (or another channel id Louis uses); an `email` needs a Gmail id (`gmail:<id>`, or `gmail:<account>/<id>` from a pulled mailbox) or a pulled `mail:` ref; a `document` may cite a pulled text, Discord, Granola, Slack, Drive or Zoom ref; a ref that names an agent's memory must be `agent_observation` | **`source_matches_type`** (new, fixes N5) |
 | author | stamped by the write path from the agent's identity, never typed | (0.5) |
 
 `agent_observation` is allowed on purpose (see 6.1). It is forced to `verification: self_reported`, ranks *below* every other source in conflict resolution, and is shown as such in views.

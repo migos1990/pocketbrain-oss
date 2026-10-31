@@ -39,13 +39,15 @@ export function registerLouisMessages(root: string, ids: string[], note?: string
   return add.length;
 }
 
-// Exact source refs (Gmail, calendar) confirmed to exist by a connector inside the wall,
-// one JSON line each: {"ref":"gmail:…","ok":true,"at":"…"} (eval gap G2). Written by upkeep's
-// live sources or `pocketbrain refs --load`. With no file, refs are checked for shape only.
-export function checkedRefs(root: string): Map<string, boolean> | undefined {
+// Exact source refs (Gmail, calendar) the hub read at their source, one JSON line each:
+// {"ref":"gmail:…","ok":true,"at":"…"} (eval gap G2). Written by the hub whenever it reads an
+// item (a source pull, verify_source, a recheck: src/pull.ts) and by `pocketbrain refs --load`.
+// Always on (outside review 2026-10-25, G417): with no file nothing is checked yet, so an exact
+// ref the hub never read can't replace a live value; before, no file meant no check at all.
+export function checkedRefs(root: string): Map<string, boolean> {
   const f = join(root, "log", "refs-checked.jsonl");
-  if (!existsSync(f)) return undefined;
   const m = new Map<string, boolean>();
+  if (!existsSync(f)) return m;
   for (const o of readJsonl<{ ref: string; ok?: boolean }>(f)) m.set(o.ref, !!o.ok);
   return m;
 }

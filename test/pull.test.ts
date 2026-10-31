@@ -25,9 +25,8 @@ const EXTRACT = (p: string) => [
   ...(/Grade the midterm/.test(p) ? [{ entity: "Course A", type: "project", attribute: "next_step", value: "Grade the midterm", quote: "Grade the midterm" }] : []),
   ...(/exam room B-201/.test(p) ? [{ entity: "Course A", type: "project", attribute: "next_step", value: "Book the exam room B-201", quote: "book the exam room B-201" }] : []),
 ];
-const original = captureModel;
 beforeAll(() => useCaptureModel(() => makeModel({ provider: "fake", model: "fake-1" }, { fake: (r: ModelRequest) => { sent.push(r.prompt); return JSON.stringify({ facts: EXTRACT(r.prompt) }); } })));
-afterAll(() => useCaptureModel((root) => original(root)));
+afterAll(() => useCaptureModel());
 
 const sh = (cwd: string, ...cmd: string[]) => Bun.spawnSync(cmd, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: "x", GIT_AUTHOR_EMAIL: "x@x", GIT_COMMITTER_NAME: "x", GIT_COMMITTER_EMAIL: "x@x" } }).stdout.toString().trim();
 const nextStep = (root: string) => loadBrain(root).find((n) => n.fm.id === "projects/course-a")!.fm.facts!.next_step as FactRecord;
@@ -270,6 +269,9 @@ test("several mailboxes are separate sources: refs name the account, and verify_
   const p = YAML.parse(readFileSync(join(root, "inbox", proposals(root)[0]), "utf8"));
   expect(p.request.sources).toEqual(["mail:work/x9@school.example"]);
   expect((await verifySource(root, "gardener", "mail:work/x9@school.example", "book the exam room B-201")).result).toBe("match");
+  // G375: the answer carries the item's own day, so a newer value it quotes can be proposed with
+  // that as_of (remember refuses a value with none).
+  expect((await verifySource(root, "gardener", "mail:work/x9@school.example", "book the exam room B-301")).dated).toBe("2026-10-12");
   expect((await verifySource(root, "gardener", "gmail:work/a1b2c3d4e5f60718", "Grade the midterm")).result).toBe("unreachable"); // that id is in the personal account
   expect(readFileSync(join(root, "log", "sources", "personal.json"), "utf8")).toContain("a1b2c3d4e5f60718"); // a cursor per mailbox
 });
@@ -331,6 +333,43 @@ test("mail forwarded from another account into Gmail keeps that account's name, 
   expect(school.forwarded_from).toBe("school");
   expect(school.min_sensitivity).toBe("private");
   expect(recs.find((r) => r.source_ref === "gmail:primary/b1b2c3d4e5f60719").forwarded_from).toBeUndefined();
+});
+
+// G364: school mail that Gmail fetched (POP, send-as) or that a correspondent wrote to the owner's
+// school address carries no Delivered-To for that domain: only To or Cc names it. A rule named only
+// there can still route it and raise its floor, never lower one; account and ref stay the source's.
+test("G364: mail naming a forwarded rule's domain only in To or Cc lands in that rule's area at its floor; it only tightens", async () => {
+  const cfg = { kind: "gmail", account: "primary", area: "personal", forwarded: [{ to: "@work.example", account: "work", area: "work" }, { to: "@school.example", account: "school", area: "school", min_sensitivity: "private" }] } as SourceConfig;
+  const g = (headers: [string, string][]) => toItem("gmail", { id: "a1", labelIds: ["INBOX"], payload: { headers: headers.map(([name, value]) => ({ name, value })) }, text: "x" })!;
+  let r = itemFloor(cfg, g([["To", "Robin <robin@school.example>"], ["Delivered-To", "robin@primary.example"]]));
+  expect(r.fwd).toBeUndefined();
+  expect(r.named?.account).toBe("school");
+  expect(r.area).toBe("school");
+  expect(r.floor).toBe("private");
+  r = itemFloor(cfg, g([["To", "robin@primary.example"], ["Cc", "team@work.example"]]));
+  expect(r.area).toBe("work");
+  // Named in both: the highest floor wins, as for delivery addresses.
+  r = itemFloor(cfg, g([["Cc", "team@work.example, dean@school.example"]]));
+  expect([r.area, r.floor]).toEqual(["school", "private"]);
+  // A delivery address still decides the rule; a named rule only adds its floor.
+  r = itemFloor(cfg, g([["Delivered-To", "robin@work.example"], ["Cc", "dean@school.example"]]));
+  expect([r.fwd?.account, r.area, r.floor]).toEqual(["work", "work", "private"]);
+  // Never lower: a private source stays private whatever a sender names; look-alikes match nothing.
+  expect(itemFloor({ ...cfg, min_sensitivity: "private" }, g([["To", "x@work.example"]])).floor).toBe("private");
+  expect(itemFloor(cfg, g([["To", "x@school.example.evil.test"]])).area).toBe("personal");
+  // In a pull: the capture keeps the source's ref, says which rule named it, and carries the floor.
+  sent = [];
+  const mail = (id: string, headers: [string, string][], text: string) => ({ id, labelIds: ["INBOX"], internalDate: "1760300000000", payload: { headers: headers.map(([name, value]) => ({ name, value })) }, text });
+  const root = setup({ primary: { kind: "gmail", account: "primary", fixture: "m.json", area: "personal", forwarded: [{ to: "@school.example", account: "school", area: "work", min_sensitivity: "private" }] } }, { "m.json": [
+    mail("c1b2c3d4e5f60718", [["To", "robin@school.example"], ["Delivered-To", "robin@primary.example"]], "Student question: can we book the exam room B-201 for the review?"),
+  ] });
+  await pullSource(root, "primary");
+  const recs = readdirSync(join(root, "inbox", "captures")).map((f) => YAML.parse(readFileSync(join(root, "inbox", "captures", f), "utf8").split("---")[1]));
+  const rec = recs.find((x) => x.source_ref === "gmail:primary/c1b2c3d4e5f60718");
+  expect(rec.addressed_to).toBe("school");
+  expect(rec.forwarded_from).toBeUndefined();
+  expect(rec.min_sensitivity).toBe("private");
+  expect(rec.area).toBe("work");
 });
 
 // ---------- red team 2026-10-15 (evals/gaps.ts G36, G37, G40, G42, G45) ----------
@@ -473,4 +512,39 @@ test("G90: checkClaim checks the whole sentence before cutting it, and caps the 
   expect(c.withheld).toBeTruthy();
   const long = checkClaim(pad.repeat(3), "Jane Roy program director");
   expect(long.quote!.length).toBeLessThanOrEqual(200);
+});
+
+// G194: the quote was redacted line by line, so a PEM body line (no BEGIN line beside it) passed.
+test("G194: a verify_source quote never carries a line from inside a BEGIN/END block", () => {
+  const body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7" + "x9Qk2LmZp8Rt";
+  const pem = (kind: string) => ["Hi, here is the deploy key for the course site.", `-----BEGIN ${kind}-----`, body, `-----END ${kind}-----`, "Thanks"].join("\n");
+  const claim = "MII EvQ IBA DAN Bgk qhk iG9 w0B AQE FAA SCB Kcw ggS jAg EAA oIB AQC";
+  for (const kind of ["PRIVATE " + "KEY", "OPENSSH PRIVATE " + "KEY", "PGP PRIVATE KEY " + "BLOCK", "CERTIFICATE"]) {
+    const r = checkClaim(pem(kind), claim);
+    expect([kind, r.quote ?? ""]).not.toEqual([kind, expect.stringContaining(body.slice(0, 20))]);
+    expect([kind, r.quote ?? ""]).not.toEqual([kind, expect.stringContaining(body.slice(-12))]);
+  }
+  // An unterminated block counts to the end of the text.
+  const open = checkClaim(["See below.", "-----BEGIN PRIVATE " + "KEY-----", body].join("\n"), claim);
+  expect(open.quote ?? "").not.toContain(body.slice(0, 20));
+  // The text around the block still quotes.
+  expect(checkClaim(pem("PRIVATE " + "KEY"), "deploy key for the course site").quote).toBe("Hi, here is the deploy key for the course site.");
+});
+
+// Gardener night 2026-10-27 (Mac): 3 of 7 verify_source calls were "outside the allowlist": mail
+// the hub had read under where: [INBOX], archived since. A message the hub read and captured from
+// that source may be read again whatever its labels are now; one it only skipped as outside the
+// allowlist (marked seen, never read) stays closed (G457).
+test("verify_source re-reads a message the hub captured before it was archived; a never-read one stays closed", async () => {
+  const A = "a1b2c3d4e5f60719", B = "b1b2c3d4e5f60719";
+  const mail = (id: string, labels: string[], text: string) => ({ id, labelIds: labels, internalDate: "1760300000000", payload: { headers: [{ name: "From", value: "dean@school.example" }, { name: "Subject", value: "Exam" }] }, text });
+  const TEXT = "Please book the exam room B-201 for the intra exam next week, thanks a lot for your help.";
+  const root = setup({ gmail: { kind: "gmail", where: ["INBOX"], fixture: "mail.json" } }, { "mail.json": [mail(A, ["INBOX"], TEXT), mail(B, ["Label_other"], TEXT)] });
+  await pullSource(root, "gmail");
+  writeFileSync(join(root, "mail.json"), JSON.stringify([mail(A, [], TEXT), mail(B, ["Label_other"], TEXT)]));
+  cite(root, `gmail:${A}`); cite(root, `gmail:${B}`);
+  expect((await verifySource(root, "gardener", `gmail:${A}`, "book the exam room B-201")).result).toBe("match");
+  const b = await verifySource(root, "gardener", `gmail:${B}`, "book the exam room B-201");
+  expect(b.result).toBe("unreachable");
+  expect(b.why).toContain("outside the allowlist");
 });

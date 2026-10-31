@@ -4,6 +4,8 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, existsSync, ftruncateSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { requestId } from "./reqid";
+import { redactSecrets, hardSecretIn } from "./checks";
 
 export const sha256 = (s: string | Uint8Array) => createHash("sha256").update(s).digest("hex");
 
@@ -111,7 +113,14 @@ export function endTornLine(file: string): boolean {
 export function appendJsonl(file: string, entry: unknown) {
   mkdirSync(dirname(file), { recursive: true });
   endTornLine(file);
-  appendFileSync(file, JSON.stringify(entry) + "\n");
+  appendFileSync(file, JSON.stringify(withRequestId(entry)) + "\n");
+}
+
+// A log line written inside a hub request names it (src/reqid.ts), for `pocketbrain trace`.
+export function withRequestId<T>(entry: T): T {
+  const id = requestId();
+  if (!id || !entry || typeof entry !== "object" || Array.isArray(entry) || "request_id" in entry) return entry;
+  return { ...entry, request_id: id };
 }
 
 // A source call that never answers must not hold up the hub: pulls run in the same queue as
@@ -126,8 +135,30 @@ export async function timed(http: (url: string, init?: RequestInit) => Promise<R
 }
 
 // log/alerts.jsonl: what the digest, dashboard and text channel surface as "needs you".
+// log/ is committed, and the backup refuses a plaintext secret on main (G201), so every string an
+// alert carries is redacted here, whoever wrote it (G280: a reason quoting the sender's text). If
+// the whole line still holds a hard secret (a key split across two fields), every field but the
+// check's name, the agent, and from/to when they are agent names (so a blanked relay or handoff
+// alert still says who, G314) is blanked; keys are redacted too, at any depth. If even that line
+// held one, only the check and agent are kept. Every writer of log/alerts.jsonl goes through here
+// (G312; test/cli-token-audit3.test.ts greps src/ for any other).
+const ALERT_REMOVED = "[removed: secret-shaped]";
+const AGENT_NAME = /^[a-z][a-z0-9-]{1,30}$/;
+const keepAsIs = (k: string, v: unknown) => typeof v === "string" && !hardSecretIn(v) && (k === "check" || k === "agent" || ((k === "from" || k === "to") && AGENT_NAME.test(v)));
+function scrubDeep(v: unknown, blank: boolean): unknown {
+  if (typeof v === "string") return blank ? ALERT_REMOVED : redactSecrets(v).text;
+  if (Array.isArray(v)) return v.map((x) => scrubDeep(x, blank));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x], i) => [blank ? `k${i}` : redactSecrets(k).text, scrubDeep(x, blank)]));
+  return v;
+}
+const strings = (v: unknown): string[] => typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(strings) : v && typeof v === "object" ? Object.entries(v).flatMap(([k, x]) => [k, ...strings(x)]) : [];
+const holdsHard = (e: Record<string, unknown>) => !!(hardSecretIn(JSON.stringify(e)) || hardSecretIn(strings(e).join("\n")));
 export function alert(root: string, entry: Record<string, unknown>) {
-  appendJsonl(join(root, "log", "alerts.jsonl"), { at: new Date().toISOString(), ...entry });
+  const clean = (blank: boolean) => Object.fromEntries(Object.entries(entry).map(([k, v]) => [redactSecrets(k).text, keepAsIs(k, v) ? v : scrubDeep(v, blank)]));
+  let e = clean(false);
+  if (holdsHard(e)) e = clean(true);
+  if (holdsHard(e)) e = Object.fromEntries(Object.entries(entry).filter(([k, v]) => (k === "check" || k === "agent") && keepAsIs(k, v)).concat([["detail", ALERT_REMOVED]]));
+  appendJsonl(join(root, "log", "alerts.jsonl"), { at: new Date().toISOString(), ...e });
 }
 
 // A request body as text, read as it streams and stopped at `max` bytes: undefined when it is
@@ -147,3 +178,14 @@ export async function readCapped(req: Request, max: number): Promise<string | un
   }
   return Buffer.concat(parts).toString("utf8");
 }
+
+// The code sha this checkout is at (git rev-parse HEAD of the app folder), "" outside git.
+export function codeVersion(dir = join(import.meta.dir, "..")): string {
+  const r = Bun.spawnSync(["git", "-C", dir, "rev-parse", "HEAD"], { stdout: "pipe", stderr: "pipe" });
+  return r.exitCode === 0 ? r.stdout.toString().trim() : "";
+}
+// The code sha this process started on: taken once, when the hub starts serving (serve() in
+// server.ts), so a checkout made after the start (a deploy that hasn't restarted yet) never changes
+// it. /health answers it and scripts/deploy.ts go compares it with the sha it was asked for.
+let startedOn: string | undefined;
+export const codeAtStart = (): string => (startedOn ??= codeVersion());

@@ -12,20 +12,37 @@
 // It protects against logic bugs in the read path, not against code running on the machine.
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import YAML from "yaml";
 import type { Fact, FactRecord, Note } from "./brain";
-import { loadBrain, saveNote, isDisputed, isList } from "./brain";
+import { loadBrain, saveNote, isDisputed, isList, CONTENT_DIRS } from "./brain";
 import { loadRules, tierOf } from "./rules";
-import { carve, grantFor, visibleFacts, shownUpdated, type CarveResult } from "./carve";
-import { redactLinks, scrubLeaves, needlesOf } from "./view";
+import { carve, grantFor, linkFor, visibleFacts, shownUpdated, type CarveResult } from "./carve";
+import { redactLinks, agentFact, needlesOf, guidanceFor, pageSummary } from "./view";
 import { carriedForms, type Needle } from "./match";
 import { escapeRe, textKeys, tokenKey } from "./util";
 import { headCommit } from "./git";
 import { standingForCell } from "./standing";
 import { withoutTokenRole, withTokenRole } from "./tokenrole";
 
-export interface CellInfo { agent: string; brain_commit: string; rules_commit: string; rules_hash?: string; slices: string[]; not_shared: string[]; notes: number }
+export interface CellInfo { agent: string; brain_commit: string; rules_commit: string; rules_hash?: string; code?: string; slices: string[]; not_shared: string[]; notes: number }
+
+// The code that builds cells, as a hash of every source file and the dependency lock: cells are kept on disk across
+// restarts (startCells), and one built by other code (an upgrade that changed carve, view or the
+// scrub) is rebuilt before it is served, never trusted.
+let codeHash: string | undefined;
+function cellCode(): string {
+  if (!codeHash) {
+    const h = createHash("sha256");
+    const dir = import.meta.dir;
+    const walk = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true }).sort((x, y) => x.name.localeCompare(y.name))) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (e.name.endsWith(".ts")) h.update(relative(dir, p)).update("\0").update(readFileSync(p)); } };
+    walk(dir);
+    // The dependencies too (the YAML parser shapes every note a cell holds).
+    for (const f of ["package.json", "bun.lock"]) { const p = join(dir, "..", f); if (existsSync(p)) h.update(f).update("\0").update(readFileSync(p)); }
+    codeHash = h.digest("hex").slice(0, 16);
+  }
+  return codeHash;
+}
 
 // What rules/ holds on disk, committed or not. The plain read path loads rules/ from disk on every
 // request, so an owner's uncommitted edit (a new exclude, a pause) applies at once; a cell built
@@ -52,20 +69,6 @@ let enabled = process.env.PB_CELLS === "1";
 export function useCells(on: boolean) { enabled = on; }
 export function cellsOn(): boolean { return enabled; }
 
-function cellRecord(r: FactRecord, agent: string, res: CarveResult): FactRecord {
-  const out = scrubLeaves(r, res) as FactRecord;
-  // Who wrote a fact, and who else may see it, name other agents; a cell shouldn't know they exist.
-  delete (out as { by?: string }).by;
-  if (out.share_with) out.share_with = [agent];
-  return out;
-}
-
-function cellFact(f: Fact, agent: string, res: CarveResult): Fact {
-  if (isList(f)) return { ...f, items: f.items.map((r) => cellRecord(r, agent, res)) };
-  if (isDisputed(f)) return { ...f, candidates: f.candidates.map((r) => cellRecord(r, agent, res)) };
-  return cellRecord(f as FactRecord, agent, res);
-}
-
 // Build one agent's cell from the full brain. Written to a temp dir and swapped in, so a read
 // never sees a half-built cell.
 export function buildCell(root: string, agent: string, notes?: Note[], slices?: string[]): CellInfo {
@@ -78,7 +81,8 @@ export function buildCell(root: string, agent: string, notes?: Note[], slices?: 
 // private like any read by that token, and kept apart from the agent's own cell (the hub reads
 // that one and caps per request). The edge seals it under its own key, wrapped for reader tokens
 // only, so a reader token's holder can decrypt nothing above personal.
-export const readerCellDir = (root: string, agent: string) => join(cellsDir(root), ".edge-reader", agent);
+const READER_DIR = ".edge-reader";
+export const readerCellDir = (root: string, agent: string) => join(cellsDir(root), READER_DIR, agent);
 export function buildReaderCell(root: string, agent: string): { dir: string; info: CellInfo } {
   const dir = readerCellDir(root, agent);
   mkdirSync(dirname(dir), { recursive: true });
@@ -90,7 +94,7 @@ export function buildReaderCell(root: string, agent: string): { dir: string; inf
 // (Deps) and, per note, its source and the file written. The next build renders again only the
 // notes a change can reach (affectedBy): a full build of a 10k-note brain takes seconds, and
 // the first read after every write waited for it (docs/perf.md).
-interface Deps { grant: string; values: string[]; needles: Map<string, Needle>; visible: Map<string, boolean>; hidden: Map<string, string> }
+interface Deps { grant: string; values: string[]; needles: Map<string, Needle>; visible: Map<string, boolean>; hidden: Map<string, string>; mergedTo: Map<string, string> }
 const built = new Map<string, { deps: Deps; notes: Map<string, Rendered> }>();
 // A note's cell file: its source, path, the note it came from and whether the file holds
 // "[withheld]" (the exact pass changed it, so a needle can find what that left).
@@ -105,6 +109,7 @@ function depsOf(res: CarveResult): Deps {
     needles: new Map(needlesOf(res).map((n) => [JSON.stringify([n.value, n.squashed, n.digits ?? "", n.parts]), n])),
     visible: new Map([...res.visible].map(([id, v]) => [id, v.body])),
     hidden: new Map([...hidden].map(([id, keys]) => [id, keys.sort().join("\n")])),
+    mergedTo: new Map(res.mergedTo ?? []),
   };
 }
 
@@ -117,7 +122,7 @@ function depsOf(res: CarveResult): Deps {
 // "[withheld]" (G132). Anything that could reach a note without passing those tests
 // (a grant change, a carved value or changed needle holding "withheld", "redacted", "[" or
 // "]" in any case, carved values that changed order) rebuilds them all.
-function affectedBy(last: Deps, next: Deps, res: CarveResult): ((id: string, note: Note, withheld: boolean) => boolean) | undefined {
+function affectedBy(last: Deps, next: Deps, res: CarveResult, seen?: WeakMap<Note, Forms>): ((id: string, note: Note, withheld: boolean) => boolean) | undefined {
   if (last.grant !== next.grant) return undefined;
   const lastSet = new Set(last.values), nextSet = new Set(next.values);
   const values = [...next.values.filter((v) => !lastSet.has(v)), ...last.values.filter((v) => !nextSet.has(v))];
@@ -130,6 +135,12 @@ function affectedBy(last: Deps, next: Deps, res: CarveResult): ((id: string, not
   for (const id of last.visible.keys()) if (!next.visible.has(id)) ids.add(id);
   for (const id of new Set([...last.hidden.keys(), ...next.hidden.keys()])) if (last.hidden.get(id) !== next.hidden.get(id)) ids.add(id);
   const linked = [...ids].filter((id) => !res.visible.has(id) || !last.visible.has(id));
+  // A link to a merged note shows the note it became while that one is in view (linkFor): a note
+  // naming a merged note is reached when its target changed or came into or left the slice.
+  for (const p of new Set([...last.mergedTo.keys(), ...next.mergedTo.keys()])) {
+    const a = last.mergedTo.get(p), b = next.mergedTo.get(p);
+    if (a !== b || (a && linked.includes(a)) || (b && linked.includes(b))) linked.push(p);
+  }
   const keys = values.map(tokenKey);
   if (!values.length && !needles.length && !linked.length) return (id) => ids.has(id);
   // A value scrubCarved can't look up by its first words (it starts with a non-ASCII letter or a
@@ -140,7 +151,7 @@ function affectedBy(last: Deps, next: Deps, res: CarveResult): ((id: string, not
     // findCarried reads a line after the exact pass: "[withheld]" can split an encoded run or
     // let a line decode, so a needle can find what the note's own text doesn't show.
     if (needles.length && withheld) return true;
-    const f = formsOf(note);
+    const f = formsOf(note, seen);
     if (linked.some((l) => f.text.includes(l))) return true;
     if (keys.some((k) => k !== undefined && f.keys.has(k))) return true;
     if (unkeyed.some((re) => re.test(f.text))) return true;
@@ -154,8 +165,8 @@ function affectedBy(last: Deps, next: Deps, res: CarveResult): ((id: string, not
 // it can only say a note may be reached, never miss one.
 interface Forms { text: string; keys: Set<string>; squashed: string; digits: Set<string> }
 const forms = new WeakMap<Note, Forms>();
-function formsOf(note: Note): Forms {
-  const hit = forms.get(note);
+function formsOf(note: Note, seen?: WeakMap<Note, Forms>): Forms {
+  const hit = forms.get(note) ?? seen?.get(note);
   if (hit) return hit;
   const strings: string[] = [note.body];
   const walk = (v: unknown) => { if (typeof v === "string") strings.push(v); else if (typeof v === "number") strings.push(String(v)); else if (v && typeof v === "object") for (const x of Object.values(v)) walk(x); };
@@ -167,6 +178,7 @@ function formsOf(note: Note): Forms {
   }
   const f = { text: strings.join("\n"), keys, squashed: sq.join("|"), digits };
   if (Object.isFrozen(note)) forms.set(note, f);
+  else seen?.set(note, f);
   return f;
 }
 // Each build in this process gets a number, so a read's cached carve (snapshot in core.ts) never
@@ -192,15 +204,33 @@ export function cellChangesSince(dir: string, from: number): string[] | undefine
   return at === cellGeneration(dir) ? [...paths] : undefined;
 }
 
+// Which visible notes can read differently under carve `b` than under `a`, for notes whose own
+// source is the same in both (the merge backstop, merge.ts): the test in-place cell updates rely on,
+// with every note counted as holding "[withheld]" so a changed needle reaches all it could.
+// `seen` keeps each note's forms across calls for notes that aren't frozen (one merge, many viewers).
+export function mayReadDifferently(a: CarveResult, b: CarveResult, seen?: WeakMap<Note, unknown>): (id: string, note: Note) => boolean {
+  const f = affectedBy(depsOf(a), depsOf(b), b, seen as WeakMap<Note, Forms> | undefined);
+  return f ? (id, note) => f(id, note, true) : () => true;
+}
+
+// A note's cell file as text, for comparing what an agent would read (the merge backstop, merge.ts).
+export function cellText(v: CarveResult["visible"] extends Map<string, infer V> ? V : never, agent: string, res: CarveResult): string {
+  const n = cellNote(v, agent, res);
+  return JSON.stringify(n.fm) + "\0" + n.body;
+}
+
 function cellNote(v: CarveResult["visible"] extends Map<string, infer V> ? V : never, agent: string, res: CarveResult): Note {
-  const facts = Object.fromEntries(visibleFacts(v, res).map(([attr, f]) => [attr, cellFact(f, agent, res)]));
+  const facts = Object.fromEntries(visibleFacts(v, res).map(([attr, f]) => [attr, agentFact(f, agent, res)]));
   const fm = { ...v.note.fm, facts: Object.keys(facts).length ? facts : undefined, updated: shownUpdated(v, res), by: undefined, history: undefined, legacy: undefined } as unknown as Note["fm"];
   // Decision links point only at notes in the slice; the rest become "redacted".
   const f = fm as unknown as Record<string, unknown>;
   for (const k of ["superseded_by", "supersedes", "merged_into"]) if (f[k] !== undefined) {
-    const ids = [f[k]].flat().map(String).map((id) => (res.visible.has(id) ? id : "redacted"));
+    const ids = [f[k]].flat().map(String).map((id) => linkFor(id, res) ?? "redacted");
     f[k] = Array.isArray(f[k]) ? ids : ids[0];
   }
+  // The wiki fields (src/wiki.ts): the summary is text like the body, a parent outside the slice is dropped.
+  if (f.summary !== undefined) f.summary = pageSummary(v, res);
+  if (f.parent !== undefined && !(typeof f.parent === "string" && res.visible.has(f.parent))) f.parent = undefined;
   // Links to notes outside the slice are redacted here, so the cell never holds their ids.
   return { fm, body: v.body ? redactLinks(v.note.body, res) : "", path: v.note.path };
 }
@@ -227,9 +257,9 @@ function build(root: string, agent: string, notes: Note[], slices?: string[], di
   if (!last) changes.delete(dir);
   // The cell still on disk and a change that reaches only some notes: update it in place. Reads
   // run in this process, which is busy here, so none sees it half-updated; a crash mid-update
-  // leaves cell.json at the old commit, so the next read (or the next start, which rebuilds
-  // every cell) builds it again.
-  const affected = last && existsSync(join(dir, "cell.json")) ? affectedBy(last.deps, deps, res) : undefined;
+  // leaves cell.json at the old commit, so the next read builds it again.
+  // Only a cell this code built is updated in place; any other is built again from nothing.
+  const affected = last && infoAt(dir)?.code === cellCode() ? affectedBy(last.deps, deps, res) : undefined;
   const inPlace = !!affected;
   const target = inPlace ? dir : `${dir}.building`;
   const rendered = new Map<string, Rendered>();
@@ -253,7 +283,10 @@ function build(root: string, agent: string, notes: Note[], slices?: string[], di
 
   const policy = {
     ...(rules.policy.owner ? { owner: rules.policy.owner } : {}),
-    agents: { [agent]: { tier: a.tier, slices: ["all"] } },
+    // The owner's context budget (src/context.ts), everyone's and this agent's own: reads served
+    // from the cell take their rules from here.
+    ...(rules.policy.context_budget ? { context_budget: rules.policy.context_budget } : {}),
+    agents: { [agent]: { tier: a.tier, slices: ["all"], ...(a.context_budget ? { context_budget: a.context_budget } : {}) } },
     tiers: { [a.tier]: { max_sensitivity: res.grant.ceiling, writes: tier.writes } },
     areas: {},
   };
@@ -261,10 +294,10 @@ function build(root: string, agent: string, notes: Note[], slices?: string[], di
   const put = (f: string, text: string) => { if (!inPlace || !existsSync(f) || readFileSync(f, "utf8") !== text) writeFileSync(f, text); };
   put(join(target, "rules", "policy.yaml"), YAML.stringify(policy));
   put(join(target, "rules", "checks.yaml"), YAML.stringify({ checks: [], types: rules.checks.types ?? {} }));
-  put(join(target, "rules", "RULES.md"), rules.guidance);
+  put(join(target, "rules", "RULES.md"), guidanceFor(rules, res));
   // Standing only for people whose standing this agent sees, never the owner's own addresses.
   put(join(target, "rules", "standing.yaml"), YAML.stringify(standingForCell(res, rules)));
-  const info: CellInfo = { agent, brain_commit: headCommit(root), rules_commit: headCommit(root, "rules"), rules_hash: rulesAt, slices: res.grant.slices, not_shared: res.notShared, notes: res.visible.size };
+  const info: CellInfo = { agent, brain_commit: headCommit(root), rules_commit: headCommit(root, "rules"), rules_hash: rulesAt, code: cellCode(), slices: res.grant.slices, not_shared: res.notShared, notes: res.visible.size };
   writeFileSync(join(target, "cell.json"), JSON.stringify(info, null, 2) + "\n");
 
   if (!inPlace) {
@@ -288,9 +321,29 @@ export function buildCells(root: string): CellInfo[] {
   return agents.map((agent) => buildCell(root, agent, notes));
 }
 
+// At start: a cell for an agent no longer in the policy goes; the others stay on disk and each is
+// checked (brain, rules, slices, code) and brought up to date on its agent's first read, so a
+// restart answers at once instead of rebuilding every cell first (backlog row 217).
+export function startCells(root: string): void {
+  const rules = loadRules(root);
+  if (!existsSync(cellsDir(root))) return;
+  // A cell is current by commit; an uncommitted note edit (the owner raising a note by hand, then
+  // restarting) isn't in any commit, so with one pending no kept cell is trusted.
+  const dirty = Bun.spawnSync(["git", "status", "--porcelain", "--", ...CONTENT_DIRS], { cwd: root }).stdout.toString().trim();
+  const keep = new Set(dirty ? [] : Object.entries(rules.policy.agents).filter(([, a]) => !a.inside_wall).map(([n]) => n));
+  // The sealed edge's reader cells (readerCellDir) are kept and pruned the same way.
+  const prune = (dir: string) => { for (const e of readdirSync(dir, { withFileTypes: true })) if (e.isDirectory() && !keep.has(e.name) && !(dir === cellsDir(root) && e.name === READER_DIR)) rmSync(join(dir, e.name), { recursive: true, force: true }); };
+  prune(cellsDir(root));
+  if (existsSync(join(cellsDir(root), READER_DIR))) prune(join(cellsDir(root), READER_DIR));
+}
+
 export function cellInfo(root: string, agent: string): CellInfo | undefined {
-  const f = join(cellDir(root, agent), "cell.json");
-  return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : undefined;
+  return infoAt(cellDir(root, agent));
+}
+function infoAt(dir: string): CellInfo | undefined {
+  const f = join(dir, "cell.json");
+  // A torn file (a crash mid-write) is no cell: the next read builds it again.
+  try { return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : undefined; } catch { return undefined; }
 }
 
 // The cell to read from, rebuilt first if the brain moved on since it was built (an upkeep run,
@@ -298,6 +351,6 @@ export function cellInfo(root: string, agent: string): CellInfo | undefined {
 export function freshCell(root: string, agent: string, slices?: string[]): { dir: string; info: CellInfo } {
   let info = cellInfo(root, agent);
   const same = !slices || (info && info.slices.length === slices.length && info.slices.every((s, i) => s === slices[i]));
-  if (!info || info.brain_commit !== headCommit(root) || info.rules_hash !== rulesHash(root) || !same) info = buildCell(root, agent, undefined, slices);
+  if (!info || info.brain_commit !== headCommit(root) || info.rules_hash !== rulesHash(root) || info.code !== cellCode() || !same) info = buildCell(root, agent, undefined, slices);
   return { dir: cellDir(root, agent), info };
 }

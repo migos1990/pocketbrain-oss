@@ -1,101 +1,838 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
   - heading "Who sees what" [level=1]
   - paragraph: "Every note against every assistant, from the same rules that answer them. the whole note · part of it, some facts cut · outside its slice: it can only ask you for one read, and you decide each time · empty: never offered, it doesn't exist for that assistant. Click an assistant to see the brain as it does. Updates by itself."
   - table:
     - rowgroup:
-      - row "Note planner no key gardener no key helper no key":
+      - row "Note Claude ChatGPT Gemini gardener no key":
         - cell "Note"
-        - cell "planner no key":
-          - link "planner":
-            - /url: /map?as=planner
-          - text: no key
+        - cell "Claude":
+          - link "Claude":
+            - /url: /map?as=claude
+        - cell "ChatGPT":
+          - link "ChatGPT":
+            - /url: /map?as=chatgpt
+        - cell "Gemini":
+          - link "Gemini":
+            - /url: /map?as=gemini
         - cell "gardener no key":
           - link "gardener":
             - /url: /map?as=gardener
           - text: no key
-        - cell "helper no key":
-          - link "helper":
-            - /url: /map?as=helper
-          - text: no key
     - rowgroup:
       - row "decisions":
         - cell "decisions"
-      - row "Pick a bank private":
-        - cell "Pick a bank private":
-          - link "Pick a bank":
-            - /url: /note/decisions/2026-09-01-pick-bank
-          - text: private
+      - row "Atelier Boréal for the kitchen sees the whole note sees the whole note":
+        - cell "Atelier Boréal for the kitchen":
+          - link "Atelier Boréal for the kitchen":
+            - /url: /p/decisions/2026-08-30-kitchen-contractor
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
         - cell
+      - row "Atlas beta scope sees the whole note sees the whole note sees the whole note":
+        - cell "Atlas beta scope":
+          - link "Atlas beta scope":
+            - /url: /p/decisions/2026-09-08-atlas-beta-scope
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Final projects in teams of four sees the whole note sees the whole note":
+        - cell "Final projects in teams of four":
+          - link "Final projects in teams of four":
+            - /url: /p/decisions/2026-09-10-final-project-format
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Hire a senior designer, not two juniors sees the whole note sees the whole note sees the whole note":
+        - cell "Hire a senior designer, not two juniors":
+          - link "Hire a senior designer, not two juniors":
+            - /url: /p/decisions/2026-09-15-hire-senior-designer
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Mom moves in December sees the whole note sees the whole note":
+        - cell "Mom moves in December":
+          - link "Mom moves in December":
+            - /url: /p/decisions/2026-09-28-mom-moves-in-december
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Northgate for the pricing page sees the whole note sees the whole note sees the whole note":
+        - cell "Northgate for the pricing page":
+          - link "Northgate for the pricing page":
+            - /url: /p/decisions/2026-09-22-pick-northgate
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Red River in April sees the whole note sees the whole note":
+        - cell "Red River in April":
+          - link "Red River in April":
+            - /url: /p/decisions/2026-09-25-red-river-dates
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Three guest speakers this term sees the whole note sees the whole note":
+        - cell "Three guest speakers this term":
+          - link "Three guest speakers this term":
+            - /url: /p/decisions/2026-09-24-three-guest-speakers
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Three-month Pinecrest pilot sees the whole note sees the whole note sees the whole note":
+        - cell "Three-month Pinecrest pilot":
+          - link "Three-month Pinecrest pilot":
+            - /url: /p/decisions/2026-09-29-pinecrest-pilot-length
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Weekly Atlas review on Wednesdays sees the whole note sees the whole note sees the whole note":
+        - cell "Weekly Atlas review on Wednesdays":
+          - link "Weekly Atlas review on Wednesdays":
+            - /url: /p/decisions/2026-10-01-weekly-team-review
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
       - row "money":
         - cell "money"
-      - row "Main bank private":
-        - cell "Main bank private":
-          - link "Main bank":
-            - /url: /note/money/main-bank
+      - row "Household taxes private sees the whole note":
+        - cell "Household taxes private":
+          - link "Household taxes":
+            - /url: /p/money/household-taxes
           - text: private
+        - cell "sees the whole note"
         - cell
         - cell
+        - cell
+      - row "Kitchen budget private sees the whole note":
+        - cell "Kitchen budget private":
+          - link "Kitchen budget":
+            - /url: /p/money/kitchen-budget
+          - text: private
+        - cell "sees the whole note"
+        - cell
+        - cell
+        - cell
+      - row "orgs":
+        - cell "orgs"
+      - 'row "Atelier Boréal sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Atelier Boréal":
+          - link "Atelier Boréal":
+            - /url: /p/orgs/atelier-boreal
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Fernwood Climbing Gym sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Fernwood Climbing Gym":
+          - link "Fernwood Climbing Gym":
+            - /url: /p/orgs/fernwood-climbing
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Fieldnote sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Fieldnote":
+          - link "Fieldnote":
+            - /url: /p/orgs/fieldnote
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Gaspé Cottages sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Gaspé Cottages":
+          - link "Gaspé Cottages":
+            - /url: /p/orgs/gaspe-cottages
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Harbourline Software sees the whole note sees the whole note sees the whole note":
+        - cell "Harbourline Software":
+          - link "Harbourline Software":
+            - /url: /p/orgs/harbourline
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Lakeshore College sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Lakeshore College":
+          - link "Lakeshore College":
+            - /url: /p/orgs/lakeshore-college
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Maison des Pins sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Maison des Pins":
+          - link "Maison des Pins":
+            - /url: /p/orgs/maison-des-pins
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Northgate Design Studio sees the whole note sees the whole note sees the whole note":
+        - cell "Northgate Design Studio":
+          - link "Northgate Design Studio":
+            - /url: /p/orgs/northgate-design
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Parc Avenue Books sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Parc Avenue Books":
+          - link "Parc Avenue Books":
+            - /url: /p/orgs/parc-avenue-books
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Pinecrest Labs sees the whole note sees the whole note sees the whole note":
+        - cell "Pinecrest Labs":
+          - link "Pinecrest Labs":
+            - /url: /p/orgs/pinecrest-labs
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Rosemont Children''s Choir sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Rosemont Children's Choir":
+          - link "Rosemont Children's Choir":
+            - /url: /p/orgs/rosemont-choir
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Tilehouse Supply sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Tilehouse Supply":
+          - link "Tilehouse Supply":
+            - /url: /p/orgs/tilehouse-supply
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
         - cell
       - row "people":
         - cell "people"
-      - row "Jane Roy":
-        - cell "Jane Roy":
-          - link "Jane Roy":
-            - /url: /note/people/jane-roy
+      - 'row "Ahmed Saleh sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Ahmed Saleh":
+          - link "Ahmed Saleh":
+            - /url: /p/people/ahmed-saleh
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
         - cell
+      - row "Aisha Rahman sees the whole note sees the whole note sees the whole note":
+        - cell "Aisha Rahman":
+          - link "Aisha Rahman":
+            - /url: /p/people/aisha-rahman
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
+      - 'row "Anne Ellis sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Anne Ellis":
+          - link "Anne Ellis":
+            - /url: /p/people/anne-ellis
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
         - cell
-      - row "Paul Advisor":
-        - cell "Paul Advisor":
-          - link "Paul Advisor":
-            - /url: /note/people/paul-advisor
+      - 'row "Antoine Lavoie sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Antoine Lavoie":
+          - link "Antoine Lavoie":
+            - /url: /p/people/antoine-lavoie
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
         - cell
+      - 'row "Bea Thompson sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Bea Thompson":
+          - link "Bea Thompson":
+            - /url: /p/people/bea-thompson
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
         - cell
+      - row "Ben Carter sees the whole note sees the whole note sees the whole note":
+        - cell "Ben Carter":
+          - link "Ben Carter":
+            - /url: /p/people/ben-carter
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Camille Lefebvre sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Camille Lefebvre":
+          - link "Camille Lefebvre":
+            - /url: /p/people/camille-lefebvre
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Chloé Gagnon sees the whole note sees the whole note sees the whole note":
+        - cell "Chloé Gagnon":
+          - link "Chloé Gagnon":
+            - /url: /p/people/chloe-gagnon
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Claire Dubois sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Claire Dubois":
+          - link "Claire Dubois":
+            - /url: /p/people/claire-dubois
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Daniel Okoro sees the whole note sees the whole note sees the whole note":
+        - cell "Daniel Okoro":
+          - link "Daniel Okoro":
+            - /url: /p/people/daniel-okoro
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Diego Alvarez sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Diego Alvarez":
+          - link "Diego Alvarez":
+            - /url: /p/people/diego-alvarez
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Elena Rossi sees the whole note sees the whole note sees the whole note":
+        - cell "Elena Rossi":
+          - link "Elena Rossi":
+            - /url: /p/people/elena-rossi
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Emma Wilson sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Emma Wilson":
+          - link "Emma Wilson":
+            - /url: /p/people/emma-wilson
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Ethan Brooks sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Ethan Brooks":
+          - link "Ethan Brooks":
+            - /url: /p/people/ethan-brooks
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Fatima Diallo sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Fatima Diallo":
+          - link "Fatima Diallo":
+            - /url: /p/people/fatima-diallo
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Felix Moreau sees the whole note sees the whole note sees the whole note":
+        - cell "Felix Moreau":
+          - link "Felix Moreau":
+            - /url: /p/people/felix-moreau
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Grace Liu sees the whole note sees the whole note sees the whole note":
+        - cell "Grace Liu":
+          - link "Grace Liu":
+            - /url: /p/people/grace-liu
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Hannah Becker sees the whole note sees the whole note sees the whole note":
+        - cell "Hannah Becker":
+          - link "Hannah Becker":
+            - /url: /p/people/hannah-becker
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Hélène Lefebvre sees part: some facts are cut sees part: some facts are cut sees part: some facts are cut"':
+        - cell "Hélène Lefebvre":
+          - link "Hélène Lefebvre":
+            - /url: /p/people/helene-lefebvre
+        - 'cell "sees part: some facts are cut"'
+        - 'cell "sees part: some facts are cut"'
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Hugo Martin sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Hugo Martin":
+          - link "Hugo Martin":
+            - /url: /p/people/hugo-martin
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Inès Bouchard sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Inès Bouchard":
+          - link "Inès Bouchard":
+            - /url: /p/people/ines-bouchard
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Isabelle Roy sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Isabelle Roy":
+          - link "Isabelle Roy":
+            - /url: /p/people/isabelle-roy
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Jacob Stein sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Jacob Stein":
+          - link "Jacob Stein":
+            - /url: /p/people/jacob-stein
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Jordan Ellis sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Jordan Ellis":
+          - link "Jordan Ellis":
+            - /url: /p/people/jordan-ellis
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Julie Tran sees the whole note sees the whole note sees the whole note":
+        - cell "Julie Tran":
+          - link "Julie Tran":
+            - /url: /p/people/julie-tran
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Kai Nakamura sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Kai Nakamura":
+          - link "Kai Nakamura":
+            - /url: /p/people/kai-nakamura
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Karen Liu sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Karen Liu":
+          - link "Karen Liu":
+            - /url: /p/people/karen-liu
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Kenji Watanabe sees the whole note sees the whole note sees the whole note":
+        - cell "Kenji Watanabe":
+          - link "Kenji Watanabe":
+            - /url: /p/people/kenji-watanabe
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Laila Haddad sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Laila Haddad":
+          - link "Laila Haddad":
+            - /url: /p/people/laila-haddad
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Léa Lefebvre sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Léa Lefebvre":
+          - link "Léa Lefebvre":
+            - /url: /p/people/lea-lefebvre
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Lina Sato sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Lina Sato":
+          - link "Lina Sato":
+            - /url: /p/people/lina-sato
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Luc Gauthier sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Luc Gauthier":
+          - link "Luc Gauthier":
+            - /url: /p/people/luc-gauthier
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Lucas Bergeron sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Lucas Bergeron":
+          - link "Lucas Bergeron":
+            - /url: /p/people/lucas-bergeron
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Lucas Fontaine sees the whole note sees the whole note sees the whole note":
+        - cell "Lucas Fontaine":
+          - link "Lucas Fontaine":
+            - /url: /p/people/lucas-fontaine
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Marc Lefebvre sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Marc Lefebvre":
+          - link "Marc Lefebvre":
+            - /url: /p/people/marc-lefebvre
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Marc-André Côté sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Marc-André Côté":
+          - link "Marc-André Côté":
+            - /url: /p/people/marc-andre-cote
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Marcus Webb sees the whole note sees the whole note sees the whole note":
+        - cell "Marcus Webb":
+          - link "Marcus Webb":
+            - /url: /p/people/marcus-webb
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Martin Leclerc sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Martin Leclerc":
+          - link "Martin Leclerc":
+            - /url: /p/people/martin-leclerc
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Maya Chen sees the whole note sees the whole note sees the whole note":
+        - cell "Maya Chen":
+          - link "Maya Chen":
+            - /url: /p/people/maya-chen
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Mei Lin sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Mei Lin":
+          - link "Mei Lin":
+            - /url: /p/people/mei-lin
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Nadia Lefebvre sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Nadia Lefebvre":
+          - link "Nadia Lefebvre":
+            - /url: /p/people/nadia-lefebvre
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Nina Petrova sees the whole note sees the whole note sees the whole note":
+        - cell "Nina Petrova":
+          - link "Nina Petrova":
+            - /url: /p/people/nina-petrova
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Olivier Pelletier sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Olivier Pelletier":
+          - link "Olivier Pelletier":
+            - /url: /p/people/olivier-pelletier
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Omar Haddad sees the whole note sees the whole note sees the whole note":
+        - cell "Omar Haddad":
+          - link "Omar Haddad":
+            - /url: /p/people/omar-haddad
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Patrick O''Neil sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Patrick O'Neil":
+          - link "Patrick O'Neil":
+            - /url: /p/people/patrick-o-neil
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Peter Novak sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Peter Novak":
+          - link "Peter Novak":
+            - /url: /p/people/peter-novak
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Priya Shah sees the whole note sees the whole note sees the whole note":
+        - cell "Priya Shah":
+          - link "Priya Shah":
+            - /url: /p/people/priya-shah
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Rachel Adler sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Rachel Adler":
+          - link "Rachel Adler":
+            - /url: /p/people/rachel-adler
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Ravi Menon sees the whole note sees the whole note sees the whole note":
+        - cell "Ravi Menon":
+          - link "Ravi Menon":
+            - /url: /p/people/ravi-menon
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Robert Ellis sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Robert Ellis":
+          - link "Robert Ellis":
+            - /url: /p/people/robert-ellis
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Robin Lefebvre sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Robin Lefebvre":
+          - link "Robin Lefebvre":
+            - /url: /p/people/robin-lefebvre
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Sam Patel sees the whole note sees the whole note sees the whole note":
+        - cell "Sam Patel":
+          - link "Sam Patel":
+            - /url: /p/people/sam-patel
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Sarah Kim sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Sarah Kim":
+          - link "Sarah Kim":
+            - /url: /p/people/sarah-kim
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Simone Laurent sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Simone Laurent":
+          - link "Simone Laurent":
+            - /url: /p/people/simone-laurent
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Sofia Marquez sees the whole note sees the whole note sees the whole note":
+        - cell "Sofia Marquez":
+          - link "Sofia Marquez":
+            - /url: /p/people/sofia-marquez
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Sophie Girard sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Sophie Girard":
+          - link "Sophie Girard":
+            - /url: /p/people/sophie-girard
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Theo Lefebvre sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Theo Lefebvre":
+          - link "Theo Lefebvre":
+            - /url: /p/people/theo-lefebvre
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - row "Tomás Rivera sees the whole note sees the whole note sees the whole note":
+        - cell "Tomás Rivera":
+          - link "Tomás Rivera":
+            - /url: /p/people/tomas-rivera
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - 'row "Valérie Roy sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Valérie Roy":
+          - link "Valérie Roy":
+            - /url: /p/people/valerie-roy
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Yusuf Kaya sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Yusuf Kaya":
+          - link "Yusuf Kaya":
+            - /url: /p/people/yusuf-kaya
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
+        - cell
+      - 'row "Zoe Harper sees the whole note sees the whole note sees part: some facts are cut"':
+        - cell "Zoe Harper":
+          - link "Zoe Harper":
+            - /url: /p/people/zoe-harper
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - 'cell "sees part: some facts are cut"'
         - cell
       - row "projects":
         - cell "projects"
-      - row "Course A":
-        - cell "Course A":
-          - link "Course A":
-            - /url: /note/projects/course-a
+      - row "Atlas launch sees the whole note sees the whole note sees the whole note":
+        - cell "Atlas launch":
+          - link "Atlas launch":
+            - /url: /p/projects/atlas-launch
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Book club, November sees the whole note sees the whole note":
+        - cell "Book club, November":
+          - link "Book club, November":
+            - /url: /p/projects/book-club-november
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
         - cell
+      - row "Choir winter concert sees the whole note sees the whole note":
+        - cell "Choir winter concert":
+          - link "Choir winter concert":
+            - /url: /p/projects/choir-winter-concert
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
-      - row "Course B":
-        - cell "Course B":
-          - link "Course B":
-            - /url: /note/projects/course-b
+        - cell
+      - row "Final projects sees the whole note sees the whole note":
+        - cell "Final projects":
+          - link "Final projects":
+            - /url: /p/projects/final-projects
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
         - cell
+      - row "Gaspésie trip sees the whole note sees the whole note":
+        - cell "Gaspésie trip":
+          - link "Gaspésie trip":
+            - /url: /p/projects/gaspesie-trip
+        - cell "sees the whole note"
+        - cell "sees the whole note"
         - cell
-      - row "Notes it can read 0 0 0":
+        - cell
+      - row "Guest lectures sees the whole note sees the whole note":
+        - cell "Guest lectures":
+          - link "Guest lectures":
+            - /url: /p/projects/guest-lecture-series
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Kitchen renovation sees the whole note sees the whole note":
+        - cell "Kitchen renovation":
+          - link "Kitchen renovation":
+            - /url: /p/projects/kitchen-renovation
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Mom's move sees the whole note sees the whole note":
+        - cell "Mom's move":
+          - link "Mom's move":
+            - /url: /p/projects/moms-move
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Pinecrest pilot sees the whole note sees the whole note sees the whole note":
+        - cell "Pinecrest pilot":
+          - link "Pinecrest pilot":
+            - /url: /p/projects/pinecrest-partnership
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Pricing page refresh sees the whole note sees the whole note sees the whole note":
+        - cell "Pricing page refresh":
+          - link "Pricing page refresh":
+            - /url: /p/projects/pricing-page-refresh
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Product Discovery course sees the whole note sees the whole note":
+        - cell "Product Discovery course":
+          - link "Product Discovery course":
+            - /url: /p/projects/product-discovery-course
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Q1 roadmap sees the whole note sees the whole note sees the whole note":
+        - cell "Q1 roadmap":
+          - link "Q1 roadmap":
+            - /url: /p/projects/q1-roadmap
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Red River climbing trip sees the whole note sees the whole note":
+        - cell "Red River climbing trip":
+          - link "Red River climbing trip":
+            - /url: /p/projects/red-river-trip
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+        - cell
+      - row "Senior designer hire sees the whole note sees the whole note sees the whole note":
+        - cell "Senior designer hire":
+          - link "Senior designer hire":
+            - /url: /p/projects/designer-hire
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell "sees the whole note"
+        - cell
+      - row "Notes it can read 99 97 83 0":
         - cell "Notes it can read"
-        - cell "0"
-        - cell "0"
+        - cell "99"
+        - cell "97"
+        - cell "83"
         - cell "0"

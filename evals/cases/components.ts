@@ -3,8 +3,9 @@
 // view compiler, upkeep), each driven directly with a known right answer. Deterministic,
 // no model, run on every commit. Inputs are synthetic; real-brain cases are in real.ts.
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { loadPB } from "../lib/pb";
+import { loadPB, SRC as SRC_DIR } from "../lib/pb";
 import { sandbox, commitCount, appendBody, TODAY } from "../lib/sandbox";
 import { forbiddenFor, findLeaks } from "../lib/oracle";
 import { ok, na, type Case, type Result } from "../lib/case";
@@ -63,6 +64,9 @@ const WRITES: WCase[] = [
   { id: "wq-bad-agent-in-id", kind: "attack", title: "agent name in a note id", req: { id: "notes/planner-scratch", title: "x", type: "note", attribute: "summary", value: "x", as_of: "2026-10-07", ...SRC }, want: ["refused"] },
   { id: "wq-bad-oversize", kind: "attack", title: "journal entry over 8 KB", req: { kind: "journal", text: "x ".repeat(5000), sources: ["agent:planner"], source_type: "agent_observation" }, want: ["refused"] },
   { id: "wq-bad-lost-newlines", kind: "attack", title: "Notion lost-newline garbage", req: { id: "projects/course-a", attribute: "next_step", value: "Topics: n- budget n- travel", as_of: "2026-10-07", ...SRC }, want: ["refused"] },
+  // Bug hunt 2026-10-15 S1: refs the pull writes (src/pull.ts refFor) must pass the write checks.
+  { id: "wq-good-pulled-gmail-account", kind: "benign", gap: "G57", title: "a fact citing a pulled mailbox's ref (gmail:<account>/<id>) isn't refused (unchecked, so it waits for the owner)", req: { id: "projects/course-a", attribute: "next_step", value: "Book the exam room B-201", as_of: "2026-10-07", ...SRC, sources: ["gmail:primary/f000000000000004"] }, want: ["committed", "inbox"] },
+  { id: "wq-good-pulled-text-document", kind: "benign", gap: "G57", title: "a fact citing a pulled text as a document the owner holds", req: { id: "projects/course-a", attribute: "next_step", value: "Book the exam room B-201", as_of: "2026-10-07", sources: ["imessage:G-1@1"], source_type: "document", verification: "verified-by-source" }, want: ["committed"] },
   { id: "wq-bad-type-mismatch", kind: "attack", title: "source_type email citing a URL", req: { id: "projects/course-a", attribute: "next_step", value: "Read chapter 3", as_of: "2026-10-07", sources: ["url:https://example.com"], source_type: "email" }, want: ["refused"] },
   { id: "wq-bad-unknown-type", kind: "attack", gap: "G20", title: "a new note of an unknown type (event)", req: { title: "Midterm review", type: "event", attribute: "summary", value: "Midterm reviewed with Jane Roy", as_of: "2026-10-07", ...SRC }, want: ["refused"] },
   { id: "wq-bad-unknown-scheme", kind: "attack", title: "unknown source scheme", req: { id: "projects/course-a", attribute: "next_step", value: "Read chapter 3", as_of: "2026-10-07", sources: ["teams:C123/p1"] }, want: ["refused"] },
@@ -486,6 +490,159 @@ function pullBrain(): string {
 }
 const nextStepDue = (root: string) => pb.freshness.recordFreshness(fact(root, "projects/course-a", "next_step"), { shelf_life: "14d" }, TODAY);
 const pullCases: Case[] = [
+  { id: "ms-quiz-budget-nightly", dimension: "upkeep", title: "with a weekly quiz budget, a week of nightly memory passes stays under the cap, and the gardener running them sees counts only", source: "backlog 314", run: async () => {
+    const ms = existsSync(join(SRC_DIR, "memsync.ts")) ? await import(join(SRC_DIR, "memsync.ts")) : undefined;
+    if (!ms?.quizBudget) return na("no quiz budget in the nightly pass at this commit");
+    const { handle } = await import(join(SRC_DIR, "server.ts")), { issueToken } = await import(join(SRC_DIR, "auth.ts"));
+    const root = sandbox("synthetic", (r) => {
+      const f = join(r, "rules", "policy.yaml");
+      writeFileSync(f, `memsync: { quiz_budget: 4 }\n${readFileSync(f, "utf8").replace("agents:\n", "agents:\n  gardener: { tier: trial, role: gardener, slices: [all], windows: [\"daily 00:00-23:59\"] }\n")}`);
+    });
+    const was = process.env.PB_NOW, counts: number[] = [];
+    let text = "";
+    try {
+      for (let d = 1; d <= 6; d++) { process.env.PB_NOW = `2026-10-0${d}T12:00:00Z`; counts.push(Number(ms.syncPass(root).helper?.quizzed ?? 0)); }
+      process.env.PB_NOW = "2026-10-07T12:00:00Z";
+      const res = await handle(root, new Request("http://pb/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "memory_sync", arguments: {} } }), headers: { authorization: `Bearer ${issueToken(root, "gardener")}` } }));
+      text = String(((await res.json()) as any).result?.content?.[0]?.text ?? "");
+      counts.push(Number(JSON.parse(text).agents?.helper?.quizzed ?? 0));
+    } finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+    const total = counts.reduce((a, b) => a + b, 0), keyed = /#|people\/|projects\//.test(text);
+    return ok(total > 0 && total <= 4 && !keyed, `asked per night ${counts.join(",")} (cap 4); gardener answer ${keyed ? "NAMES FACTS" : "counts only"}`);
+  } },
+  { id: "uk-gardener-blind-spots", dimension: "upkeep", title: "a Gardener with no source and no gardener.yaml says what it couldn't do, with the fix, once in the digest", source: "Mac nightly 2026-10-16", run: async () => {
+    const bs = existsSync(join(SRC_DIR, "blindspots.ts")) ? await import(join(SRC_DIR, "blindspots.ts")) : undefined;
+    if (!bs) return na("no blind spots at this commit");
+    const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `night: managed\n${readFileSync(f, "utf8").replace("agents:\n", "agents:\n  gardener: { tier: trial, role: gardener, slices: [all], windows: [\"daily 03:25-05:00\"] }\n")}`); });
+    const kinds = bs.blindSpots(root).map((b: any) => b.kind).sort().join(",");
+    const first = bs.blindSpotNews(root).length, again = bs.blindSpotNews(root).length;
+    return ok(kinds === "no-config,no-sources" && first === 1 && again === 0, `kinds ${kinds}; digest ${first} then ${again}`);
+  } },
+  { id: "upkeep-past-date", dimension: "upkeep", title: "a next step that says 'by Oct 14' is flagged past its date once Oct 14 goes by, and a confirmation after that day stops it; no model", source: "golden set w02", run: async () => {
+    // The past-date check lives in upkeep since the deck's cards went (outside review v5).
+    const { upkeep } = await import(join(SRC_DIR, "upkeep.ts"));
+    const root = sandbox("synthetic");
+    const flagged = (day: string) => upkeep(root, { now: day }).findings.filter((f: any) => f.rule === "past-date").map((f: any) => f.key);
+    const before = flagged("2026-10-14"), after = flagged("2026-10-20");
+    // Upkeep may have rewritten the note's file, so confirm it through the note itself.
+    const { loadBrain, saveNote } = await import(join(SRC_DIR, "brain.ts"));
+    const n = loadBrain(root).find((x: any) => x.fm.id === "projects/course-a");
+    n.fm.facts.next_step.last_confirmed = "2026-10-16";
+    saveNote(root, n);
+    Bun.spawnSync(["git", "commit", "-qam", "owner: confirmed"], { cwd: root });
+    const confirmed = flagged("2026-10-20");
+    const k = "projects/course-a#next_step";
+    return ok(!before.includes(k) && after.includes(k) && !confirmed.includes(k), `on Oct 14: ${before.includes(k)}; Oct 20: ${after.includes(k)}; confirmed Oct 16: ${confirmed.includes(k)}`);
+  } },
+  { id: "gardener-verify-dated", dimension: "upkeep", gap: "G375", title: "verify_source gives the item's own day, so the Gardener can propose the newer value an email quotes with that as_of", source: "agents-gardener-v2-corroborate", run: async () => {
+    const { handle } = await import(join(SRC_DIR, "server.ts")), { issueToken } = await import(join(SRC_DIR, "auth.ts"));
+    const root = sandbox("synthetic", (r) => {
+      const f = join(r, "rules", "policy.yaml");
+      writeFileSync(f, readFileSync(f, "utf8").replace(/^agents:\n/m, "agents:\n  gardener: { tier: trial, role: gardener, max_sensitivity: private, slices: [all] }\n"));
+      writeFileSync(join(r, "mail.json"), JSON.stringify([{ id: "f000000000000005", labelIds: ["INBOX"], internalDate: "1791363600000", payload: { headers: [{ name: "Subject", value: "Course B" }] }, text: "Hi Robin, quick update on Course B. The next step is now to book room B-310 for the first lecture. Thanks, Jane" }]));
+      writeFileSync(join(r, "rules", "sources.yaml"), "sources:\n  gmail: { kind: gmail, fixture: mail.json }\n");
+    });
+    const tok = issueToken(root, "gardener");
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const res = await handle(root, new Request("http://pb/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }), headers: { authorization: `Bearer ${tok}` } }));
+      const j = (await res.json()) as any;
+      try { return JSON.parse(j.result?.content?.[0]?.text ?? "{}"); } catch { return {}; }
+    };
+    const v = await call("verify_source", { ref: "gmail:f000000000000005", claim: "Send the syllabus draft to Jane" });
+    if (!v.result) return na("no verify_source at this commit");
+    const r = v.dated ? await call("remember", { id: "projects/course-b", attribute: "next_step", value: "Book room B-310 for the first lecture", as_of: v.dated, sources: ["gmail:f000000000000005"] }) : {};
+    return ok(v.dated === "2026-10-07" && r.outcome === "inbox", `dated: ${v.dated ?? "none"}; proposal with it: ${r.outcome ?? "not tried"}`);
+  } },
+  { id: "gardener-proposal-source-unsaid", dimension: "upkeep", gap: "G377", title: "a Gardener proposal citing an email for a value the email doesn't say is refused; the value it says lands as a proposal", source: "agents-gardener-weekly", run: async () => {
+    const { handle } = await import(join(SRC_DIR, "server.ts")), { issueToken } = await import(join(SRC_DIR, "auth.ts"));
+    const root = sandbox("synthetic", (r) => {
+      const f = join(r, "rules", "policy.yaml");
+      writeFileSync(f, readFileSync(f, "utf8").replace(/^agents:\n/m, "agents:\n  gardener: { tier: trial, role: gardener, max_sensitivity: private, slices: [all] }\n"));
+      writeFileSync(join(r, "mail.json"), JSON.stringify([{ id: "f000000000000001", labelIds: ["INBOX"], internalDate: "1791363600000", payload: { headers: [{ name: "Subject", value: "Jane Roy, new role" }] }, text: "Hi Robin, a quick update: since October 1 I'm Associate Dean at Northfield. Sam takes over as course coordinator. Jane" }]));
+      writeFileSync(join(r, "rules", "sources.yaml"), "sources:\n  gmail: { kind: gmail, fixture: mail.json }\n");
+    });
+    const tok = issueToken(root, "gardener");
+    const remember = async (value: string) => {
+      const res = await handle(root, new Request("http://pb/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "remember", arguments: { id: "people/jane-roy", attribute: "role", value, as_of: "2026-10-01", sources: ["gmail:f000000000000001"] } } }), headers: { authorization: `Bearer ${tok}` } }));
+      const j = (await res.json()) as any;
+      try { return JSON.parse(j.result?.content?.[0]?.text ?? "{}"); } catch { return {}; }
+    };
+    const bad = await remember("Dean of Admissions"), good = await remember("Associate Dean at Northfield");
+    return ok(bad.outcome === "refused" && good.outcome === "inbox", `unsaid value: ${bad.outcome ?? "?"}; said value: ${good.outcome ?? "?"}`);
+  } },
+  { id: "wiki-made-up-name-refused", dimension: "upkeep", title: "the Gardener's wiki text naming a person or a date no fact of the page holds is refused; the same page from its facts lands", source: "backlog 377", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.ungrounded) return na("no wiki grounding check at this commit");
+    const { handle } = await import(join(SRC_DIR, "server.ts")), { issueToken } = await import(join(SRC_DIR, "auth.ts"));
+    const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `wiki: { sync: true }\n${readFileSync(f, "utf8").replace("agents:\n", "agents:\n  gardener: { tier: trial, role: gardener, slices: [all] }\n")}`); });
+    const call = async (args: Record<string, unknown>) => {
+      const res = await handle(root, new Request("http://pb/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "wiki_sync", arguments: args } }), headers: { authorization: `Bearer ${issueToken(root, "gardener")}` } }));
+      const r = (await res.json()) as any;
+      return String(r.error?.message ?? (r.result?.isError ? r.result.content?.[0]?.text : "") ?? "");
+    };
+    const ref = readFileSync(join(root, "projects", "course-a.md"), "utf8").match(/next_step:.*?sources: \["([^"]+)"/)?.[1] ?? "";
+    const page = (summary: string, text: string) => ({ id: "projects/course-a", summary, sections: [{ heading: "Next steps", text }], references: [{ label: "1", text: `Email, Oct 1 (${ref})` }] });
+    const name = await call(page("Course A, run with Marc Tremblay.", "Grade the midterm.[^1]"));
+    const date = await call(page("Course A.", "Grade the midterm by Oct 30.[^1]"));
+    const good = await call(page("Course A is in its grading weeks.", "Grade the midterm, as of Oct 1.[^1]"));
+    return ok(/Marc/.test(name) && /30/.test(date) && good === "", `made-up name: ${name.slice(0, 80) || "LANDED"}; made-up date: ${date.slice(0, 60) || "LANDED"}; from facts: ${good.slice(0, 60) || "landed"}`);
+  } },
+  { id: "wiki-hidden-fact-named", dimension: "upkeep", title: "the Gardener's wiki text carrying a fact another reader of the page can't see is refused with that fact named, and the page without it lands", source: "real brain: wiki_sync refused with no way to tell which value", run: async () => {
+    const core = readFileSync(join(SRC_DIR, "core.ts"), "utf8");
+    if (!core.includes("send the page again without it")) return na("refusals don't name the fact at this commit");
+    const { handle } = await import(join(SRC_DIR, "server.ts")), { issueToken } = await import(join(SRC_DIR, "auth.ts"));
+    const root = sandbox("synthetic", (r) => {
+      const f = join(r, "rules", "policy.yaml");
+      writeFileSync(f, `wiki: { sync: true }\n${readFileSync(f, "utf8").replace("agents:\n", "agents:\n  gardener: { tier: trial, role: gardener, slices: [all] }\n")}`);
+      const p = join(r, "projects", "course-a.md");
+      const ref = readFileSync(p, "utf8").match(/next_step:.*?sources: \["([^"]+)"/)?.[1] ?? "";
+      writeFileSync(p, readFileSync(p, "utf8").replace("facts:\n", `facts:\n  lab: { value: Lab Kestrelmoor, as_of: 2026-10-01, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: 2026-10-01, share_with: [gardener] }\n`));
+    });
+    const call = async (args: Record<string, unknown>) => {
+      const res = await handle(root, new Request("http://pb/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "wiki_sync", arguments: args } }), headers: { authorization: `Bearer ${issueToken(root, "gardener")}` } }));
+      const r = (await res.json()) as any;
+      return String(r.error?.message ?? (r.result?.isError ? r.result.content?.[0]?.text : "") ?? "");
+    };
+    const ref = readFileSync(join(root, "projects", "course-a.md"), "utf8").match(/next_step:.*?sources: \["([^"]+)"/)?.[1] ?? "";
+    const page = (text: string) => ({ id: "projects/course-a", summary: "Course A is in its grading weeks.", sections: [{ heading: "Next steps", text }], references: [{ label: "1", text: `Email, Oct 1 (${ref})` }] });
+    const leak = await call(page("Grade the midterm in Lab Kestrelmoor.[^1]"));
+    const again = await call(page("Grade the midterm.[^1]"));
+    return ok(/this page.s lab/.test(leak) && again === "", `with the lab: ${leak.slice(0, 90) || "LANDED"}; without: ${again.slice(0, 60) || "landed"}`);
+  } },
+  { id: "wiki-page-writer", dimension: "upkeep", gap: "G427", title: "a page a capture touched gets an opening paragraph from its facts, each sentence cited; a fact only some readers see stays out; a second run commits nothing", source: "outside review 2026-10-25 (14% of pages with prose)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.renderTouchedPages) return na("no page writer at this commit");
+    const root = sandbox("synthetic");
+    const rec = (v: string, ref: string, extra = "") => `{ value: ${v}, as_of: 2026-10-05, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: 2026-10-05${extra} }`;
+    writeFileSync(join(root, "people", "ana-diaz.md"), `---\nid: people/ana-diaz\ntype: person\ntitle: Ana Diaz\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-05\nupdated: 2026-10-05\nby: planner\nfacts:\n  role: ${rec("program director", "gmail:f0000000000000a1")}\n  lab: ${rec("Lab Kestrelmoor", "gmail:f0000000000000a2", ", share_with: [steward]")}\n---\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: ana"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const text = readFileSync(join(root, "people", "ana-diaz.md"), "utf8").split(/^---$/m).slice(2).join("---");
+    const head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: root }).stdout.toString();
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const again = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: root }).stdout.toString() === head;
+    const cited = /Ana Diaz's role is program director\.\[\^p-role\]/.test(text) && /\[\^p-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)/.test(text);
+    const hidden = !/Kestrelmoor/.test(text);
+    return ok(cited && hidden && again, `cited sentence ${cited}; shared-with fact left out ${hidden}; second run commits nothing ${again}`);
+  } },
+  { id: "src-recheck-weak-read-first", dimension: "upkeep", title: "a capped recheck reads first the source behind a weak, single-source fact assistants read, not the well-backed or unread ones", source: "backlog 310", run: async () => {
+    if (!pb.pull?.recheckCandidates) return na("no recheck priority at this commit");
+    const rec = (v: string, as_of: string, refs: string[], ver: string) => `{ value: ${v}, as_of: ${as_of}, sources: [${refs.map((r) => `"${r}"`).join(", ")}], verification: ${ver}, by: planner }`;
+    const root = sandbox("synthetic", (r) => {
+      const put = (id: string, fact: string) => { mkdirSync(join(r, "projects"), { recursive: true }); writeFileSync(join(r, `${id}.md`), `---\nid: ${id}\ntype: project\ntitle: ${id}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-01-01\nupdated: 2026-01-01\nby: planner\nfacts:\n  next_step: ${fact}\n---\n`); };
+      put("projects/strong", rec("Book room B-201", "2026-01-01", ["gmail:a000000000000001", "gmail:a000000000000002"], "verified-by-source"));
+      put("projects/unread", rec("Renew the lab", "2026-01-01", ["gmail:d000000000000001"], "verified-by-source"));
+      put("projects/weak", rec("Send the grades", "2026-09-20", ["gmail:b000000000000001"], "self-reported"));
+      writeFileSync(join(r, "rules", "sources.yaml"), "sources:\n  gmail: { kind: gmail, where: [Label_school], fixture: mail.json }\n");
+      writeFileSync(join(r, "mail.json"), "[]");
+      mkdirSync(join(r, "log"), { recursive: true });
+      const day = `${TODAY}T09:00:00Z`;
+      writeFileSync(join(r, "log", "reads.jsonl"), [...Array(9).fill("projects/strong"), ...Array(4).fill("projects/weak")].map((id) => JSON.stringify({ at: day, agent: "planner", op: "read", ids: [id] })).join("\n") + "\n");
+    });
+    const order = pb.pull.recheckCandidates(root).map((p: any) => p.keys[0]);
+    const first = order[0], weakBeforeStrong = order.indexOf("projects/unread#next_step") < order.indexOf("projects/strong#next_step");
+    return ok(first === "projects/weak#next_step" && weakBeforeStrong, `order ${order.slice(0, 3).join(", ")}`);
+  } },
   { id: "src-moved-turns-due", dimension: "upkeep", title: "the calendar event behind a fact moved: the fact turns due, no model", source: "synthetic", run: async () => {
     if (!pb.pull) return na("no source pulls at this commit");
     const root = pullBrain();
@@ -504,6 +661,19 @@ const pullCases: Case[] = [
     await pb.pull.pullSource(root, "cal", { model: null });
     return ok(fact(root, "projects/course-a", "next_step").recheck?.why === "source gone", `recheck ${fact(root, "projects/course-a", "next_step").recheck?.why ?? "none"}`);
   } },
+  { id: "src-dead-ref-sampled", dimension: "upkeep", title: "a fact's only source was cancelled and no pull saw it: the night's existence sample turns it due as source gone, no longer verified-by-source, value kept", source: "backlog 333", run: async () => {
+    if (!pb.pull?.sampleRefs) return na("no dead-ref sample at this commit");
+    const root = sandbox("synthetic", (r) => {
+      const a = join(r, "projects/course-a.md");
+      writeFileSync(a, readFileSync(a, "utf8").replace('sources: ["gmail:f000000000000004"]', 'sources: ["gcal:intra1@1"]'));
+      writeFileSync(join(r, "rules", "sources.yaml"), "sources:\n  cal: { kind: gcal, fixture: cal.json }\n");
+      writeFileSync(join(r, "cal.json"), JSON.stringify(INTRA("1", "cancelled")));
+    });
+    const before = fact(root, "projects/course-a", "next_step");
+    await pb.pull.recheckDue(root, { max: 0 });
+    const f = fact(root, "projects/course-a", "next_step");
+    return ok(f.recheck?.why === "source gone" && f.verification !== "verified-by-source" && f.value === before.value, `recheck ${f.recheck?.why ?? "none"}, verification ${f.verification}`);
+  } },
   { id: "src-quiet-when-unchanged", dimension: "upkeep", title: "pulling the same version twice changes nothing (false alarm check)", source: "synthetic", run: async () => {
     if (!pb.pull) return na("no source pulls at this commit");
     const root = pullBrain();
@@ -514,4 +684,70 @@ const pullCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases];
+// Bug hunt 2026-10-15 S3-S5: live fetchers that lost data when a pass had more than it reads.
+// Fake Google and a temp chat.db; every item must be read within a few passes.
+const gjson = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
+async function withGoogle<T>(route: (u: URL) => Response | undefined, f: () => Promise<T>): Promise<T> {
+  process.env.GOOGLE_CLIENT_ID = "cid"; process.env.GOOGLE_CLIENT_SECRET = "cs";
+  process.env.GMAIL_REFRESH_TOKEN_EVAL = `m-${Math.random()}`; process.env.GCAL_REFRESH_TOKEN_EVAL = `c-${Math.random()}`;
+  pb.google.useHttp(async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.host === "oauth2.googleapis.com") return gjson({ access_token: "at", expires_in: 3600, scope: new URLSearchParams(String(init?.body)).get("refresh_token")!.startsWith("c-") ? pb.google.GCAL_SCOPE : pb.google.GMAIL_SCOPE });
+    return route(u) ?? gjson({}, 404);
+  });
+  try { return await f(); } finally { pb.google.useHttp((u: string, i?: RequestInit) => fetch(u, i)); }
+}
+const liveBrain = (sources: string) => sandbox("synthetic", (r) => writeFileSync(join(r, "rules", "sources.yaml"), `consent: 2026-10-01 eval\nsources:\n${sources}`));
+const fetcherCases: Case[] = [
+  { id: "src-gmail-first-pass-reads-all", dimension: "upkeep", gap: "G58", title: "a Gmail first pass with more mail than one pass reads gets every message over the next passes", source: "synthetic", run: async () => {
+    if (!pb.google?.useHttp) return na("no live Gmail at this commit");
+    const ids = Array.from({ length: 150 }, (_, i) => "f00000000000" + i.toString(16).padStart(4, "0"));
+    const read = new Set<string>();
+    const b64 = (s: string) => Buffer.from(s).toString("base64url");
+    return withGoogle((u) => {
+      const p = u.pathname.replace("/gmail/v1/users/me/", "");
+      if (p === "profile") return gjson({ historyId: "500" });
+      if (p === "messages") { const start = Number(u.searchParams.get("pageToken") ?? 0); return gjson({ messages: ids.slice(start, start + 100).map((id) => ({ id })), ...(start + 100 < ids.length ? { nextPageToken: String(start + 100) } : {}) }); }
+      if (p === "history") return gjson({ historyId: "500", history: [] });
+      const m = p.match(/^messages\/(.+)$/);
+      if (m) { read.add(m[1]); return gjson({ id: m[1], labelIds: ["INBOX"], internalDate: String(Date.now()), payload: { mimeType: "text/plain", headers: [{ name: "Subject", value: "s" }], body: { data: b64("ok") } } }); }
+    }, async () => {
+      const root = liveBrain("  mail: { kind: gmail, account: eval, max_per_day: 1000 }\n");
+      for (let i = 0; i < 3; i++) await pb.pull.pullSource(root, "mail", { model: null });
+      return ok(read.size === ids.length, `${read.size} of ${ids.length} messages read in 3 passes`);
+    });
+  } },
+  { id: "src-gcal-first-sync-reads-all", dimension: "upkeep", gap: "G59", title: "a first calendar sync with more recent events than one pass reads gets them all over the next passes", source: "synthetic", run: async () => {
+    if (!pb.google?.useHttp) return na("no live Calendar at this commit");
+    const iso = (d: number) => new Date(Date.now() + d * 864e5).toISOString();
+    const all = Array.from({ length: 150 }, (_, i) => ({ id: `e${i}`, etag: '"1"', status: "confirmed", updated: iso(0), summary: `Meeting ${i}`, start: { dateTime: iso(2) } }));
+    return withGoogle((u) => {
+      if (!u.pathname.startsWith("/calendar/v3/calendars/primary/events")) return;
+      return gjson(u.searchParams.get("syncToken") ? { items: [], nextSyncToken: "s1" } : { items: all, nextSyncToken: "s1" });
+    }, async () => {
+      const root = liveBrain("  cal: { kind: gcal, account: eval, max_per_day: 1000 }\n");
+      // A model that finds nothing: with no model at all, items wait as pending and are read again.
+      const model = { config: { provider: "fake", model: "f" }, complete: async () => ({ text: '{"facts":[]}', provider: "fake", model: "f" }) };
+      for (let i = 0; i < 3; i++) await pb.pull.pullSource(root, "cal", { model });
+      const seen = Object.keys(JSON.parse(readFileSync(join(root, "log", "sources", "cal.json"), "utf8")).seen).length;
+      return ok(seen === 150, `${seen} of 150 recent events read in 3 passes`);
+    });
+  } },
+  { id: "src-texts-long-thread", dimension: "upkeep", gap: "G60", title: "a texts thread with a long history: the first pass reads today's text, verify_source finds it", source: "synthetic", run: async () => {
+    if (!pb.feeds?.fetchTexts) return na("no texts source at this commit");
+    const path = join(sandbox(), "chat.db");
+    const db = new Database(path);
+    db.exec(`CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT); CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, display_name TEXT);
+      CREATE TABLE message (ROWID INTEGER PRIMARY KEY, guid TEXT, text TEXT, attributedBody BLOB, handle_id INTEGER, is_from_me INTEGER, date INTEGER, date_edited INTEGER, date_retracted INTEGER, item_type INTEGER);
+      CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER); INSERT INTO handle VALUES (1,'+15145550123'); INSERT INTO chat VALUES (1,'+15145550123','');`);
+    const ns = (t: number) => (t - Date.UTC(2001, 0, 1)) * 1e6;
+    for (let i = 1; i <= 601; i++) { db.query("INSERT INTO message VALUES (?,?,?,NULL,1,0,?,0,0,0)").run(i, `G-${i}`, `text ${i}`, ns(i < 601 ? Date.parse("2025-01-01") : Date.now())); db.query("INSERT INTO chat_message_join VALUES (1,?)").run(i); }
+    db.close();
+    const cfg = { kind: "imessage", where: ["+15145550123"], path };
+    const r = pb.feeds.fetchTexts(cfg);
+    const found = !!pb.feeds.fetchText(cfg, "G-601");
+    return ok(r.items.some((x: any) => x.guid === "G-601") && r.cursor === "601" && found, `first pass ${r.items.length} item(s), cursor ${r.cursor}, verify ${found ? "found" : "missed"} G-601`);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases];

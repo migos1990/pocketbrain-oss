@@ -4,13 +4,16 @@ import { join } from "node:path";
 import { makeBrain } from "./fixture";
 import { dueJobs, hubPlists } from "../src/start";
 
+// Owner wall-clock in October (EDT, UTC-4): dueJobs counts the owner's day (src/clock.ts).
+const toronto = (d: number, h: number, m: number) => new Date(Date.UTC(2026, 9, d, h + 4, m));
+
 test("the nightly pass and the digest run once a day, even if the hub was asleep at their hour", () => {
   const root = makeBrain();
-  expect(dueJobs(root, new Date(2026, 9, 8, 2, 59))).toEqual([]);
-  expect(dueJobs(root, new Date(2026, 9, 8, 9, 30))).toEqual(["night", "digest"]); // woke up late: both
-  expect(dueJobs(root, new Date(2026, 9, 8, 23, 0))).toEqual([]);
-  expect(dueJobs(root, new Date(2026, 9, 9, 3, 1))).toEqual(["night"]);
-  expect(dueJobs(root, new Date(2026, 9, 9, 7, 0))).toEqual(["digest"]);
+  expect(dueJobs(root, toronto(8, 2, 59))).toEqual([]);
+  expect(dueJobs(root, toronto(8, 9, 30))).toEqual(["night", "digest"]); // woke up late: both
+  expect(dueJobs(root, toronto(8, 23, 0))).toEqual([]);
+  expect(dueJobs(root, toronto(9, 3, 1))).toEqual(["night"]);
+  expect(dueJobs(root, toronto(9, 7, 0))).toEqual(["digest"]);
 });
 
 test("launchd files keep start and the tunnel running", () => {
@@ -37,4 +40,22 @@ test("start serves the agents and the dashboard from one process", async () => {
   const out = await new Response(p.stdout).text();
   expect(out).toContain("text channel: off");
   expect(out).toContain("relay: off");
+});
+
+// Bug hunt #147: pullsDue ran outside the timer's try, so a rules file
+// mid-edit rejected the serial() promise unhandled (the process could exit) and nothing said why.
+test("a malformed sources.yaml is logged and shows as a failing job, never thrown", async () => {
+  const { writeFileSync } = await import("node:fs");
+  const { pullTick } = await import("../src/start");
+  const { jobChecks } = await import("../src/probe");
+  const root = makeBrain();
+  writeFileSync(join(root, "rules", "sources.yaml"), "sources:\n  gmail: [unclosed\n");
+  const lines: string[] = [];
+  await pullTick(root, (s) => lines.push(s));
+  expect(lines.some((l) => /pull failed/.test(l))).toBe(true);
+  const failing = jobChecks(root).filter((c) => !c.ok).map((c) => c.name);
+  expect(failing).toContain("pull");
+  writeFileSync(join(root, "rules", "sources.yaml"), "sources: {}\n");
+  await pullTick(root, () => {});
+  expect(jobChecks(root).filter((c) => !c.ok).map((c) => c.name)).toEqual([]);
 });

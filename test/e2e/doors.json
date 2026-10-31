@@ -78,7 +78,7 @@
     {
       "step": "write",
       "status": 200,
-      "says": "Result: inbox proposed for review: helper is a trial agent: propose-only One fact per form, with its source. Same checks as anywhere else: outside your own area it waits for the owner. Note id (e.g. people/jane-roy; leave empty for a new no",
+      "says": "Result: inbox proposed for review: helper is a trial agent: propose-only One fact per form, with its source. Same checks as anywhere else: it files itself, a different value for one the brain holds is filed as a conflict, and a fact on a pr",
       "notes": [
         "people/jane-roy"
       ]
@@ -86,7 +86,7 @@
     {
       "step": "held",
       "status": 200,
-      "says": "Result: inbox proposed for review: helper is a trial agent: propose-only One fact per form, with its source. Same checks as anywhere else: outside your own area it waits for the owner. Note id (e.g. people/jane-roy; leave empty for a new no",
+      "says": "Result: inbox proposed for review: helper is a trial agent: propose-only One fact per form, with its source. Same checks as anywhere else: it files itself, a different value for one the brain holds is filed as a conflict, and a fact on a pr",
       "notes": [
         "people/jane-roy"
       ]

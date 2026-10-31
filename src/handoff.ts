@@ -5,6 +5,7 @@
 // search or cell ever holds it), and shown to its recipient first by whats_new until the recipient
 // marks it done. The sender gets the same answer whether it was delivered or held, so a handoff
 // can't be used to test what the recipient may see. A trial agent's handoffs wait for the owner.
+import { clock, ownerDay } from "./clock";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -15,6 +16,8 @@ import { keyedModel } from "./aftercheck";
 import type { Model } from "./model";
 import { loadCanaries } from "./canary";
 import { alert } from "./util";
+import { redactSecrets, hardSecretIn } from "./checks";
+import { putHeld, getHeld, dropHeld } from "./quotes";
 import { git } from "./git";
 import { OWNER } from "./owner";
 import { tokenRole } from "./tokenrole";
@@ -71,9 +74,33 @@ function all(root: string): Record_[] {
   return out.sort((a, b) => String(a.fm.at).localeCompare(String(b.fm.at)));
 }
 
+// G201: the record is committed, and the backup refuses plaintext secrets on main, so the agent's
+// own words (task and next step) are redacted before they are written, and the record is then
+// scanned whole: a key split between the two (its header in one, its body in the other) passes
+// each alone, so then both are blanked. The checks ran on the raw text, so a handoff carrying a
+// secret is still held with an alert; its original waits outside git (G243, `keepOriginal`).
+// G280: the reasons quote the sender too (a money ask quotes a few of its words), so they are
+// redacted like the rest; level 1 blanks the task and next step, level 2 the reasons as well.
+const REMOVED = "[removed: secret-shaped]";
+const recordText = (r: Record_, level: 0 | 1 | 2) => {
+  const red = (t: string) => (level ? REMOVED : redactSecrets(t).text);
+  const fm: Record<string, unknown> = { ...r.fm };
+  if (typeof r.fm.next_step === "string") fm.next_step = red(r.fm.next_step);
+  if (Array.isArray(r.fm.reasons)) fm.reasons = r.fm.reasons.map((x: unknown) => (level === 2 ? REMOVED : redactSecrets(String(x)).text));
+  return `---\n${YAML.stringify(fm, { lineWidth: 0 })}---\n${red(r.task)}\n`;
+};
+// The least blanking that leaves no hard secret in the record.
+const safeRecord = (r: Record_) => {
+  const a = recordText(r, 0); if (!hardSecretIn(a)) return a;
+  const b = recordText(r, 1); if (!hardSecretIn(b)) return b;
+  const c = recordText(r, 2);
+  // The last level holds only what the hub wrote (id, agents, times); checked all the same (G314).
+  if (hardSecretIn(c)) throw new Error("handoff: the record still held a secret shape after every field the sender wrote was blanked");
+  return c;
+};
 function save(root: string, r: Record_, message: string, author: string, withLog = false) {
   mkdirSync(join(root, r.file, ".."), { recursive: true });
-  writeFileSync(join(root, r.file), `---\n${YAML.stringify(r.fm, { lineWidth: 0 })}---\n${r.task}\n`);
+  writeFileSync(join(root, r.file), safeRecord(r));
   git(root, ["add", r.file, ...(withLog && existsSync(join(root, "log")) ? ["log"] : [])]);
   git(root, ["commit", "-q", "-m", message], author);
 }
@@ -101,7 +128,9 @@ export async function handOff(root: string, from: string, req: { to: unknown; ta
   if (to === from) throw new CoreError(400, "you can't hand off to yourself");
   const task = text(req.task, "a task", MAX_TASK), next_step = text(req.next_step, "a next step", MAX_STEP);
 
-  const now = new Date();
+  // The owner's clock (src/clock.ts); a pinned PB_TODAY (tests, as for as_of) keeps the clock's time
+  // on that day, so the id, the date whats_new shows and the folder all agree with the brain's today.
+  const now = process.env.PB_TODAY ? new Date(`${process.env.PB_TODAY}${clock().toISOString().slice(10)}`) : clock();
   const id = `ho-${now.toISOString().replace(/[-:TZ]/g, "").slice(0, 14)}-${Math.random().toString(36).slice(2, 6).padEnd(4, "0")}`;
   const v = checkBetween(loadBrain(root), rules, relayConfig(root), id, from, to, `${task}\n${next_step}`);
   const reasons = [...v.reasons];
@@ -113,15 +142,20 @@ export async function handOff(root: string, from: string, req: { to: unknown; ta
   // sender's handoffs until the owner decides on it (as for the relay hook, G51), and a day has a cap.
   // One hit across channels: a relay-hook message held with an alert counts too (G189).
   if (deliver && (mine.some((r) => r.fm.verdict === "held" && r.fm.alert === true) || alertedHookHolds(root, from).length)) hold(`${from} has a message held with an alert; the owner decides on that one first`);
-  if (deliver && mine.filter((r) => String(r.fm.at).slice(0, 10) === now.toISOString().slice(0, 10)).length >= PER_DAY) hold(`${from} handed off ${PER_DAY} tasks today already`);
+  const today_ = ownerDay(rules, now); // the owner's day (src/clock.ts)
+  if (deliver && mine.filter((r) => !!r.fm.at && ownerDay(rules, r.fm.at instanceof Date ? r.fm.at : String(r.fm.at)) === today_).length >= PER_DAY) hold(`${from} handed off ${PER_DAY} tasks today already`);
   if (deliver && tierOf(rules, from).writes === "propose") hold(`${from} is a trial agent: the owner sees its handoffs first`);
   const on = opts.model !== null && (opts.model !== undefined || rules.policy.relay?.classify === true);
   const model = deliver && on && flagCategories(rules, v).length ? opts.model ?? keyedModel(root, FLAG_STEP, "relay") : undefined;
   if (v.alert) alert(root, { check: "handoff", from, to, reasons });
   const fm: Record<string, unknown> = { id, type: "handoff", from, to, at: now.toISOString(), verdict: model ? "checking" : deliver ? "delivered" : "held", ...(reasons.length ? { reasons } : {}), ...(v.alert ? { alert: true } : {}), next_step, status: "open" };
-  const file = join("handoffs", today(), `${id}.md`);
+  const file = join("handoffs", process.env.PB_TODAY ?? today_, `${id}.md`);
   // Saved before anything is awaited, so the cap and the sticky hold count this one at once.
-  save(root, { fm, task, file }, `handoff: ${from} -> ${to} ${fm.verdict}`, "relay", true);
+  // When the record has to be redacted, the original waits outside git for the owner (G243).
+  const rec = { fm, task, file };
+  // A delivered one keeps none (G285): the recipient reads the record, and nothing releases it.
+  if (fm.verdict !== "delivered" && safeRecord(rec) !== `---\n${YAML.stringify(fm, { lineWidth: 0 })}---\n${task}\n`) putHeld(root, `handoff-${id}`, { task, next_step });
+  save(root, rec, `handoff: ${from} -> ${to} ${fm.verdict}`, "relay", true);
   const settled = model ? settle(root, id, opts.lock ?? (async (fn) => fn()), async () => requestCheck(root, loadBrain(root), rules, model, { id, from, to: [to], subject: "", text: `${task}\n${next_step}` }, v)) : Promise.resolve();
   return { id, reply: `Handed off to ${to} (handoff id: ${id}). ${to} sees it the next time it checks what's new; the owner may look at it first.`, settled };
 }
@@ -149,6 +183,7 @@ async function settleNow(root: string, id: string, lock: <T>(fn: () => T) => Pro
     r.fm.verdict = why ? "held" : "delivered";
     if (why) r.fm.reasons = [...(r.fm.reasons ?? []), why];
     save(root, r, `handoff: ${id} ${r.fm.verdict} by the request check`, "relay");
+    if (!why) dropHeld(root, `handoff-${id}`); // delivered: nothing will release it (G285)
   });
 }
 
@@ -186,7 +221,11 @@ export function openHandoffs(root: string, agent: string): Handoff[] {
   const notes = loadBrain(root), cfg = relayConfig(root);
   const reader = tokenRole(agent) === "reader";
   return mine.filter((r) => (r.fm.verdict === "released-by-owner" && !reader) || checkBetween(notes, rules, cfg, r.fm.id, r.fm.from, agent, `${r.task}\n${r.fm.next_step}`).deliver)
-    .map((r) => ({ id: r.fm.id, from: "an assistant", at: r.fm.at, task: r.task, next_step: r.fm.next_step }));
+    .map((r) => {
+      // A released one shows what the sender wrote, kept outside git while it was held (G243).
+      const orig = r.fm.verdict === "released-by-owner" ? getHeld(root, `handoff-${r.fm.id}`) : undefined;
+      return { id: r.fm.id, from: "an assistant", at: r.fm.at, task: orig?.task ?? r.task, next_step: orig?.next_step ?? r.fm.next_step };
+    });
 }
 
 // Closing keeps no note: nothing checks it, and nobody would read it.
@@ -200,6 +239,7 @@ export function finishHandoff(root: string, agent: string, id: unknown): string 
   r.fm.status = "done";
   r.fm.done = today();
   save(root, r, `handoff: ${id} done by ${agent}`, agent);
+  dropHeld(root, `handoff-${id}`);
   return `${id}: done`;
 }
 
@@ -211,6 +251,7 @@ export function decideHandoff(root: string, id: string, decision: "release" | "d
   r.fm.verdict = decision === "release" ? "released-by-owner" : "dropped-by-owner";
   r.fm.decided = today();
   save(root, r, `handoff: ${id} ${r.fm.verdict}`, OWNER);
+  if (decision === "drop") dropHeld(root, `handoff-${id}`);
   return `${id}: ${r.fm.verdict}`;
 }
 

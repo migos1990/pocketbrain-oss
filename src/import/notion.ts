@@ -7,7 +7,7 @@ import { join } from "node:path";
 import YAML from "yaml";
 import type { Note, FactRecord, Frontmatter, SourceRef, Sensitivity, Verification, Fact } from "../brain";
 import { saveNote, slugify, loadBrain } from "../brain";
-import { extractRefs, schemeOf, AGENT_MEMORY_SCHEMES, refString } from "../sources";
+import { extractRefs, schemeOf, AGENT_MEMORY_SCHEMES, refString, isApprovedRef } from "../sources";
 import { redactSecrets } from "../checks";
 import { compareKey } from "../normalize";
 
@@ -164,7 +164,9 @@ function common(ctx: Ctx, db: string, r: Row, title: string) {
   const rawBody = readBody(ctx, db, r);
   const red = redactSecrets(cleanBody(rawBody));
   if (red.found.length) flag(ctx, "Secret-shaped strings removed", `${db} "${title}": ${[...new Set(red.found)].join(", ")}`);
-  const { refs, laundering } = rowSources(ctx, r, rawBody, title);
+  // approved: records the owner's tap in the hub; text from Notion never carries one in (G424).
+  const { refs: cited, laundering } = rowSources(ctx, r, rawBody, title);
+  const refs = cited.filter((x) => !isApprovedRef(refString(x)));
   const ver = verificationOf(r);
   if (laundering && ver.verification !== "unverified") {
     flag(ctx, "Source type laundering (write-quality N5)", `${db} "${title}": Source type says "a text received from Louis" but the source is agent memory (${refs.map(refString).join(", ")}); imported as self-reported`);
@@ -176,7 +178,7 @@ function common(ctx: Ctx, db: string, r: Row, title: string) {
   if (refs.length === 1 && refs[0] === "unverified") flag(ctx, "No usable source", `${db} "${title}"`);
   const { as_of, approx } = asOfFor(r);
   const sens: Sensitivity = s(r, "Sensitive") === "__YES__" ? "private" : "personal";
-  const bodyRefs = extractRefs(cleanText(rawBody)).filter((x) => !refs.map(refString).includes(x));
+  const bodyRefs = extractRefs(cleanText(rawBody)).filter((x) => !refs.map(refString).includes(x) && !isApprovedRef(x));
   const noteSources = [...refs, ...bodyRefs];
   const base = { as_of, ...(approx ? { as_of_approx: true } : {}), sources: refs, ...ver, by: "", recorded: ctx.importDate };
   return { body: red.text, base, sens, noteSources, rawBody };

@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { loadBrain, sensitivityRank, type Note, type Sensitivity } from "./brain";
 import { loadRules, tierOf, type Rules } from "./rules";
 import { carve, grantFor, visibleFacts, type CarveResult } from "./carve";
-import { git } from "./git";
+import { git, gitTime } from "./git";
 import { isOwnerId } from "./owner";
 import { alert, appendJsonl, readJsonl } from "./util";
 
@@ -70,7 +70,7 @@ function baselineFor(root: string, now: Date): { snap: CarveSnapshot; from: Audi
   const sha = git(root, ["rev-list", "-1", `--before=${new Date(now.getTime() - 7 * 86_400_000).toISOString()}`, "HEAD"]) || git(root, ["rev-list", "--max-parents=0", "HEAD"]).split("\n").at(-1)!;
   const dir = materialize(root, sha);
   if (!dir) return undefined;
-  try { return { snap: { ...carveSnapshot(dir, sha), at: git(root, ["log", "-1", "--format=%cI", sha]) }, from: "git" }; }
+  try { return { snap: { ...carveSnapshot(dir, sha), at: gitTime(git(root, ["log", "-1", "--format=%cI", sha])) }, from: "git" }; }
   finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
@@ -96,6 +96,11 @@ export function auditCarve(root: string, opts: { now?: Date; save?: boolean; ale
   const cur = carveSnapshot(root, head(root) || "uncommitted");
   const rules = loadRules(root);
   const ownerDisplay = rules.policy.owner?.name;
+  // The owner's hand commits (a terminal on their machine) carry the brain repo's git user.name,
+  // often a handle rather than "owner" (G376). The hub always commits under an explicit name, so
+  // that name is the owner's too, unless it is an agent's.
+  const hand = git(root, ["config", "user.name"]).trim();
+  const byOwner = (author: string) => isOwnerId(author, ownerDisplay) || (!!hand && author === hand && !rules.policy.agents[hand]);
   const widenings: Widening[] = [];
   if (base) {
     const b = base.snap;
@@ -111,7 +116,7 @@ export function auditCarve(root: string, opts: { now?: Date; save?: boolean; ale
     const dirty = (paths: string[]) => git(root, ["status", "--porcelain", "--", ...paths]).split("\n").filter(Boolean).map((l) => l.replace(/^\s*\S+\s+/, ""));
     const judge = (agent: string, what: string, paths: string[]) => {
       const c = causes(paths), u = dirty(paths);
-      widenings.push({ agent, what, paths, causes: c, uncommitted: u, ok: c.length > 0 && !u.length && c.every((x) => isOwnerId(x.author, ownerDisplay)) });
+      widenings.push({ agent, what, paths, causes: c, uncommitted: u, ok: c.length > 0 && !u.length && c.every((x) => byOwner(x.author)) });
     };
     for (const [agent, st] of Object.entries(cur.agents)) {
       const was = b.agents[agent];

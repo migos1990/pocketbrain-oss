@@ -53,10 +53,10 @@ test("doctor marks each finding it can repair; --fix previews every repair and c
   const fixOf = (re: RegExp) => f.find((x) => re.test(x.text))?.fix;
   expect(fixOf(/index\.lock/)).toBe("lock");
   expect(fixOf(/routes to the dashboard port/)).toBe("tunnel");
-  expect(fixOf(/end the ingress/)).toBe("tunnel");
-  expect(fixOf(/no public door/)).toBe("public-url");
-  expect(fixOf(/no public_url in rules\/hub\.yaml/)).toBe("public-url");
-  expect(fixOf(/gardener's Anthropic side/)).toBe("gardener-config");
+  expect(fixOf(/end its ingress/)).toBe("tunnel");
+  expect(fixOf(/no public door/i)).toBe("public-url");
+  expect(fixOf(/no public_url in rules\/hub\.yaml/i)).toBe("public-url");
+  expect(fixOf(/gardener.s Anthropic side/i)).toBe("gardener-config");
   expect(fixOf(/has no snapshot/)).toBeUndefined(); // building one doesn't paste it: not a repair
   const head = git(root, "rev-parse", "HEAD");
   const r = cli(root, "doctor", "--offline", "--fix");
@@ -129,7 +129,7 @@ test("no backup yet, or a stale one: the repair makes one now", () => {
   expect(cli(root, "backup", "--init", "--pub", pub).code).toBe(0);
   writeFileSync(join(root, "rules", "backup.yaml"), readFileSync(join(root, "rules", "backup.yaml"), "utf8").replace("dest: ~/pocketbrain-backups", `dest: ${dest}`));
   git(root, "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-qam", "dest");
-  expect(findings(root).find((x) => /no backup made yet/.test(x.text))?.fix).toBe("backup");
+  expect(findings(root).find((x) => /no backup made yet/i.test(x.text))?.fix).toBe("backup");
   const r = cli(root, "doctor", "--offline", "--fix", "--yes");
   expect(r.out).toMatch(/backup brain-.*\.tar\.age/);
   expect(readdirSync(dest).filter((f) => f.endsWith(".tar.age"))).toHaveLength(1);

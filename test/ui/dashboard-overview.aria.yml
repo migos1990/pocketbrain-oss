@@ -1,51 +1,96 @@
 - banner:
-  - img "pocketBrain"
-  - text: Robin's brain
   - navigation "Pages":
-    - link "Overview":
+    - link "Home":
       - /url: /
-    - link "Decide":
-      - /url: /deck
-    - link "Brain":
-      - /url: /brain
-    - link "Who sees what":
-      - /url: /map
-    - link "Assistants":
-      - /url: /agents
-    - link "Who matters":
-      - /url: /people
-    - link "Activity":
-      - /url: /activity
-    - link "Upkeep":
-      - /url: /upkeep
-    - link "Digest":
-      - /url: /digest
-    - link "Spend":
-      - /url: /usage
+    - text: Robin Lefebvre's brain
+    - link "Settings":
+      - /url: /overview
 - main:
-  - heading "Nothing needs you" [level=1]
-  - text: The assistants are behaving.
-  - heading "Your assistants" [level=2]
-  - link "steward":
-    - /url: /agent/steward
-  - text: nothing today · sees 6 of 6 notes · last seen never
-  - button "Read-only"
-  - button "Pause"
-  - link "planner":
-    - /url: /agent/planner
-  - text: nothing today · sees 3 of 6 notes · last seen never
-  - button "Read-only"
-  - button "Pause"
-  - link "gardener":
-    - /url: /agent/gardener
-  - text: nothing today · sees 6 of 6 notes · last seen never
-  - button "Read-only"
-  - button "Pause"
-  - link "helper":
-    - /url: /agent/helper
-  - text: nothing today · sees 3 of 6 notes · last seen never
-  - button "Read-only"
-  - button "Pause"
-  - heading "Real-use bar" [level=2]
-  - text: "Day 0 of 14 with daily use and no hand fix last break 2026-10-14: no agent read the brain No hand fix logged yet to do Restore drill: not run yet pocketbrain drill"
-  - group: Activity and your weekly numbers
+  - heading "Settings" [level=1]
+  - paragraph:
+    - link "Your memory":
+      - /url: /brain
+    - text: ": 488 facts, 28 changed this week. Nothing needs a look."
+  - list:
+    - listitem:
+      - link "Brain":
+        - /url: /brain
+      - text: every note, search, edit
+    - listitem:
+      - link "Assistants":
+        - /url: /agents
+      - text: who connects, their switches and keys
+    - listitem:
+      - link "Who sees what":
+        - /url: /map
+      - text: each assistant's view
+    - listitem:
+      - link "Who matters":
+        - /url: /people
+      - text: the people you hear from
+    - listitem:
+      - link "Activity":
+        - /url: /activity
+      - text: reads, writes and relayed mail
+    - listitem:
+      - link "History":
+        - /url: /history
+      - text: every change, with Undo
+    - listitem:
+      - link "Digest":
+        - /url: /digest
+      - text: the daily summary
+    - listitem:
+      - link "Upkeep":
+        - /url: /upkeep
+      - text: the nightly checks
+    - listitem:
+      - link "Spend":
+        - /url: /usage
+      - text: model spend and caps
+  - heading "Still open (1)" [level=2]
+  - text: "memory fix ChatGPT remembers \"course coordinator\" for Isabelle Roy: role ; your brain says registrar. Approve sends it the fix. 10 min ago"
+  - button "Approve"
+  - button "Decline"
+  - heading "Filed for you this week" [level=2]
+  - text: "From gmail: people/martin-leclerc#last_contact = 2026-10-08 (\"Robin talked to Martin Leclerc on 2026-10-08 about the Saturday carpo…\") pocketBrain saved it: filed on its page; Undo takes it back out · 60 min ago"
+  - button "Undo"
+  - text: "From gmail: people/hannah-becker#last_contact = 2026-10-08 (\"Robin met Hannah Becker on 2026-10-08 to walk through the release che…\") pocketBrain saved it: filed on its page; Undo takes it back out · 60 min ago"
+  - button "Undo"
+  - text: "From gmail: a change to a private note pocketBrain saved it: filed on its page; Undo takes it back out · 60 min ago"
+  - button "Undo"
+  - text: "From gmail: projects/kitchen-renovation#next_step = take the tile delivery on 12 October (\"For the Kitchen renovation the next step is to take the tile delivery…\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: people/grace-liu#role = customer success director (\"Grace Liu is now the customer success director for Atlas\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: projects/atlas-launch#next_step = freeze the beta build on 15 October (\"For the Atlas launch the next step is to freeze the beta build on 15 …\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: people/sofia-marquez#role = senior product marketing manager (\"Sofia Marquez is now the senior product marketing manager for Atlas\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: people/maya-chen#last_contact = 2026-10-07 (\"Robin met Maya Chen on 2026-10-07 to go over the beta screens\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: people/kenji-watanabe#role = senior data analyst (\"Kenji Watanabe is now a senior data analyst on the Atlas team\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: projects/moms-move#next_step = sign the lease at Maison des Pins on 15… (\"For the Mom's move the next step is to sign the lease at Maison des P…\") pocketBrain saved it: filed on its page; Undo takes it back out · 2 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/pinecrest-partnership#next_step = send the export sample to Ben by 9 Octo… (\"For the Pinecrest pilot the next step is to send the export sample to…\") pocketBrain saved it: filed on its page; Undo takes it back out · 2 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/guest-lecture-series#next_step = send Zoe the room details for 17 Novemb… (\"For the Guest lectures the next step is to send Zoe the room details …\") pocketBrain saved it: filed on its page; Undo takes it back out · 2 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/product-discovery-course#next_… = return the midterm reflections on 13 Oc… (\"For the Product Discovery course the next step is to return the midte…\") pocketBrain saved it: filed on its page; Undo takes it back out · 2 days ago"
+  - button "Undo"
+  - text: "From gmail: people/laila-haddad#role = product manager (\"Laila Haddad is now a product manager on the Atlas team\") pocketBrain saved it: filed on its page; Undo takes it back out · 3 days ago"
+  - button "Undo"
+  - text: "From gmail: people/isabelle-roy#role = registrar (\"Isabelle Roy is now the registrar for continuing studies\") pocketBrain saved it: filed on its page; Undo takes it back out · 3 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/designer-hire#next_step = decide between Lucas and Nina by 14 Oct… (\"For the Senior designer hire the next step is to decide between Lucas…\") pocketBrain saved it: filed on its page; Undo takes it back out · 3 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/q1-roadmap#next_step = share the first draft with Priya by 16 … (\"For the Q1 roadmap the next step is to share the first draft with Pri…\") pocketBrain saved it: filed on its page; Undo takes it back out · 3 days ago"
+  - button "Undo"
+  - text: "From gmail: people/emma-wilson#last_contact = 2026-10-04 (\"Robin called Emma Wilson on 2026-10-04 to plan her visit next summer\") pocketBrain saved it: filed on its page; Undo takes it back out · 4 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/book-club-november#next_step = finish the book before the 25th (\"For the Book club, November the next step is to finish the book befor…\") pocketBrain saved it: filed on its page; Undo takes it back out · 4 days ago"
+  - button "Undo"
+  - text: "From gmail: projects/red-river-trip#next_step = book the cabin for 9 to 16 April (\"For the Red River climbing trip the next step is to book the cabin fo…\") pocketBrain saved it: filed on its page; Undo takes it back out · 5 days ago"
+  - button "Undo"
+  - group: Your assistants, activity and weekly numbers

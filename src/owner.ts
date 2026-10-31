@@ -26,4 +26,6 @@ export function isOwnerId(name: unknown, displayName?: string): boolean {
 
 // A source ref for something the owner said on a channel (inbox, dashboard, text, init…).
 export const ownerRef = (date: string, channel: string) => `owner:${date}/${channel}`;
+// The owner approved a proposal by tapping Yes: recorded on the fact, ranked as nothing (src/sources.ts).
+export const approvedRef = (date: string, channel: string) => `approved:${date}/${channel}`;
 export const OWNER_REF = /^(owner|louis):\d{4}-\d{2}-\d{2}\/.+/;

@@ -25,6 +25,16 @@ const noteId = (url: URL) => { try { return decodeURIComponent(url.pathname.repl
 
 export const MUTANTS: Mutant[] = [
   {
+    name: "a visible note's title and aliases are served as stored, never withheld",
+    catches: ["R7"],
+    wrap: (inner, ctx) => async (req) => {
+      const url = new URL(req.url), r = await inner(req);
+      if (!isLimited(req, ctx) || req.method !== "GET" || !url.pathname.startsWith("/v1/notes/") || r.status !== 200) return r;
+      const mine = await r.json(), all = await (await inner(asFull(req, ctx))).json();
+      return Response.json({ ...mine, title: all.title, aliases: all.aliases });
+    },
+  },
+  {
     name: "a hidden note written with a plain slash answers 403",
     catches: ["R5"],
     wrap: (inner, ctx) => (req) => {

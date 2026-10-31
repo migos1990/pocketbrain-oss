@@ -69,6 +69,23 @@ export function lookalikeBase(rules: Rules, name: string): string | undefined {
   return lookalike(rules, name) ?? (bare && bare !== name ? lookalike(rules, bare) : undefined);
 }
 
+// A new id read like a label, with two differences. A part of the owner's name counts only as a
+// whole dash-separated part ("ann-bot" for Ann Lee, not "scanner"): an id can't be left empty the
+// way a label can. And a number at the end doesn't hide an agent ("steward-2" reads as steward),
+// except the plain assistant-N an access request hands out.
+function idLookalike(rules: Rules, id: string): string | undefined {
+  const parts = (rules.policy.owner?.name ?? "").split(/\s+/).map(skel).filter((x) => x.length >= 3);
+  const whole = skel(id);
+  if (id.split("-").map((t) => skel(t.replace(/\d+$/, ""))).some((t) => parts.includes(t)) || (parts.length > 1 && whole.includes(parts.join("")))) return OWNER;
+  const unnamed = { ...rules, policy: { ...rules.policy, owner: rules.policy.owner ? { ...rules.policy.owner, name: undefined } : undefined } } as Rules;
+  const stem = id.replace(/(?:-?\d)+$/, "");
+  for (const x of stem !== id && stem !== "assistant" && stem.length >= 2 ? [id, stem] : [id]) {
+    const like = lookalike(unnamed, x);
+    if (like) return like;
+  }
+  return undefined;
+}
+
 // Throws with a sentence the owner can act on; nothing is written.
 export function checkNewAgent(rules: Rules, a: NewAgent): void {
   if (!AGENT_NAME.test(a.agent)) throw new Error("the agent name is 2 to 31 lowercase letters, digits and dashes, starting with a letter");
@@ -79,6 +96,11 @@ export function checkNewAgent(rules: Rules, a: NewAgent): void {
   if (like) throw new Error(`the label "${a.name}" reads as ${like === OWNER ? "you" : like}; leave it empty or pick another`);
   if (RESERVED_AGENTS.includes(a.agent)) throw new Error(`${a.agent} is the hub's own name; pick another`);
   if (rules.policy.agents[a.agent]) throw new Error(`${a.agent} is already in policy.yaml; change its slice with carve, give it a token with connect, or reopen sign-in approval with oauth expect`);
+  // The id is shown wherever no label is set, so it gets the same look-alike check as a label.
+  const idLike = idLookalike(rules, a.agent);
+  if (idLike) throw new Error(idLike === OWNER
+    ? `the name ${a.agent} reads as you: it holds your name, so its asks would look like yours; pick another name, such as claude-code or town`
+    : `the name ${a.agent} reads as ${idLike}; pick another name`);
   if (!a.slices.length) throw new Error("pick at least one slice (for example area:work and contacts-basic)");
   if (a.slices.includes("all")) throw new Error("a new agent starts as trial with a slice; the all slice is a choice to make in policy.yaml yourself");
   const unknown = a.slices.filter((s) => !rules.slices[s]);

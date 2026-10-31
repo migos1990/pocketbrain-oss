@@ -6,9 +6,12 @@ import { join } from "node:path";
 import YAML from "yaml";
 import type { Sensitivity, FactRecord } from "./brain";
 import { cleanStanding, readStandingYaml } from "./standing";
+import { setOwnerZone, zoneDay } from "./clock";
 
 export interface AgentPolicy {
   tier: "core" | "trial";
+  // This agent's token budget per call (src/context.ts); over the policy-wide one.
+  context_budget?: Record<string, number>;
   transport?: "paste" | "mcp" | "api";
   aliases?: string[];
   slices?: string[];
@@ -61,8 +64,11 @@ export interface CoOwner { name: string; areas: string[]; agents: string[] }
 
 export interface Policy {
   // How agents are told to refer to the brain's owner ("ask <name>"). Set by `pocketbrain init`.
-  owner?: { name: string; timezone?: string };
+  // aliases: other full names the owner goes by ("Robin Lake"), so mail about them lands on their page.
+  owner?: { name: string; timezone?: string; aliases?: string[] };
   agents: Record<string, AgentPolicy>;
+  // Every agent's token budget per call (src/context.ts, docs/hub.md "Context budget").
+  context_budget?: Record<string, number>;
   areas: Record<string, { owner?: string }>;
   resolver?: string;
   // The agent that reads Louis's texts (default: the resolver). Its citations of his messages
@@ -86,6 +92,11 @@ export interface Policy {
   // Who runs the nightly pass: the hub itself (local, the default) or the gardener (managed),
   // with the hub stepping in when the gardener has been silent 36 hours. hub.yaml wins.
   night?: "local" | "managed";
+  // The dashboard on the owner's tailnet (docs/dashboard-tailnet.md), on a single machine; hub.yaml
+  // wins once there is one. Set with `pocketbrain dashboard tailnet on --device <100.x>`.
+  dashboard_tailnet?: boolean;
+  dashboard_tailnet_login?: string;
+  dashboard_tailnet_devices?: string[];
   // Ask to see (src/asks.ts, docs/ask-to-see.md): an agent asks for something outside its cut and
   // the owner approves one read, on their phone (Auth0 Guardian) or in the dashboard. Off unless set.
   ask_to_see?: import("./asks").AskPolicy | boolean;
@@ -113,10 +124,14 @@ export interface Slice {
 }
 
 export interface AttributeSpec {
-  merge?: "replace" | "set" | "max" | "min" | "append";
+  // latest: values that follow each other (build numbers, versions): the newest is kept, earlier
+  // ones go to history, and a same-day or older value never opens a dispute (backlog 403).
+  merge?: "replace" | "set" | "max" | "min" | "append" | "latest";
   normalize?: "text" | "email" | "e164" | "date" | "money" | "link";
-  shelf_life?: string; // "180d", "until_date"
+  shelf_life?: string; // "180d", "until_date" (stale once the date in its value has passed)
   item_key?: string;
+  // Set by attributeSpec for DATED attributes: like until_date, on top of any shelf life.
+  ends_on_date?: boolean;
 }
 
 export interface Checks {
@@ -160,18 +175,19 @@ export function loadRules(root: string): Rules {
   for (const area of Object.keys(policy.areas ?? {})) slices[`area:${area}`] ??= { areas: [area] };
   slices["all"] ??= {};
   checkRoles(policy);
-  for (const name of RESERVED_AGENTS) if (policy.agents?.[name]) throw new Error(`rules/policy.yaml: ${name} is the hub's own name for what it decides when you don't answer; give that assistant another name`);
+  for (const name of RESERVED_AGENTS) if (policy.agents?.[name]) throw new Error(`rules/policy.yaml: ${name} is a name the hub's own commits carry; give that assistant another name`);
   limitCollaborators(policy);
   checkCoOwners(policy);
   // A co-owner area's slice is that area, nothing more: slices.yaml can't widen it.
   for (const [id, c] of Object.entries(policy.co_owners ?? {})) for (const area of c.areas)
     if (slicesFile.slices?.[`area:${area}`]) throw new Error(`rules/slices.yaml: co-owner ${id}: area:${area} is defined by the co-owner's area; remove it from slices.yaml`);
   const actProblems = limitActs(policy);
+  setOwnerZone(policy.owner?.timezone);
   return { policy, slices, checks, guidance, standing: cleanStanding(readStandingYaml(join(dir, "standing.yaml"))), ...(actProblems.length ? { actProblems } : {}) };
 }
 
-// Names no assistant may take: the hub's own commits carry them (docs/decision-deck.md).
-export const RESERVED_AGENTS = ["auto-decide"];
+// Names no assistant may take: the hub's own commits carry them (docs/filing.md).
+export const RESERVED_AGENTS = ["auto-decide", "hub"];
 
 // A gardener reads everything and only proposes, so it must stay an outside agent with no say:
 // never the resolver, never an area owner. A policy that breaks this doesn't load.
@@ -186,6 +202,16 @@ function checkRoles(policy: Policy) {
   }
 }
 
+// One of the owner's own assistants, with a memory of its own to keep in line: not a tool inside the
+// wall, not the Gardener, and never a person's: a collaborator's (re-audit 2026-10-30, G529: quiz(),
+// the belief radar and the home's "Your assistants" took one for the owner's) or a household
+// co-owner's (G533).
+export function ownAssistant(rules: Rules, name: string): boolean {
+  const a = rules.policy.agents[name];
+  if (!a || a.inside_wall || a.role === "gardener" || a.collaborator) return false;
+  return !Object.values(rules.policy.co_owners ?? {}).some((c) => c?.agents?.includes(name));
+}
+
 // A collaborator (src/share.ts) is a person, not one of the owner's assistants. Whatever
 // policy.yaml says: trial, read-only, paused past its date, personal at most, money out, never the
 // all slice, never the resolver, an area owner, named after an area or the owner's text channel.
@@ -193,7 +219,7 @@ function checkRoles(policy: Policy) {
 const SHARE_CEILING: Sensitivity = "personal";
 const RANK: Record<string, number> = { public: 0, personal: 1, private: 2, secret: 3 };
 function limitCollaborators(policy: Policy) {
-  const day = process.env.PB_TODAY ?? new Date().toISOString().slice(0, 10);
+  const day = process.env.PB_TODAY ?? zoneDay(policy.owner?.timezone); // the owner's day, as share.ts sets until (G286)
   for (const [name, a] of Object.entries(policy.agents ?? {})) {
     if (!a?.collaborator) continue;
     if (policy.resolver === name) throw new Error(`rules/policy.yaml: ${name} is a collaborator, so it can't be the resolver`);
@@ -236,8 +262,7 @@ function checkCoOwners(policy: Policy) {
       if (a?.collaborator) bad(`agent ${name} is a collaborator's (a guest), so it can't be a co-owner's`);
       for (const role of ["resolver", "owner_channel", "louis_channel", "owner_editor"] as const)
         if (policy[role] === name) bad(`agent ${name} can't be the owner's ${role}`);
-      // The capture channel falls back to "instinct" when none is named (captureAgent in capture.ts).
-      if ((policy.owner_channel ?? policy.louis_channel ?? policy.resolver ?? "instinct") === name) bad(`agent ${name} can't be the owner's capture channel`);
+      if (captureAgentName(policy) === name) bad(`agent ${name} can't be the owner's capture channel`);
       if (a.inside_wall) bad(`agent ${name} can't be inside_wall`);
       if (a.role) bad(`agent ${name} can't have role ${a.role}`);
       const owns = Object.entries(policy.areas ?? {}).filter(([k, x]) => x?.owner === name && !c.areas.includes(k)).map(([k]) => k);
@@ -315,6 +340,12 @@ function limitActs(policy: Policy): string[] {
 export const actOn = (rules: Rules, agent: string) => !!rules.policy.agents[agent]?.act?.send_mail?.to?.length;
 
 export const isGardener = (rules: Rules, agent: string) => rules.policy.agents[agent]?.role === "gardener";
+// Who a capture's or a pull's facts are written as (capture.ts captureAgent): the owner's channel,
+// else the resolver, else the hub's own `capture` agent that init writes (G422), else "instinct"
+// (brains made before it).
+export const captureAgentName = (policy: Rules["policy"]): string =>
+  policy.owner_channel ?? policy.louis_channel ?? policy.resolver ?? (policy.agents?.capture?.inside_wall ? "capture" : "instinct");
+
 export const gardeners = (rules: Rules) => Object.entries(rules.policy.agents).filter(([, a]) => a.role === "gardener").map(([n]) => n);
 
 // The owner's name as agents read it in views and refusals.
@@ -331,8 +362,37 @@ export function tierOf(rules: Rules, agent: string) {
   return { ...tier, max_sensitivity: a.max_sensitivity ?? tier.max_sensitivity };
 }
 
+// Attributes that end on the date they name: past it, a next step or a due date is no longer the plan.
+export const DATED = ["next_step", "due", "deadline"];
+// Attributes every brain has, whatever checks.yaml says (checks.yaml still wins where it names one).
+// prefers: how a person likes things done, in the words an assistant's memory or a note used
+// ("prefers email over phone calls"). A vendor's memory is mostly this, so an import keeps it as
+// prose, one item per line, instead of losing it (outside review 2026-10-29, G490).
+export const BUILTIN: Record<string, Record<string, AttributeSpec>> = {
+  person: { prefers: { merge: "set", normalize: "text" } },
+};
+// What a contact card fills (src/contacts.ts) where checks.yaml says nothing: who someone is to the
+// owner, and what the card calls them. Never in the extraction prompt, and a model's candidate for
+// one is not captured (cardOnly): only a card's line proposes them. A nickname is a fact, never a
+// name the brain matches pages on.
+export const CARD_ATTRS: Record<string, Record<string, AttributeSpec>> = {
+  person: { relationship: { merge: "replace", normalize: "text" }, aliases: { merge: "set", normalize: "text" } },
+};
+export const cardOnly = (rules: Rules, type: string, attribute: string) =>
+  !!CARD_ATTRS[type]?.[attribute] && !(rules.checks.types?.[type]?.attributes?.[attribute] ?? BUILTIN[type]?.[attribute]);
+// Whether checks.yaml or the built-ins say anything about this kind of fact (attributeSpec gives {} when not).
+export function isDeclared(rules: Rules, type: string, attribute: string): boolean {
+  return !!(rules.checks.types?.[type]?.attributes?.[attribute] ?? BUILTIN[type]?.[attribute] ?? CARD_ATTRS[type]?.[attribute]);
+}
+
+// Project attributes that are a run of values over time unless rules/checks.yaml says otherwise.
+// Projects only: a person's build or a contract's version is not a release stream.
+export const LATEST = ["version", "build", "build_number", "latest_version", "latest_build", "app_version"];
+
 export function attributeSpec(rules: Rules, type: string, attribute: string): AttributeSpec {
-  return rules.checks.types?.[type]?.attributes?.[attribute] ?? {};
+  let s = rules.checks.types?.[type]?.attributes?.[attribute] ?? BUILTIN[type]?.[attribute] ?? CARD_ATTRS[type]?.[attribute] ?? {};
+  if (type === "project" && LATEST.includes(attribute) && !s.merge) s = { ...s, merge: "latest" };
+  return DATED.includes(attribute) ? { ...s, ends_on_date: true } : s;
 }
 
 // Maps any name an agent has gone by (Vamprose, "Vamprose / Town") to its policy key.

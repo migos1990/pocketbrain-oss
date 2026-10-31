@@ -7,16 +7,17 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
-import { loadBrain, parseNote, saveNote, serializeNote, today, isList, isDisputed, CONTENT_DIRS, type Note, type FactRecord, type Sensitivity } from "../brain";
+import { loadBrain, parseNote, parseShared, saveNote, serializeNote, today, isList, isDisputed, CONTENT_DIRS, type Note, type FactRecord, type Sensitivity } from "../brain";
 import { cap } from "./labels";
 import { loadRules, attributeSpec } from "../rules";
 import { normalizeValue } from "../normalize";
 import { findSecret } from "../checks";
 import { logWrite } from "../write";
-import { git, authorEnv } from "../git";
+import { git, authorEnv, gitTime } from "../git";
 import { OWNER, OWNER_CONFIRMED, isOwnerConfirmed, isOwnerId, ownerRef } from "../owner";
 import { hubGate } from "../hub";
-import { CoreError } from "../core";
+import { CoreError, dropStaleVectors } from "../core";
+import { applyRewrite, footnotes, sections } from "../wiki";
 
 const EDITABLE = CONTENT_DIRS.filter((d) => d !== "disputes");
 
@@ -24,14 +25,19 @@ export function editableNote(root: string, id: string): Note {
   const clean = id.replace(/\.md$/, "");
   if (!/^[a-z0-9_-]+(\/[A-Za-z0-9._-]+)+$/.test(clean) || clean.includes("..")) throw new CoreError(400, "bad note id");
   if (!EDITABLE.includes(clean.split("/")[0])) throw new CoreError(403, `${clean.split("/")[0]}/ isn't editable here`);
-  const note = loadBrain(root).find((n) => n.fm.id === clean);
+  // A copy of that one note to edit: copying all 10k to find it took seconds (backlog #295).
+  const file = join(root, `${clean}.md`);
+  let direct: Note | undefined;
+  try { direct = existsSync(file) ? parseShared(root, `${clean}.md`, readFileSync(file, "utf8")) : undefined; } catch { direct = undefined; }
+  const note = direct?.fm.id === clean ? direct : loadBrain(root, { shared: true }).find((n) => n.fm.id === clean);
   if (!note) throw new CoreError(404, `no note ${clean}`);
-  return note;
+  return structuredClone(note);
 }
 
-function commit(root: string, id: string, msg: string, keys: string[]) {
+// `trailers` say how a human edit came in (Via: edit-with-chat, Section: <heading>), docs/wiki.md.
+function commit(root: string, id: string, msg: string, keys: string[], trailers: string[] = []) {
   git(root, ["add", id + ".md"]);
-  git(root, ["commit", "-q", "-m", `owner: ${msg}\n\nKind: owner-edit${keys.length ? `\nFact-Keys: ${keys.join(", ")}` : ""}`], OWNER);
+  git(root, ["commit", "-q", "-m", `owner: ${msg}\n\nKind: owner-edit${trailers.map((t) => `\n${t}`).join("")}${keys.length ? `\nFact-Keys: ${keys.join(", ")}` : ""}`], OWNER);
 }
 
 // Parses what Louis typed: JSON for objects, numbers and lists when it parses, else text.
@@ -97,6 +103,47 @@ export function confirmFact(root: string, id: string, attribute: string): string
   return `${key} confirmed`;
 }
 
+// "Done": the owner says a single fact stopped being true today (a next step that happened). It
+// ends with his word as a source, so agents stop being told it; the value stays, ended, for history.
+export function markDone(root: string, id: string, attribute: string): string {
+  const note = editableNote(root, id);
+  const f = note.fm.facts?.[attribute];
+  if (!f) throw new CoreError(404, `no fact ${attribute} on ${note.fm.id}`);
+  if (isList(f) || isDisputed(f)) throw new CoreError(409, "only a single value can be marked done here; edit the list or settle the conflict instead");
+  const r = f as FactRecord;
+  const d = today();
+  if (r.valid_to && r.valid_to <= d) return `Already done: ${cap(attribute)} ended ${r.valid_to}.`;
+  r.valid_to = d;
+  const ref = ownerRef(d, "dashboard-done");
+  if (!r.sources?.some((x) => (typeof x === "string" ? x : x.ref) === ref)) r.sources = [...(r.sources ?? []), ref];
+  note.fm.updated = d;
+  saveNote(root, note);
+  const key = `${note.fm.id}#${attribute}`;
+  commit(root, note.fm.id, `done ${key}`, [key]);
+  logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-edit", op: "done", key, outcome: "committed", step: 6 });
+  return `Marked ${cap(attribute)} on ${String(note.fm.title ?? note.fm.id)} as done.`;
+}
+
+// "Forget": the owner says a single fact no longer matters (a deadline that went by, an event that
+// is over and worth nothing now). It is retired with his word, so no assistant is told it again;
+// the value stays in the note's history, and Undo or `git revert` brings it back.
+export function forgetFact(root: string, id: string, attribute: string, why = "forgotten from the dashboard: past its date"): string {
+  const note = editableNote(root, id);
+  const f = note.fm.facts?.[attribute];
+  if (!f) throw new CoreError(404, `no fact ${attribute} on ${note.fm.id}`);
+  if (isList(f) || isDisputed(f)) throw new CoreError(409, "only a single value can be forgotten here; edit the list or settle the conflict instead");
+  const r = f as FactRecord;
+  if (r.retired) return `Already forgotten: ${cap(attribute)}.`;
+  const d = today();
+  r.retired = { at: d, by: OWNER, why };
+  note.fm.updated = d;
+  saveNote(root, note);
+  const key = `${note.fm.id}#${attribute}`;
+  commit(root, note.fm.id, `forget ${key}`, [key]);
+  logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-edit", op: "forget", key, outcome: "committed", step: 6 });
+  return `Forgot ${cap(attribute)} on ${String(note.fm.title ?? note.fm.id)}.`;
+}
+
 // The note's free text only; the frontmatter (facts, flags) is kept exactly as it is.
 export function saveNoteBody(root: string, id: string, body: string): string {
   const text = noteText(root, id);
@@ -104,6 +151,30 @@ export function saveNoteBody(root: string, id: string, body: string): string {
   if (!head) throw new CoreError(422, "this note has no frontmatter; edit the whole file instead");
   const b = body.replace(/\r\n/g, "\n").trim();
   return saveNoteText(root, id, head + (b ? b + "\n" : ""), "edit the text of");
+}
+
+// One `## ` section of the notes text (docs/wiki.md): replaced, or added at the end; the rest of
+// the note is kept exactly as it is.
+export function sectionHeading(h: string): string {
+  const t = h.trim();
+  if (!t || t.length > 80 || /[\n#]/.test(t)) throw new CoreError(400, "a section's heading is one line of at most 80 characters, with no #");
+  return t;
+}
+export function saveSection(root: string, id: string, heading: string, text: string): string {
+  const h = sectionHeading(heading);
+  const before = noteText(root, id);
+  const head = before.match(/^---\n[\s\S]*?\n---\n/)?.[0];
+  if (!head) throw new CoreError(422, "this note has no frontmatter; edit the whole file instead");
+  const n = editableNote(root, id);
+  const body = applyRewrite({ ...n, body: before.slice(head.length) }, { sections: [{ heading: h, text: text.replace(/\r\n/g, "\n") }], references: [] }).body;
+  return saveNoteText(root, id, head + body, `edit the ${h} section of`, { trailers: [`Section: ${h}`] });
+}
+
+// The parts of a note other than one section, for checking that a section-only edit stayed there.
+export function outsideSection(text: string, path: string, heading: string): string {
+  const n = parseNote(text, path);
+  const f = footnotes(n.body);
+  return JSON.stringify([n.fm, sections(f.text).filter((x) => x.heading !== heading)]);
 }
 
 // Undo one of Louis's own dashboard edits: a new commit by him that reverses it.
@@ -165,7 +236,7 @@ function stampChanged(prev: Note, next: Note): string[] {
   return changed;
 }
 
-export function saveNoteText(root: string, id: string, text: string, why = "edit text", opts: { stamp?: boolean } = {}): string {
+export function saveNoteText(root: string, id: string, text: string, why = "edit text", opts: { stamp?: boolean; trailers?: string[] } = {}): string {
   const { note, before } = checkNoteText(root, id, text);
   let after = text.replace(/\r\n/g, "\n");
   if (after === before) return `${note.fm.id}: no change`;
@@ -174,7 +245,7 @@ export function saveNoteText(root: string, id: string, text: string, why = "edit
   // The facts that differ are named, so the change feed can tell a hidden fact's edit from a visible one.
   const prev = parseNote(before, note.path), next = parseNote(after, note.path);
   const keys = [...new Set([...Object.keys(prev.fm.facts ?? {}), ...Object.keys(next.fm.facts ?? {})])].filter((a) => JSON.stringify(prev.fm.facts?.[a]) !== JSON.stringify(next.fm.facts?.[a])).map((a) => `${note.fm.id}#${a}`);
-  commit(root, note.fm.id, `${why} ${note.fm.id}`, keys);
+  commit(root, note.fm.id, `${why} ${note.fm.id}`, keys, opts.trailers);
   logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-edit", key: note.fm.id, outcome: "committed", step: 6 });
   return `${note.fm.id}: saved`;
 }
@@ -212,7 +283,7 @@ export function editorCommits(root: string, agent: string, limit = 20): EditorCo
   const reverted = new Set(git(root, ["log", "--format=%b", "--grep", "^This reverts commit "]).match(/[0-9a-f]{40}/g) ?? []);
   return out.split("\n").filter(Boolean).map((l) => {
     const [hash, at, subject] = l.split("\t");
-    return { hash, at, subject, reverted: reverted.has(hash) };
+    return { hash, at: gitTime(at), subject, reverted: reverted.has(hash) };
   });
 }
 
@@ -247,6 +318,7 @@ export function forgetNote(root: string, id: string): string {
   git(root, ["rm", "-q", "--", note.fm.id + ".md"]);
   git(root, ["commit", "-q", "-m", `owner: forget ${note.fm.id}\n\nKind: owner-edit\nForgot: ${note.fm.id}`], OWNER);
   logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-forget", key: note.fm.id, outcome: "committed", step: 6 });
+  dropStaleVectors(root); // semantic search's vectors of the note, at once (src/semantic.ts)
   return `Forgot ${note.fm.title}. No assistant can see it now.`;
 }
 
@@ -272,7 +344,8 @@ export function recentlyForgotten(root: string, limit = 10): Forgotten[] {
   const seen = new Set<string>();
   const list: Forgotten[] = [];
   for (const line of out.split("\n").filter(Boolean)) {
-    const [hash, at] = line.split("\t");
+    const [hash, rawAt] = line.split("\t");
+    const at = gitTime(rawAt ?? "");
     const id = ownerForget(root, hash);
     if (!id || seen.has(id)) continue;
     seen.add(id);

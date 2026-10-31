@@ -17,4 +17,8 @@ gmail.googleapis.com               # Gmail source pull, read-only, owner's conse
 www.googleapis.com                 # Calendar source pull and OAuth scope names, read-only (src/google.ts)
 accounts.google.com                # Google sign-in page for `sources connect`, opened by the owner
 oauth2.googleapis.com              # Google token refresh for the read-only sources
+people.googleapis.com              # Google Contacts source pull, contacts.readonly, owner's consent line naming contacts (src/google.ts)
 discord.com                        # Discord source pull, read-only bot, GET only (src/feeds.ts)
+huggingface.co                     # the semantic-search model, downloaded once by `pocketbrain search setup` only; never a note or query (src/semantic.ts)
+us.aws.cdn.hf.co                   # where huggingface.co redirects the model's large files during `search setup` (another *.cdn.hf.co by region; src/semantic.ts)
+bun.sh                             # the installer fetches Bun from it; src/owner-errors.ts names it in the installer's fix lines

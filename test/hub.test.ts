@@ -250,9 +250,9 @@ test("doctor reports role, signing, history, queue and snapshots", async () => {
   const h = await doctor(home, { offline: false });
   const hget = (area: string) => h.filter((x) => x.area === area).map((x) => `${x.level} ${x.text}`).join("\n");
   expect(hget("replicas")).toMatch(/^ok laptop reachable/);
-  expect(hget("server")).toContain(`nothing answers on 127.0.0.1:${port}`);
-  expect(hget("door")).toMatch(/no public_url/);
-  expect(hget("snapshots")).toMatch(/no snapshot to fall back on/);
+  expect(hget("server")).toContain(`Nothing answers on 127.0.0.1:${port}`);
+  expect(hget("door")).toMatch(/no public_url/i);
+  expect(hget("snapshots")).toMatch(/no snapshot to fall back on/i);
   expect(hget("dashboard")).toMatch(/^ok/);
 });
 

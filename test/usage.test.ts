@@ -69,7 +69,7 @@ test("reads and writes are never metered, and keep working past the cap", async 
   await metered(root, "sleep.consolidate", fake()).complete({ system: "s", prompt: "p".repeat(3999) });
   expect(capState(root).state).toBe("over");
   // The owner is told agent mail held by the paused request check is waiting (relay step 3c).
-  expect(usageItem(root)?.title).toContain("agent mail that needs the request check is held for you");
+  expect(usageItem(root)?.title).toContain("assistant mail that needs the request check is held for you");
   expect((await call("helper", "GET", "/v1/context")).status).toBe(200);
   expect((await call("planner", "GET", "/v1/search?q=course")).status).toBe(200);
   const w = await call("planner", "POST", "/v1/remember", { id: "projects/course-a", attribute: "next_step", value: "Book the room", as_of: "2026-10-08", sources: ["gmail:f000000000000006"] });
@@ -101,7 +101,7 @@ test("past the monthly cap every model step pauses; a step cap pauses only that 
 // errors, the public routes.
 async function agentTranscript(root: string, call: ReturnType<typeof setup>["call"], mcp: ReturnType<typeof setup>["mcp"]): Promise<string[]> {
   const out: string[] = [];
-  const keep = (r: { text: string }) => out.push(r.text.replace(/"(at|recorded|last_confirmed|updated|heartbeat)": "[^"]*"/g, '"$1": "T"').replace(/inbox\/[^"]+\.yaml/g, "inbox/F").replace(/commit [0-9a-f]{7,}/g, "commit H"));
+  const keep = (r: { text: string }) => out.push(r.text.replace(/"(at|recorded|last_confirmed|updated|heartbeat)": "[^"]*"/g, '"$1": "T"').replace(/inbox\/[^"]+\.yaml/g, "inbox/F").replace(/commit [0-9a-f]{7,}/g, "commit H").replace(/(new-org)-[0-9a-f]{6}\b/g, "$1-H")); // a new note's suffix is random (G28)
   for (const a of ["helper", "planner", "steward"] as const) {
     keep(await mcp(a, "initialize", {}));
     keep(await mcp(a, "tools/list"));
@@ -151,7 +151,7 @@ test("the owner hears in the digest with amounts, and by text only as an opaque 
   const d = digest(root).text;
   expect(d).toMatch(/\*\*Model spend cap reached\*\*: \$0\.01\d+ of \$0\.0100 this month/);
   expect(d).toContain("- Model calls since the last digest: 3 (");
-  writeFileSync(join(root, "rules", "escalation.yaml"), YAML.stringify({ transport: { use: "fake" }, quiet_hours: null, batch: { wait_minutes: 0, max_wait_count: 1, min_gap_minutes: 0, max_items: 5, max_chars: 480 } }));
+  writeFileSync(join(root, "rules", "escalation.yaml"), YAML.stringify({ transport: { use: "fake" }, quiet_hours: null, batch: { style: "list", wait_minutes: 0, max_wait_count: 1, min_gap_minutes: 0, max_items: 5, max_chars: 480 } }));
   await tick(root, { now: new Date("2026-10-08T15:00:00Z"), transport: fakeTransport(root) });
   const sent = fakeSent(root).map((x) => x.text).join("\n");
   expect(sent).toContain("Account notice, action needed");

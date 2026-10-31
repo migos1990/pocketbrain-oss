@@ -8,7 +8,7 @@ import { makeBrain } from "./fixture";
 import { vocabulary, checkChoice, ruleChoice, propose, applyChoice, asksForMoney } from "../src/consent";
 import { loadRules } from "../src/rules";
 import { makeModel, type ModelRequest } from "../src/model";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { git } from "../src/git";
 import { loadBrain } from "../src/brain";
 import { carve, grantFor } from "../src/carve";
@@ -95,7 +95,7 @@ test("a model that fails or answers nonsense falls back to the owner's words, an
 test("propose refuses the Gardener, bad names and essays; a new agent gets the add line", async () => {
   const root = makeBrain();
   await expect(propose(root, "gardener", "keeps things tidy")).rejects.toThrow(/by design/);
-  await expect(propose(root, "Bad Name", "work")).rejects.toThrow(/agent name/);
+  await expect(propose(root, "Bad Name", "work")).rejects.toThrow(/assistant.s name/);
   await expect(propose(root, "helper", "x".repeat(301))).rejects.toThrow(/300/);
   const n = await propose(root, "newbie", "helps with work");
   expect(n.isNew).toBe(true);
@@ -158,13 +158,14 @@ test("the dashboard proposes from a sentence, shows examples, and applies only o
 
   const pid = shown.text.match(/name="pid" value="([^"]+)"/)![1];
   const done = await req("POST", "/action/consent-apply", { csrf, pid });
-  expect(decodeURIComponent(done.loc)).toMatch(/^\/agent\/helper\?ok=Helper now sees \d+ note\(s\): area:personal, without money\.&undo=[0-9a-f]+/);
+  expect(done.loc).toMatch(/^\/agent\/helper\?ok=@[\w-]+&undo=[0-9a-f]+/);
+  expect(flashOf(done.loc).ok).toMatch(/^Helper now sees \d+ note\(s\): area:personal, without money\.$/);
   expect(policy(root).agents.helper.slices).toEqual(["area:personal"]);
   const again = await req("POST", "/action/consent-apply", { csrf, pid });
-  expect(decodeURIComponent(again.loc)).toContain("that proposal is gone");
+  expect(flashOf(again.loc).err).toContain("that proposal is gone");
 
   const bad = await req("POST", "/consent/gardener", { csrf, intent: "tidies" });
-  expect(decodeURIComponent(bad.loc)).toContain("by design");
+  expect(flashOf(bad.loc).err).toContain("by design");
 });
 
 // Docs sweep b20-21 (docs/consent.md): the listed money words count, and plain "accounts"/"pay" don't.

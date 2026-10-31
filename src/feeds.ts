@@ -110,47 +110,68 @@ export function attributedText(b: Uint8Array | null | undefined): string | undef
 // where: handles (phone or email) or a thread's chat_identifier ("chat…"), never a display name:
 // any member of a group chat can name it, and names aren't unique (evals/gaps.ts G43). A
 // display-name entry is refused with what to list instead. The allowlist is applied in the SQL
-// too, so a thread that isn't listed is never read into memory. Cursor: the last ROWID; the last
-// 200 rows of the listed threads are re-read so an edit or an unsend is seen.
+// too, so a thread that isn't listed is never read into memory. Cursor: the last ROWID read. The
+// first pass reads the last backfill_days, chosen by date in the SQL so a long thread's old rows
+// can't fill the batch, and with nothing recent starts after the thread's newest row (G60). Later
+// passes read past the cursor and re-read the 200 rows below it, keeping only texts already read
+// (`known`), so an edit or an unsend is seen and the old thread never comes in.
 const TEXT_ID = /^(\+?\d[\d\s().-]{3,}|[^\s@]+@[^\s@]+\.[^\s@]+|chat\d+)$/;
-export function fetchTexts(cfg: SourceConfig, cursor?: string, all = false): { items: Raw[]; cursor: string } {
+const TEXTS_BATCH = 500;
+function openChat(cfg: SourceConfig): Database {
   if (!cfg.where?.length) throw new Error("a texts source needs where: (the contacts or threads to read)");
   const named = cfg.where.find((w) => !TEXT_ID.test(String(w).trim()));
   if (named !== undefined) throw new Error(`texts where: ${JSON.stringify(named)} looks like a thread's display name, which anyone in a group chat can set; list the contact's handle (+15145550123 or an email) or the thread's chat_identifier (chat…) instead`);
   const path = cfg.path ?? CHAT_DB();
   if (!existsSync(path)) throw new Error(`no Messages database at ${path}`);
-  let db: Database;
-  try { db = new Database(path, { readonly: true }); }
+  try { return new Database(path, { readonly: true }); }
   catch (e) { throw new Error(`can't open the Messages database (${(e as Error).message}); the process running pocketbrain start needs Full Disk Access`); }
+}
+
+// The listed threads' messages: joins and the allowlist (2 x where: params).
+const threads = (cfg: SourceConfig) => {
+  const marks = cfg.where!.map(() => "?").join(",");
+  return `FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID
+    LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+    WHERE (c.chat_identifier IN (${marks}) OR h.id IN (${marks}))`;
+};
+
+// Rows of the listed threads matching `extra` (SQL with ? params), oldest first, at most TEXTS_BATCH.
+function textRows(db: Database, cfg: SourceConfig, extra: string, ...params: (string | number)[]): Raw[] {
+  const cols = new Set((db.query("PRAGMA table_info(message)").all() as Raw[]).map((c) => String(c.name)));
+  const opt = (c: string) => (cols.has(c) ? `m.${c}` : `NULL AS ${c}`);
+  const sql = `SELECT m.ROWID AS rowid, m.guid, m.text, ${opt("attributedBody")}, m.is_from_me, m.date, ${opt("date_edited")}, ${opt("date_retracted")}, m.item_type, h.id AS handle,
+    c.chat_identifier AS chat
+    ${threads(cfg)} AND ${extra} ORDER BY m.ROWID LIMIT ${TEXTS_BATCH}`;
+  return db.query(sql).all(...cfg.where!, ...cfg.where!, ...params) as Raw[];
+}
+
+const textItem = (r: Raw) => ({
+  guid: r.guid, text: r.text ?? attributedText(r.attributedBody) ?? "", is_from_me: !!r.is_from_me, date: appleDate(r.date),
+  date_edited: r.date_edited || undefined, is_deleted: !!r.date_retracted, item_type: r.item_type, handle: r.handle, chat: r.chat ?? r.handle,
+});
+
+export function fetchTexts(cfg: SourceConfig, cursor?: string, known: (id: string) => boolean = () => false): { items: Raw[]; cursor: string } {
+  const db = openChat(cfg);
   try {
-    const cols = new Set((db.query("PRAGMA table_info(message)").all() as Raw[]).map((c) => String(c.name)));
-    const opt = (c: string) => (cols.has(c) ? `m.${c}` : `NULL AS ${c}`);
-    const marks = cfg.where.map(() => "?").join(",");
     const last = Number(cursor ?? 0);
-    const sql = `SELECT m.ROWID AS rowid, m.guid, m.text, ${opt("attributedBody")}, m.is_from_me, m.date, ${opt("date_edited")}, ${opt("date_retracted")}, m.item_type, h.id AS handle,
-      c.chat_identifier AS chat
-      FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID
-      LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID LEFT JOIN chat c ON c.ROWID = cmj.chat_id
-      WHERE (c.chat_identifier IN (${marks}) OR h.id IN (${marks}))
-      AND m.ROWID > ? ORDER BY m.ROWID LIMIT 500`;
-    const since = last ? Math.max(0, last - 200) : 0;
-    let rows = db.query(sql).all(...cfg.where, ...cfg.where, since) as Raw[];
-    if (!last && !all) {
-      // First pass: only the last backfill_days.
-      const from = Date.now() - (cfg.backfill_days ?? 2) * 864e5;
-      rows = rows.filter((r) => Date.parse(appleDate(r.date) ?? "") >= from);
-    }
-    const items = rows.map((r) => ({
-      guid: r.guid, text: r.text ?? attributedText(r.attributedBody) ?? "", is_from_me: !!r.is_from_me, date: appleDate(r.date),
-      date_edited: r.date_edited || undefined, is_deleted: !!r.date_retracted, item_type: r.item_type, handle: r.handle, chat: r.chat ?? r.handle,
-    }));
-    const top = rows.reduce((m, r) => Math.max(m, Number(r.rowid)), last);
-    return { items, cursor: String(top) };
+    let rows: Raw[], top = last;
+    if (!last) {
+      // chat.db dates are nanoseconds since 2001 (seconds on older macOS).
+      const from = Date.now() - (cfg.backfill_days ?? 2) * 864e5 - APPLE_EPOCH;
+      rows = textRows(db, cfg, "(m.date >= ? OR (m.date < 1e12 AND m.date >= ?))", from * 1e6, from / 1000);
+      if (!rows.length) top = Number((db.query(`SELECT MAX(m.ROWID) AS top ${threads(cfg)}`).get(...cfg.where!, ...cfg.where!) as Raw | null)?.top ?? 0);
+    } else rows = textRows(db, cfg, "m.ROWID > ?", Math.max(0, last - 200));
+    top = rows.reduce((m, r) => Math.max(m, Number(r.rowid)), top);
+    const keep = rows.filter((r) => Number(r.rowid) > last || known(String(r.guid)));
+    return { items: keep.map(textItem), cursor: String(top) };
   } finally { db.close(); }
 }
 
+// One text by guid, for verify_source: only from the listed threads, however old or new.
 export function fetchText(cfg: SourceConfig, guid: string): Raw | undefined {
-  return fetchTexts(cfg, undefined, true).items.find((x) => x.guid === guid);
+  const db = openChat(cfg);
+  try { const r = textRows(db, cfg, "m.guid = ?", guid)[0]; return r ? textItem(r) : undefined; }
+  finally { db.close(); }
 }
 
 // ---------- Granola: the desktop app's local cache (read only) ----------

@@ -162,3 +162,145 @@ questions:
   - { id: c04, kind: carve, as: claude, q: "tax refund 2026", want: [], forbid: [money/impots-2026] }
   - { id: c05, kind: carve, as: helper, q: "maison de campagne Noël", want: [], forbid: [decisions/2026-10-05-campagne-noel, notes/2026-09-15-maison-campagne] }
   - { id: c06, kind: carve, as: helper, q: "Chloé TA", want: [decisions/2026-10-02-hire-ta, people/chloe-martin], forbid: [money/impots-2026] }
+  # blind3: notes and questions written by a third writer that saw neither src/lexicon.ts,
+  # the ranker nor any question above; written after blind2 became a dev set. The search bar is measured here.
+  - {"id": "y01", "kind": "blind3", "q": "Quand est le prochain nettoyage chez le dentiste des enfants?", "want": ["people/lise-pelchat"]}
+  - {"id": "y02", "kind": "blind3", "q": "Who is the kids' dentist?", "want": ["people/lise-pelchat"]}
+  - {"id": "y03", "kind": "blind3", "q": "What does Dr. Pelchat's next appointment look like?", "want": ["people/lise-pelchat"]}
+  - {"id": "y04", "kind": "blind3", "q": "Who has our ladder lent out, and what do they want back?", "want": ["people/stan-kowalski"]}
+  - {"id": "y05", "kind": "blind3", "q": "Qui arrose nos plantes quand on part en voyage?", "want": ["people/stan-kowalski"]}
+  - {"id": "y06", "kind": "blind3", "q": "Which neighbour is a retired carpenter?", "want": ["people/stan-kowalski"]}
+  - {"id": "y07", "kind": "blind3", "q": "Quel jour a lieu la pratique de soccer de ma fille?", "want": ["people/julien-st-pierre"]}
+  - {"id": "y08", "kind": "blind3", "q": "Who is the coach of the under-9 soccer team?", "want": ["people/julien-st-pierre"]}
+  - {"id": "y09", "kind": "blind3", "q": "À quelle date était le tournoi de fin de saison de soccer?", "want": ["people/julien-st-pierre"]}
+  - {"id": "y10", "kind": "blind3", "q": "When are the winter tires going on the car?", "want": ["orgs/garage-lemieux-auto"]}
+  - {"id": "y11", "kind": "blind3", "q": "Est-ce que le mécano a dit quelque chose à propos des freins?", "want": ["orgs/garage-lemieux-auto"]}
+  - {"id": "y12", "kind": "blind3", "q": "Où on fait réparer la Subaru?", "want": ["orgs/garage-lemieux-auto"]}
+  - {"id": "y13", "kind": "blind3", "q": "When is the dog's rabies booster due?", "want": ["orgs/vet-clinic-pattes-rouges"]}
+  - {"id": "y14", "kind": "blind3", "q": "Le vétérinaire a dit quoi à propos du poids de notre beagle?", "want": ["orgs/vet-clinic-pattes-rouges"]}
+  - {"id": "y15", "kind": "blind3", "q": "Quel est le montant mensuel qu'on met pour les études des enfants?", "want": ["orgs/fonds-etudes-boreal"]}
+  - {"id": "y16", "kind": "blind3", "q": "Where do the kids' education savings sit?", "want": ["orgs/fonds-etudes-boreal"]}
+  - {"id": "y17", "kind": "blind3", "q": "What did the government grant check relate to for the kids' savings plan?", "want": ["orgs/fonds-etudes-boreal"]}
+  - {"id": "y18", "kind": "blind3", "q": "What's the deadline to resubmit the paper to the journal?", "want": ["projects/journal-article-revision"]}
+  - {"id": "y19", "kind": "blind3", "q": "Who is rerunning the tables for my manuscript?", "want": ["projects/journal-article-revision"]}
+  - {"id": "y20", "kind": "blind3", "q": "Qu'est-ce que le deuxième évaluateur de mon article demande?", "want": ["projects/journal-article-revision"]}
+  - {"id": "y21", "kind": "blind3", "q": "Quand les couvreurs viennent-ils refaire le toit?", "want": ["projects/reparation-toiture"]}
+  - {"id": "y22", "kind": "blind3", "q": "Is the roof repair quote accepted?", "want": ["projects/reparation-toiture"]}
+  - {"id": "y23", "kind": "blind3", "q": "Pourquoi les bardeaux ont-ils besoin d'être refaits?", "want": ["projects/reparation-toiture"]}
+  - {"id": "y24", "kind": "blind3", "q": "Which campground are we staying at in August?", "want": ["projects/gaspesie-camping-trip"]}
+  - {"id": "y25", "kind": "blind3", "q": "Qu'est-ce qu'il nous manque encore pour le voyage de camping?", "want": ["projects/gaspesie-camping-trip"]}
+  - {"id": "y26", "kind": "blind3", "q": "How many nights is the Gaspé road trip?", "want": ["projects/gaspesie-camping-trip"]}
+  - {"id": "y27", "kind": "blind3", "q": "Did we decide to get a kitten?", "want": ["decisions/2026-07-12-pas-de-chat"]}
+  - {"id": "y28", "kind": "blind3", "q": "Pourquoi on a dit non au chaton?", "want": ["decisions/2026-07-12-pas-de-chat"]}
+  - {"id": "y29", "kind": "blind3", "q": "Which camp did we choose for my son, and why not the other one?", "want": ["decisions/2026-06-20-summer-day-camp"]}
+  - {"id": "y30", "kind": "blind3", "q": "Combien coûte la semaine de camp de jour?", "want": ["decisions/2026-06-20-summer-day-camp"]}
+  - {"id": "y31", "kind": "blind3", "q": "Did I agree to lead the program review committee?", "want": ["decisions/2026-08-03-decline-curriculum-chair"]}
+  - {"id": "y32", "kind": "blind3", "q": "Pourquoi j'ai refusé la présidence du comité du dean?", "want": ["decisions/2026-08-03-decline-curriculum-chair"]}
+  - {"id": "y33", "kind": "blind3", "q": "Qu'a dit le docteur sur ma pression artérielle?", "want": ["notes/2026-07-08-bilan-sante"]}
+  - {"id": "y34", "kind": "blind3", "q": "When do I need to book my follow-up bloodwork?", "want": ["notes/2026-07-08-bilan-sante"]}
+  - {"id": "y35", "kind": "blind3", "q": "How many applicants did we get for the faculty position?", "want": ["notes/2026-09-02-hiring-committee"]}
+  - {"id": "y36", "kind": "blind3", "q": "Qui doit rédiger les questions d'entrevue pour l'embauche?", "want": ["notes/2026-09-02-hiring-committee"]}
+  - {"id": "y37", "kind": "blind3", "q": "What are we bringing to the alley party?", "want": ["notes/2026-06-30-fete-ruelle"]}
+  - {"id": "y38", "kind": "blind3", "q": "Qui s'occupe du permis pour le barbecue de ruelle?", "want": ["notes/2026-06-30-fete-ruelle"]}
+  - {"id": "y39", "kind": "blind3", "q": "What did I name my bread culture?", "want": ["notes/2026-07-25-sourdough"]}
+  - {"id": "y40", "kind": "blind3", "q": "Quel jour de la semaine je fais du pain?", "want": ["notes/2026-07-25-sourdough"]}
+  # blind4: strict paraphrases of the blind3 notes (no content word shared with the note, except a
+  # first name in a few), written by a writer that saw only those notes. The search bar (85%) is measured here.
+  - {"id": "z01", "kind": "blind4", "q": "Who trains my daughter's football team?", "want": ["people/julien-st-pierre"]}
+  - {"id": "z02", "kind": "blind4", "q": "Ma fille joue au ballon quel soir de la semaine, et à quel endroit?", "want": ["people/julien-st-pierre"]}
+  - {"id": "z03", "kind": "blind4", "q": "When does my daughter's football squad play its closing competition in June?", "want": ["people/julien-st-pierre"]}
+  - {"id": "z04", "kind": "blind4", "q": "When are the kids next booked to get their teeth checked?", "want": ["people/lise-pelchat"]}
+  - {"id": "z05", "kind": "blind4", "q": "Qui s'occupe des caries de mes petits, et c'est où?", "want": ["people/lise-pelchat"]}
+  - {"id": "z06", "kind": "blind4", "q": "When did the kids last get their teeth scaled and polished?", "want": ["people/lise-pelchat"]}
+  - {"id": "z07", "kind": "blind4", "q": "Qui s'occupe du chien et des fleurs pendant nos vacances?", "want": ["people/stan-kowalski"]}
+  - {"id": "z08", "kind": "blind4", "q": "Quel outil faut-il rendre au monsieur d'à côté?", "want": ["people/stan-kowalski"]}
+  - {"id": "z09", "kind": "blind4", "q": "What was the old trade of the fellow beside us?", "want": ["people/stan-kowalski"]}
+  - {"id": "z10", "kind": "blind4", "q": "How much do we put into the kids' education savings each month?", "want": ["orgs/fonds-etudes-boreal"]}
+  - {"id": "z11", "kind": "blind4", "q": "What do we still need to check about the government grant on the children's college fund?", "want": ["orgs/fonds-etudes-boreal"]}
+  - {"id": "z12", "kind": "blind4", "q": "À quelle date du calendrier le prélèvement pour l'université des jeunes est-il retiré?", "want": ["orgs/fonds-etudes-boreal"]}
+  - {"id": "z13", "kind": "blind4", "q": "When is the car getting its snow tires put on?", "want": ["orgs/garage-lemieux-auto"]}
+  - {"id": "z14", "kind": "blind4", "q": "What did our mechanic warn us about?", "want": ["orgs/garage-lemieux-auto"]}
+  - {"id": "z15", "kind": "blind4", "q": "Faut-il amener le char chez le mécano la journée précédente?", "want": ["orgs/garage-lemieux-auto"]}
+  - {"id": "z16", "kind": "blind4", "q": "Combien de poids le chien doit-il perdre d'après le docteur des animaux?", "want": ["orgs/vet-clinic-pattes-rouges"]}
+  - {"id": "z17", "kind": "blind4", "q": "C'est quand le rappel contre la rage pour le pitou?", "want": ["orgs/vet-clinic-pattes-rouges"]}
+  - {"id": "z18", "kind": "blind4", "q": "Where do we take the dog for his annual exam and jabs?", "want": ["orgs/vet-clinic-pattes-rouges"]}
+  - {"id": "z19", "kind": "blind4", "q": "On part quand en vacances de plein air dans l'est du Québec?", "want": ["projects/gaspesie-camping-trip"]}
+  - {"id": "z20", "kind": "blind4", "q": "Quel emplacement on a réservé pour dormir sous la toile?", "want": ["projects/gaspesie-camping-trip"]}
+  - {"id": "z21", "kind": "blind4", "q": "Qu'est-ce qu'il nous manque encore comme équipement pour l'expédition avec les enfants?", "want": ["projects/gaspesie-camping-trip"]}
+  - {"id": "z22", "kind": "blind4", "q": "C'est pour quand la remise de mon texte sur la confiance?", "want": ["projects/journal-article-revision"]}
+  - {"id": "z23", "kind": "blind4", "q": "Qui refait les analyses statistiques pour mon manuscrit?", "want": ["projects/journal-article-revision"]}
+  - {"id": "z24", "kind": "blind4", "q": "What did the critical referee ask for in the manuscript?", "want": ["projects/journal-article-revision"]}
+  - {"id": "z25", "kind": "blind4", "q": "Which company is fixing the roof after the storm?", "want": ["projects/reparation-toiture"]}
+  - {"id": "z26", "kind": "blind4", "q": "When are the roofers scheduled to start?", "want": ["projects/reparation-toiture"]}
+  - {"id": "z27", "kind": "blind4", "q": "Did we approve the quote for the eavestrough work, and how many days will it take?", "want": ["projects/reparation-toiture"]}
+  - {"id": "z28", "kind": "blind4", "q": "Pourquoi on a laissé tomber l'option techno pour le plus jeune cet été?", "want": ["decisions/2026-06-20-summer-day-camp"]}
+  - {"id": "z29", "kind": "blind4", "q": "Combien ça coûte, le séjour estival au bord de l'eau pour le petit?", "want": ["decisions/2026-06-20-summer-day-camp"]}
+  - {"id": "z30", "kind": "blind4", "q": "Which holiday program did we enroll our son in this year?", "want": ["decisions/2026-06-20-summer-day-camp"]}
+  - {"id": "z31", "kind": "blind4", "q": "Did we agree to get a kitten for the children?", "want": ["decisions/2026-07-12-pas-de-chat"]}
+  - {"id": "z32", "kind": "blind4", "q": "Why are we holding off on a new feline?", "want": ["decisions/2026-07-12-pas-de-chat"]}
+  - {"id": "z33", "kind": "blind4", "q": "When will we reconsider getting a new pet?", "want": ["decisions/2026-07-12-pas-de-chat"]}
+  - {"id": "z34", "kind": "blind4", "q": "Est-ce que j'ai accepté de présider la refonte du programme?", "want": ["decisions/2026-08-03-decline-curriculum-chair"]}
+  - {"id": "z35", "kind": "blind4", "q": "Pourquoi j'ai refusé la présidence demandée par la doyenne?", "want": ["decisions/2026-08-03-decline-curriculum-chair"]}
+  - {"id": "z36", "kind": "blind4", "q": "Quel rôle je garde finalement dans le groupe sur les cours?", "want": ["decisions/2026-08-03-decline-curriculum-chair"]}
+  - {"id": "z37", "kind": "blind4", "q": "What are we bringing to the alley get-together?", "want": ["notes/2026-06-30-fete-ruelle"]}
+  - {"id": "z38", "kind": "blind4", "q": "Who is handling the tunes and city paperwork for the neighbourhood cookout?", "want": ["notes/2026-06-30-fete-ruelle"]}
+  - {"id": "z39", "kind": "blind4", "q": "What day is the backlane gathering?", "want": ["notes/2026-06-30-fete-ruelle"]}
+  - {"id": "z40", "kind": "blind4", "q": "What did my GP say about my blood pressure?", "want": ["notes/2026-07-08-bilan-sante"]}
+  - {"id": "z41", "kind": "blind4", "q": "When am I supposed to get lab work done?", "want": ["notes/2026-07-08-bilan-sante"]}
+  - {"id": "z42", "kind": "blind4", "q": "Qu'est-ce que le doc m'a conseillé comme exercice?", "want": ["notes/2026-07-08-bilan-sante"]}
+  - {"id": "z43", "kind": "blind4", "q": "Comment s'appelle mon levain?", "want": ["notes/2026-07-25-sourdough"]}
+  - {"id": "z44", "kind": "blind4", "q": "Quel jour de la semaine je cuis mon pain maison?", "want": ["notes/2026-07-25-sourdough"]}
+  - {"id": "z45", "kind": "blind4", "q": "Quelle farine je compte essayer pour ma prochaine fournée?", "want": ["notes/2026-07-25-sourdough"]}
+  - {"id": "z46", "kind": "blind4", "q": "Combien de postulants retenus pour le poste de prof?", "want": ["notes/2026-09-02-hiring-committee"]}
+  - {"id": "z47", "kind": "blind4", "q": "C'est quand les entrevues sur place pour le recrutement?", "want": ["notes/2026-09-02-hiring-committee"]}
+  - {"id": "z48", "kind": "blind4", "q": "Qu'est-ce qu'on m'a demandé de préparer pour le jury d'embauche?", "want": ["notes/2026-09-02-hiring-committee"]}
+  # blind5: a fifth writer, new notes (16) and strict paraphrases (no content word shared), written
+  # after semantic search was built and read by no one tuning it; the semantic bar is confirmed here.
+  - {"id": "v01", "kind": "blind5", "q": "Which grade is my teenager in this year?", "want": ["people/felix-desrosiers"]}
+  - {"id": "v02", "kind": "blind5", "q": "What sport does my kid practise on weekday evenings?", "want": ["people/felix-desrosiers"]}
+  - {"id": "v03", "kind": "blind5", "q": "Quel métier mon garçon envisage-t-il plus tard ?", "want": ["people/felix-desrosiers"]}
+  - {"id": "v04", "kind": "blind5", "q": "Qu'est-ce qui a poussé papa à déménager ?", "want": ["people/gerard-desrosiers"]}
+  - {"id": "v05", "kind": "blind5", "q": "Quel spécialiste mon père voit-il chaque trimestre ?", "want": ["people/gerard-desrosiers"]}
+  - {"id": "v06", "kind": "blind5", "q": "Which neighbourhood is my old man's care home in?", "want": ["people/gerard-desrosiers"]}
+  - {"id": "v07", "kind": "blind5", "q": "Qui tient la batterie dans notre groupe de musique ?", "want": ["people/yasmine-khoury"]}
+  - {"id": "v08", "kind": "blind5", "q": "Who is doing the audio post-production on our upcoming release, and what's her payment?", "want": ["people/yasmine-khoury"]}
+  - {"id": "v09", "kind": "blind5", "q": "What does Yaz do for a living?", "want": ["people/yasmine-khoury"]}
+  - {"id": "v10", "kind": "blind5", "q": "Who is the builder doing work on my rental property?", "want": ["people/rejean-bouffard"]}
+  - {"id": "v11", "kind": "blind5", "q": "What hourly rate does my contractor charge?", "want": ["people/rejean-bouffard"]}
+  - {"id": "v12", "kind": "blind5", "q": "Who referred the guy who rewired the upstairs apartment?", "want": ["people/rejean-bouffard"]}
+  - {"id": "v13", "kind": "blind5", "q": "Which ward am I assigned to at my workplace?", "want": ["orgs/hopital-saint-aubin"]}
+  - {"id": "v14", "kind": "blind5", "q": "How long are my shifts?", "want": ["orgs/hopital-saint-aubin"]}
+  - {"id": "v15", "kind": "blind5", "q": "Combien je paie pour garer ma voiture au boulot ?", "want": ["orgs/hopital-saint-aubin"]}
+  - {"id": "v16", "kind": "blind5", "q": "Où est-ce que je fais du bénévolat ?", "want": ["orgs/garde-manger-pointe-verte"]}
+  - {"id": "v17", "kind": "blind5", "q": "Quel jour je donne de mon temps pour trier les dons ?", "want": ["orgs/garde-manger-pointe-verte"]}
+  - {"id": "v18", "kind": "blind5", "q": "Who is in charge of the charity that distributes groceries?", "want": ["orgs/garde-manger-pointe-verte"]}
+  - {"id": "v19", "kind": "blind5", "q": "Who's the animal doctor for my pup?", "want": ["orgs/clinique-veterinaire-des-saules"]}
+  - {"id": "v20", "kind": "blind5", "q": "When did my dog last get his shots?", "want": ["orgs/clinique-veterinaire-des-saules"]}
+  - {"id": "v21", "kind": "blind5", "q": "What time does the animal hospital shut on weekdays?", "want": ["orgs/clinique-veterinaire-des-saules"]}
+  - {"id": "v22", "kind": "blind5", "q": "Combien j'ai prévu dépenser pour les travaux de l'immeuble ?", "want": ["projects/duplex-reno"]}
+  - {"id": "v23", "kind": "blind5", "q": "Quand est-ce que je veux un locataire en haut ?", "want": ["projects/duplex-reno"]}
+  - {"id": "v24", "kind": "blind5", "q": "Dans quel quartier se trouve ma propriété à revenus ?", "want": ["projects/duplex-reno"]}
+  - {"id": "v25", "kind": "blind5", "q": "How many tracks are on our upcoming record?", "want": ["projects/ep-hirondelles-fauves"]}
+  - {"id": "v26", "kind": "blind5", "q": "When and where is the release party for my group's songs?", "want": ["projects/ep-hirondelles-fauves"]}
+  - {"id": "v27", "kind": "blind5", "q": "What instrument do I play in the band?", "want": ["projects/ep-hirondelles-fauves"]}
+  - {"id": "v28", "kind": "blind5", "q": "Quelle race est mon chien ?", "want": ["projects/pruneau-obedience"]}
+  - {"id": "v29", "kind": "blind5", "q": "Quel soir le toutou a-t-il son cours de dressage ?", "want": ["projects/pruneau-obedience"]}
+  - {"id": "v30", "kind": "blind5", "q": "Qu'est-ce que la dresseuse m'a demandé de faire chaque jour ?", "want": ["projects/pruneau-obedience"]}
+  - {"id": "v31", "kind": "blind5", "q": "Why did I switch to working overnight?", "want": ["decisions/2026-06-12-quarts-de-nuit"]}
+  - {"id": "v32", "kind": "blind5", "q": "How many overnight shifts a week did I commit to?", "want": ["decisions/2026-06-12-quarts-de-nuit"]}
+  - {"id": "v33", "kind": "blind5", "q": "When am I reviewing the late-hours schedule arrangement?", "want": ["decisions/2026-06-12-quarts-de-nuit"]}
+  - {"id": "v34", "kind": "blind5", "q": "Quel système de chauffage j'ai retenu pour l'immeuble ?", "want": ["decisions/2026-08-03-heat-pump"]}
+  - {"id": "v35", "kind": "blind5", "q": "Combien coûte l'appareil avant la subvention ?", "want": ["decisions/2026-08-03-heat-pump"]}
+  - {"id": "v36", "kind": "blind5", "q": "Pourquoi j'ai écarté les plinthes ?", "want": ["decisions/2026-08-03-heat-pump"]}
+  - {"id": "v37", "kind": "blind5", "q": "What time does my boy have to be home on school nights?", "want": ["decisions/2026-09-14-couvre-feu-felix"]}
+  - {"id": "v38", "kind": "blind5", "q": "What did my ex and I agree after the teen came back very late?", "want": ["decisions/2026-09-14-couvre-feu-felix"]}
+  - {"id": "v39", "kind": "blind5", "q": "When will we revisit the teenager's evening limits?", "want": ["decisions/2026-09-14-couvre-feu-felix"]}
+  - {"id": "v40", "kind": "blind5", "q": "Combien on a été payés pour le spectacle de rue cet été ?", "want": ["notes/2026-07-19-street-festival-gig"]}
+  - {"id": "v41", "kind": "blind5", "q": "Quel pépin technique j'ai eu sur scène ?", "want": ["notes/2026-07-19-street-festival-gig"]}
+  - {"id": "v42", "kind": "blind5", "q": "Combien de morceaux on a joués en juillet ?", "want": ["notes/2026-07-19-street-festival-gig"]}
+  - {"id": "v43", "kind": "blind5", "q": "Is Dad still allowed behind the wheel?", "want": ["notes/2026-09-02-rendez-vous-cardiologue"]}
+  - {"id": "v44", "kind": "blind5", "q": "When is the follow-up for my father's heart checkup?", "want": ["notes/2026-09-02-rendez-vous-cardiologue"]}
+  - {"id": "v45", "kind": "blind5", "q": "What monitoring device does the heart specialist want him to wear?", "want": ["notes/2026-09-02-rendez-vous-cardiologue"]}
+  - {"id": "v46", "kind": "blind5", "q": "Combien de denrées on a ramassé à l'Action de grâce ?", "want": ["notes/2026-10-05-thanksgiving-food-drive"]}
+  - {"id": "v47", "kind": "blind5", "q": "Quel problème on a eu pendant la collecte d'octobre ?", "want": ["notes/2026-10-05-thanksgiving-food-drive"]}
+  - {"id": "v48", "kind": "blind5", "q": "Comment mon ado a-t-il aidé, et qu'est-ce que ça lui a rapporté ?", "want": ["notes/2026-10-05-thanksgiving-food-drive"]}

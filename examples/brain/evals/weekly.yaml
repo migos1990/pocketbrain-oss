@@ -1,0 +1,10 @@
+# The golden set (docs/prove-the-loop.md#the-golden-set): five weekly questions the owner really asks,
+# each with the note that answers it and the fact that must be shown, fresh. Synthetic: the owner's
+# own five live in their brain's evals/weekly.yaml, never in the code repository.
+# Run: pocketbrain golden [agent]
+questions:
+  - { id: w01, theme: classes, as: [planner], q: "What's next on Course A?", want: [projects/course-a], expect: next_step, answer: Grade the midterm }
+  - { id: w02, theme: people, as: [planner, helper], q: "Who is the course coordinator?", want: [people/jane-roy], expect: role, answer: Course coordinator }
+  - { id: w03, theme: money, as: [steward], q: "Who is my financial advisor?", want: [people/paul-advisor], expect: role }
+  - { id: w04, theme: decisions, as: [steward], q: "Which bank did I pick?", want: [decisions/2026-09-01-pick-bank], expect: body }
+  - { id: w05, theme: classes, as: [helper], q: "What is Course B about?", want: [projects/course-b], expect: body }

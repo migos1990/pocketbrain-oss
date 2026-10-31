@@ -27,6 +27,7 @@ Whatever else `policy.yaml` says, `loadRules` enforces for a co-owner's assistan
 - **No actions.** Her assistant never keeps an `act` block (`docs/act.md`), so it can't ask the hub to send mail, even though every mail would wait for the owner. A conservative default the owner can loosen later.
 - **Her slice can't be redefined.** `rules/slices.yaml` may not define `area:<a co-owner area>`, so a slice entry can't widen hers to other areas.
 - **Ask to see stays inside her limits.** When `ask_to_see` is on, her assistant can only be offered notes in her areas, personal at most, never money, and an approved read is checked against those limits again when it is handed over.
+- **Not the owner's assistant.** It isn't quizzed by memory sync (the weekly pass, the belief radar's Fix everywhere or any other path) or sent a change feed, and it isn't in the belief radar or under Your assistants on the owner's home: its memory is hers (`ownAssistant` in `src/rules.ts`, G533).
 
 ## Her word
 
@@ -36,7 +37,7 @@ Her assistant reports what she said the way any assistant reports the owner's wo
 - Her assistant writes directly in her areas, without area-owner routing (a trial assistant's writes are proposed, as for any trial agent). Outside them its writes are refused (`co_owner_area`), never proposed, even when her assistant is on trial. So is asking to move a note to an area outside hers.
 - A fact on a shared note that her assistant can't see (a private fact of the owner's, say) is never touched by her word, as for any assistant: a retract answers like a missing fact, and any other write waits in the owner's inbox with one fixed reply (invariant 3).
 - When her assistant confirms a value another assistant wrote, the record keeps `confirmed_by: <her assistant>`, so it counts as her word.
-- When the owner accepts a trial assistant's proposal, that accept is his word; her message still never enters his registry.
+- When the owner accepts a trial assistant's proposal, that accept is his approval (ranked as her source, docs/trust.md); her message still never enters his registry.
 - The nightly pass puts her old word up for review, like the owner's, instead of forgetting it.
 - No agent can write the `confirmed-by-co-owner` label itself: it isn't a verification an agent may send.
 
@@ -50,6 +51,7 @@ On a fact in a shared area:
 | The two owners say different things as of the same day | A dispute, never a winner. |
 | An assistant (hers included) retracting either owner's word without an owner's word | Proposed to the owner's inbox (`owner_word_retract`); the word stays. Either owner's word can take back the other's. |
 | An assistant's value against either owner's word | A dispute, held for the owners (step 6); it never replaces their word. Two exceptions for now, being fixed for every owner's word (gap G163): a more precise date (`2026-11-05` against `2026-11`) replaces it, and so does a newer value of a `merge: max` or `min` attribute (such as `last_contact`). The resolver can't settle it against her word with its own evidence; only an owner can. |
+| Either owner's word joining a dispute that is already open (a new value, or a confirmation of one side, on a single fact or on a disputed list item) | It becomes a side of that dispute, in the packet the owner answers too, and the dispute is the owners' from then on: the resolver's `resolve` is refused (403), nothing moves, and the Gardener may suggest that side or nothing. A side backed by the owner's own message ref counts the same. A packet opened beside a fact that has since become either owner's word is refused too (409). (G277, G278, G305, G307) |
 | The owner confirming the value she set | The record becomes his word (`confirmed-by-owner`, his ref), so it stays his word if the note leaves her areas or she stops being a co-owner. |
 | A `confirmed-by-co-owner` label written by hand, by an agent that isn't hers, or outside her areas | Worth no more than its sources (rank 2 at most). |
 

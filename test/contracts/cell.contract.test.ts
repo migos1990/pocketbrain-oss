@@ -10,7 +10,7 @@ import { loadRules } from "../../src/rules";
 import * as rulesModule from "../../src/rules";
 const realLoadRules = rulesModule.loadRules;
 import { carve, grantFor } from "../../src/carve";
-import { useCells, buildCell, buildCells, cellDir, cellsDir, cellInfo, cellGeneration, freshCell } from "../../src/cell";
+import { useCells, buildCell, buildCells, cellDir, cellsDir, cellInfo, cellGeneration, freshCell, startCells, buildReaderCell, readerCellDir } from "../../src/cell";
 import * as core from "../../src/core";
 import { handle } from "../../src/server";
 import { issueToken, revokeTokens } from "../../src/auth";
@@ -163,6 +163,50 @@ test("contract cell: a revoked agent's cell stays until it leaves the policy, bu
   expect(await get()).toBe(401);
 });
 
+// A restart (launchd kickstart, an auto-update) must answer fast at 50k notes, so the hub keeps
+// current cells on disk instead of rebuilding them all at start (backlog row 217). A cell built
+// by other code (an upgrade that changed how cells are scrubbed) is never served: rebuilt first.
+test("contract cell: at start, current cells are kept, removed agents' cells go, and a cell built by other code is rebuilt", () => {
+  const root = brain();
+  buildCells(root);
+  const marker = (agent: string) => join(cellDir(root, agent), "marker");
+  for (const a of ["planner", "helper"]) { writeFileSync(marker(a), "x"); buildReaderCell(root, a); }
+  policy(root, "  helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }\n", "");
+  startCells(root);
+  expect(existsSync(cellDir(root, "helper"))).toBe(false);
+  // The sealed edge's reader cells follow the same rule (G249).
+  expect(existsSync(readerCellDir(root, "planner"))).toBe(true);
+  expect(existsSync(readerCellDir(root, "helper"))).toBe(false);
+  expect(existsSync(marker("planner"))).toBe(true); // not rebuilt at start
+  freshCell(root, "planner");
+  expect(existsSync(marker("planner"))).toBe(true); // current: served as is
+  const f = join(cellDir(root, "planner"), "cell.json");
+  writeFileSync(f, readFileSync(f, "utf8").replace(/"code": "[^"]*"/, '"code": "older-build"'));
+  freshCell(root, "planner");
+  expect(existsSync(marker("planner"))).toBe(false); // built by other code: rebuilt before a read
+});
+
+test("contract cell: at start, an uncommitted note edit drops the kept cells, so a raised note isn't served from an old cell", () => {
+  const root = brain();
+  buildCells(root);
+  expect(existsSync(join(cellDir(root, "planner"), "projects/course-a.md"))).toBe(true);
+  // The owner raises a note by hand and restarts the hub without committing.
+  const p = join(root, "projects/course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace(/^sensitivity: \w+$/m, "sensitivity: secret"));
+  startCells(root);
+  freshCell(root, "planner");
+  expect(existsSync(join(cellDir(root, "planner"), "projects/course-a.md"))).toBe(false);
+});
+
+test("contract cell: a torn cell.json (a crash mid-write) means no cell: the next read builds it", () => {
+  const root = brain();
+  buildCells(root);
+  const f = join(cellDir(root, "planner"), "cell.json");
+  writeFileSync(f, readFileSync(f, "utf8").slice(0, 20));
+  expect(cellInfo(root, "planner")).toBeUndefined();
+  expect(freshCell(root, "planner").info.agent).toBe("planner");
+});
+
 test("contract cell: removing an agent from policy removes its cell", () => {
   const root = brain();
   buildCells(root);
@@ -203,4 +247,68 @@ test("contract cell: an uncommitted fact-level exclude vanishes after two builds
   writeFileSync(p, orig);
   freshCell(root, "planner");
   expect(cellText(root, "planner")).toContain("Book the room");
+});
+
+test("contract cell: a link to a merged note holds the note it became while that is in the slice, and no id once it leaves, also updated in place (G266)", () => {
+  const root = makeBrain();
+  policy(root, "helper: { tier: trial, slices: [area:work, contacts-basic]", "helper: { tier: trial, slices: [area:work]");
+  note(root, "people/p-77", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/jane-roy");
+  note(root, "projects/lunch", "type: project\narea: work\nsensitivity: personal\nstatus: active\nsuperseded_by: people/p-77", "", "See [[people/p-77]].");
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "x"]);
+  useCells(true);
+  core.readNote(root, "helper", "projects/lunch");
+  const file = () => readFileSync(join(cellDir(root, "helper"), "projects/lunch.md"), "utf8");
+  expect(file()).toContain("See [[people/jane-roy]].");
+  expect(file()).toContain("superseded_by: people/jane-roy");
+  const f = join(root, "people/jane-roy.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace("area: work", "area: personal"));
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "y"]);
+  expect(core.readNote(root, "helper", "projects/lunch").body).toBe("See [[redacted]].\n");
+  expect(file()).not.toContain("jane-roy");
+  expect(file()).not.toContain("p-77");
+});
+
+// The in-place update trusts only a cell this code built, judged by that cell's own cell.json:
+// a reader cell (G249) built by other code is rebuilt from nothing, whatever the agent's own cell says.
+test("contract cell: a reader cell is never updated in place on the agent cell's code stamp", () => {
+  const root = brain();
+  buildCell(root, "planner");
+  const { dir } = buildReaderCell(root, "planner");
+  const f = join(dir, "cell.json");
+  writeFileSync(f, readFileSync(f, "utf8").replace(/"code": "[^"]*"/, '"code": "old"'));
+  writeFileSync(join(dir, "marker"), "x");
+  const p = join(root, "projects/course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("title: Course A", "title: Course A renamed"));
+  git(root, ["commit", "-qam", "rename"]);
+  buildReaderCell(root, "planner");
+  expect(existsSync(join(dir, "marker"))).toBe(false);
+  expect(readFileSync(join(dir, "projects/course-a.md"), "utf8")).toContain("Course A renamed");
+});
+
+test("contract cell: the owner's context budget holds with cells on, for everyone and per agent (G309)", () => {
+  const root = brain();
+  policy(root, "\nagents:", "\ncontext_budget: { context_pack: 900, whats_new: 700 }\nagents:");
+  policy(root, "helper: { tier: trial,", "helper: { tier: trial, context_budget: { context_pack: 340 },");
+  useCells(true);
+  const { contextBudget } = require("../../src/context");
+  core.contextPack(root, "helper"); // builds the cell
+  const r = realLoadRules(cellDir(root, "helper"));
+  expect(contextBudget(r, "helper")).toMatchObject({ context_pack: 340, whats_new: 700 });
+  const p = core.contextPack(root, "helper");
+  expect(p).toMatch(/over your context budget of 340 tokens/);
+  const reads = readFileSync(join(root, "log", "reads.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((x) => x.op === "context_pack");
+  expect(reads.at(-1).cut).toBeGreaterThan(0);
+  // A cell names no other agent: the budget copied in is this agent's own and the global one.
+  expect(cellText(root, "helper")).not.toMatch(/planner|steward/);
+});
+
+test("contract cell: a page's parent outside the slice and a carved value in its summary never reach the cell (wiki, docs/wiki.md)", () => {
+  const root = makeBrain();
+  const f = join(root, "people", "jane-roy.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace("aliases: [Jane]", "aliases: [Jane]\nsummary: Banks with Maple Trust Bank.\nparent: money/main-bank"));
+  buildCell(root, "helper");
+  const helper = cellText(root, "helper");
+  expect(helper).toContain("Jane Roy");
+  expect(helper).not.toContain("money/main-bank");
+  expect(helper).not.toContain("Maple Trust");
 });

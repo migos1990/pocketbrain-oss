@@ -9,6 +9,7 @@ import { handle } from "../src/server";
 import { issueToken, revokeTokens } from "../src/auth";
 import { tunnelConfig } from "../src/hub";
 import { main } from "../src/cli";
+import { runAction } from "../src/dashboard/actions";
 import { git } from "../src/git";
 import YAML from "yaml";
 import { loadBrain, saveNote } from "../src/brain";
@@ -156,7 +157,9 @@ test("connect --browser turns the door on for that agent only and prints just th
   console.log = (...a: unknown[]) => out.push(a.join(" "));
   console.error = (...a: unknown[]) => errs.push(a.join(" "));
   let code: number;
-  try { code = main(["connect", "planner", "--browser", "--key-only", "--url", "https://brain.example", "--brain", root]); } finally { console.log = log; console.error = err; }
+  // planner is core tier, so the terminal needs the owner's one-time code (G184).
+  const otc = runAction({ root }, "token-code", { agent: "planner" }).match(/[0-9A-Z]{5}-[0-9A-Z]{5}/)![0];
+  try { code = main(["connect", "planner", "--browser", "--key-only", "--code", otc, "--url", "https://brain.example", "--brain", root]); } finally { console.log = log; console.error = err; }
   expect(code).toBe(0);
   expect(out).toHaveLength(1);
   expect(out[0]).toMatch(/^pb_planner_[A-Za-z0-9_-]+$/);
@@ -278,7 +281,8 @@ test("G18: connect --browser gives a reader key", () => {
   const root = makeBrain();
   const log = console.log, err = console.error;
   console.log = () => {}; console.error = () => {};
-  try { main(["connect", "steward", "--browser", "--key-only", "--brain", root]); } finally { console.log = log; console.error = err; }
+  const otc = runAction({ root }, "token-code", { agent: "steward" }).match(/[0-9A-Z]{5}-[0-9A-Z]{5}/)![0]; // G184
+  try { main(["connect", "steward", "--browser", "--key-only", "--code", otc, "--brain", root]); } finally { console.log = log; console.error = err; }
   const t = YAML.parse(readFileSync(join(root, "rules/tokens.yaml"), "utf8"));
   expect(t.agents.steward).toHaveLength(1);
   expect(t.agents.steward[0].role).toBe("reader");
@@ -333,6 +337,18 @@ test("memory check on /b: a changed fact in the slice is listed with its pointer
   expect(ms.state(root).quizzes.find((q) => q.id === qid)!.verdict).toBe("in-sync");
 });
 
+test("browser door: an oversized sign-in form is refused after reading only the limit (#133)", async () => {
+  const { handle } = await import("../src/server");
+  const { makeBrain } = await import("./fixture");
+  const root = makeBrain();
+  const chunk = new Uint8Array(64 * 1024).fill(0x61);
+  let pulled = 0;
+  const body = new ReadableStream<Uint8Array>({ pull(c) { if (pulled >= 100 * 1024 * 1024) return c.close(); pulled += chunk.length; c.enqueue(chunk); } });
+  const res = await handle(root, new Request("http://pb/b/login", { method: "POST", body, duplex: "half", headers: { "content-type": "application/x-www-form-urlencoded" } } as RequestInit));
+  expect([413, 401, 404]).toContain(res.status);
+  expect(pulled).toBeLessThan(1024 * 1024);
+});
+
 test("What changed on /b says it starts at the last visit and can always look back 7 or 30 days, or show the ones past the first page", async () => {
   const { req, login } = setup();
   const { cookie } = await login("helper");
@@ -343,4 +359,23 @@ test("What changed on /b says it starts at the last visit and can always look ba
   expect(week).toBeDefined();
   expect(again).toMatch(/href="\/b\/changes\?since=[^"]+">Last 30 days/);
   expect((await req("GET", week!.replace(/&amp;/g, "&"), { cookie })).status).toBe(200);
+});
+
+test("every browser-door page an agent opens is one line in log/calls.jsonl, like the other doors", async () => {
+  const { root, req, login } = setup();
+  const { cookie } = await login("helper");
+  await req("GET", "/b/orientation", { cookie });
+  await req("GET", "/b/context?topic=course", { cookie });
+  await req("GET", "/b/notes/projects%2Fcourse-a", { cookie });
+  await req("GET", "/b/notes/money%2Fmain-bank", { cookie });
+  await req("GET", "/b/nowhere?x=secret-word", { cookie });
+  const lines = readFileSync(join(root, "log", "calls.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(lines.map((l) => [l.agent, l.tool, l.refused])).toEqual([
+    ["helper", "GET /b/orientation", undefined],
+    ["helper", "GET /b/context", undefined],
+    ["helper", "GET /b/notes", undefined],
+    ["helper", "GET /b/notes", "#"],
+    ["helper", "GET /b/other", "#"],
+  ]);
+  expect(readFileSync(join(root, "log", "calls.jsonl"), "utf8")).not.toMatch(/course-a|main-bank|secret-word/);
 });

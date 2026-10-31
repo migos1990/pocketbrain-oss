@@ -27,9 +27,8 @@ const EXTRACT = (p: string) => [
   ...(/program director/i.test(p) ? [{ entity: "Jane Roy", type: "person", attribute: "role", value: "Program director", quote: "Jane is now program director" }] : []),
   ...(/grades by Monday/.test(p) ? [{ entity: "Course A", type: "project", attribute: "next_step", value: "Publish grades by Monday", quote: "publish grades by Monday" }] : []),
 ];
-const original = captureModel;
 beforeAll(() => useCaptureModel(fake(EXTRACT)));
-afterAll(() => useCaptureModel((root) => original(root)));
+afterAll(() => useCaptureModel());
 
 const fact = (root: string, id: string, attr: string) => loadBrain(root).find((n) => n.fm.id === id)?.fm.facts?.[attr] as (FactRecord & { dispute?: string }) | undefined;
 const proposals = (root: string) => existsSync(join(root, "inbox")) ? readdirSync(join(root, "inbox")).filter((f) => f.includes("-capture-")) : [];
@@ -169,7 +168,7 @@ test("E2E: the capture mailbox takes Robin's forwards, drops strangers with an a
   const md = mkdtempSync(join(tmpdir(), "pb-maildir-"));
   mkdirSync(join(md, "new"), { recursive: true });
   writeFileSync(join(md, "new", "1.eml"), FORWARD("a1"));
-  writeFileSync(join(md, "new", "2.eml"), FORWARD("a2", "Mallory <robin@example.com.evil.net>"));
+  writeFileSync(join(md, "new", "2.eml"), FORWARD("a2", "Mallory <robin@example.com.evil.example>"));
   writeFileSync(join(md, "new", "3.eml"), FORWARD("a3")); // Robin forwarded it twice
   setPolicy(root, (p) => { p.capture = { mail: { provider: "maildir", dir: md, allowed_from: ["robin@example.com"] } }; });
 
@@ -178,7 +177,7 @@ test("E2E: the capture mailbox takes Robin's forwards, drops strangers with an a
   expect(r.problems).toEqual([]);
   expect(r.mail.map((i) => i.outcome)).toEqual(["stored", "ignored", "duplicate"]);
   expect(readdirSync(join(md, "new"))).toEqual([]); // every message read is marked seen
-  expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("robin@example.com.evil.net");
+  expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("robin@example.com.evil.example");
   expect(sent.join("\n")).not.toContain("Mallory");
 
   // Extracted in the same tick (this is a one-machine brain); a mailbox capture is a document.

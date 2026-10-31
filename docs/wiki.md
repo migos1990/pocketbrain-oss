@@ -1,0 +1,128 @@
+# The brain as a wiki
+
+The brain already works like a wiki on disk: one Markdown file per thing, `[[links]]` between them, and facts with their sources in the frontmatter. This page covers the wiki shape that is built so far. You write these fields yourself, in the dashboard's Edit file box or in any text editor.
+
+Every field is optional. A note without them shows exactly as it did before.
+
+## What a page can carry
+
+| Field or text | What it does | Where it shows |
+|---|---|---|
+| `summary: <one line>` | One line under the title. Only the first line is kept; reference markers and link brackets show as plain words. Upkeep takes a reference marker out of any summary (`summary-marker`, one `reflect:auto` commit per note), and the Gardener's `wiki_sync` drops one from the summary it sends. | Under the title on the note's dashboard page |
+| `parent: <note id>` | The page above this one. The tree is worked out from these fields and never stored. | The path at the top of the page (Brain / People / …), and "Pages under this" on the parent |
+| `## Heading` in the notes text | Starts a section. Deeper headings stay as plain text. | Section headings in the Notes block |
+| `[^1]` in the text, with `[^1]: Email, Oct 2` on a line of its own | A numbered reference. Its definition moves under the text. | A small number in the text, and a References list under it |
+
+A `parent:` that names a missing note, or that loops back to itself, is ignored: the page sits at the top of the tree.
+
+A reference says what the source is (for example "Email, Oct 2"). It is never a copy of the source.
+
+## Lint
+
+Upkeep's step 9 checks the wiki shape on every run (`pocketbrain upkeep`, the nightly pass, the Gardener's `upkeep_run`). It uses no model and changes nothing. Each finding is a review line in the run's findings file. A finding names the page, the section or the ref, never the text of a line.
+
+| Rule | When |
+|---|---|
+| `uncited-line` | A line in a page's `## ` section has no footnote reference with a definition. Only notes with `summary:` or `parent:` count as pages; older notes are left alone. |
+| `section-drift` | A footnote names a source ref (for example `gmail:…`) that none of the page's current facts cite. |
+| `parent-broken` | `parent:` names a missing note, or the chain loops back. |
+| `missing-hub` | Some notes are pages, but no note has `type: hub` (the Overview). |
+| `orphan` | Once a hub exists: no note links here, and the note has no `parent:` and no pages under it. |
+
+## Facts that change and facts that don't
+
+Each kind of fact says how it ages in rules/checks.yaml: a `shelf_life` (a role 180 days, a next step 14) means it changes over time; a kind declared with none (a decision's outcome, an org's website) doesn't go out of date. A fact's page shows it on the fact's second line: "check again in Mar 2027" (its last check plus its shelf life), or "doesn't go out of date". A kind nobody declared shows neither, and a fact already past its shelf life says "may be out of date" instead (`lifeWords` in `src/dashboard/browse.ts`, `lifeOf` in `src/freshness.ts`). Assistants already get each fact's freshness (current, due, stale) in what they read.
+
+### Facts that follow each other
+
+Some facts are a run of values: an app's build number, a version, a project's status or next step. Declare one with `merge: latest` in rules/checks.yaml (`pocketbrain next-steps newest` does it for next steps, on projects and any other kind that declares one: it changes only that line, keeps the shelf life, and commits it as you); on project notes `version`, `build`, `build_number`, `latest_version`, `latest_build` and `app_version` are that way unless checks.yaml gives them another merge rule (`LATEST` in `src/rules.ts`). A value dated later becomes current and the old one moves to history; on the same day, the one with the higher version number ("0.21.0 (29)" over "0.20.1 (28)") is current. An earlier value is added to history and ends where the next one begins. None of these opens a dispute. The ordinary rules still apply, and can open one, when the new value's source is weaker than the current one's (a value the hub checked against its source outranks an unchecked one, so a newer unchecked value is a conflict that waits for the Gardener beside it, never a silent replacement), when either side is the owner's word, when the value was only relayed by another assistant, or when two values on the same day have no numbers to order them. Disputes already open stay open for the owner, and an assistant gets the same reply whether or not an earlier value was already recorded. The fact's page says "changes over time; the newest is kept".
+
+## When a fact changes
+
+A fact's earlier value stays in the note's history. Each upkeep run (step 8b, `src/drift.ts`) looks for text that still states it: the page's own text and summary, and every note that links to the page. Each one is a `neighbour-drift` review line on the note whose text is out of date: "the text still states a value that has since changed on a note it links to; update it or check it", or for the page's own text "the text still states an earlier value of one of this note's facts; update it or check it". The line names no page, fact, date or value, because the Gardener reads review lines for every note it can see, and the fact may be one it can't. An earlier value that is still part of the current one ("Course coordinator" inside "Senior course coordinator") is not flagged, and a note that doesn't link to the page is not a neighbour.
+
+Nothing is rewritten here. The lines reach the digest under "Worth a look" and the Gardener's `upkeep_run`. Having the Gardener refresh those pages at night is a change to its instructions, which waits for the owner's yes.
+
+## Every page gets text
+
+Every page a commit touched gets an opening paragraph by morning (`renderTouchedPages` in `src/wiki.ts`: upkeep step 1d, and the hub's night job on its own when a managed Gardener does upkeep). A page the hub's filing tick files a fact onto gets it on that same tick, within a minute, along with the pages linked with it (audit v5, midday). It says what the page's facts say, one plain sentence per live fact, each with a reference naming its source and date ("Email, 2026-10-05 (gmail:<id>)"). A reference always says what kind of source it is: "Calendar", "Notion import", "Your note", "Planner's note" for an assistant's own note (by the assistant's name), "Relayed by an assistant", "No source given" for a fact with none, and a kind the hub has no word for by its own name ("Import"), never just "Source". The sentence follows the kind of value (rules/checks.yaml), not the attribute's name: "Ana Diaz's hobby is sailing.", "Ana Diaz's languages are French and Portuguese.", a date in words ("You were last in touch with Ana Diaz on 5 Oct 2026."), a plan with its date ("Next for Ana Diaz: …"), and a long value as the source gave it ("On Ana Diaz, the bio: …"); a few that every page has read as a person would say them ("Ana Diaz's role is program director.", "Ana Diaz works at North College."). Contact details (emails, phones, addresses, handles) are never written into prose. The text ends "(Written by the hub from this page's facts.)", so whoever reads it, on the dashboard, through an assistant or in the file, knows no person wrote it; The commit's `Why:` line is true of each page it names: how many had their facts change since the window opened, how many are new, how many are linked with one of those, and how many changed only in their links or text. A fact whose conflict is waiting keeps its live value in the sentence, followed by "A different value is waiting to be checked." No model writes it, so it can't say anything the facts don't. When the sources of those facts also name other pages, a last sentence links them: "Its sources also name [[people/ben-okafor|Ben Okafor]]." A page the text already links isn't named again there. A value that already says what someone did is written as a sentence to you: "Ana Diaz sent you a request for feedback on your grant plan." (the owner's name, from `owner.name`, `owner.aliases` or the owner's page title, reads as "you"); a relationship that is only a description reads "How you know Cy Moss: former manager." An org page lists the people whose org fact links to it ("Ana Diaz and Ben Okafor work at North College."), each cited by that fact's sources, and is written again whenever one of them is; a person some reader of the org page can't see, or one more private than the org page, isn't listed. The other way round, a page named in a source another page's fact cites links back: "Ben Okafor also comes up in the sources of Ana Diaz.", cited by that fact's sources, with the same reader checks (a fact some reader of the page can't see, or more private than the page, never names it), and the named page is written again with the page that cites the source. Two pages whose facts cite the same email, calendar event, message or Notion page name each other the same way, though no name ties them (up to 8 pages per item; an item behind more is a list, not a tie; G516). A person's org written in plain words ("North College") links when it is the title of exactly one org page, and counts for that org's list. A page another page's fact links to (a value "[[people/paul-advisor]]") links back: "See also [[projects/course-a|Course A]].", cited by that fact's sources, with the same reader checks. Your own page (the person page titled with your name) also lists, the same way, your decision and money pages no other page links to, cited by up to three of each one's facts; a page with no sourced fact isn't listed (audit v5, midday: 25 pages with text and no link in). A page carries one hub-written block, and it opens the page. Text someone else left at the top is kept word for word beneath it under `## Earlier notes` (an import's "Imported from …" line, the Gardener's old opening, an assistant's note, an old block in one of your commits), with any source id written into it ("(gmail:<id>)", "Gmail <id>", a bare 16-digit mail id, "notion: <id>") turned into a reference that names its kind and, when a fact of the page cites the same item, its date. `## Your notes` holds only what you type on a page in the app; one the writer filled before this rule becomes `## Earlier notes`. A fact a section of the page already says (the Gardener's "Your relationship", say) isn't said again in the opening. Wherever else an id sits in a page's text (a section an assistant wrote), the note page and the phone page show it as words ("an email", "a Notion import"), never the id; the file keeps it, so an assistant can still check the source. Sections with their own headings (the Gardener's "Who they are", yours) stay as they are. The writer's old sections from before this rule (`## Related`, `## From its facts`) go once its text opens the page, unless someone has since written in one, which then stays like any other section. Facts that cite the same sources share one reference. A list whose items all came from one email cites that email once, not once per item (G514). A value that names a page ("[[North College]]", or the page's id "orgs/north-college") is written by that page's id, so it reads as a link; a name that matches no page, or more than one, reads as plain words, and a page some reader of this one can't see reads as its name, never its id. The fact list on a page shows a value that is a page's id by that page's name too.
+
+On the dashboard, references read as numbers in brackets ("[1][2]", never "12"), and the References list shows each one as words with a readable date ("Email, 5 Oct 2026", "Your note, 5 Oct 2026"); the source id is kept on hover. What an assistant gets from `context_pack` keeps each paragraph under its section's heading, and the references at the end under none (`chunkNote` in `src/retrieve.ts`, G508). A fact value shown on the page never shows link brackets: a link to a page is drawn as a link, anything else as its words.
+
+The hub commits all the pages of one run together as `hub`, with a `Why:` line, so Recent updates shows it like any other change. A second run with nothing new commits nothing. The writer replaces the opening text only when it is its own (its `p-` references and nothing else, last changed by the writer or by upkeep's link passes). Text you, an assistant or the Gardener wrote, or your edit of the writer's text, is kept, and the page's `## ` sections are never touched. Undoing a same-person merge takes back the page text written since with it, as it does upkeep's link repoints; the next night writes it again. What it leaves out:
+- a fact that some assistant who sees the page's text can't see (a private fact on a personal page, an attribute outside its slices), and a fact with its own `share_with`;
+- contact details (email, phone, address) and anything that looks like a secret;
+- a link to a page that some assistant who sees this page can't see, and a link to a page nobody made yet (the name stays plain);
+- money pages, conflict packets and agents' own notes.
+
+A page left with nothing the writer may say (an Undo took its last fact out) loses the writer's own opening and its references in the same run; every other section stays (G455).
+
+Which pages a source names comes from the capture record: when a pulled item is read, the hub keeps a short hash of each run of capitalised words in it (`name_keys`, `nameKeys` in `src/mentions.ts`), never the words. The writer matches those against today's titles and aliases that fit exactly one note, so an email read before a page existed links to it once it does. For mail read before the hub kept these keys, the night job reads again up to 20 of the items that the touched pages' facts cite (`backfillNameKeys`, through the listed source as a recheck does) and keeps the hashes in `log/sources/name-keys.jsonl`; an item it can't read is noted and not tried again.
+
+## Names become links
+
+When a note's text names another note by its exact title or alias, and that name fits exactly one note, upkeep turns the first mention into a link, keeping the words as written: `Ask Jane Roy` becomes `Ask [[people/jane-roy|Jane Roy]]`, which reads the same (`src/mentions.ts`, upkeep step 1c).
+
+A new brain has it on (`link_names: true` in the policy.yaml `pocketbrain init` writes). A brain made before 2026-10-26 has it off until you run `pocketbrain wiki links on`; off, it does nothing and adds no findings. `pocketbrain wiki links preview` lists in your terminal what it would link, note by note, with the names. `pocketbrain wiki links off` stops it again. Once on, each note's links are one `reflect:auto` commit (finding `link-mention`), and `pocketbrain undo --run <run>` takes them back and keeps them from coming back. Up to 50 notes get links per run; the rest wait for the next night.
+
+No model is involved and nothing is guessed. It leaves alone:
+- a name that fits two notes: a `name-ambiguous` review line, and you link the right one;
+- a page that some assistant who sees this note can't see: the name stays plain text (a link would show that assistant `[[redacted]]` where it read a name before), with a `name-unlinked` review line;
+- a merged note's names (they live on as aliases of the note it became; a same-person undo would leave such a link at the wrong person), the owner's own name, a one-word name shorter than 5 letters or without a capital, and a longer name shorter than 4 characters;
+- text in code, headings, existing links, URLs and reference definitions, and fact values (a value belongs to whoever wrote it).
+
+The Gardener gets upkeep's findings on the notes it sees, sometimes without their text, so these lines name no name, no other note and no value ("linked 2 names in the text to the one note each names"); the commit and the preview say which. Review lines reach the digest under "Worth a look", like broken links do.
+
+## Recent updates
+
+Each note's dashboard page lists its own recent updates. A `type: hub` page, the Overview, lists the whole brain's. Each line names the page and the kind of change, for example "Changed the Role fact on Jane Roy" or "Added an Open threads section to Maya". A line never carries a value or the text of a line. The lines come from the brain's git history (`recentUpdates` in `src/wiki.ts`), so hand edits that were committed show up too. They can be filtered by who may see each page, but for now only the owner sees them.
+
+## Editing one section
+
+Each `## ` section on a note's dashboard page has its own Edit box. You can change the text by hand (Save section), or say what to change and let the model propose it (Edit with chat). Edit with chat is the Suggest box scoped to one section. If the model's answer changes anything outside that section, it is refused before you see it. Either way the rest of the note is kept exactly as it is.
+
+The commit says how a person went in: `Kind: owner-edit` with `Section: <heading>`, plus `Via: edit-with-chat` for a chat edit. The Gardener's `wiki_sync` reads this history and never rewrites a section a person wrote last.
+
+## The Gardener keeps pages in sync
+
+The Gardener can rewrite a page's summary and its `## ` sections with `wiki_sync`, using only that page's own facts. You chose to let it do this by itself (2026-10-17): its rewrite lands as one `reflect:auto` commit by the Gardener, with a `Why:` line the hub writes from the change itself: what it changed (the sections, the summary) and which of the page's facts are newer than the page's text, by attribute name only and only facts every reader of the page sees (G458, made specific after audit v5, midday), and you undo it like any other commit. The Gardener writes the words, but the hub's code decides whether they may land. It refuses:
+
+- a line with no `[^n]` reference, or a reference that names no source ref, or a source ref none of the page's current facts cite. A `[^n]` the call never defines (in `references`) gets its own answer: how to define it, with an example built from one of the page's facts and the refs its facts cite, so the Gardener can send the page again (G456);
+- any value hidden from an assistant that reads the page, or from the Gardener, in any spelling the leak matcher catches (`hiddenNeedles` and `findCarried`). When the Gardener can see the fact but another reader of the page can't, the refusal names it ("the text carries this page's room, which someone who reads this page can't see") so the Gardener sends the page again without it; a value hidden from the Gardener itself is never named;
+- secrets and instructions (`findSecret`, `findInjection`);
+- the summary or a section that a person wrote last (`partAuthors`, from git history). There the Gardener proposes with `remember` instead.
+- a section line starting with `#` (it would be an uncited heading, or a second section);
+- a name or number that none of the page's facts hold (`ungrounded` in `src/wiki.ts`). A word with a capital letter that doesn't start a sentence, and every number, must appear in the page's title or aliases, in its facts as the Gardener sees them (values, dates, sources), in the title of a note it links to, or be your name or a month or day name. A number matches by value, so "Oct 1" matches 2026-10-01. The refusal names the words. This can't check what a sentence means, but it catches the names and figures a model makes up;
+- a page whose text the Gardener may not read (it answers like a missing page). A source ref counts as cited only when a fact the Gardener sees cites it.
+
+It never touches facts, and text before the first section is kept as it was. A page outside the Gardener's view answers like a missing one. The kill switches hold (paused, read-only).
+
+It starts report-only. Until you run `pocketbrain wiki sync on`, `wiki_sync` only says what it would change, and `pocketbrain wiki sync off` stops it again. Each call is a line in the Gardener's run log.
+
+The nightly pass (step 6b in `src/tend.ts`) syncs up to 5 changed pages; after its proposals (step 8) it writes up to 3 pages that have facts but no summary. The weekly pass (step 4, also after its proposals) backfills up to 10 more. A paid eval showed why the order matters: with the backfill before the proposals, a refused page ("write only what they hold") most likely made the Gardener drop a proposal the email backed (its answer: "the one fix I had ready needed a date the source didn't give me"). The Gardener's `last_run` lists those pages as `wiki_missing` (the first 15 it may read, people and projects first, and `wiki_missing_total`), so it doesn't search for them. The week report's Brain health counts the people and projects still without a summary (docs/real-use-bar.md).
+
+## Edits made by hand
+
+You can edit a note in any text editor. When the hub starts, and at the start of each nightly pass, it commits notes changed on disk without a commit as yours, in one commit with `Kind: hand-edit` and a `Files:` line (`adoptHandEdits` in `src/wiki.ts`). Then they show in Recent updates and in an assistant's `whats_new` like any other change.
+
+A hand edit is held instead when the note carries a secret, doesn't parse, or was deleted (use Forget on the dashboard to delete). A held edit stays on disk exactly as you wrote it. It is never committed and never put back. The digest lists it under Needs you, with the path and the reason, never the text. A replica commits nothing of its own, so it leaves hand edits alone.
+
+A note that doesn't parse still stops every command that loads the brain, as before. Fix it and the next pass commits it.
+
+In `whats_new`, a commit reads `by: "owner"` when its author address is the owner's or isn't one the hub writes (the hub writes every assistant's and job's commits as `<name>@pocketbrain.local`; `isPersonCommit`). So an edit you committed yourself with git counts as yours, and an assistant removed from policy.yaml still reads as an assistant.
+
+The hub doesn't check a hand edit for instructions or hidden values: it is your own text. It runs one at a time with the hub's other writes, but another process writing a note at that moment (a CLI command) could be committed with it.
+
+## What assistants see
+
+An assistant that may read a note's text also reads its summary: in `read`, in its Markdown view (a `Summary:` line) and in `context_pack`. The summary is cleaned the same way as the body. Links to notes outside its slice and values carved from it are withheld (`pageSummary` in `src/view.ts`).
+
+`read` returns `parent` only when the parent page is in the assistant's slice. A hidden parent answers like no parent, and its id never reaches the assistant's cell.
+
+Links go both ways for an assistant too (`src/links.ts`). `read` returns `links_to` and `mentioned_in` (up to 20 each, with titles) and adds `Mentioned in:` and `Links to:` lines to its Markdown. `context_pack` adds one `Connected:` line to each hit (up to 8 notes), so the next hop is one `read` away. Only links the assistant can see count: a link in a body it may not read, or in a fact carved from its view, never shows, and a note outside its slice is never named. Like the dashboard's "Mentioned in", this is computed on each read and never stored.
+
+`read` takes an optional `section` (a `## ` heading). It returns only that section and the references it cites. An unknown section is a 404 (`GET /v1/notes/<id>?section=<heading>` on the JSON API). `context_pack` still ranks whole notes; ranking by section is not built yet.
+
+## Code
+
+`src/wiki.ts` provides `summaryOf`, `parentOf`, `pageTree`, `ancestors`, `sections`, `footnotes`, `wikiLint` and `renderTouchedPages` (the page writer; both called from `src/upkeep.ts`), `recentUpdates`, and `applyRewrite`, `partAuthors` and `pageFindings` for `gardenerWikiSync` in `src/core.ts`. The dashboard's note page draws them (`src/dashboard/html-brain.ts`). `adoptHandEdits`, `scanHandEdits` and `isPersonAuthor` handle hand edits (called from `src/start.ts` and `src/digest.ts`). The tests are in `test/wiki*.test.ts` and `test/page-writer.test.ts`.

@@ -26,6 +26,7 @@ function rig() {
   const open = async () => {
     const page = await (await browser.newContext()).newPage();
     await page.goto(d.loginUrl);
+    await page.goto(new URL("/overview", page.url()).href);
     return page;
   };
   return { root, mcp, remember, open, stop: () => { agents.stop(true); d.server.stop(true); } };
@@ -43,12 +44,13 @@ run("Plain words: the owner reads labels, and the code names are one hover away"
     expect((await r.remember("helper", "Paid via Maple Trust Bank")).outcome).toBe("refused"); // the leak tripwire
     expect((await r.remember("steward", "Send the reminder Friday")).outcome).toBeDefined();
     const page = await r.open();
-    for (const path of ["/", "/agents", "/activity", "/agent/helper", "/brain", "/note/projects/course-a"]) {
+    for (const path of ["/overview", "/agents", "/activity", "/agent/helper", "/brain", "/note/projects/course-a"]) {
       await page.goto(new URL(path, page.url()).href);
       const text = await visible(page);
       expect(text.match(CODE_WORDS)?.[0] ?? `none on ${path}`).toBe(`none on ${path}`);
     }
-    await page.goto(new URL("/", page.url()).href);
+    // Alerts are listed on Activity; the home page only counts them (owner, 2026-10-24).
+    await page.goto(new URL("/activity", page.url()).href);
     const trip = page.locator('span[title="leak_tripwire"]').first();
     expect(await trip.innerText()).toBe("tried to repeat something it can't see");
     await page.goto(new URL("/activity", page.url()).href);

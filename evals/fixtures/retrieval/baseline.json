@@ -6,14 +6,20 @@
       "heldout": 0.733,
       "dev2": 0.433,
       "direct2": 1,
-      "blind2": 0.175
+      "blind2": 0.125,
+      "blind3": 0.825,
+      "blind4": 0.041,
+      "blind5": 0.062
     },
     "lexicon": {
       "direct": 1,
       "heldout": 1,
       "dev2": 1,
       "direct2": 1,
-      "blind2": 0.5
+      "blind2": 0.675,
+      "blind3": 1,
+      "blind4": 0.562,
+      "blind5": 0.479
     }
   },
   "misses": {
@@ -36,7 +42,7 @@
         "b07(none)",
         "b09(none)",
         "b10(none)",
-        "b11(12)",
+        "b11(11)",
         "b12(none)",
         "b17(none)",
         "b19(none)",

@@ -101,7 +101,8 @@ test("contract auth: the owner's kill switches hold on every pasted-token path (
     ["paused", "/v1/search?q=course", "GET", undefined, 403],
     ["paused", "/v1/remember", "POST", remember, 403],
     ["paused", "/mcp", "POST", tools(), 403],
-    ["paused", `/mcp/${planner}`, "POST", tools(), 403],
+    // A token in the URL path opens nothing at all since G419: refused before any status check.
+    ["paused", `/mcp/${planner}`, "POST", tools(), 401],
   ];
   for (const [status, path, method, body, want] of rows) {
     setPolicy(root, /planner: \{ (status: [a-z-]+, )?tier: core,/.exec(readFileSync(join(root, "rules/policy.yaml"), "utf8"))![0], `planner: { status: ${status}, tier: core,`);
@@ -141,3 +142,88 @@ test("contract auth: revoke bites on the next request and leaves other agents al
   for (const t of helper) expect((await req(root, "/v1/context", { auth: `Bearer ${t}` })).status).toBe(401);
   expect((await req(root, "/v1/context", { auth: `Bearer ${planner}` })).status).toBe(200);
 });
+
+test("contract auth: a terminal alone mints only for a narrow trial agent; a wider one needs the owner's code (G184)", async () => {
+  const { shellMintRefusal } = await import("../../src/invite");
+  const root = makeBrain();
+  // Rows: agent -> may a terminal mint for it with no code.
+  const rows: [string, boolean][] = [["helper", true], ["planner", false], ["steward", false], ["gardener", false]];
+  for (const [agent, may] of rows) expect([agent, shellMintRefusal(root, agent) === undefined]).toEqual([agent, may]);
+});
+
+test("contract auth: every CLI door that makes a token refuses a wide agent without the owner's code (G184)", async () => {
+  const { main } = await import("../../src/cli");
+  const { existsSync, mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const YAML = (await import("yaml")).default;
+  // Rows: the command a shell runs for steward (all slice). Each must exit non-zero and list no token.
+  const rows: string[][] = [
+    ["token", "--agent", "steward"],
+    ["connect", "steward"],
+    ["connect", "steward", "--browser"],
+    ["connect", "steward", "--kind", "claude-code"],
+    ["connect", "steward", "--kind", "town"],
+    ["connect", "steward", "--kind", "browser"],
+    ["invite", "steward"],
+  ];
+  const root = makeBrain();
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME };
+  // A fake claude CLI first on PATH, so a door that got past the gate would show up here, not in the real one.
+  const bin = mkdtempSync(join(tmpdir(), "pb-bin-")), calls = join(bin, "calls.log");
+  writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> "${calls}"\n`, { mode: 0o755 });
+  process.env.PATH = `${bin}:${env.PATH}`;
+  process.env.HOME = mkdtempSync(join(tmpdir(), "pb-home-"));
+  const log = console.log, err = console.error;
+  console.log = () => {}; console.error = () => {};
+  const got: [string, number][] = [];
+  try { for (const r of rows) got.push([r.join(" "), main([...r, "--brain", root])]); }
+  finally { console.log = log; console.error = err; process.env.PATH = env.PATH; process.env.HOME = env.HOME; }
+  for (const [cmd, code] of got) expect([cmd, code === 0]).toEqual([cmd, false]);
+  expect(existsSync(calls)).toBe(false);
+  const file = join(root, "rules", "tokens.yaml");
+  expect(existsSync(file) ? YAML.parse(readFileSync(file, "utf8"))?.agents?.steward ?? [] : []).toEqual([]);
+});
+
+test("contract auth: a terminal's reach is bounded: one area, money left out (G241)", async () => {
+  const { reachRefusal } = await import("../../src/invite");
+  const { loadRules } = await import("../../src/rules");
+  const base = loadRules(makeBrain());
+  const trial = (slices: string[], extra: Record<string, unknown> = {}) => ({ ...base, policy: { ...base.policy, agents: { ...base.policy.agents, x: { tier: "trial", slices, exclude_types: ["money"], ...extra } } } }) as typeof base;
+  // Rows: the agent's shape -> may a terminal mint for it.
+  const rows: [string, typeof base, boolean][] = [
+    ["one area, money out", trial(["area:work", "contacts-basic"]), true],
+    ["two areas", trial(["area:work", "area:personal"]), false],
+    ["money in", trial(["area:work"], { exclude_types: [] }), false],
+  ];
+  for (const [what, rules, may] of rows) expect([what, reachRefusal(rules, "x") === undefined]).toEqual([what, may]);
+});
+
+test("contract auth: a terminal's invite holds only while its agent stays narrow (G285)", async () => {
+  const { createInvite, redeemInvite } = await import("../../src/invite");
+  const root = makeBrain();
+  // Rows: made by -> redeemable after helper is widened.
+  const rows: [string, boolean][] = [["terminal", false], ["dashboard", true]];
+  const codes = rows.map(([by]) => createInvite(root, "helper", by === "terminal" ? { terminal: true } : {}).code);
+  setPolicy(root, "helper: { tier: trial, slices: [area:work, contacts-basic]", "helper: { tier: trial, slices: [all]");
+  rows.forEach(([by, ok], i) => expect([by, "token" in redeemInvite(root, codes[i])]).toEqual([by, ok]));
+});
+
+test("contract auth: a revoke never leaves an agent keyless with its open code still minting (G336)", async () => {
+  const { revokeTokens, issueToken, tokenInfo } = await import("../../src/auth");
+  const { createInvite, redeemInvite, resetEnrollLimits } = await import("../../src/invite");
+  const { writeFileSync, rmSync } = await import("node:fs");
+  // Rows: the invites lock during the revoke -> after it, keys left or the old code dead.
+  const rows: [string, boolean][] = [["free", false], ["held by a live process", true]];
+  for (const [lock, held] of rows) {
+    resetEnrollLimits();
+    const root = makeBrain();
+    issueToken(root, "helper");
+    const { code } = createInvite(root, "helper");
+    const p = join(root, ".git", "pb-invites.lock");
+    if (held) writeFileSync(p, JSON.stringify({ pid: process.pid, at: new Date().toISOString(), token: "other" }));
+    try { revokeTokens(root, "helper"); } catch { /* refused whole */ }
+    rmSync(p, { force: true });
+    const keys = (tokenInfo(root).helper ?? []).length;
+    expect([lock, keys > 0 || !("token" in redeemInvite(root, code))]).toEqual([lock, true]);
+  }
+}, 30_000);

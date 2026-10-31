@@ -11,7 +11,7 @@ import { issueToken } from "../src/auth";
 import { loadBrain, type FactRecord } from "../src/brain";
 import { loadRules } from "../src/rules";
 import { carve, grantFor } from "../src/carve";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { git } from "../src/git";
 import { storeCapture, readCapture } from "../src/capture";
 import { openItems } from "../src/textline/items";
@@ -27,10 +27,10 @@ function setup() {
     const body = fields ? new URLSearchParams(fields) : undefined;
     const r = await d.handle(new Request(`http://${H}${path}`, { method, body, headers: { host: H, cookie, origin: `http://${H}`, referer: `http://${H}${from}`, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) } }));
     const loc = r.headers.get("location") ?? "";
-    return { status: r.status, text: await r.text(), loc, ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { status: r.status, text: await r.text(), loc, ...flashOf(loc) };
   };
   const login = async () => { const r = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } })); cookie = r.headers.get("set-cookie")!.split(";")[0]; };
-  const csrf = async () => (await req("GET", "/brain")).text.match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = async () => (await req("GET", "/home")).text.match(/name="csrf" value="([^"]+)"/)![1];
   const post = async (path: string, fields: Record<string, string> = {}, from = "/brain") => req("POST", path, { csrf: await csrf(), ...fields }, from);
   const agent = async (who: keyof typeof tok, path: string) => {
     const r = await handle(root, new Request(`http://pb${path}`, { headers: { authorization: `Bearer ${tok[who]}` } }));
@@ -213,7 +213,7 @@ test("A held capture shows in Needs you with its text, and Release or Discard an
   await login();
   const s = storeCapture(root, { text: injected, kind: "text" }, { via: "mail", by: "steward" });
   expect(s.outcome).toBe("held");
-  const home = await req("GET", "/");
+  const home = await req("GET", "/overview");
   expect(home.text).toContain("held capture");
   expect(home.text).toContain("Lunch with Jane moved to Friday");
   expect(home.text).not.toContain("<b>Alert");
@@ -221,16 +221,16 @@ test("A held capture shows in Needs you with its text, and Release or Discard an
   expect(home.text.match(/capture_held|Held capture/gi)?.length ?? 0).toBeLessThanOrEqual(1);
 
   const rel = s.file;
-  const r = await post("/action/capture-release", { file: rel }, "/");
+  const r = await post("/action/capture-release", { file: rel }, "/overview");
   expect(r.ok).toContain("released");
   expect(readCapture(root, rel).status).toBe("pending");
-  expect((await req("GET", "/")).text).not.toContain("Lunch with Jane moved to Friday");
+  expect((await req("GET", "/overview")).text).not.toContain("Lunch with Jane moved to Friday");
 
   const s2 = storeCapture(root, { text: injected + " Also call Paul.", kind: "text" }, { via: "mail", by: "steward" });
-  const d = await post("/action/capture-discard", { file: s2.file }, "/");
+  const d = await post("/action/capture-discard", { file: s2.file }, "/overview");
   expect(d.ok).toContain("discarded");
   expect(existsSync(join(root, s2.file))).toBe(false);
-  expect((await post("/action/capture-discard", { file: "../rules/policy.yaml" }, "/")).err).toBeTruthy();
+  expect((await post("/action/capture-discard", { file: "../rules/policy.yaml" }, "/overview")).err).toBeTruthy();
 });
 
 test("A held capture is one text item, never with its words or its sender", async () => {
@@ -241,7 +241,7 @@ test("A held capture is one text item, never with its words or its sender", asyn
   expect(cap.length).toBe(1);
   expect(cap[0].ref).toBe(s.file);
   expect(cap[0].title).toBe("Held capture from the capture mailbox: it reads like instructions. Release?");
-  expect(cap[0].verbs).toEqual(["approve", "reject", "later"]);
+  expect(cap[0].verbs).toEqual(["later"]); // a reply never releases it (outside review v5)
   expect(JSON.stringify(items)).not.toContain("Lunch");
   // Its digest alert doesn't make a second item while the capture is still held.
   expect(items.filter((i) => i.kind === "alert").length).toBe(0);

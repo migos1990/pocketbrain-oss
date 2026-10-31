@@ -36,7 +36,7 @@ async function session(root: string): Promise<string[]> {
   const out: string[] = [];
   const send = async (a: string, method: string, path: string, body?: unknown) => {
     const r = await server.handle(root, new Request(`http://pb${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { authorization: `Bearer ${tok[a]}` } }));
-    out.push((await r.text()).replace(/"(at|recorded|last_confirmed|updated|heartbeat)": "[^"]*"/g, '"$1": "T"').replace(/inbox\/[^"]+\.yaml/g, "inbox/F").replace(/commit [0-9a-f]{7,}/g, "commit H"));
+    out.push((await r.text()).replace(/"(at|recorded|last_confirmed|updated|heartbeat)": "[^"]*"/g, '"$1": "T"').replace(/inbox\/[^"]+\.yaml/g, "inbox/F").replace(/commit [0-9a-f]{7,}/g, "commit H").replace(/\b([a-z]+\/[a-z0-9-]+)-[0-9a-f]{6}\b/g, "$1-H")); // new notes get a random suffix (G28)
   };
   const mcp = (a: string, method: string, params?: unknown) => send(a, "POST", "/mcp", { jsonrpc: "2.0", id: 1, method, params });
   for (const a of AGENTS) {

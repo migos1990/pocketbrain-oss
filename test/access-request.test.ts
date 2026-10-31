@@ -9,7 +9,7 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
 import { handle, serve } from "../src/server";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { setupOAuth, listPending, clearJwksCache, revokeClient, bindClient, revokeAgentClients, PENDING_PER_HOUR } from "../src/oauth";
 import { issueToken } from "../src/auth";
 import { askToSee, type Approver } from "../src/asks";
@@ -39,11 +39,11 @@ async function setup(extraSlices = "") {
   const r = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = r.headers.get("set-cookie")!.split(";")[0];
   const get = async (path: string) => { const x = await d.handle(new Request(`http://${H}${path}`, { headers: { host: H, cookie } })); return { status: x.status, text: await x.text() }; };
-  const csrf = async () => (await get("/")).text.match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = async () => (await get("/overview")).text.match(/name="csrf" value="([^"]+)"/)![1];
   const act = async (action: string, fields: Record<string, string>) => {
     const x = await d.handle(new Request(`http://${H}/action/${action}`, { method: "POST", body: new URLSearchParams({ csrf: await csrf(), ...fields }), headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: `http://${H}` } }));
     const loc = x.headers.get("location") ?? "";
-    return { ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { ...flashOf(loc) };
   };
   const policy = () => YAML.parse(readFileSync(join(root, "rules", "policy.yaml"), "utf8"));
   const setPolicy = (fn: (p: any) => void) => { const p = policy(); fn(p); writeFileSync(join(root, "rules", "policy.yaml"), YAML.stringify(p)); };
@@ -85,7 +85,7 @@ test("the request is kept as a suggestion: a clean name, the slice names it gave
 
 test("a name already taken becomes a plain new name, never a takeover or a near-copy like helper-2 (G167)", async () => {
   const { root, ask, signIn } = await setup();
-  for (const name of ["helper", "planner2", "steward-1"]) {
+  for (const name of ["helper", "planner2", "steward-1", "Helper 2 2"]) {
     const c = await signIn();
     await ask(c.token(), { name, purpose: "x", slices: ["area:work"] });
     expect(listPending(root).find((p) => p.client_id === c.client_id)!.request!.agent, name).toMatch(/^assistant(-\d+)?$/);
@@ -194,6 +194,20 @@ test("initialize names only the area slices, not the owner's own named slices", 
   const init = await rpc((await signIn()).token(), "initialize");
   expect(init.json.result.instructions).toContain("area:work");
   expect(init.json.result.instructions).not.toContain("contacts-basic");
+});
+
+// Not every client shows a server's instructions, so the tool itself names the slices it takes:
+// an assistant that only sees the tool asked for made-up names ("teaching") the owner can't grant.
+test("request_access's slices are the area slices by name, the same list initialize gives", async () => {
+  const { rpc, signIn } = await setup();
+  const c = await signIn();
+  const [tool] = (await rpc(c.token(), "tools/list")).json.result.tools;
+  const items = tool.inputSchema.properties.slices.items;
+  expect(items.enum).toContain("area:work");
+  expect(items.enum).not.toContain("contacts-basic");
+  expect(items.enum).not.toContain("all");
+  const init = (await rpc(c.token(), "initialize")).json.result.instructions as string;
+  for (const s of items.enum) expect(init).toContain(s);
 });
 
 test("a request name with markup stays escaped in the form value and the review link", async () => {

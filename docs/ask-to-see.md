@@ -6,7 +6,16 @@ Code: `src/asks.ts`. Tests: `test/asks.test.ts` (a fake Auth0 stands in for the 
 
 ## Turning it on
 
-Off unless `rules/policy.yaml` says so:
+Off until you turn it on:
+
+```
+pocketbrain ask on                                    # approve on the dashboard
+pocketbrain ask on --never money,health --max-per-day 3
+pocketbrain ask on --approver guardian --client-id <Auth0 application with the CIBA grant>
+pocketbrain ask off
+```
+
+`ask on` keeps the settings already there and changes only the flags you give. It edits only `ask_to_see` in `rules/policy.yaml` and commits it as you, so the real-use bar counts it as configuration, not a hand fix. Editing the file by hand works too, but the bar then counts a hand edit and starts again. The command writes this block, which you can also read or tune by hand:
 
 ```yaml
 ask_to_see:
@@ -36,11 +45,15 @@ MCP tools `ask_to_see` (what, why) and `ask_status` (request); JSON `POST /v1/as
 
 - **Phone (Guardian):** "helper wants to read a private person note once. Code K7QM". Approving releases the best match; the dashboard shows the same code next to it. The push names the kind of note (its level and type) so a phone approval isn't blind; the title is only in it with `push_title: true`, since the push travels through Auth0 and Apple or Google.
 - **Dashboard, Needs you:** "helper wants to read Mom once", its reason, the words it used, the time left, **Allow once** for the best match, **Allow X instead** for the next two matches, and **Decline**. If the push couldn't be sent, the reason is right there.
-- **CLI:** `pocketbrain ask list | approve <id> [note] | decline <id> | test`.
+- **CLI:** `pocketbrain ask list | decline <id> | test`. Approving is not on the CLI: any program with a shell can run `pocketbrain`, so an approval comes only from the dashboard click or your phone (G244). `ask approve` says so and changes nothing.
+
+## Just this one: the owner offers first
+
+The owner app's sheet for a dashed mark (`/let`, see `docs/owner-home.md`) has **Just this one**: the owner lets that assistant read that page once without being asked (`offerOnce`). The tap is the approval, so it needs a sign-in from the last 10 minutes, and it works whether or not `ask_to_see` is turned on. It is logged in `log/asks.jsonl` as an ask approved in the same step (`offered: true`, `via: dashboard`), so everything under "What holds" applies to it too. The page reaches the assistant at the top of its next `context_pack`, whatever the topic, once, under a heading that says the owner let it read one page once and not to store it or pass it on (`takeOffers`); the read is an `ask_read` in `log/reads.jsonl`. An offer waits 7 days for that check-in. A reader token's context read leaves it for the assistant's full token. Offers don't count against the assistant's own `max_per_day`. Its slice and its mark never change. Never offered or read: a page the owner kept from that assistant by name (Keep it from), a page of a type left out of its view (`exclude_types`, money for most), a canary decoy in the `probe` area, anything to the Gardener, a tool inside the wall or a collaborator (checked again at the read, so a later edit to policy.yaml holds), and everything an ask never releases; the sheet doesn't offer Just this one where it couldn't be read (`mayOffer`). Both are checked again at the read, so Keep it from tapped after Just this one, or a move into `probe`, voids the offer (G543). An assistant's own ask may still name a page kept from it by name, since the owner decides each one; with `ask_to_see` off there is no `never` list, so the owner's own tap may release a private money or health page. Revoking the assistant voids an offer it hasn't read; pausing it doesn't, so it is read after a resume within the 7 days.
 
 ## What holds
 
-- Only the owner approves: a dashboard click (loopback, CSRF) or a CIBA approval whose id token names the owner's own Auth0 user. An approval by any other user is treated as a decline. No agent, relayed text or model can approve.
+- Only the owner approves (never the terminal, G244): a dashboard click (loopback, CSRF) or a CIBA approval whose id token names the owner's own Auth0 user. An approval by any other user is treated as a decline. No agent, relayed text or model can approve.
 - One approval is one read of one note. The note is rendered as a view holding only that note: links to anything else show as `[[redacted]]`, secret facts and facts limited with `share_with` stay out. A note that became secret, moved to a `never` type or was deleted after the approval is not handed over.
 - Secret notes, conflict packets, agents' own notes and anything in `never` are never offered.
 - Every step is in `log/asks.jsonl` (asked, push, approved, declined, used, expired) and the read in `log/reads.jsonl` as `ask_read` with `grant`, `approved_via` and the Auth0 request id. Both are hash-chained.

@@ -9,7 +9,7 @@ pocketbrain probe init            # plant the decoys (once; re-running changes n
 pocketbrain probe init --rotate   # new canaries; the old ones stay watched
 ```
 
-`probe init` writes three decoy notes, `notes/probe-personal`, `notes/probe-private` and `notes/probe-secret`, in the `probe` area, tagged `canary`, each with a unique canary as its `reference` fact and in its body. It adds the slice `probe: { areas: [probe] }` to `rules/slices.yaml` and records the list in `rules/canaries.yaml` (never served to an agent; `handover` strips canary notes). All of it is one commit authored by the owner, and the command prints the canaries and which agents can see each decoy.
+`probe init` writes three decoy notes, `notes/probe-personal`, `notes/probe-private` and `notes/probe-secret`, in the `probe` area, tagged `canary`, each with a unique canary as its `reference` fact and in its body; no two share their pair of words, since the leak matcher counts two consecutive words as carrying a value (G535). It adds the slice `probe: { areas: [probe] }` to `rules/slices.yaml` and records the list in `rules/canaries.yaml` (never served to an agent; `handover` strips canary notes). All of it is one commit authored by the owner, and the command prints the canaries and which agents can see each decoy.
 
 Only a slice that names the `probe` area reaches these notes (`src/carve.ts`): not `all`, not a type, tag or sensitivity slice. So today no agent sees any of them. A prober agent (managed-agents-audit section 7) is an ordinary entry in `rules/policy.yaml`:
 
@@ -23,7 +23,7 @@ On the trial tier it sees the personal decoy and nothing else, so its answers ma
 
 - **Relay:** mail carrying any planted or retired canary is held and alerts (the relay reads `rules/canaries.yaml` next to the `canaries:` in `rules/relay.yaml`).
 - **Write path:** a write whose fields (value, text, title, attribute, source refs) carry a canary whose decoy the writer can't see is refused and alerts, whatever the decoy's level. The writer sees an ordinary `leak_tripwire` refusal that names no note, fact or canary; only the owner's alert says which (eval gap G165).
-- **Reads:** a context pack, search or read that would hand an agent a canary its carve doesn't hold raises a `canary_served` alert. (Values carved from an agent are also scrubbed from what it reads, so the private and secret canaries never get that far.)
+- **Reads:** a context pack, search, read or what's-new (`whats_new`, the API's `/v1/changes` and the dashboard's change list) that would hand an agent a canary its carve doesn't hold raises a `canary_served` alert. (Values carved from an agent are also scrubbed from what it reads, so the private and secret canaries never get that far.)
 
 ## The leak oracle
 

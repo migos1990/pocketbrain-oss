@@ -2,9 +2,10 @@
 // `pocketbrain init`: a stranger with no Notion gets a working brain. E2E first (the CLI as a
 // user runs it, then an agent over MCP), then the boundaries, then the parsers.
 import { test, expect, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import YAML from "yaml";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, existsSync, readlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { handle } from "../src/server";
 import { loadBrain, type FactRecord, type ListFact } from "../src/brain";
 import { initBrain, interview, parseAddresses, parseIcs, parseMbox, InitError } from "../src/init";
@@ -12,6 +13,7 @@ import { runChecks, type WriteRequest } from "../src/checks";
 import { loadRules } from "../src/rules";
 import { decideProposal } from "../src/write";
 import { useCells, buildCells } from "../src/cell";
+import { ownerError } from "../src/owner-errors";
 
 const REPO = join(import.meta.dir, "..");
 const SEED = join(REPO, "examples", "seed");
@@ -26,7 +28,7 @@ function cli(args: string[], stdin?: string, opts: { cwd?: string; env?: Record<
   const env: Record<string, string | undefined> = { ...process.env, PB_TODAY: "2026-10-08", PB_CONFIG_DIR: CONFIG, ...opts.env };
   delete env.PB_BRAIN;
   for (const [k, v] of Object.entries(opts.env ?? {})) if (v !== undefined) env[k] = v;
-  const r = Bun.spawnSync(["bun", join(REPO, "src", "cli.ts"), ...args], { cwd: opts.cwd ?? REPO, env, stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin) });
+  const r = Bun.spawnSync([process.execPath, join(REPO, "src", "cli.ts"), ...args], { cwd: opts.cwd ?? REPO, env, stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin) });
   return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
 }
 function client(root: string, token: string) {
@@ -90,7 +92,7 @@ test("E2E: from nothing to an agent reading only its slice over MCP, writing thr
 test("E2E: the guided interview, answers piped in, gives a brain and a token", () => {
   const root = fresh();
   const answers = [
-    "Sam", "", "I run a small bakery.",
+    "Sam", "town", "", "I run a small bakery.",
     "Rita Gomez: supplier at Flour Co, rita@flourco.example", "",
     "Tom Sam: brother", "",
     "Spring menu: next step: test the rye loaf", "",
@@ -100,13 +102,14 @@ test("E2E: the guided interview, answers piped in, gives a brain and a token", (
   ].join("\n") + "\n";
   const r = cli(["init", root, "--interview"], answers);
   expect(r.code).toBe(0);
-  expect(r.out).toMatch(/pb_assistant_\S+/);
+  // Named after the assistant picked, and connected with that kind's own command (row 388).
+  expect(r.out).toContain("pocketbrain connect town --kind town --url");
   const ids = loadBrain(root).map((n) => n.fm.id);
   expect(ids).toEqual(expect.arrayContaining(["people/rita-gomez", "orgs/flour-co", "people/tom-sam", "projects/spring-menu", "money/main-bank", "notes/about-my-work"]));
   const rules = loadRules(root);
   expect(rules.policy.owner?.name).toBe("Sam");
   expect((rules.checks as any).categories.money).toContain("Pine");
-  const view = readFileSync(join(root, "views", "assistant.md"), "utf8");
+  const view = readFileSync(join(root, "views", "town.md"), "utf8");
   expect(view).toContain("test the rye loaf");
   expect(view).not.toContain("Pine Credit Union");
 });
@@ -273,9 +276,9 @@ test("text format: area and private tags, next steps, dated decisions", () => {
 });
 
 test("interview answers turn into the plain text format", () => {
-  const answers = ["Ana", "Helper", "Nurse", "Bo Li: charge nurse at City Hospital", "", "", "", "", "", "", "", "", "", ""];
+  const answers = ["Ana", "", "Helper", "Nurse", "Bo Li: charge nurse at City Hospital", "", "", "", "", "", "", "", "", "", ""];
   const iv = interview(() => answers.shift() ?? null);
-  expect(iv).toMatchObject({ owner: "Ana", agent: "helper", mbox: [], ics: [] });
+  expect(iv).toMatchObject({ owner: "Ana", kind: "claude-ai", agent: "helper", mbox: [], ics: [] });
   expect(iv.text).toContain("# About my work (work)\nNurse");
   expect(iv.text).toContain("# People (work)\n- Bo Li: charge nurse at City Hospital");
 });
@@ -376,10 +379,137 @@ test("the installer is valid sh, stops with a clear message without git or Bun, 
   expect(existsSync(join(home, ".bun"))).toBe(false);
 });
 
+test("the installer installs the newest release tag from the source, without npm, and a second run changes nothing", () => {
+  const home = mkdtempSync(join(tmpdir(), "pb-home-"));
+  // A stand-in source: a package with no libraries, two releases and an unreleased commit.
+  const work = join(home, "work");
+  mkdirSync(join(work, "src"), { recursive: true });
+  const git = (...a: string[]) => { const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", ...a], { cwd: work }); expect(r.exitCode).toBe(0); };
+  const release = (v: string) => {
+    writeFileSync(join(work, "src", "cli.ts"), `#!/usr/bin/env bun\nconsole.log("pocketbrain ${v}");\n`);
+    Bun.spawnSync(["chmod", "+x", join(work, "src", "cli.ts")]);
+    git("add", "-A"); git("commit", "-qm", v);
+  };
+  writeFileSync(join(work, "package.json"), JSON.stringify({ name: "pocketbrain", version: "0.0.0", bin: { pocketbrain: "src/cli.ts" } }));
+  writeFileSync(join(work, ".gitignore"), "node_modules\n");
+  git("init", "-q", "-b", "main");
+  release("v0.9.0"); git("tag", "v0.9.0");
+  release("v0.10.0"); git("tag", "v0.10.0");
+  release("unreleased");
+  const bare = join(home, "source.git");
+  expect(Bun.spawnSync(["git", "clone", "-q", "--bare", work, bare]).exitCode).toBe(0);
+
+  const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, POCKETBRAIN_REPO: bare };
+  const install = (extra: Record<string, string> = {}) => Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, ...extra } });
+  const cmd = join(home, ".bun", "bin", "pocketbrain");
+  const app = join(home, ".pocketbrain", "app");
+  const runs = () => Bun.spawnSync([cmd], { env }).stdout.toString().trim();
+  // install.sh's lines with its shell variables filled in.
+  const said = (id: Parameters<typeof ownerError>[0], src: string, repo: string) => `pocketBrain install: ${ownerError(id).replaceAll("$SRC", src).replaceAll("$REPO", repo)}`;
+
+  const first = install();
+  expect(first.stderr.toString()).toBe("");
+  expect(first.exitCode).toBe(0);
+  expect(first.stdout.toString()).toContain("Installed v0.10.0.");   // newest by version, not by name
+  expect(runs()).toBe("pocketbrain v0.10.0");
+  expect(readlinkSync(cmd)).toBe(join(app, "src", "cli.ts"));
+
+  const again = install();
+  expect(again.exitCode).toBe(0);
+  expect(again.stdout.toString()).toContain("Installed v0.10.0.");
+  expect(runs()).toBe("pocketbrain v0.10.0");
+  expect(Bun.spawnSync(["git", "status", "--porcelain", "--untracked-files=no"], { cwd: app }).stdout.toString()).toBe("");
+
+  // A new release: running it again updates.
+  release("v0.11.0"); git("tag", "v0.11.0");
+  expect(Bun.spawnSync(["git", "push", "-q", "--tags", bare, "main"], { cwd: work }).exitCode).toBe(0);
+  expect(install().exitCode).toBe(0);
+  expect(runs()).toBe("pocketbrain v0.11.0");
+
+  // An edit of the owner's in the copy is never thrown away.
+  writeFileSync(join(app, "src", "cli.ts"), "// mine\n");
+  const dirty = install();
+  expect(dirty.exitCode).toBe(1);
+  expect(dirty.stderr.toString().trim()).toBe(said("install.dirty", app, bare));
+  expect(readFileSync(join(app, "src", "cli.ts"), "utf8")).toBe("// mine\n");
+
+  // A source with no release says how to get the unreleased code, and that way works.
+  const other = mkdtempSync(join(tmpdir(), "pb-home-"));
+  const bareNoTags = join(other, "plain.git");
+  expect(Bun.spawnSync(["git", "clone", "-q", "--bare", "--no-tags", work, bareNoTags]).exitCode).toBe(0);
+  Bun.spawnSync(["git", "--git-dir", bareNoTags, "tag", "-d", "v0.9.0", "v0.10.0", "v0.11.0"]);
+  const none = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags } });
+  expect(none.exitCode).toBe(1);
+  expect(none.stderr.toString().trim()).toBe(said("install.no-release", join(other, ".pocketbrain", "app"), bareNoTags));
+  const main = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags, POCKETBRAIN_REF: "main" } });
+  expect(main.exitCode).toBe(0);
+  expect(Bun.spawnSync([join(other, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim()).toBe("pocketbrain v0.11.0");
+  const typo = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags, POCKETBRAIN_REF: "v9" } });
+  expect(typo.stderr.toString().trim()).toBe(said("install.no-ref", join(other, ".pocketbrain", "app"), bareNoTags).replaceAll("$REF", "v9"));
+});
+
 test("an accented money word from the owner's list tags a contact finance (G129)", () => {
   const root = fresh();
   const seed = join(mkdtempSync(join(tmpdir(), "pb-seed-")), "notes.txt");
   writeFileSync(seed, "# People (personal)\n- Marc Dubé: conseiller épargne chez Caisse du Plateau\n\n# Money words\népargne\n");
   initBrain(root, { owner: "Alex", agent: "claude", text: [seed] });
   expect(loadBrain(root).find((n) => n.fm.title === "Marc Dubé")!.fm.tags).toEqual(["finance"]);
+});
+
+test("with Claude Code installed, init's connect step is one command that also writes the standing instruction (stranger rehearsal)", () => {
+  const root = join(mkdtempSync(join(tmpdir(), "pb-init-cc-")), "brain");
+  const bin = mkdtempSync(join(tmpdir(), "pb-bin-"));
+  writeFileSync(join(bin, "claude"), "#!/bin/sh\nexit 0\n");
+  chmodSync(join(bin, "claude"), 0o755);
+  const r = cli(["init", root, "--name", "Alex", "--agent", "claude"], undefined, { env: { PATH: `${bin}:${process.env.PATH}` } });
+  expect(r.code).toBe(0);
+  expect(r.out).toContain("pocketbrain connect claude --kind claude-code");
+  // Without it, the paste lines stay.
+  const r2 = cli(["init", join(mkdtempSync(join(tmpdir(), "pb-init-nocc-")), "brain"), "--name", "Alex", "--agent", "claude"], undefined, { env: { PATH: "/usr/bin:/bin" } });
+  expect(r2.out).not.toContain("--kind claude-code");
+  expect(r2.out).toContain("claude mcp add --scope user");
+});
+
+// ---------- which assistant (row 388) ----------
+
+test("the interview asks which assistant first and names it after that kind; Enter takes Claude Code when it's installed", () => {
+  const ask = (answers: string[], o?: { claudeCode?: boolean }) => { const q: string[] = []; const iv = interview((x) => { q.push(x); return answers.shift() ?? null; }, () => {}, o); return { iv, q }; };
+  const a = ask(["Ana", "", "", ""], { claudeCode: true });
+  expect(a.q[1]).toBe("Which assistant will use your brain first? claude-code, claude-ai, town or browser [claude-code]:");
+  expect(a.q[2]).toBe("A short name for it [claude]:");
+  expect(a.iv).toMatchObject({ kind: "claude-code", agent: "claude" });
+  expect(ask(["Ana", "", ""], { claudeCode: false }).iv).toMatchObject({ kind: "claude-ai", agent: "claude" });
+  expect(ask(["Ana", "browser", ""]).iv).toMatchObject({ kind: "browser", agent: "browser" });
+  // A word it doesn't know is asked again, never guessed.
+  const b = ask(["Ana", "chatgpt", "Town", ""]);
+  expect(b.q.filter((x) => x.startsWith("Which assistant"))).toHaveLength(2);
+  expect(b.iv).toMatchObject({ kind: "town", agent: "town" });
+});
+
+test("init --kind claude-code connects Claude Code itself: claude mcp add runs, the instruction lands in ~/.claude/CLAUDE.md, no token printed", () => {
+  const root = join(mkdtempSync(join(tmpdir(), "pb-init-kind-")), "brain");
+  const bin = mkdtempSync(join(tmpdir(), "pb-bin-")), home = mkdtempSync(join(tmpdir(), "pb-home-"));
+  const log = join(bin, "calls.txt");
+  writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> ${log}\nexit 0\n`);
+  chmodSync(join(bin, "claude"), 0o755);
+  const r = cli(["init", root, "--name", "Alex", "--kind", "claude-code"], undefined, { env: { PATH: `${bin}:${process.env.PATH}`, HOME: home } });
+  expect(r.code).toBe(0);
+  expect(loadRules(root).policy.agents.claude).toBeDefined();
+  expect(readFileSync(log, "utf8")).toMatch(/^mcp add --scope user --transport http pocketbrain http:\/\/127\.0\.0\.1:8787\/mcp --header Authorization: Bearer pb_claude_/m);
+  expect(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8")).toContain("<!-- pocketbrain -->");
+  expect(r.out).toContain("Added pocketbrain to Claude Code");
+  expect(r.out).not.toMatch(/pb_claude_\S+/);
+  // One token: the one Claude Code holds.
+  expect([YAML.parse(readFileSync(join(root, "rules", "tokens.yaml"), "utf8")).agents.claude].flat()).toHaveLength(1);
+});
+
+test("init --kind for an assistant in the cloud names it and prints the one command for once the brain has a public address", () => {
+  for (const [kind, agent] of [["claude-ai", "claude"], ["town", "town"], ["browser", "browser"]]) {
+    const root = join(mkdtempSync(join(tmpdir(), "pb-init-kind-")), "brain");
+    const r = cli(["init", root, "--name", "Alex", "--kind", kind], undefined, { env: { PATH: "/usr/bin:/bin" } });
+    expect(r.code).toBe(0);
+    expect(loadRules(root).policy.agents[agent]).toBeDefined();
+    expect(r.out).toContain(`pocketbrain connect ${agent} --kind ${kind} --url https://`);
+  }
+  expect(cli(["init", join(mkdtempSync(join(tmpdir(), "pb-init-kind-")), "brain"), "--name", "Alex", "--kind", "chatgpt"]).code).toBe(2);
 });

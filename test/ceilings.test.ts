@@ -15,6 +15,7 @@ import { loadRules } from "../src/rules";
 import { hiddenNeedles } from "../src/needles";
 import { needleFor, findCarried, unhide, type Needle } from "../src/match";
 import { carve, grantFor, shownUpdated } from "../src/carve";
+import { checkClaim } from "../src/pull";
 
 const k = (prefix: string, n: number, ch = "a") => prefix + ch.repeat(n);
 // Password-looking words are built at run time so gitleaks doesn't flag this file (CLAUDE.md Shipping).
@@ -139,6 +140,9 @@ const SECRET_CEILING: string[] = [
   "Door code 2026 renewal",
   "alarm code 2026 review",
   "code de la porte 2026",
+  // A key's body line with no BEGIN line beside it reads as any base64 run. So text is redacted
+  // whole before it is cut into lines (G194: verify_source quotes), never line by line.
+  "MIIEvQIBADANBgkqhkiG9w0" + "BAQEFAASCBKcwggSjAgEAAoIBAQC7",
 ];
 
 // The other side of the secret ceiling: ordinary text the G47 shapes knowingly refuse on the
@@ -416,4 +420,16 @@ test("shown update date: knowingly jumps when a note gains or loses its last hid
     [shown(hidden + "\nBody edited today.\n"), "2026-10-01"], // a body edit is not shown
   ];
   for (const [got, want] of rows) expect(got).toBe(want);
+});
+
+// verify_source (G194, G245): the item is redacted whole before the claim is matched, so a claim
+// that quotes a secret-shaped value is answered no-match even when the item says it. Known ceiling.
+const VERIFY_SECRET_CEILING: [string, string][] = [
+  ["Booking code ABC123 confirmed for Friday.", "booking code ABC123"],
+  ["Card on file: 4111 1111 1111 1111.", "card 4111 1111 1111 1111"],
+  ["The portal password is hunter2xx.", "password hunter2xx"],
+];
+test("verify_source answers no-match for a claim quoting a secret-shaped value (ceiling)", () => {
+  for (const [item, claim] of VERIFY_SECRET_CEILING) expect([claim, checkClaim(item, claim).result]).toEqual([claim, "no-match"]);
+  expect(checkClaim("Session 6 moved to Oct 11 in Hall B210.", "session 6 Oct 11 B210").result).toBe("match");
 });

@@ -259,6 +259,18 @@ test("#148: mail from outside the agents' inboxes (an auto-reply, a bounce, the 
   expect(queue).toHaveLength(0);
 });
 
+test("a message whose id isn't its file name is moved once, and a short id never moves another file (G29)", () => {
+  const root = makeBrain();
+  mkdirSync(join(root, "relay/incoming"), { recursive: true });
+  writeFileSync(join(root, "relay/incoming/x1.json"), JSON.stringify(msg("<outside@mail.example>", "planner@brain.example", "relay+helper@brain.example", "Course A", "Draft the reminder please")));
+  writeFileSync(join(root, "relay/incoming/a.json"), JSON.stringify(msg("a", "planner@brain.example", "relay+helper@brain.example", "Course A", "Draft the agenda please")));
+  writeFileSync(join(root, "relay/incoming/ab.json"), JSON.stringify(msg("zz", "planner@brain.example", "relay+helper@brain.example", "Course A", "Draft the syllabus please")));
+  expect(relayOnce(root, fileTransport(root)).length).toBe(3);
+  expect(readdirSync(join(root, "relay/incoming"))).toEqual([]);
+  expect(readdirSync(join(root, "relay/processed")).sort()).toEqual(["a.json", "ab.json", "x1.json"]);
+  expect(relayOnce(root, fileTransport(root))).toEqual([]);
+});
+
 // Backlog #141: message ids come from outside; two that differ only in punctuation must not
 // share a comms record, or the held one is overwritten and can't be released.
 test("ids that differ only in punctuation keep separate records; the held one can still be released", () => {
@@ -313,4 +325,60 @@ test("a raw message id never acts on a different message's record with a look-al
   // A record written for message "_abc_1_mail_example_", which also is the old name of "<abc.1@mail.example>".
   writeFileSync(join(root, "comms", day, "_abc_1_mail_example_.md"), "---\nid: comms/2026-10-08/_abc_1_mail_example_\ntype: comms\nmessage_id: _abc_1_mail_example_\nfrom: helper\nto: planner\nverdict: held\nreasons: []\nsubject: q\n---\nhello\n");
   expect(decideHeld(root, fileTransport(root), "<abc.1@mail.example>", "release")).toMatch(/no held message/);
+});
+
+// G201: comms/ records were written raw, so one secret-shaped string from any sender stopped
+// every backup (backup.ts refuses plaintext secrets on main).
+test("G201: a relayed or held message is recorded with its secrets removed, so it can't stop a backup", async () => {
+  const { secretIn } = await import("../src/backup");
+  const { relayCheck } = await import("../src/relay");
+  const root = makeBrain();
+  const key = "-----BEGIN OPENSSH PRIVATE " + "KEY-----\n" + "b3BlbnNzaC1rZXktdjEAAAAA" + "BG5vbmUAAAAEbm9uZQ\n-----END OPENSSH PRIVATE " + "KEY-----";
+  const tok = "pb_town_" + "a1B2c3D4".repeat(4);
+  mkdirSync(join(root, "relay/incoming"), { recursive: true });
+  writeFileSync(join(root, "relay/incoming/s.json"), JSON.stringify(msg("s", "planner@brain.example", "relay+helper@brain.example", `keys ${tok}`, `Here is the deploy key:\n${key}`)));
+  writeFileSync(join(root, "relay/incoming/o.json"), JSON.stringify(msg("o", "stranger@elsewhere.example", "relay+helper@brain.example", "hello", `token ${tok}`)));
+  relayOnce(root, fileTransport(root));
+  relayCheck(root, { from: "planner", to: "helper", subject: tok, text: `use ${tok}`, via: "hook:test" });
+  const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().trim().split("\n");
+  const comms = tracked.filter((f) => f.startsWith("comms/"));
+  expect(comms.length).toBeGreaterThanOrEqual(3);
+  for (const f of comms) expect([f, secretIn(readFileSync(join(root, f), "utf8"))]).toEqual([f, undefined]);
+  const held = readFileSync(join(root, comms.find((f) => f.endsWith("/s.md"))!), "utf8");
+  expect(held).toContain("verdict: held");
+  expect(held).toContain("Here is the deploy key:");
+  expect(held).toContain("[removed: secret-shaped]");
+});
+
+// G201 (slice audit): a key split across two fields (its header in the subject, its body in the
+// text) passed each field's redaction and still stopped the backup.
+test("G201: a key split between subject and text is kept out of the committed record", async () => {
+  const { secretIn } = await import("../src/backup");
+  const root = makeBrain();
+  const head = "-----BEGIN OPENSSH PRIVATE " + "KEY-----";
+  const body = "b3BlbnNzaC1rZXktdjEAAAAA" + "BG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW";
+  mkdirSync(join(root, "relay/incoming"), { recursive: true });
+  writeFileSync(join(root, "relay/incoming/x1.json"), JSON.stringify(msg("x1", "planner@brain.example", "relay+helper@brain.example", head, body)));
+  relayOnce(root, fileTransport(root));
+  const day = readdirSync(join(root, "comms"))[0];
+  const rec = readFileSync(join(root, "comms", day, "x1.md"), "utf8");
+  expect(rec).toContain("verdict: held");
+  expect(secretIn(rec)).toBeUndefined();
+});
+
+// G243: the committed record is redacted, so releasing it used to forward the redacted text. The
+// original waits outside git for the owner's decision, is forwarded on release, and is deleted then.
+test("G243: a released message goes on as the sender wrote it, from outside git", () => {
+  const root = makeBrain();
+  const text = "Booking code: ABC123 and my password is hunter2xx for the portal";
+  mkdirSync(join(root, "relay/incoming"), { recursive: true });
+  writeFileSync(join(root, "relay/incoming/h2.json"), JSON.stringify(msg("h2", "helper@brain.example", "relay+planner@brain.example", "portal", text)));
+  relayOnce(root, fileTransport(root));
+  const tracked = Bun.spawnSync(["git", "grep", "-l", "hunter2xx"], { cwd: root }).stdout.toString().trim();
+  expect(tracked).toBe("");
+  expect(decideHeld(root, fileTransport(root), "h2", "release")).toBe("h2: released-by-owner");
+  const sent = JSON.parse(readFileSync(join(root, "relay/outgoing/planner@brain.example/h2.json"), "utf8"));
+  expect(sent.text).toBe(text);
+  const left = Bun.spawnSync(["grep", "-rl", "hunter2xx", join(root, ".git")]).stdout.toString().trim();
+  expect(left).toBe("");
 });

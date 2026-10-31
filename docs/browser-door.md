@@ -24,7 +24,7 @@ Every page sends `no-store`, `X-Frame-Options: DENY` and a CSP that allows nothi
 
 ## What it is not
 
-- **Off by default.** Only agents with `browser: true` in `rules/policy.yaml` can sign in. `pocketbrain connect <agent> --browser` sets it, as the owner, and commits it.
+- **Off by default.** Only agents with `browser: true` in `rules/policy.yaml` can sign in. `pocketbrain connect <agent> --browser` sets it, as the owner, and commits it. For an agent wider than a narrow trial agent it needs `--code <code>` from the agent's dashboard page first (G184), and without one it changes nothing.
 - **Fewer routes.** No owner, resolver (disputes), capture, log or gardener routes. The resolver work stays on `/v1` with a bearer token.
 - **The cookie is not a token.** It opens nothing outside `/b`.
 - **A token's role holds here too.** A reader token (`token --role reader`) signs in with its cap: nothing private. A resolver token is refused at sign-in, since its routes aren't on this door; sign in with the reader token.
@@ -51,7 +51,7 @@ The tunnel must let `/b` out: `pocketbrain hub tunnel-config` includes it. A hub
 
 ## Why not the other routes
 
-- `/mcp/<token>` and `?token=` put the key in URLs and tunnel logs, and the assistant still has to keep the key somewhere it can type it.
+- A key in the URL (`/mcp/<token>`, refused since 2026-10-25) ends up in tunnel logs, and the assistant still has to keep the key somewhere it can type it.
 - Mail (the capture mailbox) only goes one way; there is no read path.
 - Another assistant relaying for it doubles the reach of one token and goes against "a new agent can't learn the rest through another agent".
 

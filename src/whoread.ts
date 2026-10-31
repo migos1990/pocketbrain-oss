@@ -3,8 +3,8 @@
 // the read log (log/reads.jsonl), with one 'unusual' line when most of a day's notes sit outside
 // the areas the agent read in the 28 days before. Owner only: `pocketbrain reads <agent>` and the
 // dashboard's agent page; never served to an agent. See docs/sleep-and-explain.md.
-import { loadBrain, today as todayDate } from "./brain";
-import { loadRules } from "./rules";
+import { loadBrain, today as todayDate, type Note } from "./brain";
+import { loadRules, type Rules } from "./rules";
 import { readEntries, type ReadEntry } from "./readlog";
 import { oneLine } from "./memsync";
 
@@ -23,7 +23,8 @@ export interface ReadDay {
   unusual?: { outside: string[]; areas: string[]; of: number };
 }
 
-export interface ReadsOpts { days?: number; today?: string; tz?: string; entries?: ReadEntry[] }
+// The dashboard passes the notes, rules and read log it already holds, so a page reads no file again.
+export interface ReadsOpts { days?: number; today?: string; tz?: string; entries?: ReadEntry[]; notes?: Note[]; rules?: Rules }
 
 const dayIn = (tz: string) => {
   const f = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
@@ -34,12 +35,12 @@ const minus = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`
 const noteIds = (e: ReadEntry) => (e.ids ?? []).filter((id) => id !== "*" && !String(id).startsWith("log:"));
 
 export function readsByDay(root: string, agent: string, o: ReadsOpts = {}): ReadDay[] {
-  const rules = loadRules(root);
+  const rules = o.rules ?? loadRules(root);
   let tz = o.tz ?? rules.policy.owner?.timezone ?? "UTC";
   try { dayIn(tz); } catch { tz = "UTC"; }
   const dayOf = dayIn(tz);
   const last = o.today ?? todayDate(), first = minus(last, (o.days ?? 7) - 1), from = minus(first, USUAL_DAYS);
-  const area = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n.fm.area || "(none)"]));
+  const area = new Map((o.notes ?? loadBrain(root, { shared: true })).map((n) => [n.fm.id, n.fm.area || "(none)"]));
   const areaOf = (id: string) => area.get(id) ?? "(gone)";
   const mine = (o.entries ?? readEntries(root)).filter((e) => e.agent === agent).map((e) => ({ e, day: dayOf(e.at) })).filter((x) => x.day >= from && x.day <= last);
 

@@ -80,11 +80,11 @@ test("the owner's card shows the evidence next to Approve: what it replaces, the
   const d = dashboardHandler(root, { port: 8788, loginKey: "k".repeat(32) });
   const H = "127.0.0.1:8788";
   const cookie = (await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }))).headers.get("set-cookie")!.split(";")[0];
-  const html = await (await d.handle(new Request(`http://${H}/`, { headers: { host: H, cookie } }))).text();
-  const card = html.slice(html.indexOf("change to approve"), html.indexOf("proposal-reject"));
+  const html = await (await d.handle(new Request(`http://${H}/overview`, { headers: { host: H, cookie } }))).text();
+  const at = html.indexOf('class="item decide'), card = html.slice(at, html.indexOf('<div class="item', at + 10) >>> 0);
   expect(card).toContain("Replaces <b>Grade the midterm</b>");
   expect(card).toContain("checked against the email: matches");
-  expect(card).toContain('href="/note/people/jane-roy"');
+  expect(card).toContain('href="/p/people/jane-roy"');
 });
 
 test("a verdict counts only for the fact that cites the ref, not for the same value on another note", async () => {
@@ -114,7 +114,7 @@ test("a match from a source that reads as instructions says so on the card, so t
   const d = dashboardHandler(root, { port: 8788, loginKey: "k".repeat(32) });
   const H = "127.0.0.1:8788";
   const cookie = (await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }))).headers.get("set-cookie")!.split(";")[0];
-  const html = await (await d.handle(new Request(`http://${H}/`, { headers: { host: H, cookie } }))).text();
-  const card = html.slice(html.indexOf("change to approve"), html.indexOf("proposal-reject"));
+  const html = await (await d.handle(new Request(`http://${H}/overview`, { headers: { host: H, cookie } }))).text();
+  const at = html.indexOf('class="item decide'), card = html.slice(at, html.indexOf('<div class="item', at + 10) >>> 0);
   expect(card).toContain("matches, but the email reads as instructions");
 });

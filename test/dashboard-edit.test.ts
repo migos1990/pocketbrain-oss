@@ -8,7 +8,7 @@ import { handle } from "../src/server";
 import { issueToken } from "../src/auth";
 import { loadBrain, type FactRecord } from "../src/brain";
 import { makeModel, type ModelRequest } from "../src/model";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { git } from "../src/git";
 
 const H = "127.0.0.1:8790";
@@ -23,10 +23,10 @@ function setup(fake: (req: ModelRequest) => string = () => "No model in this tes
     const body = fields ? new URLSearchParams(fields) : undefined;
     const r = await d.handle(new Request(`http://${H}${path}`, { method, body, headers: { host: H, cookie, origin: `http://${H}`, referer: `http://${H}${path.startsWith("/action") ? "/brain" : path}`, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) } }));
     const loc = r.headers.get("location") ?? "";
-    return { status: r.status, text: await r.text(), loc, ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { status: r.status, text: await r.text(), loc, ...flashOf(loc) };
   };
   const login = async () => { const r = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } })); cookie = r.headers.get("set-cookie")!.split(";")[0]; };
-  const csrf = async () => (await req("GET", "/brain")).text.match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = async () => (await req("GET", "/home")).text.match(/name="csrf" value="([^"]+)"/)![1];
   const post = async (path: string, fields: Record<string, string> = {}) => req("POST", path, { csrf: await csrf(), ...fields });
   const agent = async (who: keyof typeof tok, method: string, path: string, body?: unknown) => {
     const r = await handle(root, new Request(`http://pb${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { authorization: `Bearer ${tok[who]}` } }));
@@ -36,30 +36,6 @@ function setup(fake: (req: ModelRequest) => string = () => "No model in this tes
   return { root, req, post, login, agent, prompts };
 }
 const fact = (root: string, id: string, attr: string) => loadBrain(root).find((n) => n.fm.id === id)?.fm.facts?.[attr] as FactRecord;
-
-test("Ask answers from the brain, cites notes, and never sends a private note to the model", async () => {
-  const { login, post, prompts } = setup(() => "Jane Roy is the course coordinator [people/jane-roy]. <img src=x onerror=alert(1)>");
-  await login();
-  const r = await post("/ask", { q: "Jane Roy role" });
-  expect(r.status).toBe(200);
-  expect(r.text).toContain("course coordinator");
-  expect(r.text).toContain('href="/note/people/jane-roy"');
-  expect(r.text).not.toContain("<img src=x");
-  expect(r.text).toContain("Facts it drew on");
-  // the bank note matches "bank" but is private: shown to Robin, not sent
-  const b = await post("/ask", { q: "which bank Maple Trust" });
-  expect(b.text).toContain("money/main-bank");
-  expect(b.text).toContain("not sent");
-  expect(prompts.map((p) => p.prompt).join("\n")).not.toContain("Maple Trust Bank");
-});
-
-test("Ask without a working model still lists the facts", async () => {
-  const { login, post } = setup(() => { throw new Error("set ANTHROPIC_API_KEY for anthropic"); });
-  await login();
-  const r = await post("/ask", { q: "course A next step" });
-  expect(r.text).toContain("the model didn&#39;t answer");
-  expect(r.text).toContain("projects/course-a");
-});
 
 test("Robin edits a fact in place: old value to history, his word, one commit", async () => {
   const { root, login, post } = setup();
@@ -174,19 +150,19 @@ test("Brain home: kinds with counts, what changed this week, what needs a look; 
   await login();
   await post("/action/fact-set", { id: "projects/course-a", attribute: "next_step", value: "Post the video link" });
   const home = await req("GET", "/brain");
-  expect(home.text).toContain('placeholder="Search or ask"');
+  expect(home.text).toContain('placeholder="Search"');
   expect(home.text).toContain("<span>People</span><b>2</b>");
   expect(home.text).toContain("Changed this week");
-  expect(home.text).toContain("You updated next step");
+  expect(home.text).toContain("Next step, edited by you");
   expect(home.text).toContain("Needs a look");
   const r = await req("GET", "/brain/results?q=coordinator");
   expect(r.status).toBe(200);
-  expect(r.text).toContain('href="/note/people/jane-roy"');
+  expect(r.text).toContain('href="/p/people/jane-roy"');
   expect(r.text).toContain("<mark>");
-  expect(r.text).toContain("Ask “coordinator”");
+  expect(r.text).not.toContain("Ask “coordinator”");
   expect(r.text).not.toContain("<html");
   // the owner's search covers private notes too, and never calls a model
-  expect((await req("GET", "/brain?q=Maple+Trust")).text).toContain('href="/note/money/main-bank"');
+  expect((await req("GET", "/brain?q=Maple+Trust")).text).toContain('href="/p/money/main-bank"');
   expect((await req("GET", "/brain?q=<script>alert(1)</script>")).text).not.toContain("<script>alert(1)");
   expect(prompts.length).toBe(0);
   const people = await req("GET", "/brain?kind=people");
@@ -261,10 +237,10 @@ test("Connections: where facts came from, which notes mention this one, and what
   expect(jane.text).toContain("Links to");
   // Jane links to Course A, so Course A lists Jane under "Mentioned in"
   const course = await req("GET", "/note/projects/course-a");
-  expect(course.text).toMatch(/Mentioned in<\/h3><div class="b-plain"><a class="b-row" href="\/note\/people\/jane-roy"/);
+  expect(course.text).toMatch(/Mentioned in<\/h3><div class="b-plain"><a class="b-row" href="\/p\/people\/jane-roy"/);
   // a replaced decision says so at the top
   const f = join(root, "decisions/2026-09-01-pick-bank.md");
   writeFileSync(f, readFileSync(f, "utf8").replace("status: active", "status: superseded\nsuperseded_by: money/main-bank"));
   const old = await req("GET", "/note/decisions/2026-09-01-pick-bank");
-  expect(old.text).toContain("Replaced by <a title=\"money/main-bank\" href=\"/note/money/main-bank\">");
+  expect(old.text).toContain("Replaced by <a title=\"money/main-bank\" href=\"/p/money/main-bank\">");
 });

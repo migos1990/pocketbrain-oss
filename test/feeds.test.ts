@@ -17,9 +17,8 @@ import { useDiscordHttp, attributedText } from "../src/feeds";
 
 let prompts: string[] = [];
 const EXTRACT = (p: string) => /exam room B-201/.test(p) ? [{ entity: "Course A", type: "project", attribute: "next_step", value: "Book the exam room B-201", quote: "book the exam room B-201" }] : [];
-const original = captureModel;
 beforeAll(() => useCaptureModel(() => makeModel({ provider: "fake", model: "fake-1" }, { fake: (r: ModelRequest) => { prompts.push(r.prompt); return JSON.stringify({ facts: EXTRACT(r.prompt) }); } })));
-afterAll(() => { useCaptureModel((root) => original(root)); useDiscordHttp((u, i) => fetch(u, i)); });
+afterAll(() => { useCaptureModel(); useDiscordHttp((u, i) => fetch(u, i)); });
 
 const sh = (cwd: string, ...cmd: string[]) => Bun.spawnSync(cmd, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: "x", GIT_AUTHOR_EMAIL: "x@x", GIT_COMMITTER_NAME: "x", GIT_COMMITTER_EMAIL: "x@x" } }).stdout.toString().trim();
 function setup(sources: Record<string, unknown>) {

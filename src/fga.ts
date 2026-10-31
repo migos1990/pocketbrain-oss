@@ -72,6 +72,14 @@ export function confirmSlices(agent: string, slices: string[], insideWall?: bool
   return slices.filter((s) => e.slices.has(s));
 }
 
+// True when FGA leaves this agent every slice policy.yaml gives it: FGA off, inside the wall, or a
+// fresh entry that holds them all. A merge check reads this so a stale or partial FGA copy refuses
+// the merge instead of looking like an agent that sees neither note (G226).
+export function fgaConfirmsAll(agent: string, slices: string[], insideWall?: boolean): boolean {
+  if (!state.on || insideWall) return true;
+  return confirmSlices(agent, slices, insideWall).length === new Set(slices).size;
+}
+
 export function fgaStatus() {
   return { on: state.on, agents: [...state.agents].map(([a, e]) => ({ agent: a, slices: [...e.slices], age_s: Math.round((Date.now() - e.at) / 1000) })), last_error: state.lastError };
 }

@@ -46,7 +46,7 @@ An authenticated but unapproved agent waits for the owner.
 - Requests MUST expire, and the server MUST rate-limit new ones, so registrations can't flood the owner's list.
 - A server MAY let the owner open a short **approval window** for one named agent: the next new credential presented by the owner's own account within the window is approved as that agent, once. The window MUST be bounded (minutes), single-use, limited to the owner's own subject, and recorded.
 
-*pocketBrain:* waiting sign-ins are listed on the dashboard's Assistants page with a one-tap "new agent" preview and Approve (always trial, money out by default); requests lapse after a day and at most 10 new ones are noted an hour; `pocketbrain add --door oauth` and `oauth expect` open a 10-minute, one-client window. Agent-proposed name, purpose and slices are not built: today the owner types them.
+*pocketBrain:* waiting sign-ins are listed on the dashboard's Assistants page with a one-tap "new agent" preview and Approve (always trial, money out by default); requests lapse after a day and at most 10 new ones are noted an hour; `pocketbrain add --door oauth` and `oauth expect` open a 10-minute, one-client window. A waiting sign-in that is the owner's own can propose its name, purpose and slices with `request_access`, the only tool of its waiting session; the card pre-fills the review, and the owner still edits and approves it ([add-an-agent.md](../add-an-agent.md)).
 
 ### 4. Orient
 

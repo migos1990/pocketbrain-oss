@@ -13,13 +13,14 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { loadBrain, today, sensitivityRank, type Note } from "./brain";
 import { loadRules, RESERVED_AGENTS, type Rules, type Slice } from "./rules";
-import { carve, grantFor, visibleFacts, PROBE_AREA, type CarveResult, type Grant } from "./carve";
+import { carve, grantFor, narrowSlice, visibleFacts, PROBE_AREA, type CarveResult, type Grant } from "./carve";
 import { buildView, renderNote } from "./view";
 import { logJudgment, type Model } from "./model";
 import { git } from "./git";
 import { OWNER } from "./owner";
 import { AGENT_NAME } from "./addagent";
 import { CoreError } from "./core";
+import { ownerError } from "./owner-errors";
 
 export const STEP = "consent.propose";
 
@@ -34,9 +35,8 @@ export interface Vocabulary {
 
 const kindOf = (n: Note) => n.fm.id.split("/")[0];
 
-// A slice a sentence may grant: one that picks notes by area, kind, tag or name. A slice with no
-// such selector is "all" under another name, and the canary area is never offered.
-const narrow = (name: string, s: Record<string, unknown>) => name !== "all" && !!(s.areas || s.types || s.tags || s.include) && !(s.areas as string[] | undefined)?.includes(PROBE_AREA);
+// A slice a sentence may grant: narrowSlice (carve.ts).
+const narrow = narrowSlice;
 
 export function vocabulary(root: string, rules = loadRules(root), notes = loadBrain(root)): Vocabulary {
   const life = notes.filter((n) => !SYSTEM.has(kindOf(n)));
@@ -65,14 +65,14 @@ export function checkChoice(raw: unknown, v: Vocabulary, keepMoney: boolean): Ch
   const list = (x: unknown) => (Array.isArray(x) ? x : []).filter((s): s is string => typeof s === "string").map((s) => s.trim()).filter(Boolean);
   const slices = [...new Set(list(o.slices))];
   const exclude = [...new Set(list(o.exclude_types))];
-  if (!slices.length) throw new CoreError(400, "the proposal picked no slice; say more about what the assistant does");
-  if (slices.includes("all")) throw new CoreError(400, "the proposal asked for everything; that is a choice you make in policy.yaml yourself, never from a sentence");
+  if (!slices.length) throw new CoreError(400, ownerError("consent.no-slice"));
+  if (slices.includes("all")) throw new CoreError(400, ownerError("consent.all"));
   const known = new Set(v.slices.map((s) => s.name));
   const unknown = slices.filter((s) => !known.has(s));
-  if (unknown.length) throw new CoreError(400, `the proposal named slice(s) the brain doesn't have: ${unknown.join(", ")}`);
+  if (unknown.length) throw new CoreError(400, ownerError("consent.unknown-slice", { names: unknown.join(", ") }));
   const kinds = new Set(v.kinds.map((k) => k.name));
   const bad = exclude.filter((t) => !kinds.has(t) && t !== "money");
-  if (bad.length) throw new CoreError(400, `the proposal named kind(s) the brain doesn't have: ${bad.join(", ")}`);
+  if (bad.length) throw new CoreError(400, ownerError("consent.unknown-kind", { names: bad.join(", ") }));
   // Money stays out unless the owner asked for it, whatever the model says.
   if (!keepMoney && !exclude.includes("money")) exclude.push("money");
   const why = typeof o.why === "string" ? o.why.replace(/\s+/g, " ").trim().slice(0, 300) : "";
@@ -119,7 +119,7 @@ export async function modelChoice(intent: string, v: Vocabulary, model: Model, r
   let raw: unknown;
   try { raw = json ? JSON.parse(json) : undefined; } catch { raw = undefined; }
   if (root) logJudgment(root, STEP, r, prompt, { proposed: !!raw });
-  if (!raw) throw new CoreError(400, "the model's answer wasn't a proposal");
+  if (!raw) throw new CoreError(400, ownerError("consent.not-proposal"));
   return checkChoice(raw, v, asksForMoney(intent));
 }
 
@@ -156,13 +156,13 @@ function examples(notes: Note[], res: CarveResult, intent: string): { sees: Exam
 
 export async function propose(root: string, agent: string, intent: string, model?: Model): Promise<Proposal> {
   const text = intent.replace(/\s+/g, " ").trim();
-  if (!text) throw new CoreError(400, "say in one sentence what the assistant is for");
-  if (text.length > 300) throw new CoreError(400, "one sentence is enough (300 characters at most)");
-  if (!AGENT_NAME.test(agent)) throw new CoreError(400, "the agent name is 2 to 31 lowercase letters, digits and dashes, starting with a letter");
-  if (RESERVED_AGENTS.includes(agent)) throw new CoreError(400, `${agent} is the hub's own name; pick another`);
+  if (!text) throw new CoreError(400, ownerError("consent.empty"));
+  if (text.length > 300) throw new CoreError(400, ownerError("consent.too-long"));
+  if (!AGENT_NAME.test(agent)) throw new CoreError(400, ownerError("consent.bad-name", { agent }));
+  if (RESERVED_AGENTS.includes(agent)) throw new CoreError(400, ownerError("consent.reserved-name", { agent }));
   const rules = loadRules(root);
   const existing = rules.policy.agents[agent];
-  if (existing?.inside_wall || existing?.role === "gardener") throw new CoreError(400, `${agent} keeps the brain in order and sees it all by design; its slice isn't set from a sentence`);
+  if (existing?.inside_wall || existing?.role === "gardener") throw new CoreError(400, ownerError("consent.inside", { agent }));
   const notes = loadBrain(root);
   const v = vocabulary(root, rules, notes);
   // A model that fails, or proposes something the checks refuse, falls back to the owner's own words.
@@ -296,14 +296,14 @@ export function moreText(m: { notes: number; facts: number; loosened: string[] }
 export function applyChoice(root: string, agent: string, slices: string[], excludeTypes: string[], opts: { tightenOnly?: boolean } = {}): string {
   const rules = loadRules(root);
   const a = rules.policy.agents[agent];
-  if (!a) throw new CoreError(400, `${agent} isn't in policy.yaml yet; add it with pocketbrain add`);
-  if (a.inside_wall || a.role === "gardener") throw new CoreError(400, `${agent}'s slice isn't set from a sentence`);
+  if (!a) throw new CoreError(400, ownerError("consent.not-in-policy", { agent }));
+  if (a.inside_wall || a.role === "gardener") throw new CoreError(400, ownerError("consent.inside", { agent }));
   const notes = loadBrain(root);
   const v = vocabulary(root, rules, notes);
   const c = checkChoice({ slices, exclude_types: excludeTypes.filter((t) => t !== "none") }, v, true);
   if (opts.tightenOnly) {
     const m = moreThanToday(notes, rules, agent, c);
-    if (widensToday(m)) throw new CoreError(403, `this shows ${agent} more than it sees today (${moreText(m)}); apply it on the dashboard, on ${agent}'s page: showing more needs your login`);
+    if (widensToday(m)) throw new CoreError(403, ownerError("consent.widens", { agent, more: moreText(m) }));
   }
   const file = join(root, "rules", "policy.yaml");
   const doc = YAML.parseDocument(readFileSync(file, "utf8"));

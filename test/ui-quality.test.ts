@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The owner dashboard and the browser door, page by page, in a real Chromium on a seeded throwaway
-// brain: accessibility (labels, names, landmarks, headings, contrast), keyboard focus, light and
-// dark, empty, busy and error states. With PB_UI_SHOTS=1 each page is also compared with its
+// The owner dashboard and the browser door, page by page, in a real Chromium on a copy of the demo
+// brain (test/ui-rig.ts): accessibility (labels, names, landmarks, headings, contrast), keyboard
+// focus, light and dark, a lived-in day, busy and error states. With PB_UI_SHOTS=1 each page is also compared with its
 // screenshot baseline in test/screenshots/<platform>/ (docs/ui-quality.md). Skipped when
 // Chromium can't start.
 import { test, expect, afterAll, setSystemTime } from "bun:test";
 import { join } from "node:path";
 import { audit, keyboard, matchScreenshot } from "./ui-audit";
-import { uiRig, DASHBOARD_PAGES, BUSY_PAGES, DOOR_PAGES } from "./ui-rig";
+import { uiRig, DASHBOARD_PAGES, BUSY_PAGES, DOOR_PAGES, ASK_SAYS } from "./ui-rig";
 
 let pw: any;
 let browser: any;
@@ -31,7 +31,7 @@ async function check(page: any, url: string, name: string, scheme: string, probl
 
 run("every dashboard page passes the accessibility checks in light and dark, empty and busy, and keeps its look", async () => {
   setSystemTime(CLOCK);
-  const quiet = await uiRig({ ports: [18961, 18962] });
+  const quiet = await uiRig({ ports: [18961, 18962] }); // the demo brain's own day
   const busy = await uiRig({ busy: true, ports: [18963, 18964] });
   const problems: string[] = [];
   try {
@@ -41,7 +41,10 @@ run("every dashboard page passes the accessibility checks in light and dark, emp
       await page.goto(quiet.loginUrl);
       for (const [name, path] of DASHBOARD_PAGES) await check(page, quiet.dash + path, name, scheme, problems, { keys: scheme === "light" });
       await page.goto(busy.loginUrl);
-      for (const [name, path] of BUSY_PAGES) await check(page, busy.dash + path, name, scheme, problems, { keys: scheme === "light" });
+      for (const [name, path] of BUSY_PAGES) {
+        if (name === "ask-busy") for (const q of ASK_SAYS) { await page.goto(busy.dash + "/ask"); await page.fill("#q", q); await page.press("#q", "Enter"); await page.waitForLoadState(); }
+        await check(page, busy.dash + path, name, scheme, problems, { keys: scheme === "light" });
+      }
       await ctx.close();
     }
   } finally { quiet.stop(); busy.stop(); }
@@ -59,8 +62,8 @@ run("every browser-door page passes the same checks, follows the system's dark m
       await check(page, `${r.api}/b`, "door-signin", scheme, problems, { keys: scheme === "light" });
       const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       expect(bg).toBe(scheme === "dark" ? "rgb(25, 25, 25)" : "rgb(255, 255, 255)");
-      await page.fill("input[name=agent]", "helper");
-      await page.fill("input[name=password]", r.tokens.helper);
+      await page.fill("input[name=agent]", "gemini");
+      await page.fill("input[name=password]", r.tokens.gemini);
       await page.click("button[type=submit]");
       for (const [name, path] of DOOR_PAGES) await check(page, r.api + path, name, scheme, problems, { keys: scheme === "light" });
       await ctx.close();

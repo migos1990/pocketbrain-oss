@@ -22,10 +22,11 @@ struct MenuState: Decodable {
     let barLine: String
     let agents: [MenuAgent]
     let dashboard: Bool
+    let problems: [String]
 
     // Same words as menuTitle() in src/menubar.ts.
     var title: String {
-        "\(hubUp ? "●" : "○") \(barMet ? "bar met" : "day \(barDays)/\(barTarget)")"
+        "\(problems.isEmpty ? "" : "⚠ ")\(hubUp ? "●" : "○") \(barMet ? "bar met" : "day \(barDays)/\(barTarget)")"
     }
 }
 

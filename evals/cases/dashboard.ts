@@ -47,6 +47,8 @@ class Rig {
     this.page = await this.ctx.newPage();
     this.page.on("dialog", (dl: any) => { this.dialogs.push(dl.message()); this.acceptDialogs ? dl.accept() : dl.dismiss(); });
     await this.page.goto(this.loginUrl);
+    // Sign-in lands on the home; these cases read the old overview, now at /overview.
+    await this.page.goto(new URL("/overview", this.page.url()).href);
     return this.page;
   }
   async stop() { try { await this.browser?.close(); } catch {} this.agents.stop(true); this.dash.stop(true); }
@@ -68,6 +70,19 @@ class Rig {
     await this.page.waitForLoadState("load");
   }
   lastCommit() { return sh(this.root, ["git", "log", "-1", "--format=%an|%s"]); }
+  // The home's "two sources disagree on what's next for …" row: how many, and settle it by picking a side.
+  async waiting() {
+    await this.page.goto(new URL("/home", this.page.url()).href);
+    return this.page.locator("li", { hasText: /two sources disagree on what.s next for/i }).count();
+  }
+  async settle(side: string) {
+    const n = await this.waiting();
+    await this.page.locator("li", { hasText: /two sources disagree on what.s next for/i }).first().getByRole("link").click();
+    await this.page.waitForLoadState("load");
+    await this.page.locator("form.pick button", { hasText: side }).first().click();
+    await this.page.waitForLoadState("load");
+    return n;
+  }
 }
 
 async function episode(fn: (r: Rig) => Promise<Result>): Promise<Result> {
@@ -100,15 +115,15 @@ export const dashboardCases: Case[] = [
   { id: "dash-approve-proposal", dimension: "e2e", kind: "benign", title: "Helper proposes over MCP; Robin approves it in the dashboard; Planner reads it on its next call", run: () => episode(async (r) => {
     const w = await r.tool("helper", "remember", PROPOSAL);
     const page = await r.open();
-    const shown = await page.locator(".item", { hasText: "change to approve" }).count();
-    await r.click("change to approve", "Approve");
+    // Settings decides nothing (2026-10-27): a contradiction waits on the home and settles on its screen.
+    const shown = await r.settle(PROPOSAL.value);
     const t = await r.tool("planner", "read", { id: "projects/course-a" });
     return steps([
       ["proposal went to the inbox", w.json?.outcome === "inbox"],
       ["dashboard lists it", shown === 1],
       ["committed by the owner", /^(louis|owner)\|/.test(r.lastCommit())],
       ["fact is the proposed value", fact(r.root, "projects/course-a", "next_step")?.value === PROPOSAL.value],
-      ["gone from needs-you", (await page.locator(".item", { hasText: "change to approve" }).count()) === 0],
+      ["gone from needs-you", (await r.waiting()) === 0],
       ["Planner reads it", /session 6 reminder/.test(t.text)],
     ]);
   }) },
@@ -116,51 +131,62 @@ export const dashboardCases: Case[] = [
     const before = fact(r.root, "projects/course-a", "next_step")?.value;
     await r.tool("helper", "remember", PROPOSAL);
     await r.open();
-    await r.click("change to approve", "Reject");
+    await r.settle(String(before));
     return steps([["value unchanged", fact(r.root, "projects/course-a", "next_step")?.value === before], ["inbox emptied", !readdirSync(join(r.root, "inbox")).some((f) => f.endsWith(".yaml"))]]);
   }) },
-  { id: "dash-release-held", dimension: "e2e", kind: "benign", title: "The relay holds a message; Robin releases it from the dashboard after a confirm; Helper gets it", run: () => episode(async (r) => {
+  // A held message is a question on the home with its own settle screen (owner's third read, 2026-10-29:
+  // Settings, which decides nothing, still had Release and Drop).
+  { id: "dash-release-held", dimension: "e2e", kind: "benign", title: "The relay holds a message; Robin lets it through from its settle screen on the home; Helper gets it", run: () => episode(async (r) => {
     if (!pb.relay) return na("no relay at this commit");
     const h = heldMessage(r.root);
     await r.open();
-    const shown = await r.page.locator(".item", { hasText: "held message" }).count();
-    await r.click("held message", "Release");
+    await r.page.goto(`${r.dashUrl}/home`);
+    const shown = await r.page.locator('a[href="/settle/m-h1"]').count();
+    await r.page.goto(`${r.dashUrl}/settle/m-h1`);
+    await r.page.getByRole("button", { name: /Let it through/ }).click();
+    await r.page.waitForURL(/\/home/);
     return steps([
       ["relay held it", h.held],
-      ["dashboard lists it", shown === 1],
-      ["asked to confirm first", r.dialogs.some((m) => /Release this message/.test(m))],
+      ["home lists it", shown === 1],
       ["delivered to Helper", existsSync(h.out)],
-      ["off the held list", (await r.page.locator(".item", { hasText: "held message" }).count()) === 0],
+      ["off the home", (await r.page.locator('a[href="/settle/m-h1"]').count()) === 0],
     ]);
   }) },
-  { id: "dash-release-cancelled", dimension: "e2e", kind: "benign", title: "Cancelling the release confirm leaves the message held", run: () => episode(async (r) => {
+  { id: "dash-release-cancelled", dimension: "e2e", kind: "benign", title: "Opening a held message and going back home without answering leaves it held", run: () => episode(async (r) => {
     if (!pb.relay) return na("no relay at this commit");
     const h = heldMessage(r.root);
-    r.acceptDialogs = false;
     await r.open();
-    await r.click("held message", "Release");
-    return steps([["not delivered", !existsSync(h.out)], ["still held", (await r.page.locator(".item", { hasText: "held message" }).count()) === 1]]);
+    await r.page.goto(`${r.dashUrl}/settle/m-h1`);
+    await r.page.getByRole("link", { name: /Home/ }).click();
+    await r.page.waitForURL(/\/home/);
+    return steps([["not delivered", !existsSync(h.out)], ["still on the home", (await r.page.locator('a[href="/settle/m-h1"]').count()) === 1]]);
   }) },
-  { id: "dash-drop-held", dimension: "e2e", kind: "benign", title: "Robin drops a held message; it is never delivered", run: () => episode(async (r) => {
+  { id: "dash-drop-held", dimension: "e2e", kind: "benign", title: "Robin keeps a held message back from its settle screen; it is never delivered", run: () => episode(async (r) => {
     if (!pb.relay) return na("no relay at this commit");
     const h = heldMessage(r.root);
     await r.open();
-    await r.click("held message", "Drop");
+    await r.page.goto(`${r.dashUrl}/settle/m-h1`);
+    await r.page.getByRole("button", { name: /Don't send it/ }).click();
+    await r.page.waitForURL(/\/home/);
     const day = readdirSync(join(r.root, "comms"))[0];
     return steps([["not delivered", !existsSync(h.out)], ["recorded as dropped", /verdict: dropped/.test(readFileSync(join(r.root, "comms", day, "h1.md"), "utf8"))]]);
   }) },
-  { id: "dash-decide-dispute", dimension: "e2e", kind: "benign", title: "A tie opens a dispute; Robin keeps candidate 2 in the dashboard; it settles as his word", run: () => episode(async (r) => {
+  { id: "dash-decide-dispute", dimension: "e2e", kind: "benign", title: "A tie opens a dispute; Robin keeps candidate 2 on the settle screen; it settles at that side's rank, his tap recorded", run: () => episode(async (r) => {
     const w = await r.tool("planner", "remember", { id: "people/jane-roy", attribute: "role", value: "Program director", as_of: "2026-09-01", sources: ["gmail:f00000000000000f"], verification: "verified-by-source" });
     const d = pb.brain.loadBrain(r.root).find((n: any) => n.fm.type === "dispute");
     const pick = d?.fm.candidates?.[1]?.value;
     await r.open();
-    await r.click("conflict", "Keep (2)");
+    // A conflict is settled on its own screen (outside review v5): one row per side, a tap picks it.
+    await r.page.goto(`${r.dashUrl}/settle/${encodeURIComponent(String(d?.fm.id ?? "").replace(/^disputes\//, ""))}`);
+    await r.page.locator("form.pick button", { hasText: String(pick) }).first().click();
+    await r.page.waitForLoadState("load");
     const f = fact(r.root, "people/jane-roy", "role");
     const m = await r.tool("helper", "read", { id: "people/jane-roy" });
     return steps([
       ["dispute opened", w.json?.outcome === "disputed" && !!d],
       ["fact is candidate 2", pick !== undefined && f?.value === pick],
-      ["confirmed by Robin", ["confirmed-by-owner", "confirmed-by-louis"].includes(String(f?.verification)) && !f?.dispute],
+      // A tap on a side files it at its own rank with the tap recorded; only typed words are his (audit v4).
+      ["settled by Robin's tap", !f?.dispute && (f?.sources ?? []).some((x: unknown) => String(x).startsWith("approved:")) && !["confirmed-by-owner", "confirmed-by-louis"].includes(String(f?.verification))],
       ["Helper sees the settled value", m.text.includes(String(pick))],
     ]);
   }) },
@@ -198,7 +224,7 @@ export const dashboardCases: Case[] = [
   { id: "dash-escapes-agent-text", dimension: "e2e", kind: "benign", title: "Markup inside an agent's proposal is shown as text, never rendered", run: () => episode(async (r) => {
     await r.tool("helper", "remember", { ...PROPOSAL, value: 'Reminder <b id="pb-markup">bold</b> draft' });
     const page = await r.open();
-    const listed = await page.locator(".item", { hasText: "change to approve" }).count();
+    const listed = await page.locator(".item", { hasText: ": next step?" }).count();
     return steps([["proposal listed", listed === 1], ["markup not rendered", (await page.locator("#pb-markup").count()) === 0], ["shown as text", (await page.content()).includes("&lt;b id=")]]);
   }) },
   { id: "dash-owner-only", dimension: "e2e", kind: "benign", title: "The dashboard refuses no session, a wrong login key, another Host, and actions without the session's CSRF token", run: () => episode(async (r) => {

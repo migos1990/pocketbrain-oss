@@ -25,8 +25,9 @@ The bar is met when the streak reaches 14, the latest `pocketbrain drill` was cl
 
 | Fix | How the hub sees it |
 |---|---|
-| A **hand edit** to the brain | a commit whose author isn't `<name>@pocketbrain.local`. Every commit pocketBrain makes, dashboard edits included, carries that address (`authorEnv` in `src/git.ts`), so any other author is someone editing, reverting or merging by hand. The brain's first commit is its setup and doesn't count. Read from git each time, not copied into the log |
-| A **hand restart** of the hub | `pocketbrain start` writes each start, and each stop by a signal, to `log/hub-runs.jsonl`. A start right after such a stop counts, unless the machine rebooted in between, the updater restarted it (`scripts/deploy.ts` writes `deploy.restart` next to `deploy.json` just before its kickstart), or the code changed: each start records the app's version and commit, and a start on different code than the last one is an update, even when a person pulled it and ran the kickstart. A start with no stop before it followed a crash that launchd recovered from; the probe reports those. A `kill -9` leaves no stop line either, so it isn't counted |
+| A **hand edit** to the brain | a commit whose author isn't `<name>@pocketbrain.local`. Every commit pocketBrain makes, dashboard edits included, carries that address (`authorEnv` in `src/git.ts`), so any other author is someone editing, reverting or merging by hand. The brain's first commit is its setup and doesn't count. Changing a setting with an owner command (`ask on`, `night`, `gardener setup`, `hub url` and the other `rules/` setters in `src/ownerset.ts`) is configuration and carries that address too, so it doesn't count; the same change typed into `rules/` by hand does. Read from git each time, not copied into the log |
+| A **hand restart** of the hub | `pocketbrain start` writes each start, and each stop by a signal, to `log/hub-runs.jsonl`. A start right after such a stop counts, unless the machine rebooted in between, the updater restarted it (`scripts/deploy.ts` writes `deploy.restart` next to `deploy.json` just before its kickstart), or the code changed: each start records the app's version and commit, and a start on different code than the last one is an update, even when a person pulled it and ran the kickstart. The app checkout's HEAD moving since the last start (a pull, a checkout, a commit: the time of its HEAD reflog, read without running git) counts as new code too, so a start after an older hub that recorded no build, or one where git couldn't name the commit, isn't taken for a hand restart. The hub's log says `noted a hand fix (<date> <time> UTC): …` for each one it counts. A start with no stop before it followed a crash that launchd recovered from; the probe reports those. A `kill -9` leaves no stop line either, so it isn't counted |
+| A **hung hub** (no hand fix, but a failed hub check) | `pocketbrain watchdog` runs from its own launchd job, `com.pocketbrain.watchdog`, every 5 minutes, outside the hub, so a hub frozen on one call can't freeze it too. It asks `/health` with a 15-second timeout. After two missed answers in a row it restarts the hub (`launchctl kickstart -k`, marked as planned like the updater's restart) and leaves a `probe_hub_hung` hub alert, so that day breaks the bar as a hub check that failed. Then it waits 15 minutes before restarting again. Off a Mac it only alerts. Each run also does the hub's own job checks that need no network (a night pass, digest, backup or Gardener run that stopped, an assistant that stopped reading), so they are seen while the hub is down. Each failing one, like a hung hub, shows as a Mac notification once a day and as a ⚠ line in the menu bar, from `log/watchdog.json`. The hub's self-check flags a watchdog that hasn't run for 15 minutes, and so does the menu bar. `pocketbrain menubar install` adds the watchdog to a hub installed before it existed, without touching the hub's own launchd file |
 | The menu's **Restart hub** | `pocketbrain menubar restart` logs "restarted the hub from the menu"; the start after it isn't counted twice |
 | A **repair command** run by hand | `pocketbrain hub replay`, `hub promote` and `restore` (logged in the restored brain) |
 
@@ -48,13 +49,21 @@ The health probe in `start` (`src/probe.ts`, every 2 hours) checks the public do
 | `digest` | the morning digest threw, or last finished over 36 hours ago |
 | `housekeeping` | run after every nightly pass (`src/growth.ts`): `git gc --auto` failed, or the brain's `.git` is over its budget (`PB_GIT_MAX_MB`, default 2048 MB). It also rotates the hub's launchd logs; see `docs/perf.md` |
 | `searchable` | run after every nightly pass, even a failed one: a note file whose path doesn't match its id, or a note in an agent's view that its search index lacks or that a search for its own title doesn't return |
-| `pull` | a source pull threw or ran past 15 minutes |
+| `pull` | a source pull threw or ran past 15 minutes, or `rules/sources.yaml` doesn't parse (cleared once it does) |
+| `job_timeout` (an alert, not a probe line) | a job in the hub's write queue (`serial()`, `src/server.ts`) ran past its limit: 2 minutes for a door's write or a Gardener pass (`PB_SERIAL_LIMIT_MS`), 10 for the Gardener's tend, 20 for a pull, 30 for a backup, `PB_JOB_MINUTES` + 5 for the daily jobs. An async job is let go there, so later writes on every door go on and its caller gets an error; synchronous work can't be cut short in the hub's thread and is only reported once it returns. Each is a line in `log/jobs.jsonl`, and one alert per job a day |
 | `backup` | backups are set up, the last one is over 48 hours old and the brain moved since |
+| `auto_saves` | a fact the hub planned to file was refused in the last day (names the refusal checks, never a value); it waits as a card and is tried again the next day. A save refused twice under the same code is parked until new code runs, and counts for as long as its proposal is open (G538). Early warning |
+| `filed_lines` | a fact the hub filed in the last day left no line on the owner's home (its commits touched no diary file); names how many, never a value. Early warning (G524) |
+| `source_cap` | a source reached its daily `max_per_day` limit; the rest is read tomorrow. Early warning |
+| `calendar_pull` | a calendar pull read nothing for 3 days while that calendar's coming events include ones it never read: the sync is broken, not quiet |
+| `origin` | with `push_origin: true` in `rules/backup.yaml`: the hub's last 2 hourly pushes of main to the brain's origin failed (rejected because origin moved on, no credentials, or no answer in 5 minutes), so new commits are only on this disk |
 | `texts` | the last 3 texts to the owner all failed to send (for iMessage, usually the Messages permission) |
 | `fill` | once `rules/sources.yaml` has the consent line: a listed source made no proposal and re-confirmed no fact for 72 hours (`silent_after_hours` per source; see [sources-pull.md](sources-pull.md#silent-sources)) |
+| `local` | the hub's own `/health` doesn't answer 200. `/health` answers 503 when the brain's rules don't parse, since every agent call would fail too |
+| `probe` | `log/probe.json` itself can't be read (the hub died mid-write). The next run starts over and re-alerts every failing check; the file is written to a temp file and renamed, so this should not happen again |
 | `model` | a model key the owner put in `~/.config/pocketbrain/keys/` (for the conflict check or the sleep pass) isn't loaded in the hub, so those steps quietly run rule-only. `start` also prints which keys it ignored and why |
 | `disk` | under 1024 MB free on the brain's disk (once the hub has run `start`) |
-| `restarts` | the hub started 5 or more times in 6 hours (each `start` adds a line to `log/starts.jsonl`): it is crashing and coming back |
+| `restarts` | the hub started 5 or more times in 6 hours without a plan (each `start` adds a line to `log/starts.jsonl` with its `kind`): it is crashing and coming back. An update (new build or HEAD moved), a reboot, the updater's or watchdog's `deploy.restart` mark and the menu's Restart hub are `planned` and don't count (G394) |
 
 ### The daily self-check: early warnings
 
@@ -63,14 +72,14 @@ The same probe also looks for what would otherwise end in a hand fix before the 
 | Check | Warns when |
 |---|---|
 | `connections` | an assistant that read the brain in the last 14 days has been silent for 3 days: its token or connection probably stopped working (paused agents and the gardener are left out) |
-| `logs` | `log/` is over 500 MB (`PB_LOG_MAX_MB`); names the biggest files |
-| `release` | `main` has had changes the `release` branch lacks for over 7 days, from the auto-update's `deploy.json` (`unreleased_since`, see [release.md](release.md)) |
+| `logs` | the `.json` and `.jsonl` files directly in `log/` total over 500 MB (`PB_LOG_MAX_MB`); names the biggest. Subfolders such as `log/sources/` aren't counted |
+| `release` | `main` has had changes the `release` branch lacks for over 7 days, from the auto-update's `deploy.json` (`unreleased_since`, see [release.md](release.md)). Not checked while auto-update is on hold (`deploy.ts hold`) |
 
 A gardener that missed its night isn't a warning here: the job check `gardener_runs` fails for it, per hours window ([gardener.md](gardener.md)).
 
 Tokens don't expire on their own, so there is no expiry date to watch; a connection that stopped working shows up as `connections`.
 
-The digest's "Numbers" carry one line for all of it: `Self-check: all 9 ok`, or `Self-check: 2 of 9 failing (disk, connections); see Needs you`, where each failing check is listed until it passes.
+The digest's "Numbers" carry one line for every check the probe last recorded in `log/probe.json` (door, job and self-checks together): `Self-check: all 14 ok`, or `Self-check: 2 of 14 failing (disk, door); see Needs you`, where each failing check is listed until it passes.
 
 A check that turns to failing raises one alert (`agent: hub, check: probe_<name>`), which texts the owner and breaks the streak; while it stays failing the bar can't be met. Job outcomes are kept in `log/start-state.json` (`<job>_at`, `<job>_error`).
 
@@ -80,12 +89,29 @@ A check that turns to failing raises one alert (`agent: hub, check: probe_<name>
 |---|---|
 | `pocketbrain bar` | the line above |
 | `digest/<date>.md` "Numbers" | the same line, every morning |
-| `pocketbrain week` | "Hand fixes" and "Hub failures" rows per day, the bar line, and a "Hand fixes and hub failures" verdict (any is "fix first") |
-| The dashboard's Overview | a "Real-use bar" card: the day of the streak and its last break, days since the last hand fix and what it was, and the restore drill (passed, failed or not run yet) |
+| `pocketbrain week` | "Hand fixes" and "Hub failures" rows per day, the bar line, a "Hand fixes and hub failures" verdict (any is "fix first"), and the [brain health](#brain-health-in-the-week-report) lines |
+| The dashboard's Settings | a "Real-use bar" card: the day of the streak and its last break, days since the last hand fix and what it was, and the restore drill (passed, failed or not run yet) |
 
 Logs: `log/fixes.jsonl` (`{at, what, via}`), `log/hub-runs.jsonl` (`{at, ev, signal?}`), `log/alerts.jsonl` (probe checks are `agent: hub, check: probe_*`), `log/drills.jsonl`, `log/reads.jsonl`.
 
 Probe failures are counted as hub outages, not as forged commits (before 2026-10-15 they also raised the "Forged or wrong-author commits" stop verdict).
+
+## Brain health in the week report
+
+The bar says whether the brain was used without hand fixes. It doesn't say whether the brain is slowly going bad. `pocketbrain week` ends with a "Brain health" section of eight lines to show that. Each line has one number, its count, last week's number, and the one action that improves it. A line at 0% has no action. The lines contain counts only, never a value, title or source.
+
+| Line | Counts | Fix it with |
+|---|---|---|
+| Facts with no live source | Facts in force (each live list item counts once) that have neither your word nor an exact ref (a message, event or document). A fact whose source the pull found moved or gone (`recheck`) counts too. An agent's own memory, a vague pointer and `unverified` are not live sources. | `pocketbrain sources backfill <source>`, which searches your mail for each such fact and adds the mail that still says it as its source (`sources pull` does the same as new mail arrives) |
+| Stale facts that change over time | Facts whose attribute has a `shelf_life` in rules/checks.yaml and that were last confirmed more than twice that long ago | the Brain's "Needs a look" (Still true, Change) |
+| Conflicts open more than 7 days | Open conflicts older than a week, out of all open ones | Waiting on you on the home, each settled on its own screen |
+| People and projects with no wiki summary | Person and project notes, not archived or superseded, without a `summary:` line (docs/wiki.md). An assistant asking who someone is gets the summary instead of a list of facts. | nothing by hand: the Gardener writes up to 3 a night and 10 a week from the page's facts, while `pocketbrain wiki sync on` lets it |
+| Gardener writes the hub refused in 7 days | The Gardener's `wiki_sync`, `remember` and `retire` calls in `log/calls.jsonl` over the last 7 days that the hub refused. Pages stay empty and facts go unwritten when the hub refuses what the Gardener writes, not only when it doesn't run; otherwise a refused write shows only in the Gardener's own transcript. | nothing by hand while it stays low: each refusal says what to change and the Gardener tries once more; if it stays high, `pocketbrain week` lists the refusal kinds |
+| Notes not linked to any other note | People, org, project, decision, note and money notes (not merged) with no `[[link]]` to or from another note, in their text or facts (docs/wiki.md). An island is a note an assistant only finds by searching for it. | nothing by hand for names: upkeep links a name that fits exactly one note each night (docs/wiki.md, "Names become links"); for the rest, add a `[[link]]` where one note mentions another |
+| Links to a note that doesn't exist | Links from those notes to an id no note has, out of all their links | the `broken-link` review lines in the digest: point each at the right note, or remove it (upkeep already repoints one that matches a single note's name) |
+| Notes no assistant read in 90 days | Notes at least 90 days old that no assistant read (the Gardener's reads don't count, as in forgetting). The line says "no data yet" until reads go back 90 days. | nothing by hand: the nightly pass forgets their facts once they pass their shelf life, and `pocketbrain undo --run` brings one back |
+
+Each week report adds its percentages to `log/health.jsonl` (`{date, pct}`), and the next report reads last week's numbers from there. Running a report again for the same day doesn't add a row. Code: `src/health.ts`.
 
 ## In the morning digest
 

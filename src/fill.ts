@@ -24,7 +24,6 @@ export interface Fill {
   sources: SourceFill[];
   total: Omit<SourceFill, "source">;
   ownerMinutes?: number;
-  reviewMinutes?: number; // seconds on the deck's cards for these facts (the morning swipe), in minutes
   verdict: { volume: Grade; keep: Grade; minutes: Grade };
 }
 
@@ -65,16 +64,11 @@ export function fill(root: string, n = 7, end = today()): Fill {
   const keepRate = rate(total);
   const mins = measures(root, days).map((m) => m.ownerMinutes).filter((x): x is number => typeof x === "number");
   const ownerMinutes = mins.length ? mins.reduce((a, b) => a + b, 0) : undefined;
-  // Timed swipes on these facts' cards (src/deck.ts recordSwipe) beat the dashboard's page-load
-  // estimate: they are the review itself.
-  const swipes = readJsonl<{ at?: string; day?: string; ms?: number; capture?: boolean }>(join(root, "log", "deck.jsonl")).filter((e) => e.capture && typeof e.ms === "number" && inWindow(e.day ?? e.at));
-  const reviewMinutes = swipes.length ? swipes.reduce((s, e) => s + e.ms!, 0) / 60_000 : undefined;
-  const graded = reviewMinutes ?? ownerMinutes;
+  const graded = ownerMinutes;
   return {
     from: days[0], to: days.at(-1)!, days: n,
     sources, total: { ...total, ...(keepRate === undefined ? {} : { keepRate }) },
     ...(ownerMinutes === undefined ? {} : { ownerMinutes }),
-    ...(reviewMinutes === undefined ? {} : { reviewMinutes }),
     verdict: {
       volume: total.proposed >= (TARGET.perWeek * n) / 7 ? "pass" : "fail",
       keep: keepRate === undefined ? "no data" : keepRate >= TARGET.keep ? "pass" : "fail",
@@ -96,7 +90,7 @@ export function renderFill(f: Fill): string {
   lines.push("");
   for (const s of f.sources) lines.push(`${s.source}: ${s.proposed} proposed, ${s.kept} kept, ${s.dropped} dropped, ${s.open} open, ${s.confirmed} re-confirmed (${pct(s.keepRate)})`);
   const t = f.total;
-  lines.push(`all: ${t.proposed} proposed, ${t.kept} kept, ${t.dropped} dropped, ${t.open} open, ${t.confirmed} re-confirmed (${pct(t.keepRate)})${f.ownerMinutes === undefined ? "" : `; ${f.ownerMinutes} owner minutes`}${f.reviewMinutes === undefined ? "" : `; ${f.reviewMinutes.toFixed(1)} min on the deck`}`);
+  lines.push(`all: ${t.proposed} proposed, ${t.kept} kept, ${t.dropped} dropped, ${t.open} open, ${t.confirmed} re-confirmed (${pct(t.keepRate)})${f.ownerMinutes === undefined ? "" : `; ${f.ownerMinutes} owner minutes`}`);
   const worst = f.sources.filter((s) => s.keepRate !== undefined && s.keepRate < TARGET.keep && s.kept + s.dropped >= 5);
   if (worst.length) lines.push("", `Dropped too often: ${worst.map((s) => s.source).join(", ")}. Narrow what that source reads in rules/sources.yaml before it costs more taps.`);
   return lines.join("\n");

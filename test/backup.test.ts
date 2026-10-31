@@ -2,7 +2,7 @@
 // Backups end to end with real age keys, real git bundles and real SSH signing keys: back up,
 // lose the machine, restore on a clean one, prove nothing changed; plus the ways it must refuse.
 import { test, expect, beforeAll } from "bun:test";
-import { mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, rmSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
@@ -149,7 +149,7 @@ test("E2E: pocketbrain drill passes and says which key it proved", () => {
   // The drill never touches the brain or the real backup folder.
   expect(sh(root, "git", "rev-parse", "HEAD").out).toBe(headBefore);
   expect(readdirSync(dest)).toEqual([]);
-});
+}, 30_000); // two drills and a restore: about 5 s under a full-suite load, past bun's default
 
 test("restore refuses the wrong key, a tampered backup, and a folder that isn't empty", async () => {
   const dest = tmp("pb-bk-dest-");
@@ -241,4 +241,72 @@ test("rotation: 30 days of dailies, the first of each month, always the newest; 
   // keep_monthly: 2 keeps September and October's firsts only; keep_daily 0 still keeps the newest.
   bk.rotate(dest, { keep_daily: 0, keep_monthly: 2 }, "2026-10-08");
   expect(readdirSync(dest).sort()).toEqual(["brain-2026-09-01.tar.age", "brain-2026-10-01.tar.age", "brain-2026-10-08-2.tar.age", "brain-final.tar.age", "notes.txt"]);
+});
+
+// Backlog #196: the restore half of the real-use bar, provable in one command on demo data.
+test("drill also checks git fsck, note and fact counts, and that the hub boots on the restored brain", async () => {
+  const root = makeBrain();
+  const d = await bk.drill(root);
+  expect(d.ok).toBe(true);
+  expect(d.notes).toBe(loadBrain(root).length);
+  expect(d.facts).toBeGreaterThan(0);
+  expect(d.checks).toEqual([]);
+  const text = bk.renderDrill(d);
+  expect(text).toContain("git fsck: clean");
+  expect(text).toContain(`${d.notes} notes and ${d.facts} facts, same as before`);
+  expect(text).toContain("hub booted on the restored brain");
+});
+
+// 2026-10-22 on the Mac: the restore was identical, yet the drill said "failed" over a hub log the
+// pull writes and never commits, and over a week of open hub alerts. A drill that fails on noise
+// teaches the owner to ignore it: it compares the brain's content, and reports alerts apart.
+test("a drill passes over hub logs changed outside git and open hub alerts, and lists the alerts apart", async () => {
+  const root = makeBrain();
+  mkdirSync(join(root, "log", "sources"), { recursive: true });
+  writeFileSync(join(root, "log", "sources", "runs.jsonl"), JSON.stringify({ at: "2026-10-07T10:00:00Z", source: "calendar" }) + "\n");
+  sh(root, "git", "add", "-f", "log/sources/runs.jsonl");
+  sh(root, "git", "commit", "-qm", "hub: runs");
+  appendFileSync(join(root, "log", "sources", "runs.jsonl"), JSON.stringify({ at: "2026-10-08T10:00:00Z", source: "calendar" }) + "\n");
+  appendFileSync(join(root, "log", "alerts.jsonl"), JSON.stringify({ at: "2026-10-08T09:00:00Z", agent: "hub", check: "probe_fill", from: "calendar quiet 72h" }) + "\n");
+  const d = await bk.drill(root);
+  expect(d.diff).toEqual([]);
+  expect(d.doctorFails).toEqual([]);
+  expect(d.ok).toBe(true);
+  expect(d.alerts.join("\n")).toMatch(/hub alert/);
+  expect(bk.renderDrill(d)).toContain("open alerts on the brain (not a drill failure");
+});
+
+test("restore checks catch a missing note, a broken repo and a hub that can't boot", async () => {
+  const root = makeBrain();
+  const before = bk.brainCounts(root);
+  expect(await bk.restoreChecks(root, before)).toEqual([]);
+  rmSync(join(root, "projects", "course-a.md"));
+  writeFileSync(join(root, "rules", "policy.yaml"), readFileSync(join(root, "rules", "policy.yaml"), "utf8") + "\nbad: [\n");
+  const objects = join(root, ".git", "objects");
+  const pack = readdirSync(objects).find((d) => /^[0-9a-f]{2}$/.test(d))!;
+  // git writes its objects read-only; a test run as root (here) ignores that, the CI runner doesn't.
+  for (const f of readdirSync(join(objects, pack))) { chmodSync(join(objects, pack, f), 0o644); writeFileSync(join(objects, pack, f), "corrupt"); }
+  const problems = (await bk.restoreChecks(root, before)).join("\n");
+  expect(problems).toMatch(/notes: \d+ before, \d+ after/);
+  expect(problems).toMatch(/git fsck/);
+  expect(problems).toMatch(/hub didn't boot/);
+});
+
+// CI runs it from the repo, where no brain is (the CI test job's last step failed so, G540).
+test("pocketbrain drill --demo needs no brain anywhere", () => {
+  const cfg = tmp("pb-demo-drill-nobrain-");
+  const env: Record<string, string> = { ...process.env as Record<string, string>, PB_CONFIG_DIR: cfg };
+  delete env.PB_BRAIN;
+  const p = Bun.spawnSync(["bun", "src/cli.ts", "drill", "--demo"], { cwd: join(import.meta.dir, ".."), env });
+  expect({ exit: p.exitCode, err: p.stderr.toString().trim().split("\n")[0] ?? "" }).toEqual({ exit: 0, err: "" });
+});
+
+test("pocketbrain drill --demo: the sample brain, a throwaway key, one pass line, nothing recorded", () => {
+  const cfg = tmp("pb-demo-drill-cfg-");
+  const p = Bun.spawnSync(["bun", "src/cli.ts", "drill", "--demo"], { cwd: join(import.meta.dir, ".."), env: { ...process.env, PB_BRAIN: join(cfg, "nowhere"), PB_CONFIG_DIR: cfg } });
+  const out = p.stdout.toString().trim();
+  expect(p.exitCode).toBe(0);
+  expect(out.split("\n")).toHaveLength(1);
+  expect(out).toMatch(/^drill PASSED in [\d.]+s \(demo brain, throwaway key\): \d+ notes, \d+ facts, fsck clean, hub booted$/);
+  expect(existsSync(join(cfg, "nowhere"))).toBe(false);
 });

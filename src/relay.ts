@@ -5,14 +5,16 @@
 // Louis, and recorded in comms/. Nothing here depends on an agent following instructions.
 import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, readdirSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import YAML from "yaml";
 import type { Note } from "./brain";
 import { loadBrain, today, sensitivityRank, type Sensitivity } from "./brain";
 import type { Rules } from "./rules";
 import { loadRules, ownerName } from "./rules";
+import { ownerDay } from "./clock";
 import { carve, grantFor, records, visibleFacts, shownWords } from "./carve";
-import { findSecret, findInjection, categoryWords, moneyAsk } from "./checks";
+import { findSecret, findInjection, categoryWords, moneyAsk, redactSecrets, hardSecretIn } from "./checks";
+import { putHeld, getHeld, dropHeld, listHeld, dropHeldFile } from "./quotes";
 import { needleFor, findCarried, unhide, distinctive, type Needle } from "./match";
 import { hasWord, alert, sha256, readJsonl } from "./util";
 import { git } from "./git";
@@ -22,7 +24,7 @@ import { keyedModel } from "./aftercheck";
 import { logJudgment, parseJson, type Model } from "./model";
 
 export interface RelayConfig {
-  relay_address: string; // e.g. relay@pocketbrain.agentmail.to; agents write to relay+<agent>@...
+  relay_address: string; // e.g. relay@<your-inbox>.agentmail.to; agents write to relay+<agent>@...
   owner_address?: string; // where hold notices go
   louis_address?: string; // legacy name for owner_address
   agents: Record<string, string>; // agent -> its own AgentMail address
@@ -173,9 +175,11 @@ const safeId = (id: string) => {
 export function fileTransport(root: string): MailTransport {
   const dir = join(root, "relay");
   for (const d of ["incoming", "processed", "outgoing"]) mkdirSync(join(dir, d), { recursive: true });
+  // The file each message was read from: done() moves that exact file, whatever its id says (G29).
+  const fileOf = new WeakMap<MailMessage, string>();
   return {
     fetchNew: () => readdirSync(join(dir, "incoming")).filter((f) => f.endsWith(".json")).sort()
-      .map((f) => JSON.parse(readFileSync(join(dir, "incoming", f), "utf8")) as MailMessage),
+      .map((f) => { const m = JSON.parse(readFileSync(join(dir, "incoming", f), "utf8")) as MailMessage; fileOf.set(m, f); return m; }),
     forward: (msg, to, from) => {
       mkdirSync(join(dir, "outgoing", to.replace(/[^A-Za-z0-9_.@+-]/g, "_")), { recursive: true });
       // Like AgentMail's send: the recipient gets the relay's own envelope, never the sender's
@@ -184,8 +188,8 @@ export function fileTransport(root: string): MailTransport {
     },
     notifyLouis: (subject, text) => appendFileSync(join(dir, "louis.log"), `${subject}\n${text}\n\n`),
     done: (msg) => {
-      const f = msg.id ? readdirSync(join(dir, "incoming")).find((x) => x.startsWith(msg.id)) : undefined;
-      if (f) renameSync(join(dir, "incoming", f), join(dir, "processed", f));
+      const f = fileOf.get(msg);
+      if (f && existsSync(join(dir, "incoming", f))) renameSync(join(dir, "incoming", f), join(dir, "processed", f));
     },
   };
 }
@@ -228,14 +232,59 @@ const recordMessageId = (file: string): string | undefined => {
   const id = fm ? YAML.parse(fm)?.message_id : undefined;
   return id === undefined ? undefined : String(id);
 };
+// G201: the record is committed, and the backup refuses plaintext secrets on main, so one
+// secret-shaped string from any sender would stop every backup. Every field the sender wrote is
+// redacted before it is written, and the record is then scanned whole: a key split across two
+// fields (its header in the subject, its body in the text) passes each field alone, so when the
+// whole record still holds a secret shape, every field the sender wrote is blanked. The checks
+// above ran on the raw message, so it is still held and alerted. When redaction changed a held
+// message, its original waits outside git for the owner's decision (G243, quotes.ts putHeld).
+const REMOVED = "[removed: secret-shaped]";
+const scrub = (s: unknown) => redactSecrets(String(s ?? "")).text;
+const heldKey = (rel: string) => `comms-${rel}`;
+// G284: the least that clears the record, in order: the message id replaced by its hash (only the
+// id); then the free text the sender wrote (subject, text, via, an unresolved address); then the
+// reasons too (G280: they quote the sender). Who it is from and to, when they are agents the relay
+// resolved, is never blanked, so the owner can still release a held one.
 function recordComms(root: string, msg: MailMessage, v: Verdict, via?: string) {
   const d = today();
   mkdirSync(join(root, "comms", d), { recursive: true });
-  let rel = `comms/${d}/${safeId(msg.id)}.md`;
-  for (let n = 2; existsSync(join(root, rel)) && recordMessageId(join(root, rel)) !== msg.id; n++) rel = `comms/${d}/${safeId(msg.id)}-${n}.md`;
-  const fm = { id: rel.replace(/\.md$/, ""), type: "comms", message_id: msg.id, from: v.sender ?? addr(msg.from), to: v.recipient ?? msg.to.join(", "), at: msg.received_at ?? new Date().toISOString(), verdict: v.deliver ? "delivered" : "held", reasons: v.reasons, ...(v.alert ? { alert: true } : {}), subject: msg.subject, ...(via ? { via } : {}) };
-  writeFileSync(join(root, rel), `---\n${YAML.stringify(fm, { lineWidth: 0 })}---\n${msg.text.trim()}\n`);
+  // G313: the id is never run through the broad shapes (a card-shaped digit run in two ids would
+  // make them one record); it is kept as sent, or hashed when it carries part of a hard secret.
+  const hashed = `id-${sha256(String(msg.id)).slice(0, 16)}`;
+  const asSent = hardSecretIn(String(msg.id)) ? hashed : String(msg.id);
+  const build = (rel: string, mid: string, level: 0 | 1 | 2 | 3) => {
+    const f = (x: unknown) => (level ? REMOVED : scrub(x));
+    // Level 3 (G314, the last): nothing the sender sent but the agents the relay resolved.
+    if (level === 3) return `---\n${YAML.stringify({ id: rel.replace(/\.md$/, ""), type: "comms", message_id: mid, from: v.sender ?? REMOVED, to: v.recipient ?? REMOVED, at: new Date().toISOString(), verdict: v.deliver ? "delivered" : "held", reasons: [REMOVED] }, { lineWidth: 0 })}---\n${REMOVED}\n`;
+    const fm = { id: rel.replace(/\.md$/, ""), type: "comms", message_id: mid, from: v.sender ?? f(addr(msg.from)), to: v.recipient ?? f(msg.to.join(", ")), at: level === 2 ? new Date().toISOString() : scrub(msg.received_at ?? new Date().toISOString()), verdict: v.deliver ? "delivered" : "held", reasons: v.reasons.map((r) => (level === 2 ? REMOVED : scrub(r))), ...(v.alert ? { alert: true } : {}), subject: f(msg.subject), ...(via ? { via: f(via) } : {}) };
+    return `---\n${YAML.stringify(fm, { lineWidth: 0 })}---\n${level ? REMOVED : scrub(msg.text).trim()}\n`;
+  };
+  const relFor = (mid: string) => {
+    let rel = `comms/${d}/${safeId(mid)}.md`;
+    for (let n = 2; existsSync(join(root, rel)) && recordMessageId(join(root, rel)) !== mid; n++) rel = `comms/${d}/${safeId(mid)}-${n}.md`;
+    return rel;
+  };
+  const tries: [string, 0 | 1 | 2 | 3][] = [[asSent, 0], [hashed, 0], [asSent, 1], [hashed, 1], [hashed, 2], [hashed, 3]];
+  let rel = "", text = "", level: 0 | 1 | 2 | 3 = 0;
+  for (const [mid, l] of tries) {
+    rel = relFor(mid); text = build(rel, mid, l); level = l;
+    if (!hardSecretIn(text)) break;
+  }
+  if (hardSecretIn(text)) throw new Error("relay: a comms record still held a secret shape after every field was blanked"); // can't happen: level 3 holds nothing the sender sent
+  writeFileSync(join(root, rel), text);
+  if (!v.deliver && (level > 0 || scrub(msg.text) !== msg.text || scrub(msg.subject) !== msg.subject)) putHeld(root, heldKey(rel), { subject: msg.subject, text: msg.text, rel });
   return rel;
+}
+
+// G285: an original waits only while its record is held. Decided (by any route), or gone: swept.
+function sweepHeldComms(root: string) {
+  for (const { file, data } of listHeld(root)) {
+    if (!file.startsWith("comms-") || typeof data.rel !== "string") continue;
+    const f = join(root, data.rel);
+    const verdict = existsSync(f) ? readFileSync(f, "utf8").match(/^verdict: (\S+)$/m)?.[1] : undefined;
+    if (verdict !== "held") dropHeldFile(root, file);
+  }
 }
 
 // Forward or hold one checked message, record it in comms/ and commit. A send the mail service
@@ -265,10 +314,12 @@ function settle(root: string, cfg: RelayConfig, transport: MailTransport, msg: M
 }
 
 function failed(root: string, msg: MailMessage, why: string) {
-  const day = new Date().toISOString().slice(0, 10); // alert() stamps the real clock
+  // Once per owner day (src/clock.ts, G286); alert() stamps the real clock.
+  const rules = loadRules(root), day = ownerDay(rules, new Date());
   const seen = readJsonl<{ check?: string; id?: string; at?: string; why?: string }>(join(root, "log", "alerts.jsonl"))
-    .some((a) => a.check === "relay_failed" && a.id === msg.id && a.why === why && a.at?.slice(0, 10) === day);
-  if (!seen) alert(root, { check: "relay_failed", id: msg.id, why });
+    .some((a) => a.check === "relay_failed" && a.id === scrub(msg.id) && a.why === scrub(why) && !!a.at && Number.isFinite(Date.parse(a.at)) && ownerDay(rules, a.at) === day);
+  // The id is the sender's; scrubbed, since log/ is committed (G201).
+  if (!seen) alert(root, { check: "relay_failed", id: scrub(msg.id), why: scrub(why) });
 }
 
 // One pass with the code checks only: check every new message, forward or hold, record, commit.
@@ -277,6 +328,7 @@ export function relayOnce(root: string, transport: MailTransport): Verdict[] {
   const rules = loadRules(root);
   const notes = loadBrain(root);
   const out: Verdict[] = [];
+  sweepHeldComms(root);
   for (const msg of transport.fetchNew()) {
     if (msg.unreadable) { failed(root, msg, `couldn't read it: ${msg.unreadable}`); continue; }
     const v = checkMessage(notes, rules, cfg, msg);
@@ -513,10 +565,15 @@ export function decideHeld(root: string, transport: MailTransport, rawId: string
   const m = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)!;
   const fm = YAML.parse(m[1]);
   if (fm.verdict !== "held") return `${id} is ${fm.verdict}, not held`;
+  // G243: the sender's original, kept outside git while the owner decided, when the record had
+  // to be redacted; release forwards it, and either decision deletes it.
+  const key = heldKey(relative(root, file));
+  const orig = getHeld(root, key);
   if (decision === "release" && !String(fm.via ?? "").startsWith("hook:")) {
     if (!cfg.agents[fm.to]) return `unknown recipient ${fm.to}`;
-    transport.forward({ id, from: cfg.agents[fm.from] ?? fm.from, to: [cfg.agents[fm.to]], subject: fm.subject, text: m[2] }, cfg.agents[fm.to], fm.from);
+    transport.forward({ id, from: cfg.agents[fm.from] ?? fm.from, to: [cfg.agents[fm.to]], subject: orig?.subject ?? fm.subject, text: orig?.text ?? m[2] }, cfg.agents[fm.to], fm.from);
   }
+  dropHeld(root, key);
   fm.verdict = decision === "release" ? "released-by-owner" : "dropped-by-owner";
   fm.decided = today();
   writeFileSync(file, `---\n${YAML.stringify(fm, { lineWidth: 0 })}---\n${m[2]}`);

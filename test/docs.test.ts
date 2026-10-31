@@ -81,9 +81,22 @@ const OVERCLAIMS: [RegExp, string][] = [
   [/It proves that any miss in the paid run/i, "the scripted case shows reachability, not that every miss is behaviour"],
   [/^- Audio over `max_bytes` is refused/im, "only the drop folder checks max_bytes; capture --voice doesn't"],
   [/point credentials-file at the file create wrote\s*$/im, "tunnel-config prints brain.example.com unless rules/hub.yaml has public_url: the hostname needs setting too"],
+  // Stranger rehearsal 3 (2026-10-16), the merges a442d0f..7c722a9.
+  [/owner's\s+text\s+and\s+card/i, "a source quote shows only in the owner's texts (src/textline/items.ts getQuote); the dashboard card never reads it"],
+  [/hub's\s+own\s+source\s+check\s+and\s+its\s+quote/i, "the hub's source check keeps its verdict and ref only, never the sentence (src/pull.ts preverifyInbox, G98)"],
+  [/each\s+inbox\s+proposal\s+carries\s+an\s+evidence\s+block|evidence\s+block\s+on\s+each\s+inbox\s+proposal|every\s+inbox\s+proposal\s+\(the\s+gardener's/i, "only proposals the write path files get an evidence block (src/write.ts propose); capture and sleep proposals have none"],
+  [/up\s+to\s+20\s+due\s+or\s+stale\s+facts/i, "upkeep's recheck is capped at 20 source items a pass, not 20 facts (src/pull.ts RECHECK_PER_PASS)"],
+  [/"Hark\s+\(hark\)\s+wants/i, "the push shows a label beside the id only when it says more than the id (src/asks.ts askerName): Hark for hark shows hark"],
+  [/"gardener-bot"\s+gets\s+assistant-N/i, "a look-alike request name gets the id assistant, and assistant-2 and on only when that is taken (src/access-request.ts)"],
+  [/Agent-proposed\s+name,\s+purpose\s+and\s+slices\s+are\s+not\s+built/i, "request_access (src/access-request.ts) is built: a waiting sign-in files its own name, purpose and slices"],
+  [/the\s+Agents\s+table\s+has\s+a\s+Memory\s+exam/i, "the dashboard tab is Assistants"],
+  [/fixes\s+one\s+fact\s+in\s+every\s+assistant\s+at\s+once\s+\(\[docs/i, "a second, shorter copy of the Belief radar CHANGELOG entry"],
+  [/no\s+per-agent\s+rate\s+limit/i, "every door has a per-agent request and write budget (src/budget.ts, 120 requests a minute, 300 writes an hour by default)"],
+  [/undo\s+--run`\s+(commits|stages)\s+only\s+what\s+it\s+reverts/i, "undo --run also commits rules/suppressions.yaml (src/upkeep.ts undoRun)"],
 ];
 
-for (const f of ["README.md", "docs/quickstart.md", "IDEA.md", "docs/hub.md", "docs/release.md", "docs/relay.md", "docs/share.md", "docs/switch-day.md", "docs/capture.md"]) {
+const SPEC = readdirSync(join(ROOT, "docs", "spec")).filter((f) => f.endsWith(".md")).map((f) => `docs/spec/${f}`);
+for (const f of [...new Set(["README.md", "IDEA.md", "CHANGELOG.md", ...DOCS, ...SPEC])]) {
   test(`no known overclaims: ${f}`, () => {
     const t = text(f);
     expect(OVERCLAIMS.filter(([re]) => re.test(t)).map(([, why]) => why)).toEqual([]);
@@ -115,7 +128,8 @@ const INTERNAL: [RegExp, string][] = [
   [/challenges-2/i, "points into private planning (challenges-2.md)"],
   [/\bbacklog (item )?#?\d+/i, "points into the private backlog"],
 ];
-const TABS = [...text("src/dashboard/html.ts").matchAll(/\["\/[a-z]*", "[a-z]+", "([^"]+)"\]/g)].map((m) => m[1]);
+// No tab bar any more (outside review v5): Home, Settings, and the pages Settings links to.
+const TABS = ["Home", "Settings", ...[...text("src/dashboard/html.ts").matchAll(/\["\/[a-z]*", "([^"]+)", "[^"]+"\]/g)].map((m) => m[1])];
 
 test("the dashboard's tab names are found", () => {
   expect(TABS).toContain("Assistants");

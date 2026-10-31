@@ -16,11 +16,13 @@ import type { SourceConfig } from "./pull";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
-type Product = "gmail" | "gcal" | "gdoc";
+export const CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
+type Product = "gmail" | "gcal" | "gdoc" | "contacts";
 const PRODUCT: Record<Product, { scope: string; key: string; api: string; label: string }> = {
   gmail: { scope: GMAIL_SCOPE, key: "GMAIL_REFRESH_TOKEN", api: "https://gmail.googleapis.com/gmail/v1/users/me", label: "Gmail" },
   gcal: { scope: GCAL_SCOPE, key: "GCAL_REFRESH_TOKEN", api: "https://www.googleapis.com/calendar/v3", label: "Calendar" },
   gdoc: { scope: DRIVE_SCOPE, key: "GDRIVE_REFRESH_TOKEN", api: "https://www.googleapis.com/drive/v3", label: "Drive" },
+  contacts: { scope: CONTACTS_SCOPE, key: "GCONTACTS_REFRESH_TOKEN", api: "https://people.googleapis.com/v1", label: "Contacts" },
 };
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -91,32 +93,57 @@ export function bodyText(payload: Raw | undefined): string {
     .replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, MAX_TEXT);
 }
 
-async function listIds(token: string, cfg: SourceConfig): Promise<string[]> {
-  const ids: string[] = [];
+// Ids in the backfill window not yet seen, paging past the seen ones, until more than MAX_IDS
+// are waiting (so the caller can tell there is more) or the listing ends.
+async function listIds(token: string, cfg: SourceConfig, seen: (id: string) => boolean = () => false): Promise<string[]> {
+  const ids = new Set<string>();
   const labels = cfg.where?.length ? cfg.where : [undefined];
   for (const label of labels) {
     let page: string | undefined;
     do {
       const r = await get(token, "messages", { q: `newer_than:${cfg.backfill_days ?? 2}d`, maxResults: "100", ...(label ? { labelIds: label } : {}), ...(page ? { pageToken: page } : {}) });
-      ids.push(...(r.messages ?? []).map((m: Raw) => String(m.id)));
+      for (const m of r.messages ?? []) if (!seen(String(m.id))) ids.add(String(m.id));
       page = r.nextPageToken;
-    } while (page && ids.length < MAX_IDS);
+    } while (page && ids.size <= MAX_IDS);
+    if (ids.size > MAX_IDS) break;
   }
-  return [...new Set(ids)];
+  return [...ids];
 }
 
 type Seen = (id: string, version?: string) => boolean;
+
+// Source backfill (src/backfill.ts): the messages under the source's where: labels that match a
+// Gmail search, at most `max`, each with its text. Read-only, like every call here.
+export async function searchGmail(cfg: SourceConfig, q: string, max = 3): Promise<Raw[]> {
+  const token = await accessToken(cfg.account);
+  const ids: string[] = [];
+  for (const label of cfg.where?.length ? cfg.where : [undefined]) {
+    const r = await get(token, "messages", { q, maxResults: String(max), ...(label ? { labelIds: label } : {}) });
+    for (const m of r.messages ?? []) if (!ids.includes(String(m.id))) ids.push(String(m.id));
+  }
+  const out: Raw[] = [];
+  for (const id of ids.slice(0, max)) {
+    const m = await get(token, `messages/${id}`, { format: "full" });
+    if (!m._notFound) out.push({ ...m, text: bodyText(m.payload) });
+  }
+  return out;
+}
 
 // One pass. `cursor` is the historyId the last pass ended on. Returns the messages in Gmail's own
 // shape with `text` filled in (pull.ts toItem reads them), deletions as { id, deleted }, and the
 // historyId to start from next time. A cursor too old for Gmail's history falls back to a listing.
 // With where: labels, the history is asked per label (labelId), so mail outside the allowlist is
 // never listed or fetched and can't fill the 100-message window (evals/gaps.ts G41).
+// A first listing with more than MAX_IDS waiting returns `list:<historyId>`: the next pass lists
+// again (seen ids skip) and, once the listing is done, history starts from that historyId, from
+// before the listing began, so nothing that arrived meanwhile is skipped (G58).
 export async function fetchGmail(cfg: SourceConfig, cursor?: string, seen: Seen = () => false): Promise<{ items: Raw[]; cursor: string; more?: boolean }> {
   const token = await accessToken(cfg.account);
   const profile = await get(token, "profile");
   let added: string[] = [], deleted: string[] = [];
-  let next = String(profile.historyId);
+  const listing = cursor?.startsWith("list:") ? cursor.slice(5) : undefined;
+  if (listing) cursor = undefined;
+  let next = listing ?? String(profile.historyId);
   if (cursor) {
     let gone = false;
     for (const label of cfg.where?.length ? cfg.where : [undefined]) {
@@ -133,8 +160,8 @@ export async function fetchGmail(cfg: SourceConfig, cursor?: string, seen: Seen 
       } while (page);
       if (gone) break;
     }
-    if (gone) added = await listIds(token, { ...cfg, backfill_days: 7 });
-  } else added = await listIds(token, cfg);
+    if (gone) added = await listIds(token, { ...cfg, backfill_days: 7 }, seen);
+  } else added = await listIds(token, cfg, seen);
   added = [...new Set(added)].filter((id) => !deleted.includes(id) && !seen(id));
   const more = added.length > MAX_IDS;
   const items: Raw[] = deleted.map((id) => ({ id, deleted: true }));
@@ -144,13 +171,14 @@ export async function fetchGmail(cfg: SourceConfig, cursor?: string, seen: Seen 
     items.push({ ...m, text: bodyText(m.payload) });
   }
   // With more than MAX_IDS waiting, keep the old cursor so the rest is read next pass (seen ids skip).
-  return { items, cursor: more && cursor ? cursor : next, ...(more ? { more } : {}) };
+  return { items, cursor: more ? cursor ?? `list:${next}` : next, ...(more ? { more } : {}) };
 }
 
 // One item by id, for verify_source on a live source.
 export async function fetchGmailMessage(cfg: SourceConfig, id: string): Promise<Raw | undefined> {
   const m = await get(await accessToken(cfg.account), `messages/${id}`, { format: "full" });
-  return m._notFound ? undefined : { ...m, text: bodyText(m.payload) };
+  // Not found in the mailbox: deleted (or never there); fetchOne reads it as gone.
+  return m._notFound ? { id, deleted: true } : { ...m, text: bodyText(m.payload) };
 }
 
 // ---------- connecting a mailbox: OAuth on the Mac, loopback redirect with PKCE ----------
@@ -166,7 +194,8 @@ export function saveKey(name: string, value: string) {
 // back. The refresh token is saved as a key file and never printed. `address`, when given, must be
 // the account that signed in, so the wrong mailbox can't be connected by mistake.
 export async function connectGoogle(cfg: SourceConfig, opts: { open?: (url: string) => void; port?: number } = {}): Promise<{ url: string; done: Promise<string> }> {
-  if (cfg.kind !== "gmail" && cfg.kind !== "gcal" && cfg.kind !== "gdoc") throw new Error(`sources connect is for gmail, gcal and gdoc sources, not ${cfg.kind}`);
+  if (cfg.kind !== "gmail" && cfg.kind !== "gcal" && cfg.kind !== "gdoc" && cfg.kind !== "contacts") throw new Error(`sources connect is for gmail, gcal, gdoc and contacts sources, not ${cfg.kind}`);
+  if (cfg.kind === "contacts" && cfg.path) throw new Error("this contacts source reads a vCard file (path:); there is nothing to sign in to");
   const product: Product = cfg.kind;
   const { id, secret } = client();
   const verifier = randomBytes(32).toString("base64url");
@@ -188,14 +217,16 @@ export async function connectGoogle(cfg: SourceConfig, opts: { open?: (url: stri
       try {
         if (!j._ok || !j.refresh_token) throw new Error(`Google gave no refresh token (${j.error ?? j._status})`);
         checkScope(j.scope, product);
-        // Who signed in: Gmail's profile address, the primary calendar's id (its owner's address), or Drive's user.
+        // Who signed in: Gmail's profile address, the primary calendar's id (its owner's address), or
+        // Drive's user. The contacts scope alone can't name its account, so login_hint picks it.
         const me = product === "gmail" ? String((await get(j.access_token, "profile")).emailAddress)
           : product === "gcal" ? String((await get(j.access_token, "calendars/primary", {}, "gcal")).id)
-          : String((await get(j.access_token, "about", { fields: "user(emailAddress)" }, "gdoc")).user?.emailAddress);
-        if (cfg.address && me.toLowerCase() !== cfg.address.toLowerCase()) throw new Error("the account that signed in isn't this source's address; nothing saved");
+          : product === "gdoc" ? String((await get(j.access_token, "about", { fields: "user(emailAddress)" }, "gdoc")).user?.emailAddress)
+          : undefined;
+        if (cfg.address && me !== undefined && me.toLowerCase() !== cfg.address.toLowerCase()) throw new Error("the account that signed in isn't this source's address; nothing saved");
         saveKey(tokenKey(cfg.account, product), j.refresh_token);
         finish(tokenKey(cfg.account, product));
-        return stop(`pocketBrain can now read this ${({ gmail: "mailbox", gcal: "calendar", gdoc: "Drive" })[product]} (read only).`, true);
+        return stop(`pocketBrain can now read this ${({ gmail: "mailbox", gcal: "calendar", gdoc: "Drive", contacts: "address book" })[product]} (read only).`, true);
       } catch (e) { fail(e as Error); return stop("Sign-in refused.", false); }
     },
   });
@@ -242,7 +273,20 @@ export async function fetchCalendar(cfg: SourceConfig, cursor?: string, seen: Se
     }
   }
   const more = items.length > MAX_EVENTS;
-  return { items: items.slice(0, MAX_EVENTS), cursor: JSON.stringify(more && cursor ? prev : next), ...(more ? { more } : {}) };
+  return { items: items.slice(0, MAX_EVENTS), cursor: JSON.stringify(more ? prev : next), ...(more ? { more } : {}) };
+}
+
+// The coming events of the listed calendars, soonest first, recurring ones expanded: the read-time
+// cache behind live next_* facts (src/upcoming.ts). Nothing here goes to a model.
+export async function fetchUpcoming(cfg: SourceConfig, days = 60): Promise<Raw[]> {
+  const token = await accessToken(cfg.account, "gcal");
+  const now = Date.now(), out: Raw[] = [];
+  for (const cal of cfg.where?.length ? cfg.where : ["primary"]) {
+    const r = await get(token, `calendars/${encodeURIComponent(cal)}/events`, { timeMin: new Date(now).toISOString(), timeMax: new Date(now + days * 864e5).toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" }, "gcal");
+    if (r._notFound || r._gone) throw new Error(`calendar ${cal} can't be read`);
+    out.push(...(r.items ?? []).map((e: Raw) => ({ ...e, calendar: cal })));
+  }
+  return out;
 }
 
 export async function fetchCalendarEvent(cfg: SourceConfig, id: string): Promise<Raw | undefined> {
@@ -251,7 +295,8 @@ export async function fetchCalendarEvent(cfg: SourceConfig, id: string): Promise
     const e = await get(token, `calendars/${encodeURIComponent(cal)}/events/${encodeURIComponent(id)}`, {}, "gcal");
     if (!e._notFound && !e._gone) return { ...e, calendar: cal };
   }
-  return undefined;
+  // In none of the listed calendars: deleted, read as cancelled.
+  return { id, status: "cancelled" };
 }
 
 // ---------- Drive ----------
@@ -311,9 +356,47 @@ export async function fetchDrive(cfg: SourceConfig, cursor?: string): Promise<{ 
 export async function fetchDriveFile(cfg: SourceConfig, id: string): Promise<Raw | undefined> {
   const token = await accessToken(cfg.account, "gdoc");
   const f = await get(token, `files/${encodeURIComponent(id)}`, { fields: FILE_FIELDS }, "gdoc");
-  if (f._notFound || f._gone) return undefined;
+  if (f._notFound || f._gone) return { id, removed: true };
   const folder = (f.parents ?? []).find((p: string) => cfg.where?.includes(p));
   if (!folder) return asItem(f, (f.parents ?? []).join(",") || "none", "");
   const text = f.trashed ? "" : await driveText(token, f);
   return text === undefined ? undefined : asItem(f, folder, text);
+}
+
+// ---------- Contacts (src/contacts.ts reads each card) ----------
+
+const MAX_CARDS = 200;
+const CARD_FIELDS = "names,nicknames,organizations,emailAddresses,phoneNumbers,relations,metadata";
+// The owner's saved contacts (never "other contacts" Google collects from mail). `cursor` is the
+// People API's sync token: the first pass lists every card, later ones only what changed, deleted
+// cards with metadata.deleted. An expired sync token starts over. Cards already read at their etag
+// are skipped, so more than MAX_CARDS move forward pass by pass.
+export async function fetchContacts(cfg: SourceConfig, cursor?: string, seen: Seen = () => false): Promise<{ items: Raw[]; cursor: string; more?: boolean }> {
+  const token = await accessToken(cfg.account, "contacts");
+  let sync = cursor, page: string | undefined, got: Raw[] = [], next: string | undefined, restarted = false;
+  for (;;) {
+    const u = new URL(`${PRODUCT.contacts.api}/people/me/connections`);
+    for (const [k, v] of Object.entries({ personFields: CARD_FIELDS, pageSize: "1000", requestSyncToken: "true", ...(sync ? { syncToken: sync } : {}), ...(page ? { pageToken: page } : {}) })) u.searchParams.set(k, v);
+    const r = await timed(http, u.toString(), { headers: { authorization: `Bearer ${token}` } });
+    // An expired sync token answers 400 (FAILED_PRECONDITION, EXPIRED_SYNC_TOKEN): list again.
+    if ((r.status === 400 || r.status === 410) && sync && !restarted) { sync = undefined; page = undefined; got = []; restarted = true; continue; }
+    if (!r.ok) throw new Error(`Contacts answered ${r.status}`);
+    const j = (await r.json()) as Raw;
+    got.push(...(j.connections ?? []));
+    page = j.nextPageToken;
+    if (!page) { next = j.nextSyncToken; break; }
+  }
+  const items = got.filter((p) => p.metadata?.deleted || !seen(String(p.resourceName), cardVersion(p.etag)));
+  const more = items.length > MAX_CARDS;
+  return { items: items.slice(0, MAX_CARDS), cursor: more ? cursor ?? "" : next ?? cursor ?? "", ...(more ? { more } : {}) };
+}
+
+// A card's version as its refs carry it: Google's etag with anything but plain characters made "_",
+// since a ref's version can't hold "/" or "@".
+export const cardVersion = (etag: unknown) => (typeof etag === "string" ? etag.replace(/"/g, "").replace(/[^A-Za-z0-9_.-]/g, "_") : "") || "1";
+
+// One card by its resource name, for verify_source; a deleted one reads as gone.
+export async function fetchContact(cfg: SourceConfig, id: string): Promise<Raw | undefined> {
+  const r = await get(await accessToken(cfg.account, "contacts"), id, { personFields: CARD_FIELDS }, "contacts");
+  return r._notFound || r._gone ? { resourceName: id, metadata: { deleted: true } } : r;
 }

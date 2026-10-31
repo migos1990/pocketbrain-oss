@@ -3,7 +3,7 @@
 // only proposes, has its own door (upkeep, forgetting, changes), a proposal cap, hours, and is
 // left out of the use signal and the scorecard. The hub drives its Anthropic side through `ant`.
 import { test, expect, afterEach } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -17,6 +17,9 @@ import { sleep } from "../src/sleep";
 import { measures, week } from "../src/measure";
 import { openWindow, nightPlan, recordRun, cleanup, rotate, parseWindow, inWindows } from "../src/gardener";
 import { sha256 } from "../src/util";
+import { tendOnce } from "../src/start";
+import { jobChecks, record } from "../src/probe";
+import { openItems } from "../src/textline/items";
 
 // 2026-10-08 is a Thursday. 07:30Z is 03:30 in Toronto (in the nightly window); 16:00Z is noon.
 const IN = "2026-10-08T07:30:00Z", OUT = "2026-10-08T16:00:00Z";
@@ -88,7 +91,7 @@ test("upkeep_run, sleep_run, changes_since and last_run are the gardener's alone
   expect((await mcp(root, town, "tools/list")).result.tools.map((t: any) => t.name)).not.toContain("upkeep_run");
   expect((await mcp(root, town, "tools/call", { name: "upkeep_run", arguments: {} })).result.isError).toBe(true);
 
-  expect((await call(root, g, "GET", "/v1/gardener/last")).json).toEqual({ at: null, run: null, proposals: [], decided: [], waiting: 0 });
+  expect((await call(root, g, "GET", "/v1/gardener/last")).json).toEqual({ at: null, run: null, proposals: [], decided: [], waiting: 0, conflicts_to_weigh: 0, wiki_missing: ["people/jane-roy", "people/paul-advisor", "projects/course-a", "money/main-bank"], wiki_missing_total: 4 });
   expect((await mcp(root, g, "tools/list")).result.tools.map((t: any) => t.name)).toEqual(expect.arrayContaining(["upkeep_run", "sleep_run", "changes_since", "last_run"]));
   const before = await call(root, town, "POST", "/v1/remember", { id: "people/jane-roy", attribute: "role", value: "Dean", ...SRC });
   expect(before.json.outcome).toBe("committed");
@@ -188,7 +191,8 @@ test("night: managed skips the hub's own upkeep and forgetting while the gardene
 
 // ---------- the Anthropic side, against a fake `ant` on PATH ----------
 
-function fakeAnt(opts: { failCreate?: boolean } = {}) {
+function fakeAnt(opts: { failCreate?: boolean; listed?: string; failUpdate?: boolean } = {}) {
+  const listed = opts.listed ?? '{"id":"vcrd_old","auth":{"type":"static_bearer","mcp_server_url":"https://brain.example/mcp"}}';
   const dir = mkdtempSync(join(tmpdir(), "pb-ant-"));
   const log = join(dir, "argv.log"), stdin = join(dir, "stdin.log");
   writeFileSync(join(dir, "ant"), `#!/bin/sh
@@ -200,13 +204,15 @@ case "$*" in
   *"retrieve --session-id sesn_busy"*) echo '{"id":"sesn_busy","status":"running","updated_at":"2026-10-08T01:00:00Z"}' ;;
   *"retrieve --session-id sesn_young"*) echo '{"id":"sesn_young","status":"terminated","updated_at":"2026-10-08T07:10:00Z"}' ;;
   *"beta:sessions delete"*) echo deleted ;;
-  *"credentials list"*) echo '{"id":"vcrd_old","auth":{"type":"static_bearer","mcp_server_url":"https://brain.example/mcp"}}' ;;
-  *"credentials create"*) cat > "${stdin}"; ${opts.failCreate ? 'echo "vault says no" >&2; exit 1' : 'echo vcrd_new'} ;;
+  *"credentials list"*) ${listed ? `echo '${listed}'` : "true"} ;;
+  *"credentials create"*) cat > "${stdin}"; ${opts.failCreate ? 'echo "vault says no" >&2; exit 1' : listed ? 'echo "POST /v1/vaults/vlt_1/credentials: 409 Conflict" >&2; exit 1' : 'echo vcrd_new'} ;;
+  *"credentials update"*) cat > "${stdin}"; if [ -e "${dir}/fail-update" ]; then echo "vault says no" >&2; exit 1; fi; echo vcrd_old ;;
   *"credentials archive"*) echo archived ;;
   *) echo "unknown $*" >&2; exit 2 ;;
 esac
 `);
   chmodSync(join(dir, "ant"), 0o755);
+  if (opts.failUpdate) writeFileSync(join(dir, "fail-update"), "");
   const lock = join(dir, "claude-lock.json");
   writeFileSync(lock, JSON.stringify({ resources: { "./agents/gardener/vault.yaml": { id: "vlt_1" }, "./agents/gardener/deployment-nightly.yaml": { id: "dep_n" }, "./agents/gardener/agent.md": { id: "agent_1" } } }));
   return { dir, log, stdin, lock };
@@ -242,31 +248,99 @@ test("cleanup with ant missing or signed out is a Needs-you item, not silence", 
   expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("gardener_ant");
 });
 
-test("rotate: the new token goes to the vault on stdin only; the old credential is archived and older tokens revoked", () => {
+// Mac 2026-10-25: a vault holds one active credential per MCP server URL, so creating a second one
+// for the brain's door is a 409 every week. The hub's credential is updated in place (G413).
+test("rotate: the new token goes on stdin into the vault's existing credential for the door; older tokens revoked", () => {
   const root = makeBrain();
   const f = fakeAnt();
   withAnt(root, f);
   issueToken(root, "gardener");
   issueToken(root, "gardener");
-  const r = rotate(root);
-  expect(r).toMatchObject({ ok: true, message: "gardener rotate: new credential vcrd_new; 1 old credential(s) archived, 2 old token(s) revoked" });
+  const r = rotate(root, { scheduled: true });
+  expect(r).toMatchObject({ ok: true, message: "gardener rotate: credential vcrd_old has the new token; 2 old token(s) revoked" });
+  const sent = JSON.parse(readFileSync(f.stdin, "utf8"));
+  expect(sent.auth).toMatchObject({ type: "static_bearer" });
+  const token = sent.auth.token as string;
+  expect(token).toMatch(/^pb_gardener_/);
+  expect(tokenInfo(root).gardener.map((t) => t.hash)).toEqual([sha256(token)]);
+  const argv = readFileSync(f.log, "utf8");
+  expect(argv).toContain("beta:vaults:credentials update --vault-id vlt_1 --credential-id vcrd_old");
+  expect(argv).not.toContain("credentials create");
+  expect(argv).not.toContain("archive");
+  expect(argv).not.toContain(token);
+  for (const file of readdirSync(join(root, "log"))) expect(readFileSync(join(root, "log", file), "utf8")).not.toContain(token);
+  expect(r.message).not.toContain(token);
+});
+
+test("rotate: the vault's credential matches the door's URL as the vault does (host case, trailing slash)", () => {
+  const root = makeBrain();
+  const f = fakeAnt({ listed: '{"id":"vcrd_old","auth":{"type":"static_bearer","mcp_server_url":"https://Brain.example:443/mcp/"}}' });
+  withAnt(root, f);
+  expect(rotate(root, { scheduled: true })).toMatchObject({ ok: true });
+  expect(readFileSync(f.log, "utf8")).toContain("credentials update --vault-id vlt_1 --credential-id vcrd_old");
+});
+
+test("rotate: if the vault won't update the credential, the new token is revoked and the old one keeps working", () => {
+  const root = makeBrain();
+  const f = fakeAnt({ failUpdate: true });
+  withAnt(root, f);
+  const old = issueToken(root, "gardener");
+  const r = rotate(root, { scheduled: true });
+  expect(r.ok).toBe(false);
+  expect(r.message).toContain("the old one still works");
+  expect(tokenInfo(root).gardener.map((t) => t.hash)).toEqual([sha256(old)]);
+});
+
+test("a rotation that failed closes its probe check once the next one goes through", () => {
+  const root = makeBrain();
+  const f = fakeAnt({ failUpdate: true });
+  withAnt(root, f);
+  tendOnce(root, () => {}, new Date(2026, 9, 18, 13, 30)); // Sunday 13:30
+  expect(jobChecks(root).find((c) => c.name === "gardener_rotate")).toMatchObject({ ok: false });
+  rmSync(join(f.dir, "fail-update")); // the vault takes it now
+  tendOnce(root, () => {}, new Date(2026, 9, 19, 13, 30)); // Monday 13:30: the daily retry
+  expect(jobChecks(root).find((c) => c.name === "gardener_rotate")).toMatchObject({ ok: true });
+});
+
+// The owner's home page, 2026-10-25: "5 problems", all from one failing rotation retried daily:
+// gardener_ant three times (one of them "pinned ant 1.40.0") and token_minted for keys revoked at once.
+test("a failing rotation is one owner alert however often it retries; the pin and revoked keys are not problems; it closes once rotation passes", () => {
+  const root = makeBrain();
+  const f = fakeAnt({ failUpdate: true });
+  withAnt(root, f);
+  for (const d of [18, 19, 20]) tendOnce(root, () => {}, new Date(2026, 9, d, 13, 30)); // Sunday, then the daily retries
+  const alerts = () => openItems(root, new Date()).filter((i) => i.kind === "alert");
+  expect(alerts().map((i) => i.check)).toEqual(["gardener_ant"]);
+  rmSync(join(f.dir, "fail-update"));
+  tendOnce(root, () => {}, new Date(2026, 9, 21, 13, 30));
+  record(root, jobChecks(root));
+  expect(alerts().map((i) => i.check)).toEqual(["token_minted"]); // the one key the vault took
+});
+
+test("rotate: with no credential for the door yet, it creates one", () => {
+  const root = makeBrain();
+  const f = fakeAnt({ listed: "" });
+  withAnt(root, f);
+  issueToken(root, "gardener");
+  issueToken(root, "gardener");
+  const r = rotate(root, { scheduled: true });
+  expect(r).toMatchObject({ ok: true, message: "gardener rotate: new credential vcrd_new; 2 old token(s) revoked" });
   const sent = JSON.parse(readFileSync(f.stdin, "utf8"));
   expect(sent.auth).toMatchObject({ type: "static_bearer", mcp_server_url: "https://brain.example/mcp" });
   const token = sent.auth.token as string;
   expect(token).toMatch(/^pb_gardener_/);
   expect(tokenInfo(root).gardener.map((t) => t.hash)).toEqual([sha256(token)]);
   expect(readFileSync(f.log, "utf8")).not.toContain(token);
-  expect(readFileSync(f.log, "utf8")).toContain("beta:vaults:credentials archive --vault-id vlt_1 --credential-id vcrd_old");
   for (const file of readdirSync(join(root, "log"))) expect(readFileSync(join(root, "log", file), "utf8")).not.toContain(token);
   expect(r.message).not.toContain(token);
 });
 
 test("rotate: if the vault refuses the new token, it is revoked and the old one keeps working", async () => {
   const root = makeBrain();
-  const f = fakeAnt({ failCreate: true });
+  const f = fakeAnt({ failCreate: true, listed: "" });
   withAnt(root, f);
   const old = issueToken(root, "gardener");
-  const r = rotate(root);
+  const r = rotate(root, { scheduled: true });
   expect(r.ok).toBe(false);
   expect(r.message).toContain("the old one still works");
   expect(tokenInfo(root).gardener.map((t) => t.hash)).toEqual([sha256(old)]);

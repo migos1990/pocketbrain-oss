@@ -9,7 +9,7 @@ import { write } from "../src/write";
 import { relayOnce, fileTransport } from "../src/relay";
 import { upkeep } from "../src/upkeep";
 import { loadBrain, type FactRecord } from "../src/brain";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { git } from "../src/git";
 import { saveNote } from "../src/brain";
 import * as memsync from "../src/memsync";
@@ -31,12 +31,12 @@ function setup() {
     cookie = r.headers.get("set-cookie")!.split(";")[0];
     return r;
   };
-  const csrf = async () => (await get("/")).text.match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = async () => (await get("/overview")).text.match(/name="csrf" value="([^"]+)"/)![1];
   const act = async (action: string, fields: Record<string, string>, opts: { csrf?: string; origin?: string } = {}) => {
     const body = new URLSearchParams({ csrf: opts.csrf ?? await csrf(), ...fields });
     const r = await d.handle(new Request(`http://${H}/action/${action}`, { method: "POST", body, headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: opts.origin ?? `http://${H}` } }));
     const loc = r.headers.get("location") ?? "";
-    return { status: r.status, ok: decodeURIComponent(loc.match(/ok=([^&]*)/)?.[1] ?? ""), err: decodeURIComponent(loc.match(/err=([^&]*)/)?.[1] ?? "") };
+    return { status: r.status, ...flashOf(loc) };
   };
   const agent = async (who: keyof typeof tok, method: string, path: string, body?: unknown) => {
     const r = await handle(root, new Request(`http://pb${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { authorization: `Bearer ${tok[who]}` } }));
@@ -49,13 +49,13 @@ function setup() {
 
 test("only a signed-in owner on localhost gets in", async () => {
   const { get, login, d } = setup();
-  expect((await get("/")).status).toBe(401);
+  expect((await get("/overview")).status).toBe(401);
   expect((await d.handle(new Request(`http://${H}/login?key=wrong`, { headers: { host: H } }))).status).toBe(403);
   const r = await login();
   expect(r.status).toBe(303);
   expect(r.headers.get("set-cookie")).toContain("HttpOnly");
   expect(r.headers.get("set-cookie")).toContain("SameSite=Strict");
-  expect((await get("/")).status).toBe(200);
+  expect((await get("/overview")).status).toBe(200);
   // DNS rebinding: a page on evil.example resolving to 127.0.0.1 sends its own Host.
   expect((await get("/", { host: "evil.example:8788" })).status).toBe(421);
 });
@@ -109,8 +109,9 @@ test("a pending write shows on the overview, escaped, and Approve applies it", a
   await login();
   const r = write(root, { agent: "helper", id: "projects/course-a", attribute: "next_step", value: "<script>alert(1)</script> grade", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" });
   expect(r.outcome).toBe("inbox");
-  const page = (await get("/")).text;
-  expect(page).toContain("change to approve");
+  const page = (await get("/overview")).text;
+  expect(page).toContain("Update ");
+  expect(page).toMatch(/href="\/settle\/p-[^"]+">Settle it</);
   expect(page).not.toContain("<script>alert(1)</script>");
   expect(page).toContain("&lt;script&gt;");
   const file = r.file!.split("/").pop()!;
@@ -128,7 +129,7 @@ test("held relay mail can be released or dropped; mail from a paused agent is he
   const msg = (id: string, from: string, to: string, text: string) => ({ id, from, to: [to], subject: "s", text });
   writeFileSync(join(root, "relay/incoming/a.json"), JSON.stringify(msg("a", "helper@brain.example", "relay+planner@brain.example", "What's Robin's bank?")));
   relayOnce(root, fileTransport(root));
-  expect((await get("/")).text).toContain("held message");
+  expect((await get("/overview")).text).toContain("held message");
   expect((await act("mail-release", { id: "a" })).ok).toBe("a: released-by-owner");
   expect(existsSync(join(root, "relay/outgoing/planner@brain.example/a.json"))).toBe(true);
 
@@ -149,12 +150,21 @@ test("Robin settles a dispute from the dashboard with one click", async () => {
   const r = write(root, { ...w, value: "Version B", sources: ["gmail:f000000000000004"] });
   expect(r.outcome).toBe("disputed");
   const id = readdirSync(join(root, "disputes")).find((f) => f.startsWith("c-"))!.replace(/\.md$/, "");
-  expect((await get("/")).text).toContain(`<span class="kind" title="${id}">conflict</span>`);
+  // The conflict is asked on the home page, settled on its own screen (the deck is gone).
+  const home = (await get("/home")).text;
+  expect(home).toContain(`/settle/${id}`);
+  const settle = (await get(`/settle/${id}`)).text;
+  expect(settle).toMatch(/Version B/);
+  expect(settle).toMatch(/Version A/);
+  // Where each side came from in words, the raw ref on hover only (new-user run, 2026-10-24).
+  expect(settle.replace(/title="[^"]*"/g, "")).not.toContain("gmail:f000000000000004");
   const a = await act("dispute-decide", { id, choice: "2" });
   expect(a.ok).toContain("settled");
   const f = loadBrain(root).find((n) => n.fm.id === "projects/course-a")!.fm.facts!.next_step as FactRecord;
   expect(f.value).toBe("Version B");
-  expect(f.verification).toBe("confirmed-by-owner");
+  // A tap on a side files at that side's rank (audit v4); only a typed value is the owner's word.
+  expect(f.verification).not.toBe("confirmed-by-owner");
+  expect(String(f.sources[0])).toMatch(/^approved:/);
   expect((await act("dispute-decide", { id, choice: "1" })).err).toContain("resolved");
 });
 
@@ -165,7 +175,7 @@ test("agent page shows the slice, its reads, and the exact view", async () => {
   const page = (await get("/agent/helper")).text;
   expect(page).toContain("helper would see");
   expect(page).toContain("search");
-  expect(page.split("Notes in the slice")[1].split("Most read")[0]).not.toContain("money/");
+  expect(page.split("Notes it can see")[1].split("Most read")[0]).not.toContain("money/");
   const view = (await get("/agent/helper/view")).text;
   const ctx = (await agent("helper", "GET", "/v1/context")).text;
   expect(view).toBe(ctx);
@@ -239,14 +249,14 @@ test("memory sync: drift in an assistant's own memory is a card in Needs you; Ap
   const q = (await agent("helper", "GET", "/v1/memory-check")).json.questions[0];
   await agent("helper", "POST", "/v1/memory-check", { answers: [{ id: q.id, answer: "Dean <i>of</i> arts" }] });
   await login();
-  const home = (await get("/")).text;
+  const home = (await get("/overview")).text;
   expect(home).toContain("memory fix");
   expect(home).toContain("Dean &lt;i&gt;of&lt;/i&gt; arts");
   expect(home).toContain(now);
   const [c] = ms.state(root).corrections;
   expect((await act("memsync-approve", { id: c.id })).ok).toContain("approved");
   expect(ms.state(root).corrections[0].state).toBe("approved");
-  expect((await get("/")).text).not.toContain("memory fix");
+  expect((await get("/overview")).text).not.toContain("memory fix");
   expect((await act("memsync-decline", { id: c.id })).ok).toContain("approved"); // already decided: says so, changes nothing
   delete process.env.PB_CONFIG_DIR;
 });

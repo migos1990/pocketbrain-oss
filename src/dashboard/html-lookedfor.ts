@@ -4,18 +4,20 @@
 // and the notes it asked for and didn't get, telling apart a note hidden from it (the agent
 // got "no note", same as for a missing one) from one that doesn't exist. Owner only.
 import { join } from "node:path";
-import { readEntries, verifyChain, type ReadEntry } from "../readlog";
+import { readEntries, verifyReadLog, type ReadEntry } from "../readlog";
 import type { CarveResult } from "../carve";
-import type { State } from "./data";
+import { keptFor, type State } from "./data";
 import { esc } from "./html";
 import { noteName, term } from "./labels";
 import { readsByDay } from "../whoread";
+import { ownerLocal } from "../clock";
 
-const when = (iso: string) => esc(String(iso).replace("T", " ").slice(0, 16));
+const when = (iso: string) => esc(ownerLocal(String(iso)).replace("T", " ").slice(0, 16));
 
-export function lookedFor(s: State, agent: string, res: CarveResult, entries: ReadEntry[] = readEntries(s.root)): string {
+// The read log is parsed once while it and the day stay the same (it changes the key when it grows).
+export function lookedFor(s: State, agent: string, res: CarveResult, entries: ReadEntry[] = keptFor(s.root, "read-entries", s.dayKey, () => readEntries(s.root))): string {
   const mine = entries.filter((e) => e.agent === agent);
-  const chain = verifyChain(join(s.root, "log", "reads.jsonl"));
+  const chain = keptFor(s.root, "read-chain", s.dayKey, () => verifyReadLog(s.root));
   const searches = new Map<string, { q: string; n: number; last: ReadEntry; op: string }>();
   for (const e of mine) {
     if (!e.q) continue;
@@ -57,8 +59,8 @@ ${whatItRead(s, agent, entries)}`;
 
 // Day by day, the last 7 days: the notes it was handed (src/whoread.ts), and an "unusual" line
 // when most of a day sat outside the areas it read in the 28 days before.
-export function whatItRead(s: Pick<State, "root" | "notes">, agent: string, entries?: ReadEntry[]): string {
-  const days = readsByDay(s.root, agent, { days: 7, entries });
+export function whatItRead(s: Pick<State, "root" | "notes"> & Partial<Pick<State, "rules">>, agent: string, entries?: ReadEntry[]): string {
+  const days = readsByDay(s.root, agent, { days: 7, entries, notes: s.notes, rules: s.rules });
   const rows = days.map((d) => {
     const flag = d.unusual ? `<div class="flash err">Unusual: ${d.unusual.outside.length} of ${d.unusual.of} notes outside its usual areas (${esc(d.unusual.areas.join(", "))}).</div>` : "";
     const notes = d.notes.slice(0, 12).map((n) => `${noteName(s.notes, n.id)}${n.n > 1 ? ` <span class="sub">x${n.n}</span>` : ""}`).join(", ");

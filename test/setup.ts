@@ -5,7 +5,7 @@
 // Every run also gets its own config folder, so a brain remembered by a developer's own
 // `pocketbrain init` is never picked up by a test that runs without --brain.
 import { afterAll } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useFreeDisk } from "../src/textline/items";
@@ -21,6 +21,25 @@ if (!process.env.PB_TEST_RUN_DIR) {
   process.env.TMPDIR = run;
   process.env.PB_CONFIG_DIR = join(run, "config");
   mkdirSync(process.env.PB_CONFIG_DIR);
+  // Semantic search (src/semantic.ts) never reads a developer's model or writes their ~/.cache:
+  // off unless a test injects an embedder, and its vectors stay in the run folder.
+  process.env.PB_MODEL_DIR = join(run, "models");
+  process.env.PB_VECTOR_DIR = join(run, "vectors");
+  // Coming calendar events (src/upcoming.ts) likewise.
+  process.env.PB_UPCOMING_DIR = join(run, "upcoming");
+  // The machine's own Claude Code is never changed (G393): HOME is the run's, and a fake `claude`
+  // that only records its arguments comes first on PATH. src/cli.ts refuses either outside the run.
+  process.env.PB_REAL_HOME = process.env.HOME ?? "";
+  // Playwright looks for its browsers under HOME: keep them found by a child test run (the CI runner
+  // installs them in ~/.cache, so test/tmp-guard.test.ts's child stopped for a missing chromium, G534).
+  const browsers = process.platform === "darwin" ? join(process.env.PB_REAL_HOME, "Library", "Caches", "ms-playwright") : join(process.env.XDG_CACHE_HOME ?? join(process.env.PB_REAL_HOME, ".cache"), "ms-playwright");
+  if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync(browsers)) process.env.PLAYWRIGHT_BROWSERS_PATH = browsers;
+  process.env.HOME = join(run, "home");
+  mkdirSync(process.env.HOME);
+  const bin = join(run, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> "${join(run, "claude-calls.log")}"\n`, { mode: 0o755 });
+  process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
   isolateGit(run);
   const clean = () => rmSync(run, { recursive: true, force: true });
   // Removing a whole run of temp brains can take a while on a slow disk.

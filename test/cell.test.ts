@@ -5,7 +5,7 @@ import { join, relative } from "node:path";
 import { makeBrain } from "./fixture";
 import { loadBrain, saveNote, type Note } from "../src/brain";
 import * as core from "../src/core";
-import { changeStats } from "../src/core";
+import { changeStats, forgetChangeFeed } from "../src/core";
 import { useCells, buildCell, buildCells, cellDir } from "../src/cell";
 import { write } from "../src/write";
 import { saveNoteText } from "../src/dashboard/edit";
@@ -81,7 +81,7 @@ test("a cell updated in place after writes is byte for byte a fresh build", () =
     { agent: "steward", id: "projects/course-b", attribute: "next_step", value: "Ask Jane about CAD 98765", as_of: "2026-10-08", sources: ["gmail:f000000000000009"], verification: "verified-by-source" },
   ];
   for (const w of steps) {
-    expect(["committed", "inbox"]).toContain(write(root, w).outcome);
+    expect(["committed", "inbox", "disputed"]).toContain(write(root, w).outcome);
     const updated: Record<string, Record<string, string>> = {};
     for (const agent of AGENTS) { core.search(root, agent, "course"); updated[agent] = snap(agent); }
     buildCells(root); // from nothing
@@ -233,10 +233,17 @@ const git = (root: string, args: string[], date?: string, author = "steward") =>
   Bun.spawnSync(["git", ...args], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: author, GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: author, GIT_COMMITTER_EMAIL: "a@x", ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) } });
 function hiddenWrites(hiddenOn: string[]): string {
   const root = makeBrain();
+  // Pinned dates make these commits' ids the same in every brain built in the same second, and the
+  // change feed keeps its verdicts by commit id across calls (src/core.ts), so another test's brain
+  // could answer for this one. A file of its own gives each brain its own commit ids.
+  writeFileSync(join(root, "salt.txt"), crypto.randomUUID());
+  Bun.spawnSync(["git", "add", "salt.txt"], { cwd: root });
   const f = join(root, "projects/course-a.md");
   const text = readFileSync(f, "utf8");
   writeFileSync(f, text.replace("Grade the midterm", "Grade the final").replace("\nfacts:\n", `\nfacts:\n  review_plan: { value: Reorder the quiz, as_of: 2026-09-01, share_with: [steward], sources: ["gmail:f000000000000003"], verification: verified-by-source, by: steward, recorded: 2026-09-01 }\n`));
-  git(root, ["commit", "-qam", "seed\n\nprojects/course-a#next_step"], "2026-10-02T10:00:00Z");
+  // The change feed keeps verdicts by commit across brains; a nonce keeps this brain's commits its own,
+  // or one made in the same second as another reuses its verdicts and never reads its versions.
+  git(root, ["commit", "-qam", `seed ${crypto.randomUUID()}\n\nprojects/course-a#next_step`], "2026-10-02T10:00:00Z");
   let cur = readFileSync(f, "utf8");
   for (const d of hiddenOn) {
     cur = cur.replace(/updated: \S+/, `updated: ${d}`).replace(/review_plan: \{ value: [^,]*, as_of: \S+,/, `review_plan: { value: Reorder the quiz, as_of: ${d},`);
@@ -318,6 +325,10 @@ test("an owner text edit of a hidden fact doesn't date the note; retiring a visi
 });
 
 test("a change-feed read that fails or is cut short isn't remembered as 'nothing changed'", () => {
+  // An earlier brain with the same commits (fixed dates make the same object ids) leaves verdicts
+  // in the process-wide cache; this one starts from an empty cache so the cut-short read happens.
+  core.whatsNew(hiddenWrites(["2026-10-07"]), "helper", "2026-10-01T00:00:00Z");
+  forgetChangeFeed();
   const root = hiddenWrites(["2026-10-07"]);
   const ask = () => core.whatsNew(root, "helper", "2026-10-01T00:00:00Z").changes.find((c) => c.id === "projects/course-a");
   try {
@@ -327,4 +338,17 @@ test("a change-feed read that fails or is cut short isn't remembered as 'nothing
     expect(ask()).toBeUndefined();
   } finally { changeStats.truncate = undefined; }
   expect(ask()?.at).toStartWith("2026-10-02"); // read again, and judged by its facts
+});
+test("the owner's RULES.md reaches an agent scrubbed like a note: no other agent named, no carved value, no hidden link (G30)", () => {
+  const root = makeBrain();
+  writeFileSync(join(root, "rules/RULES.md"), "# Rules\n\n## rule:money · Money\nSteward handles the bank questions; Robin banks with Maple Trust Bank, see [[money/main-bank]].\nDesk Pal drafts replies.\nPlanner keeps Course A moving.\n");
+  const p = join(root, "rules/policy.yaml");
+  writeFileSync(p, readFileSync(p, "utf8").replace("helper: { tier: trial,", "helper: { label: Desk Pal, tier: trial,"));
+  const [hub, cell] = both(() => core.contextPack(root, "planner"));
+  buildCells(root);
+  const file = readFileSync(join(cellDir(root, "planner"), "rules", "RULES.md"), "utf8");
+  for (const text of [hub, cell, file]) {
+    expect(text).not.toMatch(/steward|desk pal|Maple Trust Bank|money\/main-bank/i);
+    expect(text).toContain("Course A moving");
+  }
 });

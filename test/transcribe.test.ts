@@ -15,9 +15,8 @@ import { useCaptureModel, captureModel, readCapture } from "../src/capture";
 import { dropOnce } from "../src/intake";
 import { cleanTranscript, transcribeConfig, transcriberFor, useTranscribeFetch } from "../src/transcribe";
 
-const original = captureModel;
 beforeAll(() => useCaptureModel(() => makeModel({ provider: "fake", model: "fake-1" }, { fake: () => JSON.stringify({ facts: [] }) })));
-afterAll(() => useCaptureModel((root) => original(root)));
+afterAll(() => useCaptureModel());
 afterEach(() => { useTranscribeFetch(undefined); delete process.env.PB_TEST_WHISPER_KEY; });
 
 const MARKER = "AUDIO-BYTES-7f3c";

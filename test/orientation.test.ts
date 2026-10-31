@@ -52,7 +52,7 @@ test("MCP initialize carries the five-line contract; the orientation tool holds 
   const names = (await mcp("helper", "tools/list")).result.tools.map((t: any) => t.name);
   expect(names[0]).toBe("orientation");
   expect(names).toContain("retire");
-  expect(tool.length).toBeLessThan(6000); // a hosted assistant reads it in full
+  expect(tool.length).toBeLessThan(6400); // a hosted assistant reads it in full (6000, plus the today pack)
 });
 
 test("the orientation follows policy.yaml: tier, owned areas, resolver, status", async () => {

@@ -11,10 +11,13 @@
 //   log/owner-tasks.jsonl {at, ev, id, what?, via?}    pocketbrain task: what waits on the owner's own hands
 // Everything else comes from log/reads.jsonl, log/writes.jsonl, log/alerts.jsonl,
 // textline/log.jsonl, inbox/reflect/*.md and git.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { uptime } from "node:os";
-import { today } from "./brain";
+import { today, loadBrain, isList, isDisputed, type FactRecord } from "./brain";
+import { readCounts, independentSources } from "./pull";
+import { blindSpotLines } from "./blindspots";
+import { costByJob, money } from "./usage";
 import { loadRules, gardeners } from "./rules";
 import YAML from "yaml";
 import { git } from "./git";
@@ -24,6 +27,9 @@ import { failingNow } from "./probe";
 import { findSecret } from "./checks";
 import { keysDir } from "./secrets";
 import { fillQuality, fillQualityLines } from "./fill";
+import { qualityLines } from "./writequality";
+import { brainHealth, healthLines, withTrend } from "./health";
+import { refusalStats, refusalLines } from "./calls";
 
 const jsonl = (f: string) => readJsonl(f);
 const day = (at: unknown) => String(at ?? "").slice(0, 10);
@@ -72,8 +78,9 @@ export function recordRepair(root: string, cmd: string) {
 
 // Hand restarts. `pocketbrain start` logs each start, and each stop by a signal (launchd's
 // kickstart and a Ctrl-C both send one). A start right after such a stop, with no reboot in
-// between and no restart by the updater (scripts/deploy.ts leaves deploy.restart next to
-// deploy.json just before it restarts the hub), was a restart by hand. A start with no stop
+// between, no restart by the updater (scripts/deploy.ts leaves deploy.restart next to
+// deploy.json just before it restarts the hub) and no new code (a different build, or the app
+// checkout's HEAD moved since the last start: a pull, then whoever kickstarts), was a restart by hand. A start with no stop
 // before it followed a crash, which launchd recovered from alone and the probe reports. The
 // menu's Restart hub logs its own fix, so the start after it isn't counted again.
 const runsLog = (root: string) => join(root, "log", "hub-runs.jsonl");
@@ -84,21 +91,62 @@ export function noteStop(root: string, signal: string, now = new Date()) {
 function plannedRestart(): Date | undefined {
   try { const d = new Date(readFileSync(join(dirname(keysDir()), "deploy.restart"), "utf8").trim()); return Number.isFinite(d.getTime()) ? d : undefined; } catch { return undefined; }
 }
-export function noteStart(root: string, o: { now?: Date; bootAt?: Date; planned?: Date; build?: string } = {}): string | undefined {
+// The app's version and commit, and when its checkout's HEAD last moved (the mtime of the HEAD
+// reflog, which every pull, checkout and commit appends to), read from files: launchd's PATH may
+// not reach git, and a build that can't name its commit must not look like the one before.
+export function appBuild(app: string): { build: string; movedAt?: Date } {
+  let version = "unknown";
+  try { version = String(JSON.parse(readFileSync(join(app, "package.json"), "utf8")).version ?? "unknown"); } catch {}
+  let gitDir = join(app, ".git");
+  try { if (statSync(gitDir).isFile()) gitDir = resolve(app, readFileSync(gitDir, "utf8").replace(/^gitdir:\s*/, "").trim()); } catch {}
+  let sha = "";
+  try { sha = Bun.spawnSync(["git", "-C", app, "rev-parse", "--short", "HEAD"]).stdout.toString().trim(); } catch {}
+  let movedAt: Date | undefined;
+  try { movedAt = statSync(join(gitDir, "logs", "HEAD")).mtime; } catch {}
+  return { build: `${version}@${sha || "unknown"}`, ...(movedAt ? { movedAt } : {}) };
+}
+
+// The hub's log keeps every start's output, so the line names its own time: an old one found there
+// later must not read as news.
+export function handFixNotice(what: string, at = new Date()): string {
+  return `noted a hand fix (${at.toISOString().slice(0, 16).replace("T", " ")} UTC): ${what}`;
+}
+
+// Why the hub started (the probe's restart-loop check counts only "crash" and "hand"): "planned"
+// is an update (new build or HEAD moved), a reboot, the updater's or watchdog's deploy.restart mark,
+// or the menu's Restart hub; "crash" is a start with no stop before it; "first" is the first start.
+export type StartKind = "first" | "planned" | "hand" | "crash";
+export interface StartFacts { now?: Date; bootAt?: Date; planned?: Date; build?: string; codeMovedAt?: Date }
+export function startKind(root: string, o: StartFacts = {}): StartKind {
   const now = o.now ?? new Date();
   const runs = jsonl(runsLog(root));
   const last = runs.at(-1);
-  const before = runs.filter((e) => e.ev === "start").at(-1)?.build;
-  appendJsonl(runsLog(root), { at: now.toISOString(), ev: "start", ...(o.build ? { build: o.build } : {}) });
-  if (last?.ev !== "stop") return undefined;
-  // New code since the last start: an update, whoever ran the kickstart after pulling it.
-  if (o.build && before && before !== o.build) return undefined;
+  const prev = runs.filter((e) => e.ev === "start").at(-1);
+  if (!last) return "first";
+  const planned = (o.planned ?? plannedRestart())?.getTime();
+  const marked = (since: number) => planned !== undefined && planned >= since - RESTART_WINDOW_MS && planned <= now.getTime();
+  // A watchdog kickstart kills the hub without its stop line, so its mark is what says it was meant.
+  if (last.ev !== "stop") return marked(Date.parse(String(last.at))) ? "planned" : "crash";
+  // New code since the last start: an update, whoever ran the kickstart after pulling it. Two
+  // builds that couldn't name their commit prove nothing; the checkout's HEAD moving does.
+  const before = prev?.build as string | undefined;
+  const known = (b?: string) => !!b && !b.endsWith("@unknown");
+  if (known(o.build) && known(before) && before !== o.build) return "planned";
+  const prevAt = prev ? Date.parse(String(prev.at)) : NaN;
+  if (o.codeMovedAt && Number.isFinite(prevAt) && o.codeMovedAt.getTime() > prevAt) return "planned";
   const stopped = Date.parse(String(last.at));
   const boot = (o.bootAt ?? new Date(Date.now() - uptime() * 1000)).getTime();
-  if (boot > stopped) return undefined;
-  const planned = (o.planned ?? plannedRestart())?.getTime();
-  if (planned !== undefined && planned >= stopped - RESTART_WINDOW_MS && planned <= now.getTime()) return undefined;
-  if (jsonl(join(root, "log", "fixes.jsonl")).some((f) => f.via === "auto:menubar" && Date.parse(String(f.at)) >= stopped - RESTART_WINDOW_MS)) return undefined;
+  if (boot > stopped) return "planned";
+  if (marked(stopped)) return "planned";
+  if (jsonl(join(root, "log", "fixes.jsonl")).some((f) => f.via === "auto:menubar" && Date.parse(String(f.at)) >= stopped - RESTART_WINDOW_MS)) return "planned";
+  return "hand";
+}
+
+export function noteStart(root: string, o: StartFacts = {}): string | undefined {
+  const now = o.now ?? new Date();
+  const kind = startKind(root, { ...o, now });
+  appendJsonl(runsLog(root), { at: now.toISOString(), ev: "start", ...(o.build ? { build: o.build } : {}) });
+  if (kind !== "hand") return undefined;
   const what = "the hub was restarted by hand";
   append(root, "fixes.jsonl", { at: now.toISOString(), what, via: "auto:restart" });
   return what;
@@ -353,7 +401,14 @@ export function week(root: string, end = today(), baseline?: number): { file: st
     row("Hub failures", (m) => m.hubDown), "",
     bar(root, end).text, "",
     ...gardenerLine(root, ms),
+    ...corroborationLine(root, end),
+    ...blindSpotLines(root, end),
     ...fillQualityLines(fillQuality(root, 7, end)),
+    ...qualityLines(root),
+    ...contextSizeLines(root, dates[0], end),
+    ...healthLines(withTrend(root, brainHealth(root, undefined, end), end)),
+    ...costLines(root, end),
+    ...refusalLines(refusalStats(root, dates)),
     "## Verdicts", "",
     "| Measure | Value | Verdict |", "|---|---|---|",
     ...verdicts.map((x) => `| ${x.measure} | ${x.value} | ${x.verdict === "stop" ? "**stop**" : x.verdict} |`), "",
@@ -365,8 +420,56 @@ export function week(root: string, end = today(), baseline?: number): { file: st
   return { file, text, verdicts };
 }
 
+// What each agent was handed per call this week, in estimated tokens (backlog 290, src/context.ts):
+// the median and largest per call kind, and how many answers the context budget cut.
+function contextSizeLines(root: string, from: string, to: string): string[] {
+  const rows = jsonl(join(root, "log", "reads.jsonl")).filter((r) => typeof r.tokens === "number" && String(r.at).slice(0, 10) >= from && String(r.at).slice(0, 10) <= to);
+  if (!rows.length) return [];
+  const by = new Map<string, number[]>(), cut = new Map<string, number>(), over = new Map<string, number>();
+  for (const r of rows) {
+    const k = `${r.agent}\t${r.op}`;
+    by.set(k, [...(by.get(k) ?? []), Number(r.tokens)]);
+    if (r.cut) cut.set(k, (cut.get(k) ?? 0) + 1);
+    if (r.over) over.set(k, (over.get(k) ?? 0) + 1);
+  }
+  const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor((s.length - 1) / 2)]; };
+  return ["## Context sizes", "", "Estimated tokens handed to each agent per call (characters / 4); cut = answers the context budget shortened (rules/policy.yaml `context_budget`).", "",
+    ...[...by.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, xs]) => {
+      const [agent, op] = k.split("\t");
+      return `- ${agent} ${op}: ${xs.length} call${xs.length > 1 ? "s" : ""}, median ${median(xs)}, largest ${Math.max(...xs)}${cut.get(k) ? `, cut ${cut.get(k)}` : ""}${over.get(k) ? `, over budget ${over.get(k)} (not cut)` : ""}`;
+    }), ""];
+}
+
+// What each model job cost this week and the week before (log/usage.jsonl, backlog 272). A job
+// whose cost doubled is flagged: the place to look before choosing a cheaper model.
+function costLines(root: string, end: string): string[] {
+  const jobs = costByJob(root, end);
+  if (!jobs.length) return [];
+  return ["## Model cost per job", "", "| Job | This week | Week before | |", "|---|---|---|---|",
+    ...jobs.map((j) => `| ${j.step} | ${money(j.week)} | ${money(j.prior)} | ${j.doubled ? "**doubled**" : ""} |`), ""];
+}
+
 // The gardener's own line, outside the agents' numbers: runs, proposals and what became of them,
 // cap hits, tripwire trips. Open = its proposals still waiting in the inbox.
+// How well what agents read is backed (backlog 310): of the live values on notes an assistant
+// (not the gardener) read this week, how many rest on two or more separate sources.
+export function corroboration(root: string, end = today()): { backed: number; total: number } {
+  const read = readCounts(root, 7, end);
+  let backed = 0, total = 0;
+  for (const n of loadBrain(root)) {
+    if (!read.has(n.fm.id)) continue;
+    for (const f of Object.values(n.fm.facts ?? {})) {
+      if (isDisputed(f)) continue;
+      for (const r of isList(f) ? f.items.filter((i) => !i.valid_to && !i.retired) : [f as FactRecord]) { total++; if (independentSources(r) >= 2) backed++; }
+    }
+  }
+  return { backed, total };
+}
+function corroborationLine(root: string, end: string): string[] {
+  const c = corroboration(root, end);
+  return c.total ? [`Corroboration: ${c.backed} of ${c.total} values on notes your assistants read this week rest on two or more sources (${pct(c.backed, c.total)})`, ""] : [];
+}
+
 function gardenerLine(root: string, ms: DayMeasures[]): string[] {
   const g = gardeners(loadRules(root));
   if (!g.length) return [];
@@ -400,7 +503,7 @@ export function bar(root: string, end = today(), target = 14): Bar {
   for (let i = ms.length - 1; i >= 0 && !lastBreak; i--) {
     const m = ms[i];
     const read = Object.values(m.reads).some((n) => n > 0);
-    const why = m.fixes ? `hand fix: ${m.fixesWhat.join("; ")}` : m.hubDown ? `hub check failed: ${m.hubDownWhat.join(", ")}` : m.drill === false ? "restore drill failed" : !read && m.date !== end ? "no agent read the brain" : undefined;
+    const why = m.fixes ? `hand fix: ${m.fixesWhat.join("; ")}` : m.hubDown ? `hub check failed: ${m.hubDownWhat.join(", ")}` : m.drill === false ? "restore drill failed" : !read && m.date !== end ? "no assistant read the brain" : undefined;
     if (why) lastBreak = { date: m.date, why };
     else if (read) days++;
   }

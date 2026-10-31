@@ -7,7 +7,7 @@
 // What it writes: rules/ (policy.yaml with one trial agent, slices.yaml, checks.yaml,
 // RULES.md, owner-messages.yaml), one note per person/org/project/decision/money item/note,
 // import/INIT-REPORT.md, a git repo with one commit, the agent's token (printed once, hash
-// kept) and its view in views/. The owner's word is cited as `louis:<date>/init`, the
+// kept) and its view in views/. The owner's word is cited as `owner:<date>/init`, the
 // tool's scheme for "the owner said so".
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -26,6 +26,11 @@ import { escapeRe } from "./util";
 import { OWNER, OWNER_CONFIRMED, ownerRef as ownerRefOf } from "./owner";
 
 export const DEFAULT_AGENT = "assistant";
+// The assistant kinds init can set up (row 388), each with the name its first agent gets; the doors
+// are `add --kind`'s (src/cli.ts KINDS, docs/add-an-agent.md#one-command-per-kind).
+export const AGENT_KINDS = ["claude-code", "claude-ai", "town", "browser"] as const;
+export type AgentKind = typeof AGENT_KINDS[number];
+export const KIND_NAME: Record<AgentKind, string> = { "claude-code": "claude", "claude-ai": "claude", town: "town", browser: "browser" };
 export const DEFAULT_AREAS = ["work", "personal"];
 const MONEY_WORDS = ["bank", "salary", "credit card", "mortgage", "loan", "investment", "pension", "RRSP", "TFSA", "401k", "IRA", "brokerage", "tax return"];
 const FREE_MAIL = /^(gmail|googlemail|outlook|hotmail|live|msn|yahoo|ymail|icloud|me|mac|aol|gmx|proton|protonmail|pm|zoho|fastmail|hey|mail|yandex|qq|163|videotron|sympatico|bell|rogers|shaw|telus|comcast|verizon|att|orange|free|wanadoo|laposte|sfr|web|t-online)\./i;
@@ -149,7 +154,7 @@ function clean(ctx: Ctx, where: string, text: string): string | undefined {
 //
 //   # About me                      any other heading: one note, the paragraphs are its body
 //   # People (work)                 "(work)" sets the area for the section; "(private)" too
-//   - Jane Roy: course coordinator at Northfield College, jane@northfield.edu, +1 514 555 0100
+//   - Jane Roy: course coordinator at Northfield College, jane@northfield.example, +1 514 555 0100
 //   # Projects
 //   - Course A: next step: grade the midterm [work]
 //   # Decisions
@@ -517,6 +522,9 @@ agents:
   # never money, never anything marked private, and its writes wait in inbox/ for you.
   # Preview a change before granting it:  pocketbrain carve ${agent} --slices area:work,contacts-full --preview
   ${agent}: { tier: trial, transport: mcp, slices: [area:${readable}, contacts-basic], exclude_types: [money] }
+  # The hub's own reader of your mail, calendar and captures: what it finds files itself, with
+  # Undo, and a different value waits as a conflict. Inside the wall: no assistant connects as it.
+  capture: { tier: core, slices: [all], inside_wall: true }
 tiers:
   core: { max_sensitivity: private, writes: direct }
   trial: { max_sensitivity: personal, writes: propose }
@@ -527,6 +535,9 @@ areas:
 ${areas.map((a) => a === readable ? `  ${a}: { owner: ${agent} }` : `  ${a}: {} # no owner: ${agent} can't read it`).join("\n")}
 # The agent that settles disputes and reads your messages. Leave unset until you trust one.
 # resolver: ${agent}
+# Names in a note's text that fit exactly one other note become links (docs/wiki.md). Turn it
+# off with:  pocketbrain wiki links off
+link_names: true
 # Agents' conversation logs (log_session) are off: what an agent learned should come in as a
 # fact with a source (remember), not as a transcript. Set accept: true to archive them.
 logs: { accept: false }
@@ -678,7 +689,7 @@ export function initBrain(root: string, o: InitOptions): InitResult {
   writeFileSync(join(root, "rules", "RULES.md"), rulesMd(owner, date, ownerRef));
   writeFileSync(join(root, "rules", "owner-messages.yaml"), "# The owner's own messages that facts may cite as the owner's word. Only the owner adds to this file.\n" +
     YAML.stringify({ messages: [{ id: ownerRef, added: date, note: "pocketbrain init" }] }, { lineWidth: 0 }));
-  writeFileSync(join(root, ".gitignore"), "views/\nlog/reads.jsonl\n.cells/\n");
+  writeFileSync(join(root, ".gitignore"), "views/\nlog/reads.jsonl\nlog/requests.jsonl\n.cells/\n");
 
   const loaded = loadBrain(root);
   const byFolder: Record<string, number> = {};
@@ -717,9 +728,10 @@ export function initBrain(root: string, o: InitOptions): InitResult {
 // Questions one at a time; an empty answer skips or ends a list. The answers become the same
 // plain text a user could have written, so the interview and --from-text share one parser.
 
-export interface Interview { owner: string; agent: string; text: string; mbox: string[]; ics: string[] }
+export interface Interview { owner: string; kind: AgentKind; agent: string; text: string; mbox: string[]; ics: string[] }
 
-export function interview(ask: (q: string) => string | null | undefined, say: (s: string) => void = () => {}): Interview {
+// `claudeCode`: Claude Code is on this machine, so it is the default first assistant.
+export function interview(ask: (q: string) => string | null | undefined, say: (s: string) => void = () => {}, o: { claudeCode?: boolean } = {}): Interview {
   const a = (q: string) => (ask(q) ?? "").trim();
   const list = (q: string, max = 25) => {
     const out: string[] = [];
@@ -730,9 +742,17 @@ export function interview(ask: (q: string) => string | null | undefined, say: (s
   let owner = "";
   for (let i = 0; i < 3 && !owner; i++) owner = a("Your first name (how your assistants will refer to you):");
   if (!owner) throw new InitError("the interview needs your name");
-  const agent = a(`A short name for your first assistant [${DEFAULT_AGENT}]:`).toLowerCase() || DEFAULT_AGENT;
+  const fallback: AgentKind = o.claudeCode ? "claude-code" : "claude-ai";
+  let kind: AgentKind | undefined;
+  for (let i = 0; i < 3 && !kind; i++) {
+    const k = a(`Which assistant will use your brain first? ${AGENT_KINDS.slice(0, -1).join(", ")} or ${AGENT_KINDS.at(-1)} [${fallback}]:`).toLowerCase() || fallback;
+    if ((AGENT_KINDS as readonly string[]).includes(k)) kind = k as AgentKind;
+    else say(`pocketBrain sets up ${AGENT_KINDS.join(", ")}. Another assistant: pick the closest, and add it later with pocketbrain add <name>.`);
+  }
+  kind ??= fallback;
+  const agent = a(`A short name for it [${KIND_NAME[kind]}]:`).toLowerCase() || KIND_NAME[kind];
   const work = a("In one sentence, what do you do for work?");
-  say("People you work with, one per line, like: Jane Roy: course coordinator at Northfield College, jane@example.edu");
+  say("People you work with, one per line, like: Jane Roy: course coordinator at Northfield College, jane@northfield.example");
   const workPeople = list("Work contact (empty to finish):");
   say("People in your personal life, same format. Your first assistant only sees their org and role.");
   const homePeople = list("Personal contact (empty to finish):");
@@ -758,5 +778,5 @@ export function interview(ask: (q: string) => string | null | undefined, say: (s
     ...sec("Money", money),
     ...(words ? ["# Money words", words, ""] : []),
   ].join("\n");
-  return { owner, agent, text, mbox: mbox ? [mbox] : [], ics: ics ? [ics] : [] };
+  return { owner, kind, agent, text, mbox: mbox ? [mbox] : [], ics: ics ? [ics] : [] };
 }

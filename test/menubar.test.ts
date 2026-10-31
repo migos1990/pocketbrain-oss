@@ -3,7 +3,7 @@
 // it does (install or restart the hub under launchd, pause or cut off an agent). The Swift app only
 // draws this JSON, so its field names are checked against the Swift model here.
 import { test, expect } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
@@ -57,18 +57,32 @@ test("install writes the launchd file and loads it, finds the brain from it late
   const calls: string[][] = [];
   const run: Run = (cmd) => { calls.push(cmd); return { code: 0, out: "" }; };
   const done = installHub(root, { home: h, bun: "/opt/homebrew/bin/bun", app: "/Users/me/pocketbrain", uid: 501, run });
-  expect(done).toEqual(["installed and started com.pocketbrain.start"]);
+  expect(done).toEqual(["installed and started com.pocketbrain.start", "installed and started com.pocketbrain.watchdog"]);
   const plist = join(h, "Library", "LaunchAgents", "com.pocketbrain.start.plist");
+  const watchdog = join(h, "Library", "LaunchAgents", "com.pocketbrain.watchdog.plist");
   expect(readFileSync(plist, "utf8")).toContain(`<string>${root}</string>`);
-  expect(calls).toEqual([["launchctl", "bootstrap", "gui/501", plist]]);
+  expect(calls).toEqual([["launchctl", "bootstrap", "gui/501", plist], ["launchctl", "bootstrap", "gui/501", watchdog]]);
   expect(installedBrain(h)).toBe(root);
   expect((await menuState(root, { home: h, fetch: down })).installed).toBe(true);
   expect(() => installHub(root, { home: h, bun: "b", app: "a", uid: 501, run })).toThrow(/already installed/);
-  expect(calls.length).toBe(1);
+  expect(calls.length).toBe(2);
+  // A hub installed before the watchdog existed gets the watchdog only; its own file stays as it is.
+  rmSync(watchdog);
+  const before = readFileSync(plist, "utf8");
+  expect(installHub(root, { home: h, bun: "b", app: "a", uid: 501, run })).toEqual(["installed and started com.pocketbrain.watchdog"]);
+  expect(readFileSync(plist, "utf8")).toBe(before);
+  calls.splice(0, 3);
   // Restart is a kickstart of the running job, never an unload.
   expect(restartHub({ home: h, uid: 501, run })).toBe("hub restarted");
-  expect(calls[1]).toEqual(["launchctl", "kickstart", "-k", "gui/501/com.pocketbrain.start"]);
+  expect(calls[0]).toEqual(["launchctl", "kickstart", "-k", "gui/501/com.pocketbrain.start"]);
   expect(() => restartHub({ home: home(), uid: 501, run })).toThrow(/isn't installed/);
+  // The menu's hand-fix line is written before the kickstart (a fast hub's start would otherwise log
+  // the same restart again), and not at all when there is no hub to restart.
+  const order: string[] = [];
+  restartHub({ home: h, uid: 501, run: (cmd) => { order.push(cmd[1]); return { code: 0, out: "" }; }, before: () => order.push("fix") });
+  expect(order).toEqual(["fix", "kickstart"]);
+  expect(() => restartHub({ home: home(), uid: 501, run, before: () => order.push("fix") })).toThrow(/isn't installed/);
+  expect(order).toEqual(["fix", "kickstart"]);
   const fail: Run = () => ({ code: 5, out: "Bootstrap failed: 5: Input/output error" });
   expect(() => installHub(root, { home: home(), bun: "b", app: "a", uid: 501, run: fail })).toThrow(/bootstrap .* failed: Bootstrap failed/);
 });
@@ -127,7 +141,7 @@ test("with no brain yet the menu offers set-up, and set-up makes the brain, inst
   const calls: string[][] = [];
   const run: Run = (cmd) => { calls.push(cmd); return { code: 0, out: "" }; };
   const r = setupBrain(join(h, "my-brain"), { name: "Sam Owner", agent: "claude", text: [notes], install: { home: h, bun: "/opt/homebrew/bin/bun", app: "/Users/me/pocketbrain", uid: 501, run } });
-  expect(r).toMatchObject({ brain: join(h, "my-brain"), agent: "claude", mcpUrl: "http://127.0.0.1:8787/mcp", installed: ["installed and started com.pocketbrain.start"] });
+  expect(r).toMatchObject({ brain: join(h, "my-brain"), agent: "claude", mcpUrl: "http://127.0.0.1:8787/mcp", installed: ["installed and started com.pocketbrain.start", "installed and started com.pocketbrain.watchdog"] });
   expect(r.token.length).toBeGreaterThan(20);
   expect(r.standing).toContain("pocketBrain");
   expect(r.notes).toBeGreaterThan(0);

@@ -1,0 +1,47 @@
+- main:
+  - paragraph: Thu 8 Oct
+  - heading "Who knows" [level=1]
+  - link "Settings":
+    - /url: /overview
+  - region "Your memory":
+    - heading "Your memory" [level=2]
+    - paragraph: 99 pages
+    - paragraph: 61 people
+    - paragraph: 30 learned this week
+    - paragraph: Not backed up yet
+  - heading "Your assistants" [level=2]
+  - list:
+    - listitem:
+      - text: ChatGPT Read your brain 3 times today
+      - link "See as":
+        - /url: /map?as=chatgpt
+      - paragraph: Sees 97 pages
+      - list:
+        - listitem:
+          - 'link "Isabelle Roy: role"':
+            - /url: /p/people/isabelle-roy
+          - text: ChatGPT remembers “She's the course coordinator” · your brain says registrar
+          - 'button "Fix everywhere: Isabelle Roy: role"': Fix everywhere
+      - group: What it asked today (3)
+    - listitem:
+      - text: Claude Read your brain 6 times today
+      - link "See as":
+        - /url: /map?as=claude
+      - paragraph: Sees 99 pages
+      - group: What it asked today (6)
+    - listitem:
+      - text: Geminitrial Hasn't read your brain today
+      - link "See as":
+        - /url: /map?as=gemini
+      - paragraph: Sees 83 pages · what it writes waits for you
+  - 'link "Settings Everything else: sign-ins, sources, spending, history"':
+    - /url: /overview
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

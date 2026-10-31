@@ -1,0 +1,49 @@
+- main:
+  - paragraph: 99 pages · 61 people
+  - heading "Memory" [level=1]
+  - link "You and your assistants":
+    - /url: /who
+    - text: R
+  - text: Search your memory
+  - textbox "Search your memory":
+    - /placeholder: Search people, projects, decisions…
+  - button "Search"
+  - link "61 People":
+    - /url: /memory?kind=people
+  - link "14 Projects":
+    - /url: /memory?kind=projects
+  - link "12 Organisations":
+    - /url: /memory?kind=orgs
+  - link "Money 2":
+    - /url: /memory?kind=money
+  - link "Decisions 10":
+    - /url: /memory?kind=decisions
+  - heading "Pages that changed" [level=2]
+  - text: this week
+  - list:
+    - listitem:
+      - link "Antoine Lavoie role · you said today":
+        - /url: /p/people/antoine-lavoie
+    - listitem:
+      - link "Martin Leclerc last contact · from an email today":
+        - /url: /p/people/martin-leclerc
+    - listitem:
+      - link "Hannah Becker last contact · from an email today":
+        - /url: /p/people/hannah-becker
+    - listitem:
+      - link "Hélène Lefebvre something new · from an email today":
+        - /url: /p/people/helene-lefebvre
+    - listitem:
+      - link "Lucas Fontaine last contact · you said Wed":
+        - /url: /p/people/lucas-fontaine
+  - link "All changes":
+    - /url: /memory?changes=week
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

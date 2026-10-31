@@ -1,0 +1,54 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:robin-me
+FN:Robin Lefebvre
+N:Lefebvre;Robin;;;
+EMAIL;type=INTERNET:robin@example.org
+item1.X-ABRELATEDNAMES:Hélène Lefebvre
+item1.X-ABLabel:_$!<Mother>!$_
+item2.X-ABRELATEDNAMES:Gilles Lefebvre
+item2.X-ABLabel:_$!<Father>!$_
+item3.X-ABRELATEDNAMES:Léa Lefebvre
+item3.X-ABLabel:_$!<Daughter>!$_
+item4.X-ABRELATEDNAMES:Inès Bouchard
+item4.X-ABLabel:_$!<Sister>!$_
+REV:2026-09-15T12:00:00Z
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:helene
+FN:Hélène Lefebvre
+N:Lefebvre;Hélène;;;
+NICKNAME:Maman
+TITLE:retired teacher
+EMAIL;type=INTERNET:helene.lefebvre@example.org
+TEL;type=CELL:+1 514 555 0101
+REV:2026-09-10T08:00:00Z
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:gilles
+FN:Gilles Lefebvre
+N:Lefebvre;Gilles;;;
+TITLE:retired pilot
+TEL;type=CELL:+1 514 555 0102
+REV:2026-09-10T08:00:00Z
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:priya
+FN:Priya Shah
+N:Shah;Priya;;;
+ORG:Harbourline;Product
+TITLE:Senior Product Manager
+TEL;type=WORK:+1 514 555 0103
+REV:2019-03-02T08:00:00Z
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:kevin
+FN:Kevin Plumbing
+N:Plumbing;Kevin;;;
+ORG:Kevin Plumbing Inc
+TEL;type=WORK:+1 514 555 0104
+END:VCARD

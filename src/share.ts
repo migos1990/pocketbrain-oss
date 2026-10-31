@@ -83,10 +83,16 @@ export function extendShare(root: string, agent: string, days: number): string {
 // record of what was shared and when stays readable in policy.yaml as well as in git.
 export function endShare(root: string, agent: string): string {
   const c = shared(root, agent);
-  const keys = revokeTokens(root, agent); // its keys and every sign-in bound to it
+  // G352: ended, paused and the person's sign-in let go first: none of it needs the invites lock, so
+  // a revoke that fails on a busy lock still leaves the share ended. Running it again revokes the keys.
   for (const [sub, cw] of Object.entries(loadOAuth(root)?.coworkers ?? {})) if (cw.agent === agent) removeCoworker(root, sub);
-  edit(root, (doc) => { doc.setIn(["agents", agent, "collaborator", "ended"], today()); doc.setIn(["agents", agent, "status"], "paused"); });
-  commit(root, `share with ${c.name} (${agent}) ended`);
+  if (!c.ended || loadRules(root).policy.agents[agent]?.status !== "paused") {
+    edit(root, (doc) => { if (!c.ended) doc.setIn(["agents", agent, "collaborator", "ended"], today()); doc.setIn(["agents", agent, "status"], "paused"); });
+    commit(root, `share with ${c.name} (${agent}) ended`);
+  }
+  let keys: number;
+  try { keys = revokeTokens(root, agent); } // its keys and every sign-in bound to it
+  catch (e) { throw new Error(`${agent}: share ended and paused, but ${(e as Error).message}`); }
   return `${agent}: share ended; ${keys} key(s) and sign-in(s) revoked`;
 }
 

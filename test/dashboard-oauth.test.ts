@@ -37,6 +37,7 @@ run("OAuth: the owner approves a waiting connection as Helper, and declines anot
     const page = await (await browser.newContext()).newPage();
     page.on("dialog", (dl: any) => dl.accept());
     await page.goto(d.loginUrl);
+    await page.goto(new URL("/overview", page.url()).href);
     await page.getByRole("link", { name: "Assistants" }).click();
     expect(await page.locator("h2[title=\"OAuth connections\"]", { hasText: "Sign-in connections" }).count()).toBe(1);
     // The user agent came from whoever signed in: shown as text, never run.

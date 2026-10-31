@@ -4,20 +4,27 @@
 // gone). Each check is ok or failing; a check that turns from ok to failing raises one alert
 // (log/alerts.jsonl, so the digest, dashboard and text channel surface it), and one that
 // recovers is noted in log/probe.json. No new outward channel.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { FILING_CODE } from "./filing";
+import type { StartKind } from "./measure";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { loadHub } from "./hub";
-import { alert, readJsonl, appendJsonl } from "./util";
-import { loadBackupConfig, lastBackup, due } from "./backup";
+import { alert, readJsonl, appendJsonl, codeVersion, codeAtStart } from "./util";
+import { loadBackupConfig, lastBackup, lastPush, due } from "./backup";
 import { modelConfigFor, KEY_ENV } from "./model";
 import { keysDir } from "./secrets";
 import { silentSources } from "./fill";
 import { loadBrain } from "./brain";
 import { loadRules, gardeners, type Rules } from "./rules";
 import { carve, grantFor } from "./carve";
-import { buildIndex, rank, terms } from "./retrieve";
+import { scoringIndex, foundBy, terms } from "./retrieve";
 import { missedWindows, nightMode, gardenerConfig } from "./gardener";
 import { freeDiskMb } from "./textline/items";
+import { offsiteCheck } from "./offsite";
+import { loadUpcoming } from "./upcoming";
+import YAML from "yaml";
+import { filedWithoutLine } from "./diary";
+const readYamlFile = (f: string): { sources?: Record<string, unknown> } | undefined => existsSync(f) ? YAML.parse(readFileSync(f, "utf8")) : undefined;
 
 // warn: an early warning (alert check probe_warn_<name>): it reaches the owner like any alert but
 // isn't a hub failure, so it doesn't break the real-use streak (src/measure.ts).
@@ -52,7 +59,10 @@ interface State { [name: string]: { ok: boolean; since: string; detail: string }
 // Records results and alerts on ok -> failing (and on a first run that fails). Returns the new failures.
 export function record(root: string, checks: Check[], now = new Date()): Check[] {
   const file = join(root, "log", "probe.json");
-  const prev: State = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  // A torn file (the hub died mid-write) starts over: every failing check alerts again, rather
+  // than this throwing before any alert on every run after (bug hunt #134).
+  let prev: State = {};
+  try { if (existsSync(file)) prev = JSON.parse(readFileSync(file, "utf8")); } catch { /* torn: start over */ }
   const next: State = {};
   const fresh: Check[] = [];
   for (const c of checks) {
@@ -64,7 +74,8 @@ export function record(root: string, checks: Check[], now = new Date()): Check[]
     }
   }
   mkdirSync(join(root, "log"), { recursive: true });
-  writeFileSync(file, JSON.stringify(next, null, 2) + "\n");
+  writeFileSync(file + ".tmp", JSON.stringify(next, null, 2) + "\n");
+  renameSync(file + ".tmp", file);
   return fresh;
 }
 
@@ -76,8 +87,8 @@ export function jobChecks(root: string, now = new Date()): Check[] {
   const out: Check[] = [];
   let s: Record<string, string> = {};
   try { s = JSON.parse(readFileSync(join(root, "log", "start-state.json"), "utf8")); } catch { /* the hub never ran start */ }
-  // night and digest are daily; searchable and housekeeping run after night; pull every few minutes.
-  for (const job of ["night", "digest", "searchable", "housekeeping", "pull"]) {
+  // night and digest are daily; searchable, backfill, trust and housekeeping run after night; pull every few minutes.
+  for (const job of ["night", "digest", "searchable", "backfill", "trust", "housekeeping", "pull"]) {
     if (!s[job] && !s[`${job}_at`] && !s[`${job}_error`]) continue;
     const at = s[`${job}_at`] ?? `${s[job]}T12:00:00Z`;
     const hours = (now.getTime() - Date.parse(at)) / 3_600_000;
@@ -111,6 +122,11 @@ export function jobChecks(root: string, now = new Date()): Check[] {
     const stale = hours > 48 && due(root, now).due;
     out.push({ name: "backup", ok: !stale, detail: stale ? `last backup ${last.at.slice(0, 10)} and the brain moved since; the backup job isn't running` : `last backup ${last.at.slice(0, 16)}` });
   }
+  // The hourly push to origin (src/backup.ts pushOriginApart): one failure can be a network blip,
+  // two in a row mean main is piling up on this disk only.
+  const push = loadBackupConfig(root)?.push_origin ? lastPush(root) : undefined;
+  if (push) out.push(push.fails >= 2 ? { name: "origin", ok: false, detail: `the last ${push.fails} pushes of the brain to origin failed (${push.error}); new commits are only on this disk. Run git push origin main in the brain folder to see why` }
+    : { name: "origin", ok: true, detail: push.ok_at ? `brain pushed to origin ${push.ok_at.slice(0, 16)}` : "brain push to origin failed once; trying again within the hour" });
   // The model steps (the write-time conflict check, the sleep pass) quietly run rule-only without
   // their key. Only checked once the owner put that key in the keys folder: then a hub that didn't
   // load it (readable by others, empty, an old process) is a failure, not a choice.
@@ -122,14 +138,18 @@ export function jobChecks(root: string, now = new Date()): Check[] {
     : { name: "model", ok: true, detail: `${set.join(", ")} loaded; model steps run` });
   // A source that quietly stopped (docs/sources-pull.md, "Silent sources"): no proposal and nothing
   // re-confirmed for 72h (per source: silent_after_hours) after the consent line. Only once a source
-  // has been watched that long.
-  const quiet = silentSources(root, now);
+  // has been watched that long. A sources.yaml that doesn't parse is the `pull` check's to report;
+  // throwing here would take every other job check down with it.
+  let quiet: ReturnType<typeof silentSources>;
+  try { quiet = silentSources(root, now); } catch { quiet = undefined; }
   if (quiet?.watched.length) out.push(quiet.silent.length
     ? { name: "fill", ok: false, detail: `no proposal and nothing re-confirmed from ${quiet.silent.map((x) => `${x.source} for ${x.hours}h (${x.last ? `last ${x.last}` : "never"})`).join(", ")}; a pull that stopped looks like a quiet week. Run pocketbrain sources pull <name> and pocketbrain fill; a channel quiet by nature takes silent_after_hours in rules/sources.yaml` }
     : { name: "fill", ok: true, detail: `${quiet.watched.length} source(s) producing` });
   const d = deployCheck(now);
   if (d) out.push(d);
   out.push(...selfChecks(root, now));
+  const off = offsiteCheck(root, now);
+  if (off) out.push(off);
   const sends = readJsonl(join(root, "textline", "log.jsonl")).filter((e) => e.sent !== undefined).slice(-3);
   if (sends.length) {
     const failing = sends.length === 3 && sends.every((e) => e.ok === false);
@@ -141,6 +161,7 @@ export function jobChecks(root: string, now = new Date()): Check[] {
 // The daily self-check (docs/real-use-bar.md): what would otherwise need a hand fix before the
 // owner notices. Like the job checks, each appears once the thing it watches exists; disk and log
 // size once the hub has run `start`. They go through record(), so a failure alerts once and the digest lists it.
+const WATCHDOG_MINUTES = 15;
 const QUIET_HOURS = 72, LOOKBACK_DAYS = 14, MIN_FREE_MB = 1024, RESTARTS = 5, RESTART_HOURS = 6, UNRELEASED_DAYS = 7;
 export function selfChecks(root: string, now = new Date()): Check[] {
   const out: Check[] = [];
@@ -167,22 +188,98 @@ export function selfChecks(root: string, now = new Date()): Check[] {
   if (hubRan) out.push(total > cap
     ? { name: "logs", ok: false, warn: true, detail: `log/ is ${total.toFixed(1)} MB, over ${cap} MB; biggest: ${sizes.slice(0, 3).map((x) => `${x.f} ${x.mb.toFixed(1)} MB`).join(", ")}` }
     : { name: "logs", ok: true, detail: `log/ is ${total.toFixed(1)} MB` });
-  const starts = readJsonl<{ at?: string }>(join(logDir, "starts.jsonl"));
+  // A planned start (an update, a reboot, the watchdog's kickstart: src/measure.ts startKind) isn't a crash.
+  const starts = readJsonl<{ at?: string; kind?: string }>(join(logDir, "starts.jsonl"));
   if (starts.length) {
-    const recent = starts.filter((s) => s.at && hoursSince(s.at) <= RESTART_HOURS).length;
+    const recent = starts.filter((s) => s.at && hoursSince(s.at) <= RESTART_HOURS && s.kind !== "planned" && s.kind !== "first").length;
     out.push(recent >= RESTARTS
-      ? { name: "restarts", ok: false, detail: `the hub started ${recent} times in ${RESTART_HOURS}h; it may be crashing and restarting (see ~/Library/Logs or the start log)` }
+      ? { name: "restarts", ok: false, detail: `the hub started ${recent} times in ${RESTART_HOURS}h, none of them planned; it may be crashing and restarting (see ~/Library/Logs or the start log)` }
       : { name: "restarts", ok: true, detail: `${recent} start(s) in ${RESTART_HOURS}h` });
   }
+  // The watchdog (src/watchdog.ts) leaves its time on every run, every 5 minutes; once it has run,
+  // a heartbeat older than 15 minutes means nothing is watching the hub from outside any more.
+  let wd: { last?: string } | undefined;
+  try { wd = JSON.parse(readFileSync(join(logDir, "watchdog.json"), "utf8")); } catch { /* no watchdog on this machine */ }
+  if (wd?.last) out.push(hoursSince(wd.last) * 60 > WATCHDOG_MINUTES
+    ? { name: "watchdog", ok: false, detail: `the watchdog hasn't run since ${wd.last.slice(0, 16)}; check its launchd job (launchctl print gui/$(id -u)/com.pocketbrain.watchdog)` }
+    : { name: "watchdog", ok: true, detail: `the watchdog ran ${wd.last.slice(0, 16)}` });
   const d = deployState();
   if (d && "unreleased_since" in d) out.push(d.unreleased_since && hoursSince(d.unreleased_since) > UNRELEASED_DAYS * 24
     ? { name: "release", ok: false, warn: true, detail: `main has changes not on the release branch since ${d.unreleased_since.slice(0, 10)}, over ${UNRELEASED_DAYS} days; the Mac runs an old version until a release is cut` }
     : { name: "release", ok: true, detail: d.unreleased_since ? `unreleased changes since ${d.unreleased_since.slice(0, 10)}` : "release branch is level with main" });
+  out.push(...silentFailureChecks(root, now));
+  return out;
+}
+
+// Failures that were only a line in a log (outside review 2026-10-25, G421). Counts, source names
+// and refusal check names only: never a value, a title or a message id.
+const CALENDAR_QUIET_HOURS = 72;
+export function silentFailureChecks(root: string, now = new Date()): Check[] {
+  const out: Check[] = [];
+  const since = (h: number) => new Date(now.getTime() - h * 3_600_000).toISOString();
+  // A fact the hub planned to file whose save was refused waits for the owner (src/filing.ts decideNow).
+  const errFile = join(root, "log", "auto-decisions-errors.jsonl");
+  if (existsSync(errFile)) {
+    const all = readJsonl<{ at?: string; key?: string; error?: string; code?: string }>(errFile);
+    const checkOf = (e: { error?: string }) => /^([a-z][a-z_]*)[:\s]/.exec(String(e.error ?? ""))?.[1] ?? "other";
+    const day = all.filter((e) => String(e.at ?? "") >= since(24));
+    const keys = new Set(day.map((e) => e.key));
+    const checks = [...new Set(day.map(checkOf))].sort();
+    // Refused twice under this code, a save is parked until other code runs (src/filing.ts, G519):
+    // no new line comes, so it counts for as long as its proposal is open, not one day (G538).
+    const twice = new Map<string, number>();
+    for (const e of all) if (e.code === FILING_CODE && e.key) twice.set(e.key, (twice.get(e.key) ?? 0) + 1);
+    const open = (k: string) => k.startsWith("proposal:") && existsSync(join(root, "inbox", k.slice("proposal:".length).replace(/^inbox\//, "")));
+    const parked = all.filter((e) => e.code === FILING_CODE && e.key && !keys.has(e.key) && twice.get(e.key)! >= 2 && open(e.key));
+    const parkedKeys = new Set(parked.map((e) => e.key));
+    const parkedChecks = [...new Set(parked.map(checkOf))].sort();
+    const parts = [
+      ...(keys.size ? [`${keys.size} fact${keys.size === 1 ? "" : "s"} couldn't file themselves in the last day (refused by ${checks.join(", ")}); they wait as cards and are tried again tomorrow`] : []),
+      ...(parkedKeys.size ? [`${parkedKeys.size} fact${parkedKeys.size === 1 ? "" : "s"} parked: refused twice under this code (${parkedChecks.join(", ")}), ${parkedKeys.size === 1 ? "it waits" : "they wait"} as a card until you answer or new code runs`] : []),
+    ];
+    out.push(parts.length
+      ? { name: "auto_saves", ok: false, warn: true, detail: parts.join("; ") }
+      : { name: "auto_saves", ok: true, detail: "every planned save in the last day went through, and none is parked" });
+  }
+  // Every filing by the hub leaves a diary line the owner's home shows, with Undo (G524).
+  if (existsSync(join(root, "log", "auto-decisions.jsonl"))) {
+    const silent = filedWithoutLine(root, now);
+    out.push(silent.length
+      ? { name: "filed_lines", ok: false, warn: true, detail: `${silent.length} filing${silent.length === 1 ? "" : "s"} by the hub in the last day left no line on the home` }
+      : { name: "filed_lines", ok: true, detail: "every filing in the last day has its line on the home" });
+  }
+  const runs = readJsonl<{ at?: string; source?: string; fetched?: number; capped?: boolean; deferred?: number }>(join(root, "log", "sources", "runs.jsonl"));
+  // A source over its max_per_day: the rest is read tomorrow, which nobody saw outside the CLI.
+  const latest = new Map<string, (typeof runs)[number]>();
+  for (const r of runs) if (r.source && r.at && r.at >= since(24) && r.at > String(latest.get(r.source)?.at ?? "")) latest.set(r.source, r);
+  if (latest.size) {
+    const capped = [...latest.values()].filter((r) => r.capped);
+    out.push(capped.length
+      ? { name: "source_cap", ok: false, warn: true, detail: `${capped.map((r) => `${r.source} reached its daily limit (${r.deferred ?? 0} waiting)`).join(", ")}; the rest are read tomorrow. Raise max_per_day in rules/sources.yaml if this keeps happening` }
+      : { name: "source_cap", ok: true, detail: "no source at its daily limit" });
+  }
+  // A calendar pull that read nothing for days while the calendar's coming events include ones it
+  // never saw: its sync is broken, not quiet (Mac 2026-10-25: 299 of 300 runs read 0).
+  let cal: [string, unknown][] = [];
+  try { cal = Object.entries(readYamlFile(join(root, "rules", "sources.yaml"))?.sources ?? {}).filter(([, c]) => (c as { kind?: string }).kind === "gcal"); } catch { /* a broken sources.yaml is the pull check's */ }
+  const coming = cal.length ? loadUpcoming(root, now.toISOString().slice(0, 10)) : [];
+  for (const [name] of cal) {
+    const mine = runs.filter((r) => r.source === name && r.at);
+    const lastRead = mine.filter((r) => (r.fetched ?? 0) > 0).at(-1)?.at;
+    const zeros = mine.filter((r) => !lastRead || String(r.at) > lastRead);
+    if (!zeros.length || String(zeros[0].at) > since(CALENDAR_QUIET_HOURS)) continue;
+    let seen: Record<string, string> = {};
+    try { seen = JSON.parse(readFileSync(join(root, "log", "sources", `${name}.json`), "utf8")).seen ?? {}; } catch { /* never pulled */ }
+    const missed = new Set(coming.filter((e) => e.source === name).map((e) => e.id.replace(/_\d{8}(T\d{6}Z?)?$/, "")).filter((id) => !(id in seen)));
+    out.push(missed.size
+      ? { name: "calendar_pull", ok: false, detail: `the ${name} calendar pull read nothing since ${(lastRead ?? String(zeros[0].at)).slice(0, 10)}, but ${missed.size} coming events on that calendar were never read: the pull is broken, not quiet. Run pocketbrain sources pull ${name} and pocketbrain doctor` }
+      : { name: "calendar_pull", ok: true, detail: `the ${name} calendar is quiet: every coming event was read` });
+  }
   return out;
 }
 
 // Each `start` leaves a line, so a hub that keeps crashing and coming back shows as a loop.
-export function recordStart(root: string, now = new Date()) { appendJsonl(join(root, "log", "starts.jsonl"), { at: now.toISOString(), pid: process.pid }); }
+export function recordStart(root: string, now = new Date(), kind?: StartKind) { appendJsonl(join(root, "log", "starts.jsonl"), { at: now.toISOString(), pid: process.pid, ...(kind ? { kind } : {}) }); }
 
 // The one digest line: how many of the hub's checks pass, from the probe's last record.
 export function selfCheckLine(root: string): string | undefined {
@@ -198,43 +295,93 @@ export function selfCheckLine(root: string): string | undefined {
 // with no error anywhere. Returns one line per problem (paths and ids only, no values).
 export function unsearchable(root: string): string[] {
   const out: string[] = [];
-  const notes = loadBrain(root);
+  const notes = loadBrain(root, { shared: true });
   for (const n of notes) if (n.path !== `${n.fm.id}.md`) out.push(`${n.path}: its id is ${n.fm.id}, so reads by id miss it`);
   const rules = loadRules(root);
   for (const [agent, a] of Object.entries(rules.policy.agents)) {
     if (a.inside_wall || a.status === "paused") continue;
     const res = carve(notes, rules, grantFor(rules, agent));
-    const idx = buildIndex(res, rules);
+    const idx = scoringIndex(res, rules);
     const indexed = new Set(idx.docs.map((d) => d.id));
     for (const id of res.visible.keys()) {
       const title = res.visible.get(id)!.note.fm.title ?? "";
       if (!indexed.has(id)) out.push(`${id}: in ${agent}'s view but not in its search index`);
-      else if (terms(title).length && !rank(idx, title, 50, { synonyms: false }).some((h) => h.id === id)) out.push(`${id}: ${agent}'s search for its title doesn't find it`);
+      else if (terms(title).length && !foundBy(idx, title, id, 50, { synonyms: false })) out.push(`${id}: ${agent}'s search for its title doesn't find it`);
     }
   }
   return out;
 }
 
-// Auto-update (scripts/deploy.ts, the launchd job com.pocketbrain.update) leaves deploy.json in the
-// config folder. Only checked once it exists: a rollback, a block, a fetch that keeps failing, or a
-// pass that stopped running (over 3 hours) is a failing check, so it reaches the owner as an alert.
-interface DeployFile { status?: string; detail?: string; checked_at?: string; unreleased_since?: string | null }
+// Auto-update (scripts/deploy.ts) leaves deploy.json in the config folder. Only checked once it
+// exists: a rollback, a block, a fetch that keeps failing, or a release follower (the launchd job
+// com.pocketbrain.update) that stopped running (over 3 hours) is a failing check, so it reaches the
+// owner as an alert. A `deploy go` record (mode go) is a one-off by hand and never goes stale; its
+// line carries the north star's counts, report-only (never what makes the check fail).
+interface DeployFile { status?: string; detail?: string; checked_at?: string; mode?: string; unreleased_since?: string | null; north_star?: Pick<NorthStarRecord, "code" | "counts" | "error"> }
 const deployState = (): DeployFile | undefined => { try { return JSON.parse(readFileSync(join(dirname(keysDir()), "deploy.json"), "utf8")); } catch { return undefined; } };
 export function deployCheck(now = new Date()): Check | undefined {
   const s = deployState();
   if (!s) return undefined;
   const hours = (now.getTime() - Date.parse(s.checked_at ?? "")) / 3_600_000;
-  if (!(hours <= 3)) return { name: "update", ok: false, detail: `auto-update last ran ${s.checked_at?.slice(0, 16) ?? "never"}, over 3h ago; is com.pocketbrain.update loaded?` };
+  if (s.mode !== "go" && !(hours <= 3)) return { name: "update", ok: false, detail: `auto-update last ran ${s.checked_at?.slice(0, 16) ?? "never"}, over 3h ago; is com.pocketbrain.update loaded?` };
   const ok = ["deployed", "current", "held"].includes(s.status ?? "");
-  return { name: "update", ok, detail: `auto-update ${s.status}: ${s.detail ?? ""}`.trim() };
+  const ns = s.north_star ? `; ${northStarLine(s.north_star).replace(/ \(real brain, code \w+\):/, "")}` : "";
+  return { name: "update", ok, detail: `${s.mode === "go" ? "deploy go" : "auto-update"} ${s.status}: ${s.detail ?? ""}${ns}`.trim() };
 }
 
-// The checks failing right now (log/probe.json), for the digest and the real-use bar.
+// The checks failing right now (log/probe.json), for the digest and the real-use bar. A probe
+// file that can't be read is itself failing: "nothing failing" must mean the probe said so.
 export function failingChecks(root: string): { name: string; detail: string; since: string }[] {
-  try { return Object.entries(JSON.parse(readFileSync(join(root, "log", "probe.json"), "utf8")) as State).filter(([, v]) => !v.ok).map(([name, v]) => ({ name, detail: v.detail, since: v.since })); } catch { return []; }
+  const file = join(root, "log", "probe.json");
+  if (!existsSync(file)) return [];
+  try { return Object.entries(JSON.parse(readFileSync(file, "utf8")) as State).filter(([, v]) => !v.ok).map(([name, v]) => ({ name, detail: v.detail, since: v.since })); }
+  catch { return [{ name: "probe", detail: "log/probe.json can't be read; the next probe run rewrites it", since: statSync(file).mtime.toISOString() }]; }
 }
 export const failingNow = (root: string): string[] => failingChecks(root).map((c) => c.name);
 
 export async function probeOnce(root: string, localUrl: string, f: Fetch = fetch): Promise<Check[]> {
   return record(root, [...await runChecks(root, localUrl, f), ...jobChecks(root)]);
+}
+
+// The north star on the real brain after every deploy (audit v4: `--brain` only ran with an env var
+// set). Once per code version: a start on new code runs scripts/north-star.ts --brain --json in the
+// background and keeps its counts in log/north-star.json. Report-only: no alert, nothing asked; the
+// Mac's `bun scripts/deploy.ts go` runs it first (northStarFor), so the hub's own run then finds the
+// record for its code and skips. Returns the record when it ran.
+export interface NorthStarRecord { code: string; at: string; exit: number; counts?: Record<string, unknown>; error?: string }
+type Spawn = (cmd: string[]) => Promise<{ exit: number; out: string; err: string }>;
+const spawnAsync: Spawn = async (cmd) => {
+  const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  const [out, err, exit] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  return { exit, out, err };
+};
+const CODE_DIR = join(import.meta.dir, "..");
+export { codeVersion };
+export async function northStarAfterStart(root: string, o: { code?: string; spawn?: Spawn; now?: Date } = {}): Promise<NorthStarRecord | undefined> {
+  const code = o.code ?? codeAtStart();
+  if (!code) return undefined;
+  const file = join(root, "log", "north-star.json");
+  try { if ((JSON.parse(readFileSync(file, "utf8")) as NorthStarRecord).code === code) return undefined; } catch { /* none yet */ }
+  const r = await (o.spawn ?? spawnAsync)(["bun", join(CODE_DIR, "scripts", "north-star.ts"), "--brain", root, "--json"]);
+  let counts: Record<string, unknown> | undefined;
+  try { counts = JSON.parse(r.out.trim().split("\n").at(-1) ?? ""); } catch { /* no line: kept as an error */ }
+  const rec: NorthStarRecord = { code, at: (o.now ?? new Date()).toISOString(), exit: r.exit, ...(counts ? { counts } : { error: (r.err.trim().split("\n").at(-1) ?? "no output").slice(0, 200) }) };
+  mkdirSync(join(root, "log"), { recursive: true });
+  writeFileSync(file + ".tmp", JSON.stringify(rec) + "\n");
+  renameSync(file + ".tmp", file);
+  return rec;
+}
+
+// The record for this code: run once, or the one already kept (deploy go reports it either way).
+export async function northStarFor(root: string, code: string, o: { spawn?: Spawn; now?: Date } = {}): Promise<NorthStarRecord | undefined> {
+  const ran = await northStarAfterStart(root, { ...o, code });
+  if (ran) return ran;
+  try { const r = JSON.parse(readFileSync(join(root, "log", "north-star.json"), "utf8")) as NorthStarRecord; return r.code === code ? r : undefined; } catch { return undefined; }
+}
+// One line of counts, never a page name: the hub log, deploy go's output and the update check.
+export function northStarLine(r: Pick<NorthStarRecord, "code" | "counts" | "error">): string {
+  const c = r.counts;
+  if (!c) return `north star (real brain, code ${r.code.slice(0, 7)}): didn't run: ${r.error ?? "no counts"}`;
+  const pages = typeof c.pages === "number" ? `, ${c.pages_ok}/${c.pages} pages ok` : "";
+  return `north star (real brain, code ${r.code.slice(0, 7)}): ${c.pass ? "PASS" : "FAIL"}, ${c.asks} asks, ${c.not_conflict} not about a contradiction, ${c.home_asks} on the home${pages}`;
 }

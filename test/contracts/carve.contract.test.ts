@@ -9,6 +9,7 @@ import { loadBrain } from "../../src/brain";
 import { loadRules } from "../../src/rules";
 import { carve, grantFor } from "../../src/carve";
 import * as core from "../../src/core";
+import * as semantic from "../../src/semantic";
 import { withTokenRole } from "../../src/tokenrole";
 import { moreThanToday } from "../../src/consent";
 import { appendFileSync } from "node:fs";
@@ -153,8 +154,38 @@ test("contract carve: a hidden note answers exactly like a missing one (invarian
     expect(read(agent)(hidden), `${agent} ${hidden}`).not.toBe("found");
     same(hidden, missing, read(agent));
   }
-  // Search: a hidden note's title finds nothing, like a word that's nowhere.
-  expect(core.search(root, "helper", "Main bank")).toEqual(core.search(root, "helper", "Zzyzx nowhere"));
+  // Search: a hidden note's title answers exactly as it would if the note were titled with a word
+  // that's nowhere. Related words (the word map) may still find visible notes, but never because
+  // of the hidden one. (Removing the note instead would also lift the scrub of its bank name from
+  // the prose of notes Helper sees.)
+  const renamed = brain();
+  const f = join(renamed, "money/main-bank.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace("title: Main bank", "title: Zzyzx nowhere"));
+  expect(core.search(root, "helper", "Main bank")).toEqual(core.search(renamed, "helper", "Main bank"));
+  expect(core.search(root, "helper", "Zzyzx nowhere")).toEqual(core.search(root, "helper", "Qqvwx elsewhere"));
+});
+
+// G367: the same with semantic search on (a stub embedder, every view's vectors computed first):
+// the meaning ranking runs over the asker's own view, so the hidden note still answers like one
+// titled with a word that's nowhere, for its title and for words near it in meaning.
+test("contract carve: with semantic search on, a hidden note answers exactly like a missing one (invariant 3)", async () => {
+  const dim = (w: string) => { let h = 7; for (const c of w) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 32; };
+  const stub: semantic.Embedder = { id: "stub", embed: async (xs) => xs.map((x) => { const v = new Float32Array(32); for (const w of x.toLowerCase().split(/[^a-z]+/).filter(Boolean)) v[dim(w)] += 1; const n = Math.hypot(...v) || 1; return v.map((y) => y / n); }) };
+  semantic.useEmbedder(stub);
+  try {
+    const root = brain();
+    const renamed = brain();
+    const f = join(renamed, "money/main-bank.md");
+    writeFileSync(f, readFileSync(f, "utf8").replace("title: Main bank", "title: Zzyzx nowhere"));
+    await core.vectorsReady(root);
+    await core.vectorsReady(renamed);
+    for (const q of ["Main bank", "bank", "course money budget", "Zzyzx nowhere"]) {
+      const o = { vector: (await stub.embed([q]))[0] };
+      expect(core.search(root, "helper", q, 20, {}, o), q).toEqual(core.search(renamed, "helper", q, 20, {}, o));
+      expect(core.contextPack(root, "helper", q, o), q).toEqual(core.contextPack(renamed, "helper", q, o));
+    }
+    expect(core.search(root, "helper", "bank", 20, {}, { vector: (await stub.embed(["bank"]))[0] }).length).toBeGreaterThan(0);
+  } finally { semantic.useEmbedder(undefined); }
 });
 
 // G179: "only tighten" (the CLI's carve --confirm and consent --apply) compares what the agent would
@@ -200,4 +231,128 @@ test("contract carve: only-tighten decides a slice swap on selectors, not on tod
   for (const [today, to, wider] of rows) { set(today); expect(loose(to), `${today} -> ${to}`).toBe(wider); }
   // all covers every slice.
   expect(moreThanToday(loadBrain(root), loadRules(root), "steward", { slices: ["w-plain"], exclude_types: [] }).loosened).toEqual([]);
+});
+
+test("contract carve: share_with on any record hides the fact, not only on the first (G170)", () => {
+  const root = brain();
+  note(root, "projects/course-d", "type: project\narea: work\nsensitivity: personal\nstatus: active",
+    `  rooms: { items: [{ value: Room A, as_of: 2026-10-01, ${SRC} }, { value: Room Secret, as_of: 2026-10-01, share_with: [steward], ${SRC} }] }\n` +
+    `  nickname: { dispute: c-0002, candidates: [{ value: Kiki, as_of: 2026-10-01, share_with: [planner, steward], ${SRC} }, { value: Hidden Name, as_of: 2026-10-01, share_with: [steward], ${SRC} }] }`);
+  const res = carveFor(root, "planner");
+  for (const key of ["projects/course-d#rooms", "projects/course-d#nickname"])
+    expect(res.hiddenFacts.find((h) => h.key === key)?.reason, key).toMatch(/only steward/);
+  expect(carveFor(root, "steward").hiddenFacts.find((h) => h.key.startsWith("projects/course-d#"))).toBeUndefined();
+  expect(JSON.stringify(core.readNote(root, "planner", "projects/course-d"))).not.toMatch(/Room Secret|Hidden Name/);
+});
+
+test("contract carve: a merged note's names stay carved unless the note it merged into shows them (G204)", () => {
+  const root = brain();
+  note(root, "people/j-roy", "type: person\narea: work\nsensitivity: private\nstatus: merged\nmerged_into: people/jane-roy\naliases: [Jaybird Nightshade, Jane]");
+  const res = carveFor(root, "helper");
+  expect(res.carvedValues).toContain("Jaybird Nightshade");
+  expect(res.carvedValues).not.toContain("Jane"); // shown as Jane Roy's alias, so not a secret here
+});
+
+test("contract carve: a merged note's values stay carved while the note it merged into is kept out on purpose (G217)", () => {
+  const root = brain();
+  note(root, "people/sam-lee", "type: person\narea: personal\nsensitivity: private\nstatus: active");
+  note(root, "people/sam-lee-2", "type: person\narea: personal\nsensitivity: personal\nstatus: merged\nmerged_into: people/sam-lee",
+    `  home_address: { value: 12 Hidden Lane, as_of: 2026-10-01, ${SRC} }`);
+  // helper's ceiling (personal) keeps the private target out; steward sees it, where the value shows.
+  expect(carveFor(root, "helper", ["area:work"]).carvedValues).toContain("12 Hidden Lane");
+  expect(carveFor(root, "steward").carvedValues).not.toContain("12 Hidden Lane");
+});
+
+test("contract carve: a merged note is carved like the active note at the end of its chain of merges (G246)", () => {
+  const root = brain();
+  note(root, "people/jay-roy", "type: person\naliases: [Jaybird Roy]\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/j-roy-b");
+  note(root, "people/j-roy-b", "type: person\naliases: [Jaybird Roy]\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/jane-roy");
+  // jane-roy shows Jaybird Roy to planner only once the merges have put it there.
+  const f = join(root, "people/jane-roy.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace("aliases: [Jane]", "aliases: [Jane, Jaybird Roy]"));
+  expect(carveFor(root, "planner").carvedValues).not.toContain("Jaybird Roy");
+  // A chain that loops never resolves to a shown note: its names stay carved.
+  note(root, "people/loop-a", "type: person\naliases: [Loopy Larkspur]\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/loop-b");
+  note(root, "people/loop-b", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/loop-a");
+  expect(carveFor(root, "planner").carvedValues).toContain("Loopy Larkspur");
+});
+
+test("contract carve: a merged note is carved like the note it merged into; merely out of slice carves nothing (G227)", () => {
+  const root = brain();
+  note(root, "people/sam-lee", "type: person\narea: personal\nsensitivity: personal\nstatus: active");
+  note(root, "people/sam-lee-2", "type: person\naliases: [Samwise Leeward]\narea: personal\nsensitivity: personal\nstatus: merged\nmerged_into: people/sam-lee",
+    `  home_address: { value: 12 Hidden Lane, as_of: 2026-10-01, ${SRC} }`);
+  const out = carveFor(root, "helper", ["area:work"]).carvedValues; // neither note is in helper's slices
+  expect(out).not.toContain("12 Hidden Lane");
+  expect(out).not.toContain("Samwise Leeward");
+});
+
+test("contract carve: names: false (the merge backstop, G261) skips only the title copies; what is carved is the same", () => {
+  const root = brain();
+  const rules = loadRules(root), notes = loadBrain(root);
+  for (const agent of ["planner", "helper"]) {
+    const full = carve(notes, rules, grantFor(rules, agent), { flags: false });
+    const bare = carve(notes, rules, grantFor(rules, agent), { flags: false, names: false });
+    expect(bare.carvedValues).toEqual(full.carvedValues);
+    expect([...bare.visible.keys()]).toEqual([...full.visible.keys()]);
+    expect(bare.hiddenFacts).toEqual(full.hiddenFacts);
+  }
+});
+
+test("contract carve: the names pass tries only values whose first words a name holds, with the same result (G265 backstop speed)", () => {
+  const root = brain();
+  note(root, "money/acct", "type: money\narea: personal\nsensitivity: private\nstatus: active\naliases: [Maple Trust Bank, Café Roy, +1 514 555 0199]");
+  for (const [id, t] of [["projects/t1", "Lunch at Maple-Trust Bank"], ["projects/t2", "Café Roy dinner"], ["projects/t3", "Call +1 514 555 0199"], ["projects/t4", "Maple syrup"]] as const)
+    note(root, id, `type: project\narea: work\nsensitivity: personal\nstatus: active\naliases: [${t}]`);
+  const res = carveFor(root, "helper");
+  const shown = (id: string) => res.visible.get(id)!.note.fm.aliases![0];
+  expect(shown("projects/t1")).not.toContain("Maple-Trust Bank");
+  expect(shown("projects/t2")).toBe("[withheld] dinner");
+  expect(shown("projects/t3")).not.toContain("514 555 0199");
+  expect(shown("projects/t4")).toBe("Maple syrup");
+});
+
+// The incremental carve (docs/perf.md) remembers each frozen note's place per grant. A narrowing
+// that changes the note, or the grant, must never leave a remembered answer standing.
+test("contract carve: a remembered carve narrows exactly like a cold one", () => {
+  const root = makeBrain({ git: false });
+  const warm = () => { const rules = loadRules(root); return carve(loadBrain(root, { shared: true }), rules, grantFor(rules, "helper"), { flags: false }); };
+  const cold = () => { const rules = loadRules(root); return carve(structuredClone(loadBrain(root)), rules, grantFor(rules, "helper"), { flags: false }); };
+  const seen = (r: ReturnType<typeof carve>) => JSON.stringify([[...r.visible.keys()], r.hiddenFacts, r.carvedValues]);
+  expect(warm().visible.has("people/jane-roy")).toBe(true);
+  const p = join(root, "people/jane-roy.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("sensitivity: personal", "sensitivity: private"));
+  expect(warm().visible.has("people/jane-roy")).toBe(false);
+  expect(seen(warm())).toBe(seen(cold()));
+  writeFileSync(p, readFileSync(p, "utf8").replace("sensitivity: private", "sensitivity: personal"));
+  warm();
+  const policy = join(root, "rules/policy.yaml");
+  writeFileSync(policy, readFileSync(policy, "utf8").replace("helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }", "helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money], exclude: [people/jane-roy#role] }"));
+  expect(warm().hiddenFacts.map((h) => h.key)).toContain("people/jane-roy#role");
+  expect(seen(warm())).toBe(seen(cold()));
+});
+
+test("contract carve: a remembered carve follows an edit to the own slice (slice audit F1)", () => {
+  const root = makeBrain({ git: false });
+  const warm = () => { const rules = loadRules(root); return carve(loadBrain(root, { shared: true }), rules, grantFor(rules, "helper"), { flags: false }); };
+  const p = join(root, "people/jane-roy.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("area: work", "area: helper").replace(/^by: planner$/m, "by: helper"));
+  expect(warm().visible.get("people/jane-roy")?.slices).toContain("own");
+  expect(warm().hiddenFacts.map((h) => h.key)).not.toContain("people/jane-roy#role");
+  const slices = join(root, "rules/slices.yaml");
+  writeFileSync(slices, readFileSync(slices, "utf8") + "  own:\n    exclude_attributes: [role]\n");
+  expect(warm().hiddenFacts.map((h) => h.key)).toContain("people/jane-roy#role");
+});
+
+// Phone UI spec §7 (owner 2026-10-26): a value held for the owner's eyes reaches no agent, not even
+// one granted everything; once seen it serves like any other.
+test("must never: a value marked unseen reaches any agent's carve", () => {
+  const root = makeBrain();
+  note(root, "projects/held", "type: project\narea: work\nsensitivity: personal\nstatus: active",
+    `  fee: { value: 900 a term, as_of: 2026-10-01, unseen: true, ${SRC} }\n  room: { value: B-12, as_of: 2026-10-01, ${SRC} }`);
+  for (const agent of ["steward", "planner"]) {
+    const res = carveFor(root, agent);
+    expect(res.hiddenFacts.find((h) => h.key === "projects/held#fee")?.reason).toBe("waiting for the owner to see it");
+    expect(res.hiddenFacts.some((h) => h.key === "projects/held#room")).toBe(false);
+  }
 });

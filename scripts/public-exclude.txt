@@ -6,5 +6,6 @@ scripts/video-montage.ts
 scripts/video-take.ts
 examples/video/film/
 test/video-montage.test.ts
-# The contributor agreement is still under legal review; it joins the public repo once settled.
-CLA.md
+# The workflow that pushes the public copy, and its test, act on this private repo only.
+.github/workflows/public-sync.yml
+test/public-sync-workflow.test.ts

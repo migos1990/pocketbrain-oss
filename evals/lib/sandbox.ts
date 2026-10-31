@@ -25,6 +25,8 @@ if (!process.env.PB_EVAL_RUN_DIR) {
   made.push(process.env.PB_EVAL_RUN_DIR);
 }
 isolateGit(process.env.PB_EVAL_RUN_DIR!);
+// Semantic search's vectors (src/semantic.ts) stay in the run folder, never in the developer's ~/.cache.
+process.env.PB_VECTOR_DIR ??= join(process.env.PB_EVAL_RUN_DIR!, "vectors");
 process.on("exit", () => { if (!process.env.EVAL_KEEP) for (const d of made) try { rmSync(d, { recursive: true, force: true }); } catch {} });
 
 const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "louis@pocketbrain.local", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "louis@pocketbrain.local" };

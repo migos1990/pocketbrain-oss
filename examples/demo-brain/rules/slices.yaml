@@ -1,0 +1,14 @@
+# Named slices you can grant in policy.yaml. area:<name> and "all" exist without being listed.
+slices:
+  contacts-basic:
+    types: [people, orgs]
+    only_attributes: [org, role]
+    exclude_tags: [finance]
+    max_sensitivity: personal
+  contacts-full:
+    types: [people, orgs]
+    exclude_tags: [finance]
+    max_sensitivity: personal
+  decisions:
+    types: [decisions]
+    max_sensitivity: personal

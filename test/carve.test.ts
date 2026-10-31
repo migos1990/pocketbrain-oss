@@ -109,3 +109,14 @@ test("a list fact is hidden whole when any item's share_with leaves the agent ou
   jane.fm.facts!.phones = { items: [rec("+15145550100", ["planner", "steward"]), rec("+15145550199", ["steward", "planner"])] } as never;
   expect(hidden("planner")).toBe(false);
 });
+
+test("only a purposeful exclusion carves values: an area whose name reads like a reason doesn't (backlog 181)", () => {
+  const root = makeBrain();
+  const note = (id: string, area: string, value: string) => require("node:fs").writeFileSync(join(root, `${id}.md`),
+    `---\nid: ${id}\ntype: project\ntitle: ${id}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  partner: { value: ${value}, as_of: 2026-10-01, sources: ["url:https://example.org"], verification: verified-by-source }\n---\n`);
+  for (const area of ["above-board", "excluded-trips", "not shared"]) note(`projects/p-${area.replace(" ", "-")}`, area, `Zephyr ${area.replace(/\W/g, "")} Holdings`);
+  const res = carve(loadBrain(root), loadRules(root), grantFor(loadRules(root), "planner"));
+  expect(res.carvedValues.filter((v) => v.startsWith("Zephyr"))).toEqual([]);
+  // A purposeful exclusion still carves: Robin's bank is money, a type planner isn't given.
+  expect(res.carvedValues).toContain("Maple Trust Bank");
+});

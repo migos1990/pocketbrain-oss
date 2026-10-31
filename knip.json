@@ -4,11 +4,14 @@
     "evals/cases/*.ts",
     "evals/lib/browser-mcp.ts",
     "evals/lib/api-mcp.ts",
+    "evals/lib/fake-agent-cli.ts",
     "scripts/**/*.ts",
     ".claude/hooks/*.ts",
     "test/**/*.test.ts",
     "conformance/run.ts",
-    "conformance/reference-server.ts"
+    "conformance/reference-server.ts",
+    "site/analytics.ts",
+    "src/embed-worker.ts"
   ],
   "project": [
     "src/**/*.ts",
@@ -16,7 +19,8 @@
     "scripts/**/*.ts",
     ".claude/hooks/*.ts",
     "test/**/*.ts",
-    "conformance/**/*.ts"
+    "conformance/**/*.ts",
+    "site/**/*.ts"
   ],
   "ignoreDependencies": [
     "bun-types",

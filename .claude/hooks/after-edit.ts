@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // PostToolUse hook (wired in .claude/settings.json): after an edit to the access core, remind
 // the session of what the laws require before merge. It never blocks; it adds context.
 import { ACCESS_CORE, PROMPTS } from "../../scripts/gate";

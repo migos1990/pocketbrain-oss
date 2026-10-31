@@ -3,22 +3,33 @@ pocketBrain, the idea (no code)
 
 Take this and build your own, or use ours: this repository.
 
-If you use one AI assistant, you don't need any of this. Keep a folder of
-Markdown notes, let your assistant maintain it (summaries, links, an index,
-a pass that looks for contradictions), and skip the vector database until
-search actually fails you.
+The idea: one memory of you that all your AI assistants share. A personal
+wiki of facts about your life and work, each fact with the source it came
+from and the date it was true, in plain files you own. Every assistant
+starts from the same picture of you, and what one learns, the others read
+next time.
 
-This file is for the day a second assistant needs your notes, especially
-one run by a vendor you don't control. A shared wiki has no walls. Whoever
-reads it reads everything, whatever an assistant has seen can't be taken
-back, and you can't tell which assistant read or wrote what.
+If you use one AI assistant, you don't need a server for this. Keep a
+folder of Markdown notes, let your assistant maintain it (summaries, links,
+an index, a pass that looks for contradictions), and skip the vector
+database until search actually fails you.
+
+The rest of this file is for the day a second assistant needs the same
+memory, especially one run by a vendor you don't control. Then the memory
+needs a single door: one place that takes writes with their evidence,
+keeps old values when facts change, and decides what each assistant may
+see. A shared wiki has no walls. Whoever reads it reads everything,
+whatever an assistant has seen can't be taken back, and you can't tell
+which assistant read or wrote what.
 
 The pattern
 -----------
 
 1. One brain, plain files. Markdown with YAML frontmatter, one note per
-   file, in a git repo you own. Facts that go stale carry a date and the
-   source they came from.
+   file, in a git repo you own. A fact is a value with its sources, the
+   date it was true and how it was verified. When it changes, the old
+   value moves to history, so "now" and "then" both have answers. Facts
+   that go stale carry a shelf life and get rechecked at their source.
 
 2. Assistants sit outside the wall. None of them opens the files. Each
    one talks to a small server with its own token, and the token is the

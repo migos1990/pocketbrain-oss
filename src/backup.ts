@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Backups (backup-recovery.md 3 and 5): the brain leaves the hub only as an age-encrypted file.
+// Backups (backup-recovery.md 3 and 5): the backup file leaves the hub only age-encrypted.
+// Separately, with push_origin: true in rules/backup.yaml the hub pushes main in plain git to the
+// brain's origin remote every hour (pushOriginApart, below): that copy is NOT encrypted, so origin
+// must be a private repository the owner controls (outside review 2026-10-25).
 //   backup   git bundle of every ref + the untracked state git doesn't carry (read log, alerts,
 //            sleep state, text channel state), a manifest with hashes, tar, encrypted to the
 //            public key(s) in rules/backup.pub, written as a dated file into a folder Louis's
@@ -9,20 +12,21 @@
 //            state in an empty folder, rename the clone, rebuild views, run doctor.
 //   drill    copy the brain, back the copy up, wipe it, restore it, diff before and after.
 // Views, cells and node_modules are rebuilt, never backed up. Plaintext secrets never go in.
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { sha256 } from "./util";
-import { HARD_SECRETS } from "./checks";
+import { hardSecretIn } from "./checks";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import YAML from "yaml";
-import { loadBrain, today } from "./brain";
+import { loadBrain, today, isList } from "./brain";
 import { loadRules } from "./rules";
 import { carve, grantFor } from "./carve";
 import { buildView } from "./view";
 import { formatProblem } from "./format";
 import { git } from "./git";
 import * as hub from "./hub";
-import { doctor, type Finding } from "./doctor";
+import { doctor, finding, type Finding } from "./doctor";
+import type { OwnerErrorId, Vars } from "./owner-errors";
 
 export class BackupError extends Error {}
 
@@ -32,6 +36,7 @@ export interface BackupConfig {
   every_hours?: number; // a scheduled backup runs when main moved and this long passed (default 24)
   keep_daily?: number; // keep every file this many days (default 30)
   keep_monthly?: number | "all"; // and the first file of each month for this many months (default all)
+  push_origin?: boolean; // the hub pushes main to the brain's origin remote every hour (docs/backup.md)
 }
 
 const CONFIG = "rules/backup.yaml";
@@ -44,7 +49,7 @@ const SECRET_NAMES = [/(^|\/)\.env(\..*)?$/, /(^|\/)id_(rsa|ed25519|ecdsa|dsa)$/
 // Plaintext secrets by content, the same list the write path refuses (src/checks.ts), so a write
 // that passes never stops a backup. Hashes of tokens (rules/tokens.yaml) don't match these.
 export function secretIn(text: string): string | undefined {
-  return HARD_SECRETS.find((s) => new RegExp(s.re.source).test(text))?.what;
+  return hardSecretIn(text);
 }
 
 const expand = (p: string) => p.replace(/^~(?=$|\/)/, homedir());
@@ -69,6 +74,7 @@ recipients: rules/backup.pub   # age public keys (age1...), one per line; the pr
 every_hours: 24                # the hub backs up when main moved and this long passed
 keep_daily: 30                 # every file for 30 days
 keep_monthly: all              # then the first file of each month, forever
+# push_origin: true            # the hub also pushes main to the brain's git origin every hour
 `;
 
 // The age public keys backups are encrypted to. A private key here is a FAIL, not a warning.
@@ -318,9 +324,12 @@ export function decrypt(file: string, identity: Identity, into: string): Manifes
   return m;
 }
 
-// Every hash in the manifest, and nothing outside it.
+// Every hash in the manifest, and nothing outside it. Only plain files and folders: a link in a
+// backup (anyone with the public key can pack one) would let later writes land outside the brain.
 function checkPayload(stage: string, m: Manifest): string[] {
   const problems: string[] = [];
+  for (const p of linksIn(stage)) problems.push(`${p}: not a plain file (a link or a device)`);
+  if (problems.length) return problems;
   if (sha256(readFileSync(join(stage, "repo.bundle"))) !== m.bundle_sha256) problems.push("repo.bundle doesn't match its hash");
   for (const e of m.extras) {
     if (!safeRel(e.path)) { problems.push(`${e.path}: unsafe path`); continue; }
@@ -331,6 +340,12 @@ function checkPayload(stage: string, m: Manifest): string[] {
   const listed = new Set(m.extras.map((e) => e.path));
   for (const p of walk(join(stage, "files"))) if (!listed.has(p)) problems.push(`${p}: not in the manifest`);
   return problems;
+}
+function linksIn(dir: string, rel = ""): string[] {
+  return readdirSync(join(dir, rel), { withFileTypes: true }).flatMap((e) => {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    return e.isDirectory() ? linksIn(dir, r) : e.isFile() ? [] : [r];
+  });
 }
 const safeRel = (p: string) => !isAbsolute(p) && !p.split("/").includes("..") && !p.startsWith(".git/") && p !== ".git";
 function walk(dir: string, rel = ""): string[] {
@@ -347,8 +362,16 @@ export interface RestoreResult { to: string; head: string; refs: number; extras:
 // --key: the SSH signing key (1Password's SSH agent or a file) when rules/hub.yaml requires signing.
 export async function restore(file: string, o: { to: string; identity: Identity; name?: string; key?: string; signer?: string; offline?: boolean }): Promise<RestoreResult> {
   const to = resolve(expand(o.to));
-  if (existsSync(to) && readdirSync(to).length) throw new BackupError(`${to} isn't empty; restore only into a new or empty folder`);
+  const existed = existsSync(to);
+  if (existed && readdirSync(to).length) throw new BackupError(`${to} isn't empty; restore only into a new or empty folder`);
   const stage = mkdtempSync(join(tmpdir(), "pb-restore-"));
+  // A restore that fails part-way leaves the folder as it found it (gone, or empty), so the retry
+  // isn't refused as "not empty".
+  const undo = () => {
+    if (!existsSync(to)) return;
+    if (!existed) rmSync(to, { recursive: true, force: true });
+    else for (const e of readdirSync(to)) rmSync(join(to, e), { recursive: true, force: true });
+  };
   try {
     const m = decrypt(resolve(expand(file)), o.identity, stage);
     const problems = checkPayload(stage, m);
@@ -356,9 +379,12 @@ export async function restore(file: string, o: { to: string; identity: Identity;
     mkdirSync(to, { recursive: true });
     g(to, "init", "-q", "-b", m.branch);
     const v = g(to, "bundle", "verify", "-q", join(stage, "repo.bundle"));
-    if (v.code !== 0) { rmSync(to, { recursive: true, force: true }); throw new BackupError(`git bundle verify: ${v.err}`); }
+    if (v.code !== 0) throw new BackupError(`git bundle verify: ${v.err}`);
     const f = g(to, "fetch", "-q", "--update-head-ok", join(stage, "repo.bundle"), "refs/*:refs/*");
     if (f.code !== 0) throw new BackupError(`git fetch from the bundle: ${f.err}`);
+    // A tracked link (mode 120000) would be checked out pointing anywhere: refused before checkout.
+    const links = g(to, "ls-tree", "-r", m.branch).out.split("\n").filter((l) => l.startsWith("120000 ")).map((l) => l.split("\t")[1]);
+    if (links.length) throw new BackupError(`the backup's history holds a link, nothing restored: ${links.slice(0, 3).join(", ")}`);
     const co = g(to, "checkout", "-q", "-f", m.branch);
     if (co.code !== 0) throw new BackupError(`git checkout ${m.branch}: ${co.err}`);
     // A backup of a brain newer than this code (src/format.ts) isn't unpacked into a brain this
@@ -390,8 +416,11 @@ export async function restore(file: string, o: { to: string; identity: Identity;
     const built = buildAll(to);
     const findings = await doctor(to, { offline: o.offline ?? true });
     next.push("the next backup from this machine starts the record again (pocketbrain backup, once the backup folder syncs here)");
-    next.push("re-issue agent tokens if they were lost with the old machine (pocketbrain token --agent <name>), then start the server");
+    next.push("re-issue agent tokens if they were lost with the old machine (pocketbrain token --agent <name>; a wider than trial agent needs its one-time code from the dashboard, --code), then start the server");
     return { to, head: m.head, refs: Object.keys(m.refs).length, extras: m.extras.length, replica: name, built, findings, next };
+  } catch (e) {
+    undo();
+    throw e;
   } finally {
     rmSync(stage, { recursive: true, force: true });
   }
@@ -431,23 +460,56 @@ export function fingerprint(root: string): Fingerprint {
   };
 }
 
-export function diffFingerprints(a: Fingerprint, b: Fingerprint, skipped: string[] = []): string[] {
+// `ignore`: paths left out of the file and uncommitted-change comparison (the drill's hub logs).
+export function diffFingerprints(a: Fingerprint, b: Fingerprint, skipped: string[] = [], ignore: (p: string) => boolean = () => false): string[] {
   const d: string[] = [];
   if (a.head !== b.head) d.push(`HEAD ${a.head.slice(0, 8)} -> ${b.head.slice(0, 8)}`);
   if (a.tree !== b.tree) d.push("the checked-out tree differs");
   for (const r of new Set([...Object.keys(a.refs), ...Object.keys(b.refs)])) if (a.refs[r] !== b.refs[r]) d.push(`ref ${r}: ${a.refs[r]?.slice(0, 8) ?? "absent"} -> ${b.refs[r]?.slice(0, 8) ?? "absent"}`);
   for (const p of new Set([...Object.keys(a.files), ...Object.keys(b.files)])) {
-    if (skipped.includes(p)) continue;
+    if (skipped.includes(p) || ignore(p)) continue;
     if (a.files[p] !== b.files[p]) d.push(`${p}: ${!b.files[p] ? "missing after restore" : !a.files[p] ? "new after restore" : "content differs"}`);
   }
-  if (a.dirty.join() !== b.dirty.join()) d.push(`uncommitted changes differ (${a.dirty.length} before, ${b.dirty.length} after)`);
+  const dirty = (f: Fingerprint) => f.dirty.filter((l) => !ignore(l.trim().replace(/^\S+\s+/, "")));
+  if (dirty(a).join() !== dirty(b).join()) d.push(`uncommitted changes differ (${dirty(a).length} before, ${dirty(b).length} after)`);
   if (a.replica !== b.replica) d.push(`replica name ${a.replica ?? "none"} -> ${b.replica ?? "none"}`);
   return d;
 }
 
 // `lost`: logs (log/*.jsonl) the backup left out for holding a secret shape. A restore would start
 // them fresh (a hash-chained log loses its chain), so the drill fails on any (G185).
-export interface DrillResult { ok: boolean; keySource: "given" | "throwaway"; file: string; bytes: number; head: string; refs: number; extras: number; skipped: Skipped[]; lost: string[]; diff: string[]; leaks: string[]; doctorFails: string[]; doctorWarns: string[]; seconds: number }
+export interface DrillResult { ok: boolean; notes: number; facts: number; checks: string[]; keySource: "given" | "throwaway"; file: string; bytes: number; head: string; refs: number; extras: number; skipped: Skipped[]; lost: string[]; diff: string[]; leaks: string[]; doctorFails: string[]; doctorWarns: string[]; alerts: string[]; seconds: number }
+
+// What a restored brain must still hold: every note and every fact record, by count.
+export function brainCounts(root: string): { notes: number; facts: number } {
+  const notes = loadBrain(root);
+  let facts = 0;
+  for (const n of notes) for (const f of Object.values(n.fm.facts ?? {})) facts += isList(f) ? f.items.length : 1;
+  return { notes: notes.length, facts };
+}
+
+// Beyond the fingerprint diff: the repo is sound (git fsck), nothing went missing (note and fact
+// counts), and the hub serves the restored brain (its rules load and /health answers 200).
+// One line per problem; empty when the restore is good.
+export async function restoreChecks(root: string, before: { notes: number; facts: number }): Promise<string[]> {
+  const out: string[] = [];
+  const fsck = g(root, "fsck", "--full", "--no-progress");
+  if (fsck.code !== 0) out.push(`git fsck: ${(fsck.err || fsck.out).split("\n")[0] || `exit ${fsck.code}`}`);
+  let after = { notes: -1, facts: -1 };
+  try { after = brainCounts(root); } catch (e) { out.push(`notes can't be read: ${(e as Error).message.split("\n")[0]}`); }
+  if (after.notes >= 0 && after.notes !== before.notes) out.push(`notes: ${before.notes} before, ${after.notes} after`);
+  if (after.notes >= 0 && after.facts !== before.facts) out.push(`facts: ${before.facts} before, ${after.facts} after`);
+  try {
+    loadRules(root);
+    const { serve } = await import("./server");
+    const s = serve(root, 0);
+    try {
+      const h = await fetch(`http://127.0.0.1:${s.port}/health`);
+      if (h.status !== 200) out.push(`the hub didn't boot: /health answered ${h.status}`);
+    } finally { s.stop(true); }
+  } catch (e) { out.push(`the hub didn't boot: ${(e as Error).message.split("\n")[0]}`); }
+  return out;
+}
 
 // pocketbrain drill: copy -> backup -> wipe -> restore -> diff. Never touches the brain itself or
 // the real backup folder. With --identity it proves the key in 1Password opens what the hub
@@ -468,6 +530,7 @@ export async function drill(root: string, o: { identity?: string; key?: string; 
       keys = [run(["age-keygen", "-y"], { stdin: k.out + "\n" }).out];
     }
     const before = fingerprint(copy);
+    const counts = brainCounts(copy);
     const b = backup(copy, { dest, recipients: keys, record: false, rotate: false });
 
     // Nothing readable in the encrypted file, and no plaintext secret inside it.
@@ -483,11 +546,19 @@ export async function drill(root: string, o: { identity?: string; key?: string; 
     if (existsSync(copy)) throw new BackupError("couldn't wipe the drill copy");
     const r = await restore(b.file, { to: copy, identity, key: signingKey, offline: true });
     const after = fingerprint(copy);
-    const diff = diffFingerprints(before, after, b.skipped.map((s) => s.path));
-    const doctorFails = r.findings.filter((f) => f.level === "FAIL").map((f) => `${f.area}: ${f.text}`);
+    // The brain's content, not the hub's own logs: a log the hub writes and doesn't commit (the
+    // pull's log/sources/runs.jsonl) differs after a restore by design. Logs a backup had to leave
+    // out are still reported, as `lost`.
+    const diff = diffFingerprints(before, after, b.skipped.map((s) => s.path), (p) => p.startsWith("log/"));
+    // Open hub alerts are the live brain's state, carried over by the restore, not a restore that
+    // failed: listed apart (2026-10-22, a week of probe alerts made a clean restore read "failed").
+    const isAlerts = (f: { id?: string }) => f.id === "doctor.hub-alerts";
+    const alerts = r.findings.filter(isAlerts).map((f) => `${f.area}: ${f.text}`);
+    const doctorFails = r.findings.filter((f) => f.level === "FAIL" && !isAlerts(f)).map((f) => `${f.area}: ${f.text}`);
     const doctorWarns = r.findings.filter((f) => f.level === "warn").map((f) => `${f.area}: ${f.text}`);
     const lost = b.skipped.filter((x) => /^(log\/.*|actions\/log)\.jsonl$/.test(x.path) && x.reason !== "credential file").map((x) => x.path);
-    return { ok: !diff.length && !leaks.length && !doctorFails.length && !lost.length, keySource: o.identity ? "given" : "throwaway", file: b.file, bytes: b.bytes, head: b.head, refs: Object.keys(before.refs).length, extras: b.extras, skipped: b.skipped, lost, diff, leaks, doctorFails, doctorWarns, seconds: (Date.now() - t0) / 1000 };
+    const checks = await restoreChecks(copy, counts);
+    return { ok: !diff.length && !leaks.length && !doctorFails.length && !lost.length && !checks.length, notes: counts.notes, facts: counts.facts, checks, keySource: o.identity ? "given" : "throwaway", file: b.file, bytes: b.bytes, head: b.head, refs: Object.keys(before.refs).length, extras: b.extras, skipped: b.skipped, lost, diff, leaks, doctorFails, doctorWarns, alerts, seconds: (Date.now() - t0) / 1000 };
   } finally {
     if (!o.keep) rmSync(work, { recursive: true, force: true });
   }
@@ -502,29 +573,159 @@ export function renderDrill(d: DrillResult): string {
     ...d.skipped.filter((s) => !d.lost.includes(s.path)).map((s) => `  left out on purpose: ${s.path} (${s.reason})`),
     ...d.lost.map((p) => `  LOST: ${p} holds a secret shape, so the backup left the whole log out; a restore would start it empty`),
     `  wiped the copy, restored it into an empty folder`,
-    d.diff.length ? `  DIFF:\n${d.diff.map((x) => `    ${x}`).join("\n")}` : `  diff: none (refs, history, tree, untracked state and replica name all identical)`,
+    d.diff.length ? `  DIFF:\n${d.diff.map((x) => `    ${x}`).join("\n")}` : `  diff: none (refs, history, tree, untracked state and replica name all identical; the hub's own logs are not compared)`,
     d.leaks.length ? `  LEAKS:\n${d.leaks.map((x) => `    ${x}`).join("\n")}` : `  secrets: none in the backup`,
+    ...(d.checks.length ? [`  RESTORE CHECKS:\n${d.checks.map((x) => `    ${x}`).join("\n")}`] : [`  git fsck: clean; ${d.notes} notes and ${d.facts} facts, same as before; hub booted on the restored brain`]),
+    ...(d.alerts.length ? [`  open alerts on the brain (not a drill failure; see pocketbrain doctor):\n${d.alerts.map((x) => `    ${x}`).join("\n")}`] : []),
     d.doctorFails.length ? `  DOCTOR FAILS:\n${d.doctorFails.map((x) => `    ${x}`).join("\n")}` : `  doctor on the restored brain: no FAIL${d.doctorWarns.length ? ` (${d.doctorWarns.length} warning(s))` : ""}`,
   ].join("\n");
 }
+
+// pocketbrain drill --demo: the whole drill on the sample brain (examples/brain) with a throwaway
+// key, so CI and a new install prove backup and restore end to end without any real data or key.
+// Never reads the owner's brain and records nothing in it.
+export const DEMO_BRAIN = join(import.meta.dir, "..", "examples", "brain");
+export async function demoDrill(): Promise<DrillResult> {
+  const work = mkdtempSync(join(tmpdir(), "pb-demo-drill-"));
+  try {
+    const root = join(work, "brain");
+    cpSync(DEMO_BRAIN, root, { recursive: true });
+    const env = { ...process.env, GIT_AUTHOR_NAME: "demo", GIT_AUTHOR_EMAIL: "demo@example.com", GIT_COMMITTER_NAME: "demo", GIT_COMMITTER_EMAIL: "demo@example.com" };
+    for (const a of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "demo brain"]]) {
+      const r = Bun.spawnSync(["git", ...a], { cwd: root, env });
+      if (r.exitCode !== 0) throw new BackupError(`demo brain: git ${a[0]} failed: ${r.stderr.toString().trim()}`);
+    }
+    return await drill(root);
+  } finally { rmSync(work, { recursive: true, force: true }); }
+}
+export const demoLine = (d: DrillResult) => `drill ${d.ok ? "PASSED" : "FAILED"} in ${d.seconds.toFixed(1)}s (demo brain, throwaway key): ${d.notes} notes, ${d.facts} facts, fsck ${d.checks.some((c) => c.startsWith("git fsck")) ? "FAILED" : "clean"}, hub ${d.checks.some((c) => c.startsWith("the hub")) ? "DIDN'T BOOT" : "booted"}`;
 
 // ---------- doctor's backup lines ----------
 
 export function backupFindings(root: string, now = new Date()): Finding[] {
   const out: Finding[] = [];
-  const add = (level: Finding["level"], text: string, fix?: string) => out.push({ area: "backup", level, text, ...(fix ? { fix } : {}) });
+  const add = (level: "ok", text: string) => out.push({ area: "backup", level, text });
+  const bad = (level: "warn" | "FAIL", id: OwnerErrorId, vars: Vars = {}, repair?: string) => out.push(finding("backup", level, id, vars, repair));
   const cfg = loadBackupConfig(root);
-  if (!cfg) { add("warn", `no ${CONFIG}: nothing leaves this machine encrypted. Start with: pocketbrain backup --init`); return out; }
-  try { recipients(root, cfg); } catch (e) { add("FAIL", (e as Error).message); }
+  if (!cfg) { bad("warn", "doctor.backup-none"); return out; }
+  try { recipients(root, cfg); } catch (e) { bad("FAIL", "doctor.backup-config", { message: (e as Error).message }); }
+  const look = lastLook(root);
+  const lookLine = () => { if (look && !Number.isNaN(Date.parse(look.at))) add("ok", `last backup look ${Math.max(0, Math.round((now.getTime() - Date.parse(look.at)) / 60000))} min ago${look.error ? ` (it failed: ${look.error})` : ""}`); };
   const last = lastBackup(root);
-  if (!last) { add("warn", "no backup made yet; run pocketbrain backup", "backup"); return out; }
+  if (!last) { bad("warn", "doctor.backup-never", {}, "backup"); lookLine(); return out; }
   const days = (now.getTime() - Date.parse(last.at)) / 86400000;
   const moved = g(root, "diff", "--quiet", last.head, "HEAD", "--", ".", `:(exclude)${LAST}`).code !== 0;
-  if (days > 3 && moved) add("warn", `last backup ${days.toFixed(0)} days ago and main has moved since; is the hub asleep or the job broken?`, "backup");
+  if (days > 3 && moved) bad("warn", "doctor.backup-stale", { days: days.toFixed(0) }, "backup");
   else add("ok", `last backup ${last.file}, ${days < 1 ? `${(days * 24).toFixed(0)}h` : `${days.toFixed(0)} day(s)`} ago`);
   let dest: string | undefined;
-  try { dest = destOf(root, cfg); } catch (e) { add("FAIL", (e as Error).message); }
+  try { dest = destOf(root, cfg); } catch (e) { bad("FAIL", "doctor.backup-config", { message: (e as Error).message }); }
   // The folder only exists on the machine that writes it; elsewhere this is quiet.
-  if (dest && existsSync(dest) && !existsSync(join(dest, last.file))) add("warn", `${last.file} isn't in ${dest} any more (deleted, or the sync moved it)`);
+  if (dest && existsSync(dest) && !existsSync(join(dest, last.file))) bad("warn", "doctor.backup-gone", { file: last.file, dest });
+  lookLine();
   return out;
+}
+
+// ---------- from the hub ----------
+
+// The hub's hourly backup, in a child process (`pocketbrain backup --if-due`) it waits for without
+// blocking: the backup folder is often a cloud-synced one, and on 2026-10-20 a sync open() there
+// never returned and froze the whole hub for two days. Past the time limit the child is killed and
+// the hub carries on; the probe's stale-backup check reports a backup that keeps failing.
+type Child = { exited: Promise<number>; kill: (signal?: string) => void };
+export async function backupApart(root: string, o: { spawn?: (cmd: string[]) => Child; timeoutMs?: number; due?: () => boolean } = {}): Promise<number | undefined> {
+  const role = hub.hubRole(root);
+  if (role.mode === "replica" || role.mode === "unnamed") return undefined;
+  if (!(o.due ?? (() => due(root).due))()) return undefined;
+  const cmd = [process.execPath, join(import.meta.dir, "cli.ts"), "backup", "--if-due", "--brain", root];
+  const child = (o.spawn ?? ((c) => Bun.spawn(c, { stdout: "inherit", stderr: "inherit" }) as unknown as Child))(cmd);
+  const limit = o.timeoutMs ?? 20 * 60_000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([child.exited, new Promise<never>((_, no) => { timer = setTimeout(() => no(new BackupError(`the backup didn't finish in ${Math.round(limit / 60_000) || 1} min and was stopped: is the backup folder a cloud drive that stopped answering?`)), limit); })]);
+  } catch (e) {
+    try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    throw e;
+  } finally { if (timer) clearTimeout(timer); }
+}
+
+// ---------- origin ----------
+
+// The hub's hourly push of main to the brain's origin remote, when rules/backup.yaml says
+// push_origin: true (backlog 381; on 2026-10-22, 331 commits were only on the Mac's disk). In a
+// child process the hub can kill, like the backup: a remote that stops answering never holds the
+// hub. Never --force: an origin that moved on fails the push and says so. Two failures in a row
+// are a probe alert (src/probe.ts); the next good push clears it.
+const PUSHED = "log/origin-push.json";
+export interface PushState { at: string; ok_at?: string; error?: string; fails: number }
+export function lastPush(root: string): PushState | undefined {
+  try { return JSON.parse(readFileSync(join(root, PUSHED), "utf8")); } catch { return undefined; }
+}
+type PushChild = Child & { stderr?: ReadableStream<Uint8Array> };
+export async function pushOriginApart(root: string, o: { spawn?: (cmd: string[]) => PushChild; timeoutMs?: number; now?: Date } = {}): Promise<PushState | undefined> {
+  if (!loadBackupConfig(root)?.push_origin) return undefined;
+  const role = hub.hubRole(root);
+  if (role.mode === "replica" || role.mode === "unnamed") return undefined;
+  if (g(root, "remote", "get-url", "origin").code !== 0) return undefined;
+  // A prompt for a password would wait forever: it fails instead. The error kept never names the
+  // remote's address (it can carry a token), since it reaches the probe, the digest and the texts.
+  const cmd = ["git", "-C", root, "push", "--quiet", "origin", "HEAD"];
+  const child = (o.spawn ?? ((c) => Bun.spawn(c, { stdout: "ignore", stderr: "pipe", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }) as unknown as PushChild))(cmd);
+  const limit = o.timeoutMs ?? 5 * 60_000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let error: string | undefined;
+  try {
+    const code = await Promise.race([child.exited, new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error(`the push to origin didn't finish in ${limit >= 60_000 ? `${Math.round(limit / 60_000)} min` : `${limit} ms`} and was stopped`)), limit); })]);
+    if (code !== 0) error = (child.stderr ? (await new Response(child.stderr).text()).split("\n").map((l) => l.trim()).filter((l) => /^(!|error:|fatal:)/.test(l)).slice(0, 2).join(" ").replace(/'[^']*'|\S+:\/\/\S+/g, "origin") : "") || `git push exited ${code}`;
+  } catch (e) {
+    try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    error = (e as Error).message;
+  } finally { if (timer) clearTimeout(timer); }
+  const at = (o.now ?? new Date()).toISOString();
+  const prev = lastPush(root);
+  const state: PushState = error ? { at, ...(prev?.ok_at ? { ok_at: prev.ok_at } : {}), error: error.slice(0, 300), fails: (prev?.fails ?? 0) + 1 } : { at, ok_at: at, fails: 0 };
+  mkdirSync(join(root, "log"), { recursive: true });
+  writeFileSync(join(root, PUSHED), JSON.stringify(state));
+  return state;
+}
+
+// ---------- the hub's timers ----------
+
+// The hourly backup look and push, as `start` and `serve` run them. Each also runs once a few
+// minutes after start when its last run is over its hour old: an hour counted only from start
+// never came while updates restarted the hub more often than hourly (2026-10-24, 335 commits
+// never pushed). The backup's own `due` decides whether a look backs up.
+const HOUR = 3600000;
+export function pushDue(root: string, now = new Date()): boolean {
+  const last = lastPush(root);
+  return !last || now.getTime() - Date.parse(last.at) >= HOUR || Number.isNaN(Date.parse(last.at));
+}
+// Each look leaves its time in log/backup-look.json, backup or not, so doctor (and whoever checks
+// the hub) can see the looks happen even on days nothing is due.
+const LOOKED = "log/backup-look.json";
+export interface LookState { at: string; error?: string }
+export function lastLook(root: string): LookState | undefined {
+  try { return JSON.parse(readFileSync(join(root, LOOKED), "utf8")); } catch { return undefined; }
+}
+function noteLook(root: string, error?: string): void {
+  try {
+    mkdirSync(join(root, "log"), { recursive: true });
+    writeFileSync(join(root, LOOKED), JSON.stringify({ at: new Date().toISOString(), ...(error ? { error: error.slice(0, 300) } : {}) }));
+  } catch { /* the look itself already ran; its trace is best effort */ }
+}
+export function startBackupTimers(root: string, o: {
+  after?: (fn: () => unknown, ms: number) => void; every?: (fn: () => unknown, ms: number) => void;
+  firstMs?: number; backup?: () => Promise<number | undefined>; push?: () => Promise<PushState | undefined>;
+} = {}): void {
+  const cfg = loadBackupConfig(root);
+  if (!cfg) return;
+  const after = o.after ?? ((fn, ms) => { setTimeout(fn, ms); });
+  const every = o.every ?? ((fn, ms) => { setInterval(fn, ms); });
+  const first = o.firstMs ?? 3 * 60_000;
+  const look = () => (o.backup ?? (() => backupApart(root)))().then((code) => { noteLook(root, code ? `exited ${code}` : undefined); if (code) console.error(`backup: exited ${code}`); }, (e) => { noteLook(root, (e as Error).message); console.error(`backup: ${(e as Error).message}`); });
+  after(look, first);
+  every(look, HOUR);
+  if (!cfg.push_origin) return;
+  const push = () => (o.push ?? (() => pushOriginApart(root)))().then((p) => { if (p?.error) console.error(`push to origin: ${p.error}`); }, (e) => console.error(`push to origin: ${(e as Error).message}`));
+  after(() => (pushDue(root) ? push() : undefined), first);
+  every(push, HOUR);
 }

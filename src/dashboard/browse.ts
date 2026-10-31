@@ -3,28 +3,28 @@
 // the owner's whole view, no model), notes by kind, what changed this week, which facts need a
 // look, and who can see a note. Nothing here writes.
 import { isDisputed, isList, today, linksIn, type Note, type FactRecord } from "../brain";
-import { attributeSpec } from "../rules";
-import { factFreshness, daysBetween, type Freshness } from "../freshness";
+import { attributeSpec, isDeclared } from "../rules";
+import { factFreshness, daysBetween, lifeOf, type Freshness } from "../freshness";
 import { buildIndex, rank, terms } from "../retrieve";
 import { isOwnerId } from "../owner";
 import { schemeOf, refString } from "../sources";
 import type { SourceRef } from "../brain";
-import { ownerView } from "./ask";
+import { ownerView } from "./edit-chat";
 import { agentLabel } from "./labels";
-import type { State } from "./data";
+import { keptFor, type State } from "./data";
 
 // Folders in reading order, with the word a beginner uses for each.
-export const KINDS: [string, string][] = [["people", "People"], ["projects", "Projects"], ["orgs", "Organisations"], ["money", "Money"], ["decisions", "Decisions"], ["notes", "Notes"], ["agents", "Agents"]];
+export const KINDS: [string, string][] = [["people", "People"], ["projects", "Projects"], ["orgs", "Organisations"], ["money", "Money"], ["decisions", "Decisions"], ["notes", "Notes"], ["agents", "Assistants' notes"]];
 export const kindLabel = (folder: string) => KINDS.find(([f]) => f === folder)?.[1] ?? folder;
 export const folderOf = (id: string) => id.split("/")[0];
 
 export const browsable = (s: State) => s.notes.filter((n) => folderOf(n.fm.id) !== "disputes");
 
 export function kindCounts(s: State): { folder: string; label: string; count: number }[] {
-  const notes = browsable(s);
-  const folders = [...new Set(notes.map((n) => folderOf(n.fm.id)))];
+  const count = new Map<string, number>();
+  for (const n of browsable(s)) { const f = folderOf(n.fm.id); count.set(f, (count.get(f) ?? 0) + 1); }
   const order = (f: string) => { const i = KINDS.findIndex(([k]) => k === f); return i < 0 ? 99 : i; };
-  return folders.sort((a, b) => order(a) - order(b) || a.localeCompare(b)).map((f) => ({ folder: f, label: kindLabel(f), count: notes.filter((n) => folderOf(n.fm.id) === f).length }));
+  return [...count.keys()].sort((a, b) => order(a) - order(b) || a.localeCompare(b)).map((f) => ({ folder: f, label: kindLabel(f), count: count.get(f)! }));
 }
 
 // Outside agents that get this note, and the ones that don't.
@@ -40,9 +40,22 @@ export interface SearchHit { note: Note; match: string }
 export function searchNotes(s: State, q: string, limit = 12): SearchHit[] {
   if (!terms(q).length) return [];
   const byId = new Map(s.notes.map((n) => [n.fm.id, n]));
-  return rank(buildIndex(ownerView(s.root), s.rules), q, limit)
+  // The owner's view and its rules kept together while the brain is the same, so the search
+  // index (cached per view, src/retrieve.ts) is built once, not on every key typed.
+  const v = keptFor(s.root, "owner-view", s.version, () => ({ res: ownerView(s.root, s.notes, s.rules), rules: s.rules }));
+  return rank(buildIndex(v.res, v.rules), q, limit)
     .filter((h) => byId.has(h.id) && folderOf(h.id) !== "disputes")
     .map((h) => ({ note: byId.get(h.id)!, match: h.match }));
+}
+
+// The owner's search by name alone: every word of the query in a page's title or an alias, accents
+// and case aside. No value is read, so it may run on the 30-day sign-in (G542).
+const fold = (t: string) => t.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+export function byTitle(notes: Note[], q: string, limit = 20): Note[] {
+  const words = queryWords(fold(q));
+  if (!words.length) return [];
+  return notes.filter((n) => { const names = fold([n.fm.title ?? "", ...(n.fm.aliases ?? [])].join(" ")); return words.every((w) => names.includes(w)); })
+    .sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))).slice(0, limit);
 }
 
 // Words of the query worth marking in a snippet.
@@ -50,7 +63,20 @@ export function queryWords(q: string): string[] {
   return [...new Set(q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2 || /\d/.test(w)))];
 }
 
-export interface Change { id: string; attr?: string; who: string; at: string }
+export interface Change { id: string; attr?: string; who: string; at: string; why: string }
+
+// Why a fact changed, in words and never its value: who edited it, or where it was filed from.
+function changeWhy(s: State, id: string, attr: string | undefined, w: { agent?: unknown; kind?: unknown }): string {
+  const agent = String(w.agent ?? "");
+  if (String(w.kind ?? "").startsWith("owner-") || isOwnerId(agent, s.rules.policy.owner?.name)) return "edited by you";
+  const label = agentLabel(s.rules, agent);
+  if (s.rules.policy.agents[agent]?.role === "gardener") return `tidied by ${label}`;
+  const note = s.notes.find((n) => n.fm.id === id);
+  const f = attr ? note?.fm.facts?.[attr] : undefined;
+  const recs = !f ? [] : isList(f) ? f.items : [f as FactRecord];
+  const from = sourceWords(recs.flatMap((r) => r.sources ?? []).filter((x) => !/^(agent|agent-relay|agent-log):/.test(refString(x))));
+  return from ? `filed from ${from}` : `noted by ${label}`;
+}
 
 // Saved writes from the last week, newest first, one line per fact.
 export function recentChanges(s: State, days = 7, limit = 8): Change[] {
@@ -61,9 +87,12 @@ export function recentChanges(s: State, days = 7, limit = 8): Change[] {
   for (const w of [...s.writes].sort((a, b) => String(b.at).localeCompare(String(a.at)))) {
     if (w.outcome !== "committed" || String(w.at) < since) continue;
     const [id, attr] = String(w.key ?? "").split("#");
+    // A source check (confirm, due again) changed nothing: it is the trust audit's, not a change
+    // (Mac phone pass, 2026-10-25: the list was all "hub updated …").
+    if (w.kind === "source-confirm" || w.kind === "source-due") continue;
     if (!ids.has(id) || folderOf(id) === "disputes" || seen.has(String(w.key))) continue;
     seen.add(String(w.key));
-    out.push({ id, attr, who: String(w.agent ?? ""), at: String(w.at) });
+    out.push({ id, attr, who: String(w.agent ?? ""), at: String(w.at), why: changeWhy(s, id, attr, w) });
     if (out.length >= limit) break;
   }
   return out;
@@ -85,6 +114,19 @@ export function needsLook(s: State, limit = 8): Stale[] {
   return out.sort((a, b) => a.checked.localeCompare(b.checked)).slice(0, limit);
 }
 
+// How a fact ages, in a few plain words for its page (memory-graph.md item 5): "doesn't go out of
+// date" for a kind that has no shelf life, "check again in Mar 2027" for one that does, and
+// nothing for a kind nobody declared or a fact already out of date (that has its own words).
+export function lifeWords(s: State, n: Note, attr: string, r: FactRecord): string | undefined {
+  const l = lifeOf(r, attributeSpec(s.rules, n.fm.type, attr), isDeclared(s.rules, n.fm.type, attr));
+  if (!l) return undefined;
+  if (l.kind === "fixed") return "doesn't go out of date";
+  if (l.kind === "latest") return "changes over time; the newest is kept";
+  if (!l.by || ["stale", "due"].includes(freshnessOf(s, n, attr, r))) return undefined;
+  const [y, m] = l.by.split("-").map(Number);
+  return `check again in ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1]} ${y}`;
+}
+
 export function freshnessOf(s: State, n: Note, attr: string, r: FactRecord): Freshness {
   return factFreshness(r, attributeSpec(s.rules, n.fm.type, attr), today());
 }
@@ -100,7 +142,7 @@ export function sinceDate(date: string | undefined): string {
   return `${Math.round(d / 365)} years ago`;
 }
 
-const SOURCE_WORDS: Record<string, string> = { gmail: "an email", mail: "an email", calendar: "your calendar", gcal: "your calendar", notion: "Notion", url: "a web page", web: "a web page", drive: "a document", doc: "a document", owner: "you", louis: "you", "instinct-mem": "Instinct's memory", "town-wiki": "Town's wiki", "town-routine": "a Town routine", agent: "an agent", "agent-relay": "an agent's message", "agent-log": "an agent's log" };
+const SOURCE_WORDS: Record<string, string> = { gmail: "an email", mail: "an email", calendar: "your calendar", gcal: "your calendar", notion: "Notion", url: "a web page", web: "a web page", drive: "a document", doc: "a document", owner: "you", louis: "you", approved: "you approved", "instinct-mem": "Instinct's memory", "town-wiki": "Town's wiki", "town-routine": "a Town routine", agent: "an assistant", "agent-relay": "an assistant's message", "agent-log": "an assistant's log" };
 
 // Where a fact came from, in words: "an email", "your calendar and an email".
 export function sourceWords(sources: SourceRef[] | undefined): string {
@@ -136,7 +178,13 @@ export function connections(s: State, n: Note): Connections {
   const byId = new Map(s.notes.map((x) => [x.fm.id, x]));
   const linksOf = (x: Note) => new Set([...linksIn(x.body), ...linksIn(JSON.stringify(x.fm.facts ?? {}))]);
   const linksTo = [...linksOf(n)].filter((id) => id !== n.fm.id && byId.has(id)).map((id) => byId.get(id)!);
-  const mentionedIn = browsable(s).filter((x) => x.fm.id !== n.fm.id && linksOf(x).has(n.fm.id));
+  // Who links to whom, built once per brain version: scanning every note per page was most of it.
+  const backlinks = keptFor(s.root, "backlinks", s.version, () => {
+    const m = new Map<string, Note[]>();
+    for (const x of browsable(s)) for (const id of linksOf(x)) (m.get(id) ?? m.set(id, []).get(id)!).push(x);
+    return m;
+  });
+  const mentionedIn = (backlinks.get(n.fm.id) ?? []).filter((x) => x.fm.id !== n.fm.id);
   const sources = new Map<string, SourceUse>();
   for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     const recs = isList(f) ? f.items.filter((i) => !i.valid_to) : isDisputed(f) ? f.candidates : [f as FactRecord];

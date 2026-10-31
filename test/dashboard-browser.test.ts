@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Browser episodes for Ask, in-place edits, model-proposed edits and Robin's editor: a real
+// Browser episodes for search, in-place edits, model-proposed edits and Robin's editor: a real
 // Chromium (Playwright) signs in through the printed link and clicks what Robin would click,
 // against the live agents' server and dashboard on a throwaway brain. The model is the fake
 // provider (no API keys here). Skipped when Chromium can't start.
@@ -34,6 +34,7 @@ function rig(fake: (r: ModelRequest) => string) {
     const page = await ctx.newPage();
     page.on("dialog", (dl: any) => dl.accept());
     await page.goto(d.loginUrl);
+    await page.goto(new URL("/overview", page.url()).href);
     return page;
   };
   const stop = () => { agents.stop(true); d.server.stop(true); };
@@ -42,22 +43,17 @@ function rig(fake: (r: ModelRequest) => string) {
 const fact = (root: string, id: string, attr: string) => loadBrain(root).find((n) => n.fm.id === id)?.fm.facts?.[attr] as FactRecord;
 const flash = async (page: any) => (await page.locator(".flash .flash-msg").textContent()).trim();
 
-run("Ask: Robin types a question and gets an answer with the facts it used", async () => {
-  const r = rig(() => "Jane Roy coordinates the course [people/jane-roy].");
+run("Search: Robin types a name and the results come as he types; one opens the note", async () => {
+  const r = rig(() => "");
   try {
     const page = await r.open();
-    await page.getByRole("link", { name: "Brain" }).click();
-    const box = page.getByPlaceholder("Search or ask");
+    await page.getByRole("link", { name: "Brain", exact: true }).click();
+    const box = page.getByPlaceholder("Search");
     await box.fill("Jane Roy");
-    // results come as you type, before anything is asked
     await page.locator("#results a.b-row", { hasText: "Jane Roy" }).first().waitFor();
     expect(page.url()).toContain("/brain?q=Jane");
-    await box.fill("who is Jane Roy");
-    await box.press("Enter");
-    await page.waitForURL(/\/ask$/);
-    expect(await page.locator("body").textContent()).toContain("Jane Roy coordinates the course");
-    await page.locator(".card a[title=\"people/jane-roy\"]").first().click();
-    expect(page.url()).toContain("/note/people/jane-roy");
+    await page.locator("#results a.b-row", { hasText: "Jane Roy" }).first().click();
+    expect(page.url()).toContain("/p/people/jane-roy");
   } finally { r.stop(); }
 }, 30000);
 

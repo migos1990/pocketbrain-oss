@@ -5,19 +5,21 @@
 import { isDisputed, isList, type Note, type FactRecord, type SourceRef, sensitivityRank } from "../brain";
 import type { State } from "./data";
 import { esc, button, type Page } from "./html";
+import { paged, pager } from "./paging";
 import { cap, plain, agentLabel } from "./labels";
 import { OWNER } from "../owner";
 import { kindLabel, folderOf, sourceWords } from "./browse";
 import { actorOf, changesBetween, spans, firstSaveOf, undoFor, factValue, type Save, type FactChange, type Version, type Undo } from "./history";
+import { ownerLocal, ownerToday } from "../clock";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // "2026-09-28..." -> "28 Sep 2026"; partial dates stay partial.
 export const dayName = (d: string | undefined) => {
-  const m = String(d ?? "").match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?/);
+  const m = ownerLocal(String(d ?? "")).match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?/);
   return !m ? esc(d) : m[3] ? `${+m[3]} ${MONTHS[+m[2] - 1]} ${m[1]}` : m[2] ? `${MONTHS[+m[2] - 1]} ${m[1]}` : m[1];
 };
-const clock = (iso: string) => String(iso).slice(11, 16);
+const clock = (iso: string) => ownerLocal(String(iso)).slice(11, 16);
 const enc = (id: string) => id.split("/").map(encodeURIComponent).join("/");
 const noteHref = (id: string) => `/note/${enc(id)}`;
 export const historyHref = (id: string, at?: string) => `/history/${enc(id)}${at ? `?at=${encodeURIComponent(at)}` : ""}`;
@@ -126,7 +128,7 @@ export function snapshotPage(s: State, csrf: string, note: Note, v: Version, sav
   const body = `${crumbs(s, note, `<a href="${historyHref(note.fm.id)}">History</a>`)}<h1 title="${esc(note.fm.id)}">${esc(then?.fm.title ?? note.fm.title)}</h1>
 <div class="b-seen h-asof"><span>${asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? `On <b>${dayName(asked)}</b>, as last saved ${dayName(v.at)} at ${esc(clock(v.at))} by ${esc(who === "You" ? "you" : who)}.` : `As it was on <b>${dayName(v.at)}</b> at ${esc(clock(v.at))}, after a save by ${esc(who === "You" ? "you" : who)}.`}</span><span class="b-gap"></span>${datePicker(historyHref(note.fm.id), asked, "Another day")}<a href="${noteHref(note.fm.id)}">Back to today</a></div>
 ${then ? `<div class="b-facts">${facts || '<div class="empty">No facts then.</div>'}</div>
-${then.body.trim() ? `<h2>Notes</h2><div class="b-text h-text">${esc(then.body.trim()).replace(/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g, (m, id, l) => { const x = s.notes.find((y) => y.fm.id === id); return x ? `<a href="${noteHref(id)}" title="${esc(id)}">${esc(l ?? x.fm.title)}</a>` : m; })}</div>` : ""}
+${then.body.trim() ? `<h2>Notes</h2><div class="b-text h-text">${esc(then.body.trim()).replace(/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g, (m, id, l) => { const x = s.notes.find((y) => y.fm.id === id); return x ? `<a href="/p/${enc(id)}" title="${esc(id)}">${esc(l ?? x.fm.title)}</a>` : m; })}</div>` : ""}
 <h2>Since then</h2><div class="card b-list">${since.length ? since.map((c) => `<div class="b-row"><span class="b-main"><span class="h-change">${changeLine(c)}</span></span></div>`).join("") : '<div class="empty">Nothing has changed since.</div>'}</div>` : '<div class="empty">The note did not exist at that moment.</div>'}`;
   return { title: `${note.fm.title}: ${dayName(asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : v.at)}`, tab: "brain", body };
 }
@@ -135,14 +137,14 @@ ${then.body.trim() ? `<h2>Notes</h2><div class="b-text h-text">${esc(then.body.t
 export function weekPage(s: State, saves: Save[], days: number): Page {
   const titles = new Map(s.notes.map((n) => [n.fm.id, String(n.fm.title ?? n.fm.id)]));
   const byDay = new Map<string, Save[]>();
-  for (const c of saves) { const d = c.at.slice(0, 10); byDay.set(d, [...(byDay.get(d) ?? []), c]); }
-  const todayIso = s.now.toISOString().slice(0, 10);
-  const yesterday = new Date(s.now.getTime() - 86_400_000).toISOString().slice(0, 10);
+  for (const c of saves) { const d = ownerLocal(c.at).slice(0, 10); byDay.set(d, [...(byDay.get(d) ?? []), c]); }
+  const todayIso = ownerToday(s.now);
+  const yesterday = ownerToday(new Date(s.now.getTime() - 86_400_000));
   const label = (d: string) => d === todayIso ? "Today" : d === yesterday ? "Yesterday" : `${DAYS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${dayName(d)}`;
   const groups = [...byDay.entries()].map(([d, cs]) => `<h2 class="h-day">${label(d)}</h2><div class="card b-list">${cs.map((c) => {
     const title = titles.get(c.id);
     const lead = c.changes.find((x) => x.type === "changed" || x.type === "added");
-    return `<a class="b-row" href="${title ? historyHref(c.id) : "#"}" title="${esc(c.id)}"><span class="b-main"><span><span class="b-title">${esc(title ?? c.id)}</span> <span class="kind">${esc(kindLabel(folderOf(c.id)))}</span></span><span class="b-snip">${esc(saver(s, c))} ${changeSummary(c.changes)}</span>${lead && lead.to !== undefined ? `<span class="b-meta">${esc(cap(lead.attr))}: ${lead.from !== undefined ? `<s>${esc(lead.from)}</s> to ` : ""}${esc(lead.to)}</span>` : ""}</span><span class="b-when">${esc(clock(c.at))}</span></a>`;
+    return `<a class="b-row" href="${title ? historyHref(c.id) : "#"}" title="${esc(c.id)}"><span class="b-main"><span><span class="b-title">${esc(title ?? cap(c.id.split("/").pop()))}</span> <span class="kind">${esc(kindLabel(folderOf(c.id)))}</span></span><span class="b-snip">${esc(saver(s, c))} ${changeSummary(c.changes)}</span>${lead && lead.to !== undefined ? `<span class="b-meta">${esc(cap(lead.attr))}: ${lead.from !== undefined ? `<s>${esc(lead.from)}</s> to ` : ""}${esc(lead.to)}</span>` : ""}</span><span class="b-when">${esc(clock(c.at))}</span></a>`;
   }).join("")}</div>`).join("");
   const body = `<div class="b-crumbs"><a href="/brain">Brain</a></div><h1>What changed this week</h1>
 <div class="h-head"><div class="sub">${saves.length} save${saves.length === 1 ? "" : "s"} in the last ${days} days</div>${datePicker("/history", "", "See the brain on")}</div>
@@ -151,10 +153,11 @@ ${groups || '<div class="empty">Nothing changed in the last 7 days.</div>'}`;
 }
 
 // The whole brain on a date: every note as it was, with what has changed in it since.
-export function brainOnPage(s: State, day: string, then: Note[], savedAt: string): Page {
+export function brainOnPage(s: State, day: string, then: Note[], savedAt: string, page = 1): Page {
   const now = new Map(s.notes.map((n) => [n.fm.id, n]));
   const was = new Set(then.map((n) => n.fm.id));
-  const rows = then.filter((n) => folderOf(n.fm.id) !== "disputes").sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))).map((n) => {
+  const list = paged(then.filter((n) => folderOf(n.fm.id) !== "disputes").sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))), page);
+  const rows = list.rows.map((n) => {
     const cur = now.get(n.fm.id);
     const since = cur ? changesBetween(n, cur) : [{ type: "deleted" as const }];
     const facts = Object.entries(n.fm.facts ?? {}).filter(([, f]) => !isDisputed(f)).slice(0, 3).map(([a, f]) => `${cap(a)}: ${factValue(f)}`).join(" · ");
@@ -163,6 +166,6 @@ export function brainOnPage(s: State, day: string, then: Note[], savedAt: string
   const added = s.notes.filter((n) => !was.has(n.fm.id) && folderOf(n.fm.id) !== "disputes");
   const body = `<div class="b-crumbs"><a href="/brain">Brain</a> / <a href="/history">History</a></div><h1>Your brain on ${dayName(day)}</h1>
 <div class="h-head"><div class="sub">${then.length} notes, as last saved ${dayName(savedAt)} at ${esc(clock(savedAt))}${added.length ? ` · ${added.length} note${added.length > 1 ? "s" : ""} added since` : ""}</div>${datePicker("/history", day, "Another day")}</div>
-<div class="card b-list" style="margin-top:20px">${rows || '<div class="empty">The brain had no notes yet.</div>'}</div>`;
+<div class="card b-list" style="margin-top:20px">${rows || '<div class="empty">The brain had no notes yet.</div>'}</div>${pager(list, (n) => `/history?at=${day}${n > 1 ? `&page=${n}` : ""}`, "notes")}`;
   return { title: `Brain on ${dayName(day)}`, tab: "brain", body };
 }

@@ -8,7 +8,7 @@ import type { Proposal, Example } from "../consent";
 
 export interface ConsentProposal extends Proposal { id: string }
 
-const noteHref = (id: string) => `/note/${id.split("/").map(encodeURIComponent).join("/")}`;
+const noteHref = (id: string) => `/p/${id.split("/").map(encodeURIComponent).join("/")}`;
 const list = (xs: Example[], empty: string) => xs.length ? xs.map((x) => `<div><a href="${noteHref(x.id)}" title="${esc(x.id)}">${esc(x.title)}</a> <span class="sub">${esc(x.why)}</span></div>`).join("") : `<div class="empty">${esc(empty)}</div>`;
 
 // The card on an assistant's page. Its slice changes only after the owner applies a proposal.

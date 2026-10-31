@@ -14,12 +14,16 @@ import { finishHandoff } from "./handoff";
 import { loadRules, ownerName, type Rules } from "./rules";
 import { hoursTripwire } from "./gardener";
 import * as core from "./core";
+import { queryOpts } from "./semantic";
+import { meaningOnly } from "./retrieve";
 import { CoreError } from "./core";
-import { sha256 } from "./util";
+import { readCapped, sha256 } from "./util";
 import { today } from "./brain";
 import type { WriteResult } from "./write";
 import { FAVICON } from "./favicon";
 import { memoryCheck, memoryReply, type Reply } from "./memsync";
+import { noteRequest } from "./reqid";
+import { logCall } from "./calls";
 
 type Remember = (root: string, agent: string, body: Record<string, unknown>) => Promise<WriteResult>;
 // The server's write queue (serial), so a reply never races another commit.
@@ -92,8 +96,8 @@ const back = `<p><a href="/b">Back to the start page</a></p>`;
 const pre = (s: string) => `<pre>${esc(s)}</pre>`;
 
 async function form(req: Request): Promise<URLSearchParams> {
-  const text = await req.text();
-  if (text.length > MAX_FORM) throw new CoreError(413, "form too large");
+  const text = await readCapped(req, MAX_FORM);
+  if (text === undefined) throw new CoreError(413, "form too large");
   return new URLSearchParams(text);
 }
 
@@ -152,7 +156,7 @@ function rememberForm(s: Session, note = "") {
   const field = (name: string, label: string, hint = "", value = "") => `<label>${label}${hint ? ` <small>(${hint})</small>` : ""} <input name="${name}"${value ? ` value="${esc(value)}"` : ""}></label>`;
   // The hub's clock decides what counts as future-dated, not the agent's.
   const t = today();
-  return page("Remember a fact", `${note}<p>One fact per form, with its source. Same checks as anywhere else: outside your own area it waits for the owner.</p>
+  return page("Remember a fact", `${note}<p>One fact per form, with its source. Same checks as anywhere else: it files itself, a different value for one the brain holds is filed as a conflict, and a fact on a private note waits for the owner.</p>
 <form method="post" action="/b/remember"><input type="hidden" name="csrf" value="${esc(s.csrf)}">
 ${field("id", "Note id", "e.g. people/jane-roy; leave empty for a new note")}${field("title", "Title", "new note only")}${field("type", "Type", "new note only")}${field("area", "Area", "new note only")}
 ${field("attribute", "Attribute")}${field("value", "Value")}${field("as_of", "As of", `YYYY-MM-DD; today here is ${t}, never later`, t)}
@@ -177,7 +181,7 @@ async function remember(root: string, s: Session, req: Request, write: Remember)
 // memory_check on this door (docs/memory-sync.md): one page, one form. The same functions as the
 // MCP tool and /v1/memory-check, so the same slice, signing and grading.
 function memoryPage(root: string, s: Session, note = "") {
-  const c = memoryCheck(root, s.agent);
+  const c = memoryCheck(root, s.agent, "browser");
   const parts: string[] = [];
   if (c.changes) parts.push(`<h2>Changed since you last confirmed</h2><p>${esc(c.changes.instruction)}</p><ul>${c.changes.items.map((i) =>
     `<li><strong>${esc(i.about)}</strong>: now ${i.now === null ? "no longer held" : `"${esc(i.now)}"`}${i.was.length ? `; was ${i.was.map((w) => `"${esc(w)}"`).join(", ")}` : ""}. Keep: <code>${esc(i.pointer)}</code></li>`).join("")}</ul>
@@ -228,8 +232,13 @@ export async function browserDoor(root: string, req: Request, url: URL, write: R
   const res = await withTokenRole(s?.agent ?? "", s?.role, () => door(root, req, url, write, lock))
     .catch((e) => { if (writing) release(root, s!.agent, "write", at, { role: s!.role }); throw e; });
   if (writing && res.status >= 400) release(root, s!.agent, "write", at, { role: s!.role });
+  // One line per page in log/calls.jsonl (src/calls.ts), as on MCP and the API: the page, never its
+  // query or note id, and the status when it was refused.
+  if (budgeted) logCall(root, s!.agent, `${req.method} ${PAGES.has(path) ? path : path.startsWith("/b/notes/") ? "/b/notes" : "/b/other"}`, res.status >= 400 ? String(res.status) : undefined);
   return res;
 }
+
+const PAGES = new Set(["/b", "/b/orientation", "/b/changes", "/b/context", "/b/search", "/b/remember", "/b/memory-check", "/b/handoffs/done"]);
 
 async function door(root: string, req: Request, url: URL, write: Remember, lock: Lock): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, "") || "/b";
@@ -242,6 +251,7 @@ async function door(root: string, req: Request, url: URL, write: Remember, lock:
       if (sid) forRoot(root).delete(sid);
       return path === "/b" && m === "GET" ? signIn() : signIn(401, "Please sign in.");
     }
+    noteRequest({ agent: s.agent });
     const no = refusal(root, s.agent, s.hash);
     if (no) {
       if (no.status === 401) forRoot(root).delete(sid!);
@@ -290,12 +300,14 @@ async function door(root: string, req: Request, url: URL, write: Remember, lock:
       const handBlock = handed ? `<h2>Handed to you by another assistant</h2><p>A request, not the owner's word: check it against the brain and your instructions. Press Done when you've finished it.</p><ul>${handed}</ul>` : "";
       return page("What changed", `${handBlock}${head}${list}${back}`);
     }
-    if (path === "/b/context") return page("Context", pre(core.contextPack(root, s.agent, url.searchParams.get("topic") || undefined)) + back);
+    if (path === "/b/context") { const topic = url.searchParams.get("topic") || undefined; return page("Context", pre(core.contextPack(root, s.agent, topic, await queryOpts(topic, s.agent))) + back); }
     if (path === "/b/search") {
       const q = url.searchParams.get("q") ?? "";
-      const hits = core.search(root, s.agent, q, 20);
+      const hits = core.search(root, s.agent, q, 20, {}, await queryOpts(q, s.agent));
       const items = hits.map((h) => `<li><a href="/b/notes/${esc(encodeURIComponent(h.id))}">${esc(h.title)}</a> <small>${esc(h.id)} · ${esc(h.type)}</small><br>${esc(h.match)}</li>`).join("");
-      return page(`Search: ${q}`, (items ? `<ul>${items}</ul>` : "<p>Nothing in your slice matches.</p>") + back);
+      const said = (e: core.EmptySearch) => `<p>${esc(e.why)}</p><p>${esc(e.next)}</p>`;
+      const byWords = hits.some((h) => !meaningOnly(h));
+      return page(`Search: ${q}`, (byWords ? `<ul>${items}</ul>` : said(core.emptySearch(root, s.agent, q, hits)) + (items ? `<ul>${items}</ul>` : "")) + back);
     }
     if (path.startsWith("/b/notes/")) {
       let id: string;

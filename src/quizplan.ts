@@ -9,8 +9,8 @@
 //   4. then the oldest answer, then the key.
 //
 // Facts it answered in the last 30 days, or has an open question or a correction in flight on,
-// are left out. Owner-only: `pocketbrain beliefs plan` shows it and `memsync run --budget` spends
-// it. The gardener's nightly memory_sync is unchanged until the owner turns this on.
+// are left out. Owner-only: `pocketbrain beliefs plan` shows it and `--ask` spends it. The nightly
+// pass (syncPass in memsync.ts) only reports it until the owner sets memsync.quiz_budget.
 import { loadRules } from "./rules";
 import { beliefs, type Cell } from "./beliefs";
 import { quiz, state } from "./memsync";
@@ -47,7 +47,7 @@ export function quizPlan(root: string, opts: Opts = {}): PlanRow[] {
   const reads = specificReads(readEntries(root), new Date(now.getTime() - RECHECK_DAYS * DAY).toISOString());
   const weekAgo = new Date(now.getTime() - 7 * DAY).toISOString();
   return quizzed(root).map((agent) => {
-    const asked = quizzes.filter((q) => q.agent === agent && q.at >= weekAgo && q.at <= now.toISOString()).length;
+    const asked = quizzes.filter((q) => q.agent === agent && !q.feed && q.at >= weekAgo && q.at <= now.toISOString()).length;
     const left = Math.max(0, perWeek - asked);
     const ranked = radar.rows
       .filter((r) => r.cells[agent] && askable(r.cells[agent], now))

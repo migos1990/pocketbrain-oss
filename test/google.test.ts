@@ -12,13 +12,12 @@ import { makeBrain } from "./fixture";
 import { loadBrain, saveNote, type FactRecord } from "../src/brain";
 import { makeModel, type ModelRequest } from "../src/model";
 import { useCaptureModel, captureModel } from "../src/capture";
-import { pullSource, verifySource } from "../src/pull";
+import { pullSource, verifySource, recheckDue } from "../src/pull";
 import { useHttp, bodyText, connectGoogle, GMAIL_SCOPE, GCAL_SCOPE, DRIVE_SCOPE } from "../src/google";
 
 const EXTRACT = (p: string) => /exam room B-201/.test(p) ? [{ entity: "Course A", type: "project", attribute: "next_step", value: "Book the exam room B-201", quote: "book the exam room B-201" }] : [];
-const original = captureModel;
 beforeAll(() => useCaptureModel(() => makeModel({ provider: "fake", model: "fake-1" }, { fake: (r: ModelRequest) => JSON.stringify({ facts: EXTRACT(r.prompt) }) })));
-afterAll(() => { useCaptureModel((root) => original(root)); useHttp((u, i) => fetch(u, i)); });
+afterAll(() => { useCaptureModel(); useHttp((u, i) => fetch(u, i)); });
 
 const b64 = (s: string) => Buffer.from(s).toString("base64url");
 const msg = (id: string, to: string, body: string, label = "INBOX") => ({ id, labelIds: [label], internalDate: "1760300000000", payload: { mimeType: "multipart/alternative", headers: [{ name: "Delivered-To", value: to.replace(/^.*<|>.*$/g, "") }, { name: "From", value: "dean@school.example" }, { name: "To", value: to }, { name: "Subject", value: "Exam" }], parts: [{ mimeType: "text/plain", body: { data: b64(body) } }, { mimeType: "text/html", body: { data: b64(`<p>${body}</p>`) } }] } });
@@ -202,8 +201,21 @@ test("verify_source reads one live message by id; forwarded school mail gives no
   const school = await verifySource(root, "gardener", "gmail:primary/m1", "book the exam room B-201", 40, "personal");
   expect(school.result).toBe("match");
   expect(school.quote).toBeUndefined();
-  expect((await verifySource(root, "gardener", "gmail:primary/nope", "x", 40)).result).toBe("unreachable");
+  // Not in the mailbox (deleted): the source is gone, not unreachable.
+  expect(await verifySource(root, "gardener", "gmail:primary/nope", "x", 40)).toMatchObject({ result: "no-match", why: expect.stringContaining("source gone") });
   expect(calls).not.toContain("messages"); // one get per check, never a listing
+});
+
+test("a live mail deleted from the mailbox turns the facts citing it due as source gone on the night pass", async () => {
+  const root = setup(true);
+  const n = loadBrain(root).find((x) => x.fm.id === "projects/course-a")!;
+  n.fm.facts!.next_step = { value: "Book the exam room B-201", as_of: "2026-10-07", sources: ["gmail:primary/m9"], verification: "verified-by-source", by: "planner" } as FactRecord;
+  saveNote(root, n);
+  sh(root, "git", "commit", "-qam", "louis: fact from a mail");
+  const r = await recheckDue(root);
+  expect(r.due).toContain("projects/course-a#next_step");
+  const f = loadBrain(root).find((x) => x.fm.id === "projects/course-a")!.fm.facts!.next_step as FactRecord;
+  expect(f).toMatchObject({ value: "Book the exam room B-201", verification: "unverified", recheck: { why: "source gone", ref: "gmail:primary/m9" } });
 });
 
 const iso = (days: number) => new Date(Date.now() + days * 864e5).toISOString();

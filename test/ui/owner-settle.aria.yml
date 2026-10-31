@@ -1,0 +1,10 @@
+- main:
+  - link "‹ Home":
+    - /url: /home
+  - heading "Is Atlas launch's next step freeze the beta build on 15 October or freeze the beta build on 22 October?" [level=1]
+  - button "freeze the beta build on 15 October from an email, 7 Oct"
+  - button "freeze the beta build on 22 October from an email, 7 Oct"
+  - button "Not sure, keep both Nothing changes and I stop asking."
+  - text: Actually, it's…
+  - textbox "Actually, it's…"
+  - button "Send"

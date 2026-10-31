@@ -1,0 +1,7 @@
+relay_address: relay@brain.example
+owner_address: robin@example.org
+agents:
+  claude: claude@brain.example
+  chatgpt: chatgpt@brain.example
+  gemini: gemini@brain.example
+canaries: [Zephyr Holdings 7731]

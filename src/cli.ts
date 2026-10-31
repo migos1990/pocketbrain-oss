@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
 // SPDX-License-Identifier: AGPL-3.0-only
 // pocketbrain CLI. The brain folder comes from --brain, $PB_BRAIN, or the current directory.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, resolve, relative, extname } from "node:path";
+import { catchUpDiary } from "./diary-catchup";
+import { forgetPerson, planForget, undoForget } from "./forget";
+import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { supportBundle } from "./support";
+import { join, resolve, relative, extname, dirname } from "node:path";
 import { homedir } from "node:os";
 import YAML from "yaml";
-import { loadBrain } from "./brain";
-import { loadRules, gardeners } from "./rules";
+import { loadBrain, saveParseSnapshots } from "./brain";
+import { loadRules, gardeners, type Rules } from "./rules";
 import { carve, grantFor, explain, renderPreview } from "./carve";
 import { buildView } from "./view";
 import { loadStanding, setStanding, suggestStanding, approveSuggestion, orphanStanding, unpinnedAddresses, droppedStanding } from "./standing";
@@ -15,13 +18,15 @@ import { digest } from "./digest";
 import { importNotion } from "./import/notion";
 import type { WriteRequest } from "./checks";
 import { upkeep, undoRun, fileLiveSource } from "./upkeep";
+import { sourceBackfill } from "./backfill";
 import { judgeDuplicates } from "./judge";
 import { sleep, STEP as SLEEP_STEP } from "./sleep";
 import { mergeNotes } from "./merge";
+import { samePersonProposals, mergeSamePerson, notSamePerson, undoPersonMerge, personMerges } from "./sameperson";
 import { explainAgent } from "./explain";
 import { readsByDay, readsReport } from "./whoread";
 import { AUDIO, transcriberFor } from "./transcribe";
-import { capture, parseEmail, STEP as CAPTURE_STEP, type CaptureInput, extractPending, heldCaptures, decideCapture, captureConfig } from "./capture";
+import { capture, parseEmail, STEP as CAPTURE_STEP, type CaptureInput, extractPending, heldCaptures, decideCapture, captureConfig, releaseHeld, heldCount, sweepOwnerProposals } from "./capture";
 import { intakeTick, dropOnce, mailOnce, mailSourceFor, type IntakeItem } from "./intake";
 import { loadSources, pullSource, pullAll, type PullResult } from "./pull";
 import { connectGoogle } from "./google";
@@ -33,13 +38,16 @@ import { serve, serial } from "./server";
 import * as hub from "./hub";
 import { doctor, renderDoctor } from "./doctor";
 import { applyFixes, fixPlan, renderDone, renderPlan } from "./doctor-fix";
-import { useCells, buildCells, cellsOn } from "./cell";
-import { serveDashboard } from "./dashboard/server";
-import { buildDeck, runAutoByHand } from "./deck";
-import { issueToken, revokeTokens, rotateToken, tokenInfo } from "./auth";
+import { useCells, startCells, cellsOn } from "./cell";
+import { serveDashboard, mintPhoneLink } from "./dashboard/server";
+import { runAutoByHand } from "./filing";
+import { revokeTokens, rotateToken, tokenInfo, retainTokens } from "./auth";
+import { sha256 } from "./util";
 import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, OwnerSetError } from "./ownerset";
+import { namePlan } from "./mentions";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setDashboardTailnet, setAgentTier, OwnerSetError } from "./ownerset";
+import { tailnetSettings, tailnetSelf } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
 import { loadKeys, keysDir } from "./secrets";
@@ -55,21 +63,23 @@ import { standingInstruction } from "./orientation";
 import { addAgent, checkNotAnArea, likeAgent, previewNewAgent, checkNewAgent, type NewAgent } from "./addagent";
 import { comingBack, comingBackText } from "./access-request";
 import * as share from "./share";
-import { createInvite } from "./invite";
-import { initBrain, interview, InitError, type InitOptions } from "./init";
+import { createInvite, mintFromShell, shellMintRefusal, reachRefusal } from "./invite";
+import { initBrain, interview, InitError, AGENT_KINDS, KIND_NAME, type AgentKind, type InitOptions } from "./init";
 import { tick, watch, watchdog, loadTextState } from "./textline/poll";
-import { ESCALATION_TEMPLATE, loadEscalation } from "./textline/policy";
+import { ESCALATION_TEMPLATE, loadEscalation, useTransport, TRANSPORTS } from "./textline/policy";
 import { makeTransport, fakeReply } from "./textline/transport";
 import { openItems } from "./textline/items";
 import { existsSync } from "node:fs";
-import { git } from "./git";
+import { git, commitPaths } from "./git";
 import { browserInstruction } from "./browser";
 import * as bk from "./backup";
+import { offsiteCopy, offsiteOn, offsiteOff } from "./offsite";
 import { relayTick, fileTransport, agentMailTransport, loadRelayConfig, blockListPlan, decideHeld, relayCheck } from "./relay";
 import { ingestLog, searchLogs, readLog, listLogs, decideLog } from "./logs";
 import { parseExport, type LogFormat } from "./import/logs";
 import { OWNER } from "./owner";
-import { recordReexplain, recordOwnerTime, recordDrill, recordFix, recordRepair, noteStart, noteStop, bar, week, addTask, doneTask, openTasks } from "./measure";
+import { watchdogTick } from "./watchdog";
+import { recordReexplain, recordOwnerTime, recordDrill, recordFix, recordRepair, appBuild, handFixNotice, noteStart, noteStop, startKind, bar, week, addTask, doneTask, openTasks } from "./measure";
 import { startJobs, hubPlists } from "./start";
 import { uninstallPlan, runUninstall, planText } from "./uninstall";
 import { formatProblem, migrate, renderMigrate } from "./format";
@@ -78,15 +88,20 @@ import { runAction } from "./dashboard/actions";
 import * as consent from "./consent";
 import type { Model } from "./model";
 import { auditCarve } from "./audit";
+import { trustReport, trustText, recordTrust, sweep } from "./trust";
+import { setupInChild, modelDir, MODEL_ID, MODEL_PAGE, MODEL_FILE_HOST } from "./semantic";
 import { probeInit, findCanaries } from "./canary";
 import * as memsync from "./memsync";
 import * as beliefsMod from "./beliefs";
 import * as quizplan from "./quizplan";
 import * as fillMod from "./fill";
 import { examRun } from "./exam";
-import { importMemory, ME } from "./memimport";
+import { runGolden } from "./golden";
+import { importMemory, skippedMemory, ME } from "./memimport";
 import { listHandoffs, decideHandoff } from "./handoff";
 import * as edge from "./edge";
+import { ownerError } from "./owner-errors";
+import { trace, traceText, type Trace } from "./trace";
 
 // What a new owner needs; everything else is under `help --all` or a dashboard button.
 const SHORT_USAGE = `pocketbrain <command>
@@ -96,17 +111,23 @@ const SHORT_USAGE = `pocketbrain <command>
   start [--port 8787]                the hub in one process: agents' server, dashboard, text channel,
                                      relay, nightly upkeep and sleep, morning digest
   start --launchd [--tunnel <name>] [--write]   launchd files to keep it running on a Mac
+  add <agent> --kind claude-ai|claude-code|town|browser [--url https://brain.example] [--yes]
+                                     connect one assistant in one command: its door, a preset slice, then at most
+                                     two pastes (docs/add-an-agent.md#one-command-per-kind)
   add <agent> --slices a,b [--door mcp|oauth|api|local|invite] [--url https://brain.example] [--yes]
                                      a new trial agent in one go: preview, grant, then its token or sign-in
                                      and what to paste where (docs/add-an-agent.md)
   add <new> --like <old> [--slices extra] [--yes]   switch day: the new assistant starts from the old one's
                                      slice, as trial, with an invite code (docs/switch-day.md)
-  connect <agent> [--url https://brain.example]   a token for an agent, and what to paste where
+  connect <agent> [--url https://brain.example] [--code <code>]   a token for an agent, and what to paste where
+                                     (a trial agent; a wider one needs the dashboard's one-time code)
+  connect <agent> --kind claude-code [--code <code>]   connect an existing agent to Claude Code on this machine: runs
+                                     claude mcp add and writes its standing instruction into ~/.claude/CLAUDE.md
   consent <agent> "what it is for"   say in one sentence what an assistant is for; get the slice it would
                                      see, with examples, and the line that applies it (docs/consent.md)
   connect <agent> --browser [--key-only]   sign-in page for an agent that only browses (docs/browser-door.md)
   doctor                             is everything healthy
-  handover --to <dir>                give the whole brain to a person
+  handover --to "Name" --out <dir>  give the whole brain to a person
   export --out <file>                the brain (or --agent's slice) as a Memory Passport bundle
   reexplain <agent> "<what>"         you had to explain something again (the week's main number)
   week                               the 7-day scorecard
@@ -121,10 +142,11 @@ const SHORT_USAGE = `pocketbrain <command>
 
 const USAGE = `pocketbrain <command>
 
-  init <dir> --name "Your name" [--agent assistant] [--areas work,personal]
+  init <dir> --name "Your name" [--kind claude-code|claude-ai|town|browser] [--agent <name>] [--areas work,personal]
        [--from-text notes.txt|dir]… [--from-mbox mail.mbox]… [--from-ics calendar.ics]… [--me you@example.com]…
        [--export-area personal] [--no-token]
   init <dir> --interview             a new brain from nothing: rules/, one trial agent and its token,
+                                     named after the assistant kind (--kind); Claude Code is connected right away;
                                      notes seeded from plain text, a Gmail/calendar export or a guided interview
   import-notion                      raw Notion snapshot (import/raw) -> brain files + import/REPORT.md
   carve <agent> --preview            what <agent> would see, from rules/policy.yaml
@@ -155,10 +177,18 @@ const USAGE = `pocketbrain <command>
                                      --apply runs it in place as one commit (start does this by itself)
   reads <agent> [--days N] [--json]  what <agent> read and searched for, day by day, with an unusual line
                                      when most of a day is outside its usual areas (log/reads.jsonl). Only you.
+  same-person [--json]               person notes that share a trusted email, phone or handle, with the evidence
+  forget <people/id> [--yes]         take a person out of the brain on request: their note, links ([[redacted]]),
+                                     standing, inbox items; without --yes it only shows what would go (docs/forget.md)
+  forget --undo <people/id>          put a forgotten person back, within 14 days
+  same-person merge <id> [--swap] | not <id> | undo <id>   your answer; a merge is undone while neither note changed
   explain <agent> [topic|id|id#attr] what <agent>'s slice holds about a topic, why each note and fact is in
                                      or out, and who was handed it (log/reads.jsonl). Only you.
   why <id#attr> [--json]             where a fact came from: its sources and their strength, earlier values,
                                      and every write on it, refused and held ones included. Only you.
+  audit trust [--json] [--check N]  can you trust the brain? Facts checked against their source, ones that need a
+                                     look and why, no-source reasons, assistants behind, your spot checks; counts only.
+                                     --check N first reads N cited items and rechecks the facts that cite them
   audit carve [--json] [--dry-run]  did any agent's reach grow since the last audit without your commit? Every
                                      widening, traced to its commits; the rest become alerts (start runs it Sundays)
   probe init [--rotate]              plant decoy notes in the probe area, each with a unique canary; print the list
@@ -184,8 +214,10 @@ const USAGE = `pocketbrain <command>
                                      Docs, Zoom): known facts re-confirmed, new ones proposed, facts whose
                                      source moved turn due. start runs it every poll_minutes.
   sources pull <name> --dry-run [--show]   read and extract, write nothing: counts per account and area
+  sources backfill <name> [--max N] [--dry-run]   facts with no live source: search the mailbox for each value; a mail
+                                     that states it and names the note becomes its source (value unchanged)
                                      (safe to paste); --show also prints the facts (don't paste those)
-  sources connect <name>             sign in to a live Gmail, Calendar or Drive source (read-only scope); the
+  sources connect <name>             sign in to a live Gmail, Calendar, Drive or Contacts source (read-only scope); the
                                      token is saved in the keys folder, never printed
   capture held                       captures held for you (injection shapes); nothing was sent to a model
   capture release <file> | capture discard <file>   your answer to a held capture
@@ -195,7 +227,10 @@ const USAGE = `pocketbrain <command>
                                      which line of rules/models.yaml picked it
   undo --run <run-id>                revert one upkeep run's auto-fixes and suppress them
   inbox --accept <file> | --reject <file>   your answer to a proposal
+  inbox more [n]                     move n held new notes (over a source's new_notes_per_day) back to be filed
   digest [--since <iso time>]        what needs you, what happened on its own, numbers -> digest/<date>.md
+  trace <request-id> [--json]        one request's path (door, log lines, commits) from the X-Request-Id an agent got
+                                     back; names only, never note contents (docs/request-ids.md)
   reexplain <agent> "<what>"         log that you had to explain something to an agent again (the week's main number)
   minutes <n>                        log the minutes you spent on the brain today (replaces the dashboard estimate)
   fix "<what>"                       log a hand fix (a restart, a re-paste, an edit to unstick it); resets the real-use bar
@@ -214,9 +249,15 @@ const USAGE = `pocketbrain <command>
                                      launchd plists for start and the Cloudflare tunnel
                                      (config defaults to ~/.cloudflared/config.yml)
   serve [--port 8787] [--host 127.0.0.1] [--dashboard] [--no-cells]   live server: MCP at /mcp, JSON API at /v1, spec at /openapi.json
-  dashboard [--port 8788] [--agentmail]   your control panel on localhost only; prints a login link
-  deck [auto]                          what needs you, as the dashboard's swipe deck shows it; auto: let the hub decide what is past its deadline
+  dashboard [--port 8788] [--agentmail] [--tailnet]   your control panel on localhost (and, with --tailnet or dashboard_tailnet, on your Tailscale address); prints a login link
+  dashboard tailnet on --device <100.x> [--device …] | off   open the dashboard to your own devices on your tailnet (docs/dashboard-tailnet.md)
+  dashboard phone-link [--port n]    a sign-in link for your phone: works once, for a day, on your tailnet
+  filing now                           the hub's filing step by hand, only when no hub runs here: file what captures and sources found, expire what is past its deadline
+  filing all on|off                    every fact your captures and sources find files itself, with Undo; only a conflict asks you
+  me name [--suggested]                your full name as an alias (asked here, or the one your mail gives most), so facts about you land on your own page
+  next-steps newest                    a newer next step replaces the older one (kept in history) instead of asking you
   invite <agent> [--minutes 15] [--url <public url>]   a one-time code the agent redeems at POST /v1/enroll for its own token
+                                     (a narrow trial agent; a wider one's code comes from its dashboard page)
   share add <agent> --name "<person>" --slices a,b [--days 30] [--yes]   share a slice with a person's assistant,
                                      read-only until a date, personal at most, no money (docs/share.md)
   share list | extend <agent> --days N | end <agent>   who you share with; push the date; end it now (keys revoked)
@@ -226,27 +267,39 @@ const USAGE = `pocketbrain <command>
   menubar setup --name "You" [--agent claude] [--dir ~/my-brain] [--from-text notes.txt] [--no-install]
                                      the app's first-run window: a new brain, the hub under launchd, and the
                                      first agent's token and standing instruction, as JSON
+  agent tier <agent> core|trial [--dry-run]   core: the agent writes directly, no daily proposal cap; trial: it
+                                     proposes. One owner commit with a Why (docs/gardener.md)
   agent pause|read-only|revoke <agent>   tighten one agent's switch, as the dashboard's buttons do; resuming is
                                      the dashboard's alone, behind your login
   menubar open-dashboard             open the dashboard signed in, without printing its login link
+  watchdog [--url <hub>]            one look at the hub from outside: two missed /health answers restart it (launchd) and alert
   uninstall [--yes] [--remove-brain] what leaving takes: stop and remove the launchd jobs, logs, the tunnel config
                                      pocketBrain wrote, the menu-bar app and the keys folder; the brain and its
                                      backups stay (--remove-brain removes the brain, never backups); lists what to
                                      delete in your accounts. Prints the plan; --yes runs it (docs/quickstart.md#leaving)
-  token --agent <agent> | --revoke <agent> issue a server token (printed once; only its hash is kept) or cut one off
-  token rotate <agent> [--role reader] [--overlap 24] [--yes]   a new token; the old one keeps working for the
-                                     overlap (hours), then stops, so the assistant never breaks while you re-paste
+  token --agent <agent> [--code <code>] | --revoke <agent>   issue a server token (printed once; only its hash
+                                     is kept) or cut one off. A terminal mints alone only for a narrow trial agent;
+                                     any other needs the one-time code from its dashboard page (docs/add-an-agent.md)
+  token rotate <agent> [--role reader] [--overlap 24] [--code <code>] [--yes]   a new token; the old one keeps
+                                     working for the overlap (hours), then stops, so the assistant never breaks while
+                                     you re-paste. Like token, a wider agent needs the code from its dashboard page
   token --agent <agent> --role reader|resolver   a core agent's split token: reader = its slice below private, no
                                      dispute or owner routes (for a vendor's config); resolver = only those routes
+  ask on [--approver dashboard|guardian] [--never a,b] [--max-per-day N] [--client-id id]
+                                     turn ask-to-see on (rules/policy.yaml); counts as configuration, not a hand fix
+  ask off                            turn it off
   ask list                           asks to see: what agents asked for, and what you decided
-  ask approve <id> [note]            let the agent read that note once (default: the best match)
+  ask approve <id>                   refused: approve on the dashboard or your phone (invariant 13, G244)
   ask decline <id>                   say no; the agent gets nothing
   ask test                           send one test push to your phone through Auth0 Guardian
   fga model | sync [--apply] | check <agent>   (model saves its model_id) OpenFGA as a second lock on slices (docs/fga.md)
+  golden [agent] [--file f] [--json]   the golden set: the owner's weekly questions (evals/weekly.yaml in the
+                                     brain) through each agent's view; top 5, the expected fact, fresh
   exam [agent] [--days 7] [--quiz [--n 3]]   memory exam: each agent's memory against the brain, brain-first
                                      reads, citations, slice; weekly in start -> digest/exam-<date>.md
-  memsync run [agent] | scan <agent> | report <agent> [--json] | quiz <agent> | list | approve <id> | decline <id> | key | import <agent|me> [files] | ask <agent> | pointers <agent> | brainfirst [days]
+  memsync off|on [part…] | run [agent] | scan <agent> | report <agent> [--json] | quiz <agent> | list | approve <id> | decline <id> | key | import <agent|me> [files] | ask <agent> | pointers <agent> | brainfirst [days]
                                      keep agents' own memories in line with the brain (docs/memory-sync.md)
+  diary catchup [--dry-run]         the owner's diary: add lines for fact changes that came without one (counts only)
   fill [--days 7] [--json]           is the brain filling? per source: proposed, kept, dropped, re-confirmed,
                                      owner minutes, against 50 a week, 85% kept, 2 minutes a day
   beliefs [--agent a] [--red] [--json] | fix <key>   belief radar: what each assistant's memory holds per fact,
@@ -256,22 +309,35 @@ const USAGE = `pocketbrain <command>
   gardener setup [--profile p] [--lock <claude-lock.json>] [--agent g] [--mcp-url u] [--vault <id>]
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
+  wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
+  backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
+                                     (policy.yaml; docs/sources-pull.md)
+  wiki links on|off|preview          whether upkeep links a name that fits exactly one note (off: nothing); preview lists what it would link (policy.yaml; docs/wiki.md)
   gardener open [minutes] [--agent g]  let the gardener connect outside its hours for a manual run (default 60)
   gardener cleanup                   delete its ended Anthropic sessions older than an hour (rules/gardener.yaml)
-  gardener rotate                    new gardener token into its vault (on stdin), old credential archived, old tokens revoked
+  gardener rotate --code <code>      new gardener token into its vault (on stdin), old credential archived, old tokens
+                                     revoked; the code is the gardener page's "Rotation code" (the hub's weekly run needs none)
   tend --managed [--agent g] [--dir ~/pocketbrain-agents] [--url <public url>] [--profile pocketbrain]
-      [--nightly-model m] [--weekly-model m] [--force] [--apply]
+      [--nightly-model m] [--weekly-model m] [--force] [--apply --code <code>]
                                      the gardener's Managed Agents files for your own Anthropic account; with --apply,
                                      run them through ant: vault, token on stdin, deployments created paused
                                      (--revoke also cuts the agent's OAuth connections)
+  add <agent> --kind claude-ai|claude-code|town|browser [--slices a,b] [--url <public url>] [--yes]
+                                     the door that kind uses, every area plus contacts-basic unless --slices,
+                                     trial, money out; then only what is left for you, numbered (at most two
+                                     steps). claude-code runs claude mcp add and writes ~/.claude/CLAUDE.md itself
   add <agent> --slices a,b [--door mcp|oauth|api|local|invite] [--url <public url>] [--name <label>]
       [--exclude-types money] [--yes]  a new trial agent: preview its slice; with --yes grant it, then print its
                                      token (or, --door oauth, approve your next sign-in for 10 minutes) and what to paste
   add <new> --like <old> [--slices extra] [--door …] [--yes]   switch day: copy the old assistant's slices and
                                      leave-outs into a new trial agent (never its tier, ceiling or areas), then an invite
                                      code and the standing instruction; extra --slices add to the copy
-  connect <agent> [--url <public url>] a token for an agent plus what to paste into its connector settings
-  connect <agent> --browser [--key-only] [--url <public url>]
+  connect <agent> [--url <public url>] [--code <code>]   a token for an agent plus what to paste into its
+                                     connector settings; a wider than trial agent needs the dashboard's one-time code
+  connect <agent> --kind claude-code [--code <code>]   Claude Code on this machine, in one go: a new token handed to
+                                     claude mcp add (never printed when that works) and the standing instruction in
+                                     ~/.claude/CLAUDE.md; the same terminal gate as connect (G184)
+  connect <agent> --browser [--key-only] [--code <code>] [--url <public url>]
                                      turn on the browser door (/b) for an agent whose vault only fills web
                                      forms; --key-only prints only the key on stdout (docs/browser-door.md)
   oauth setup --issuer <url> --resource <https://host/mcp/oauth> --owner-subject <id> [--jwks <url>]
@@ -293,6 +359,9 @@ const USAGE = `pocketbrain <command>
   textline watch                     the routine: a tick every cadence_minutes (default 5); keep it running
   textline status                    open items, their tier, and what the next tick would do
   textline init                      write rules/escalation.yaml with the defaults (you only)
+  textline use <instinct|imessage|fake> [--to <handle>|-]
+                                     switch the transport: edits only the transport block of
+                                     rules/escalation.yaml, commits as you; the handle is never shown
   textline reply "<text>"            fake transport: pretend you texted this back (tests, demo)
   textline watchdog --url <health>   from another machine: text you if the hub stops answering
   hub init --name <machine> [--key <ssh key>] [--signer <program>] [--git <url>] [--public-url <url>]
@@ -309,12 +378,16 @@ const USAGE = `pocketbrain <command>
   door install <credentials.json> --hostname <host> [--name <machine>] [--force]
                                      a pilot's door: tunnel credentials (0600), agent-API-only ingress, public_url
   pilot door <name> --zone <zone> [--out ~/.cloudflared]   operator: a named tunnel and <name>.<zone> for a pilot
-  edge enroll <agent> [--role reader]   a new token that also opens the agent's sealed cell (shown once)
+  edge enroll <agent> [--role reader] [--code <code>]   a new token that also opens the agent's sealed cell (shown once)
   edge publish --out <dir>           seal each enrolled agent's cell into <dir> (docs/edge.md)
   edge serve --from <dir> [--port 8789]   answer reads from the sealed cells, queue writes (a stand-in edge)
   edge replay --from <dir>           (hub) run the writes queued at the edge through the write path
   doctor [--offline] [--json]        hub, replicas, signatures, ops, server, public door, dashboard, snapshots
   doctor --fix [--yes]               preview the safe repairs doctor knows; --yes runs them and checks again
+  search setup                       download the semantic-search model once (bge-m3, MIT licence, about 590 MB);
+                                     searches then also match by meaning, run on this machine only. Off with
+                                     PB_SEMANTIC=0 (docs/semantic-search.md)
+  support bundle [--out <file>]      one file to send for help: versions, doctor, jobs, rules keys, log tails; no note content
   logs import --as <agent> --file <export> [--format auto|text|json|claude-code|claude-export|chatgpt-export] [--date YYYY-MM-DD]
                                      forward a vendor export into <agent>'s log archive (Claude Code .jsonl, claude.ai or
                                      ChatGPT conversations.json, our JSON, or plain text); same checks as logs agents send
@@ -326,10 +399,15 @@ const USAGE = `pocketbrain <command>
                                      views or secrets) to rules/backup.yaml's folder, with rotation. The hub runs
                                      it from serve when main moved and every_hours passed
   backup --init --pub <age1...>      write rules/backup.yaml and rules/backup.pub (the public key only)
+  backup offsite on <folder> | off   (Mac) a separate launchd job copies new backups from the local folder to
+                                     <folder> (a synced one, like Drive) every hour, each copy under a time limit,
+                                     so a hung synced folder never stalls the hub (docs/backup.md)
   restore <file.tar.age> --to <empty dir> --identity <key file | - > [--key <ssh signing key>] [--name <machine>]
                                      rebuild a working brain from one backup, check every hash, run doctor
-  drill [--identity <key file>] [--key <ssh signing key>]   copy, back up, wipe, restore, diff; never touches
-                                     the brain or the real backup folder
+  drill [--identity <key file>] [--key <ssh signing key>]   copy, back up, wipe, restore, diff, git fsck,
+                                     note and fact counts, boot the hub on it; never touches the brain or the
+                                     real backup folder
+  drill --demo                       the same on the sample brain with a throwaway key; one line, nothing recorded
   export --out <file> [--agent <agent>]   a Memory Passport bundle (docs/export.md): the whole brain (notes and the
                                      rules a carve reads; no tokens, logs, inbox or secrets), or one agent's slice as its reads answer
   import <bundle> --into <dir>       a brain bundle into a fresh folder: same notes, same carve per agent, one owner commit
@@ -379,17 +457,30 @@ function runInit(args: string[]): number {
     token: !args.includes("--no-token"),
   };
   let seedText: string | undefined;
+  const hasClaude = !!Bun.which("claude", { PATH: process.env.PATH ?? "" });
+  // Which assistant comes first (row 388): it names the agent and picks the connect step.
+  let kind = arg(args, "--kind") as AgentKind | undefined;
+  if (kind !== undefined && !(AGENT_KINDS as readonly string[]).includes(kind)) { console.error(`init: --kind is one of ${AGENT_KINDS.join(", ")}`); return 2; }
   try {
     // With nothing to go on and a person at the keyboard, ask: plain `pocketbrain init` just works.
     const nothingGiven = !opts.owner && !opts.text!.length && !opts.mbox!.length && !opts.ics!.length;
     if (args.includes("--interview") || (nothingGiven && process.stdin.isTTY)) {
-      const iv = interview((q) => prompt(q), (s) => console.log(`\n${s}`));
+      const iv = interview((q) => prompt(q), (s) => console.log(`\n${s}`), { claudeCode: hasClaude });
       opts.owner = opts.owner || iv.owner;
       opts.agent ??= iv.agent;
+      kind ??= iv.kind;
       opts.mbox = [...opts.mbox!, ...iv.mbox];
       opts.ics = [...opts.ics!, ...iv.ics];
       seedText = iv.text;
+    } else if (nothingGiven) {
+      // Piped, CI or some IDE terminals: no one to ask (backlog 389). Say so, and both ways on.
+      console.error(`init: no terminal to ask in, so init can't ask its questions. Pass --name "Your name" (and --agent), or pipe the answers in, one per line, with --interview`);
+      return 2;
     }
+    if (kind) opts.agent ??= KIND_NAME[kind];
+    // The token comes from that kind's connect (below, or once there is a public address): not two.
+    const connectsItself = kind === "claude-code" && hasClaude, inCloud = !!kind && kind !== "claude-code";
+    if (connectsItself || inCloud) opts.token = false;
     const r = initBrain(resolve(dir), { ...opts, seedText: seedText ? [{ name: "interview", text: seedText }] : undefined });
     // A second brain (a demo, a test) never takes over the remembered one: commands without
     // --brain keep finding the brain that was there first (eval gap G143).
@@ -400,9 +491,22 @@ function runInit(args: string[]): number {
     console.log(`\nWhat ${r.agent} will see:\n${r.preview}`);
     console.log(`\nWhat init removed, kept private or guessed: ${r.report}`);
     console.log(`\n1. Start it, and leave that window open:\n\n     pocketbrain start\n`);
+    if (connectsItself) {
+      console.log("2. Claude Code, connected now:\n");
+      // init's first agent is narrow (one area and contacts-basic, trial), so the G184 gate lets it through.
+      try { return connectKind(r.root, r.agent, "claude-code", "http://127.0.0.1:8787"); } catch (e) { console.error(`init: ${(e as Error).message}`); return 1; }
+    }
+    if (inCloud) {
+      // In the cloud: the brain needs a public address first (quickstart, "Connect an assistant in the cloud").
+      console.log(`2. ${kind === "browser" ? "Your browsing assistant" : kind === "town" ? "Town" : "Claude on the web"} reaches your brain at a public address, not this machine. Once you have one (the quickstart's "Connect an assistant in the cloud"), connect it with one command:\n\n     pocketbrain connect ${r.agent} --kind ${kind} --url https://<your brain's address>\n`);
+      console.log(`It prints what to paste where, and the instruction that makes ${r.agent} check the brain without being asked.`);
+      return 0;
+    }
     if (r.token) {
       const url = "http://127.0.0.1:8787/mcp";
-      console.log(`2. Connect ${r.agent}. In Claude Code, paste:\n\n     claude mcp add --scope user --transport http pocketbrain ${url} --header "Authorization: Bearer ${r.token}"\n`);
+      // With Claude Code here, one command connects it and writes its standing instruction (stranger rehearsal).
+      if (Bun.which("claude", { PATH: process.env.PATH ?? "" })) console.log(`2. Connect Claude Code, in another window: pocketbrain connect ${r.agent} --kind claude-code\n   It runs claude mcp add and writes step 3 into ~/.claude/CLAUDE.md for you. Or paste:\n\n     claude mcp add --scope user --transport http pocketbrain ${url} --header "Authorization: Bearer ${r.token}"\n`);
+      else console.log(`2. Connect ${r.agent}. In Claude Code, paste:\n\n     claude mcp add --scope user --transport http pocketbrain ${url} --header "Authorization: Bearer ${r.token}"\n`);
       console.log(`   In any other assistant, add a custom MCP connector with\n     URL:    ${url}\n     Header: Authorization: Bearer ${r.token}\n   (Claude Desktop, Claude on the web and other assistants in the cloud can't reach 127.0.0.1;\n    they need a public address: see the quickstart, "Connect an assistant in the cloud")\n`);
       console.log(`The token is shown once. Save it in your password manager; pocketbrain connect ${r.agent} makes a new one.`);
       console.log(`\n3. So ${r.agent} checks the brain without being asked, paste this once into its own custom instructions (Claude Code: ~/.claude/CLAUDE.md):\n\n${standingInstruction(loadRules(r.root), "mcp", "http://127.0.0.1:8787")}`);
@@ -414,19 +518,122 @@ function runInit(args: string[]): number {
   }
 }
 
+// `add --kind` (docs/add-an-agent.md#one-command-per-kind): the door each kind of assistant uses.
+const KINDS = { "claude-ai": "oauth", "claude-code": "local", town: "mcp", browser: "browser" } as const;
+type Kind = keyof typeof KINDS;
+
+// A trial agent's preset, so up to personal, money out, writes wait, plus names and roles. claude-ai
+// gets every area: its door is your own sign-in, so no token is made here. A kind whose token the
+// terminal makes gets one area (work if there is one, as init's first agent), which is what the
+// terminal gate lets a shell mint for alone (G184, G241); widen it on the dashboard.
+function slicePreset(rules: Rules, kind: Kind): string[] {
+  const areas = Object.keys(rules.policy.areas ?? {});
+  const pick = kind === "claude-ai" ? [...areas].sort() : areas.includes("work") ? ["work"] : areas.slice(0, 1);
+  return [...pick.map((a) => `area:${a}`), ...(rules.slices["contacts-basic"] ? ["contacts-basic"] : [])];
+}
+
+// What is left for the owner after `add --kind`, as numbered steps: at most two, often none.
+// G184: every token made here goes through the terminal gate (mintFromShell), as `connect` does: a
+// narrow trial agent alone, a wider one with the owner's one-time code (--code). The gate runs before
+// anything changes, so a refused kind leaves policy.yaml, Claude Code and ~/.claude/CLAUDE.md as they were.
+function connectKind(root: string, agent: string, kind: Kind, url: string, name?: string, code?: string): number {
+  const rules = loadRules(root);
+  const via = `connect ${agent} --kind ${kind}${url === "http://127.0.0.1:8787" ? "" : ` --url ${url}`}`;
+  const say = (steps: string[], after = "") => {
+    console.log(steps.length ? `What's left for you:\n\n${steps.map((s, i) => `${i + 1}. ${s}`).join("\n\n")}` : "Nothing left to do.");
+    if (after) console.log(`\n${after}`);
+  };
+  const instr = (transport: "mcp" | "api") => standingInstruction(rules, transport, url).trimEnd();
+  if (kind === "claude-ai") {
+    if (!oauth.loadOAuth(root)) { console.error("no OAuth door yet: set it up first (docs/oauth.md, pocketbrain oauth setup)"); return 1; }
+    const e = oauth.expectClient(root, agent, { name });
+    const mins = Math.round((Date.parse(e.until) - Date.parse(e.opened)) / 60_000);
+    say([
+      `In claude.ai, Settings > Connectors > Add custom connector, paste ${url}/mcp/oauth and sign in with your own account in the next ${mins} minutes.`,
+      `In Settings > Profile, paste this once into your personal preferences:\n\n${instr("mcp")}`,
+    ], `Then ask it something about you: it answers "from your brain".`);
+    return 0;
+  }
+  if (kind === "browser") {
+    // The key first (G242's order, as connectBrowser): a refused key leaves the door off.
+    const tok = mintFromShell(root, agent, { via, code, role: "reader" });
+    const file = join(root, "rules", "policy.yaml");
+    const doc = YAML.parseDocument(readFileSync(file, "utf8"));
+    doc.setIn(["agents", agent, "browser"], true);
+    writeFileSync(file, doc.toString({ lineWidth: 0 }));
+    git(root, ["add", "rules/policy.yaml"]);
+    git(root, ["commit", "-q", "-m", `owner: browser door on for ${agent}`, "--", "rules/policy.yaml"], OWNER);
+    say([
+      `Save this sign-in in ${agent}'s own password vault:\n     Page:     ${url}/b\n     Username: ${agent}\n     Password: ${tok}`,
+      `Paste this once into ${agent}'s custom instructions:\n\n${browserInstruction(loadRules(root), url)}`,
+    ]);
+    console.error(`key printed once; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
+    return 0;
+  }
+  if (kind === "claude-code") {
+    const local = "http://127.0.0.1:8787";
+    const tok = mintFromShell(root, agent, { via, code });
+    const add = ["mcp", "add", "--scope", "user", "--transport", "http", "pocketbrain", `${local}/mcp`, "--header", `Authorization: Bearer ${tok}`];
+    const claude = Bun.which("claude", { PATH: process.env.PATH ?? "" });
+    testRunGuard([process.env.HOME ?? homedir(), claude]);
+    const cc = (a: string[]) => Bun.spawnSync([claude!, ...a], { stdout: "pipe", stderr: "pipe", env: process.env }).exitCode === 0;
+    // An earlier pocketbrain server in Claude Code is replaced: the name is taken once.
+    const ran = !!claude && (cc(add) || (cc(["mcp", "remove", "--scope", "user", "pocketbrain"]) && cc(add)));
+    const md = writeClaudeMd(standingInstruction(rules, "mcp", local));
+    console.log(`${ran ? "Added pocketbrain to Claude Code (claude mcp add, user scope). " : ""}Wrote the standing instruction into ${md}, between <!-- pocketbrain --> lines.`);
+    say(ran ? [] : [`Claude Code isn't on this machine's PATH. Once it is, run:\n     claude ${add.slice(0, 9).join(" ")} --header "Authorization: Bearer ${tok}"`],
+      "Then open a new Claude Code session and ask it something about you.");
+    console.error(`${ran ? "token handed to Claude Code, not shown" : "token printed once"}; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
+    return 0;
+  }
+  const tok = mintFromShell(root, agent, { via, code });
+  say([
+    `In ${agent}'s connector settings, add a custom MCP server:\n     URL:    ${url}/mcp\n     Header: Authorization: Bearer ${tok}\n     (no header field? connect it with OAuth instead: docs/oauth.md)`,
+    `Paste this once into ${agent}'s own custom instructions:\n\n${instr("mcp")}`,
+  ]);
+  console.error(`token printed once; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
+  return 0;
+}
+
+// G393: a test run (test/setup.ts sets PB_TEST_RUN_DIR) never changes the machine's own Claude Code.
+// The home it would write and the claude it would run must both be inside the run's folder.
+function testRunGuard(paths: (string | null)[]) {
+  const run = process.env.PB_TEST_RUN_DIR;
+  if (!run) return;
+  const out = paths.filter((p): p is string => !!p && !resolve(p).startsWith(resolve(run) + "/"));
+  if (out.length) throw new Error(`a test run won't change Claude Code outside its own folder (${out.join(", ")})`);
+}
+
+// The standing instruction in ~/.claude/CLAUDE.md, between marker lines: written once, replaced after.
+function writeClaudeMd(text: string): string {
+  const file = join(process.env.HOME ?? homedir(), ".claude", "CLAUDE.md");
+  testRunGuard([file]);
+  const block = `<!-- pocketbrain -->\n${text.trimEnd()}\n<!-- /pocketbrain -->\n`;
+  const old = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const re = /<!-- pocketbrain -->\n[\s\S]*?<!-- \/pocketbrain -->\n?/;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, re.test(old) ? old.replace(re, block) : `${old}${old && !old.endsWith("\n\n") ? (old.endsWith("\n") ? "\n" : "\n\n") : ""}${block}`);
+  return file;
+}
+
 // The token, where to paste it, and the standing instruction: `connect` and `add` print the same.
-function printConnect(root: string, agent: string, transport: "mcp" | "api", url: string, token?: string) {
-  const tok = token ?? issueToken(root, agent);
+// G184: every token minted here goes through mintFromShell (narrow agent, or the owner's code).
+function printConnect(root: string, agent: string, transport: "mcp" | "api", url: string, via = `connect ${agent}`, code?: string, token?: string) {
+  const tok = token ?? mintFromShell(root, agent, { via, code });
   console.log(transport === "api"
     ? `${agent} uses the JSON API.\n  Base URL:  ${url}/v1\n  Header:    Authorization: Bearer ${tok}\n  Start with GET ${url}/v1/orientation; the spec is ${url}/openapi.json`
-    : `${agent} uses MCP. Add a custom connector:\n  URL:    ${url}/mcp\n  Header: Authorization: Bearer ${tok}\n  (no header field? use ${url}/mcp/${tok})`);
+    : `${agent} uses MCP. Add a custom connector:\n  URL:    ${url}/mcp\n  Header: Authorization: Bearer ${tok}\n  (no header field? connect it with OAuth instead: docs/oauth.md)`);
   console.log(`\nThen paste this once into ${agent}'s own custom instructions, so it checks the brain without being asked:\n\n${standingInstruction(loadRules(root), transport, url)}`);
   console.error(`token printed once; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
 }
 
 // A one-time code instead of a token (docs/add-an-agent.md): the agent redeems it itself.
+// G184: an invite code is a token for whoever redeems it, so the terminal makes one only for a
+// narrow agent. A wider agent's code comes from the dashboard (the agent's page).
 function printInvite(root: string, agent: string, url: string, minutes?: number) {
-  const inv = createInvite(root, agent, { minutes });
+  const why = shellMintRefusal(root, agent);
+  if (why) throw new Error(`${agent}: ${why}, so a terminal alone can't invite it. On the dashboard, open ${agent}'s page (Assistants) and press "One-time code"; the agent can redeem that code itself at ${url}/v1/enroll`);
+  const inv = createInvite(root, agent, { minutes, terminal: true });
   console.log(`Invite code for ${agent}: ${inv.code}\nIt works once, until ${inv.until}. Give it to ${agent} with this:\n\n  Connect to pocketBrain: POST ${url}/v1/enroll with {"code": "${inv.code}"}. Keep the token it returns as your secret, then follow the read_first link.\n\nThe doors are listed at ${url}/.well-known/pocketbrain. Revoke: pocketbrain token --revoke ${agent} (also cancels the code).`);
 }
 
@@ -445,7 +652,11 @@ function usageOf(cmd: string): string {
 
 // The browser door (src/browser.ts): turn it on for this agent, as the owner, and give it a key.
 // With --key-only the key is the only thing on stdout, so it can go straight to the clipboard.
-function connectBrowser(root: string, agent: string, url: string, keyOnly: boolean) {
+function connectBrowser(root: string, agent: string, url: string, keyOnly: boolean, code?: string) {
+  // G184, G242: the key is made first (the gate, or the owner's code, checked and spent), and the
+  // door is turned on only after that, so a refused key or a wrong code leaves policy.yaml as it was.
+  // A reader key (G18): its slice below private, no resolver routes. A browser can't settle disputes anyway.
+  const tok = mintFromShell(root, agent, { via: `connect ${agent} --browser`, code, role: "reader" });
   const file = join(root, "rules", "policy.yaml");
   if (!loadRules(root).policy.agents[agent]?.browser) {
     const doc = YAML.parseDocument(readFileSync(file, "utf8"));
@@ -454,13 +665,15 @@ function connectBrowser(root: string, agent: string, url: string, keyOnly: boole
     git(root, ["add", "rules/policy.yaml"]);
     git(root, ["commit", "-q", "-m", `owner: browser door on for ${agent}`, "--", "rules/policy.yaml"], OWNER);
   }
-  // A reader key (G18): its slice below private, no resolver routes. A browser can't settle disputes anyway.
-  const tok = issueToken(root, agent, "reader");
   const say = keyOnly ? console.error : console.log;
   say(`${agent} can sign in on the browser door.\n  Sign-in page: ${url}/b\n  Agent:        ${agent}\n  Key:          ${keyOnly ? "(on stdout, not shown here)" : tok}\nSave the key in ${agent}'s own password vault for ${url}/b, then paste this once into its custom instructions:\n\n${browserInstruction(loadRules(root), url)}`);
   if (keyOnly) console.log(tok);
   console.error(`only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
 }
+
+// Commands that run before a brain exists, or beside one (the menu bar, a pilot's door, the edge).
+const NO_BRAIN = new Set(["init", "uninstall", "search", "restore", "menubar", "door", "pilot", "edge", "import-notion", "import"]);
+const KNOWN_COMMANDS = new Set([...USAGE.matchAll(/^\s{2}([a-z][a-z-]*)\b/gm)].map((m) => m[1]));
 
 export function main(argv: string[]): number {
   const [cmd, ...args] = argv;
@@ -470,6 +683,13 @@ export function main(argv: string[]): number {
   if (args.includes("--help") || args.includes("-h")) { console.log(usageOf(cmd)); return 0; }
 
   if (cmd === "init") return runInit(args);
+  // A command that reads the brain, with no brain anywhere: say so, instead of running on this folder.
+  // `drill --demo` brings its own sample brain (CI runs it from the repo, G540).
+  const demoDrill = cmd === "drill" && args.includes("--demo");
+  if (!NO_BRAIN.has(cmd) && !demoDrill && KNOWN_COMMANDS.has(cmd) && !arg(args, "--brain") && !process.env.PB_BRAIN && !existsSync(join(root, "rules", "policy.yaml"))) {
+    console.error(ownerError("cli.no-brain", { dir: root }));
+    return 1;
+  }
 
   if (cmd === "import-notion") {
     const r = importNotion(root, arg(args, "--raw"));
@@ -478,6 +698,8 @@ export function main(argv: string[]): number {
   }
 
   if (cmd === "uninstall") return uninstallCli(args);
+  // The model is this user's, not the brain's: no brain needed.
+  if (cmd === "search") return searchCli(args);
 
   // A bundle into a fresh folder: no brain needed yet.
   if (cmd === "import") {
@@ -588,6 +810,15 @@ export function main(argv: string[]): number {
   }
 
   if (cmd === "inbox") {
+    if (args[0] === "more") {
+      // New notes a source proposed over its daily count wait in inbox/held (backlog 396).
+      try { hub.hubGate(root, ["commit"]); } catch { console.error("this machine is a replica: ask on the hub"); return 1; }
+      const n = Number(args[1] && !args[1].startsWith("--") ? args[1] : 5);
+      if (!Number.isInteger(n) || n < 1) { console.error("inbox more [n]: how many held new notes to move back to be filed (default 5)"); return 2; }
+      const moved = releaseHeld(root, n);
+      console.log(`${moved} new note(s) moved back to be filed; ${heldCount(root)} still held`);
+      return 0;
+    }
     const f = arg(args, "--accept") ?? arg(args, "--reject");
  if (!f) { console.error("inbox --accept <file> | --reject <file>"); return 2; }
     // A full or relative path to the proposal works as well as its name in inbox/.
@@ -596,20 +827,14 @@ export function main(argv: string[]): number {
     console.log(`${r.outcome}: ${r.message}`);
     return r.outcome === "refused" ? 1 : 0;
   }
-  if (cmd === "deck") {
-    if (args.includes("auto")) {
-      try { hub.hubGate(root, ["commit"]); } catch { console.error("this machine is a replica: only the hub decides for you"); return 1; }
-      runAutoByHand(root).then((r) => {
-        if ("refused" in r) { console.error(r.refused); process.exit(1); }
-        console.log(r.done.length ? r.done.map((d) => `${d.question}: the hub ${d.picked} (${d.why})`).join("\n") : "nothing past its deadline");
-        process.exit(0);
-      });
-      return -1;
-    }
-    const v = buildDeck(root);
-    for (const c of v.cards) console.log(`${c.tag}: ${c.question}${c.auto ? `  [if unanswered by ${c.auto.at.slice(0, 16).replace("T", " ")}: ${c.auto.choice}]` : ""}`);
-    console.log(`${v.cards.length} card(s). Cleared today ${v.cleared_today}, streak ${v.streak} day(s). Decided for you this week: ${v.auto.filter((a) => !a.undone).length}.`);
-    return 0;
+  if (cmd === "filing" && args[0] === "now") {
+    try { hub.hubGate(root, ["commit"]); } catch { console.error("this machine is a replica: only the hub decides for you"); return 1; }
+    runAutoByHand(root).then((r) => {
+      if ("refused" in r) { console.error(r.refused); process.exit(1); }
+      console.log(r.done.length ? r.done.map((d) => `${d.question}: the hub ${d.picked} (${d.why})`).join("\n") : "nothing past its deadline");
+      process.exit(0);
+    });
+    return -1;
   }
   if (cmd === "digest") {
     const r = digest(root, arg(args, "--since"));
@@ -625,6 +850,16 @@ export function main(argv: string[]): number {
       console.log(args.includes("--json") ? JSON.stringify(w, null, 2) : whyText(w));
       return 0;
     } catch (e) { if (e instanceof CoreError) { console.error(e.message); return 1; } throw e; }
+  }
+
+  if (cmd === "trace") {
+    const id = args[0] && !args[0].startsWith("--") ? args[0] : undefined;
+    if (!id) { console.error("usage: pocketbrain trace <request-id>   the X-Request-Id an agent got back"); return 2; }
+    let t: Trace;
+    try { t = trace(root, id); } catch (e) { console.error((e as Error).message); return 2; }
+    if (!t.request && !t.logs.length && !t.commits.length) { console.error(`no request ${id} in this brain's logs or history`); return 1; }
+    console.log(args.includes("--json") ? JSON.stringify(t, null, 2) : traceText(t));
+    return 0;
   }
 
   if (cmd === "reexplain") {
@@ -702,8 +937,9 @@ ${p.text}`);
     startOffboarding(root).then((on) => { if (on) console.log("coworker offboarding: on, following the sign-in service"); }, () => {});
     // OpenFGA as a second lock on each agent's slices, when rules/fga.yaml exists (src/fga.ts).
     fga.startFga(root).then((on) => { if (on) { const st = fga.fgaStatus(); console.log(`fga: on, ${st.agents.length} agent(s) confirmed${st.last_error ? `, last error: ${st.last_error}` : ""}`); } }, (e) => console.error(`fga: ${(e as Error).message}; outside agents get no slices until it answers`));
-    // Each agent's reads come from its own cell (src/cell.ts) unless --no-cells.
-    if (!args.includes("--no-cells")) { useCells(true); buildCells(root); }
+    // Each agent's reads come from its own cell (src/cell.ts) unless --no-cells. Cells on disk are
+    // kept and checked on each agent's first read, so a restart answers at once (row 217).
+    if (!args.includes("--no-cells")) { useCells(true); startCells(root); }
     const s = serve(root, Number(arg(args, "--port") ?? 8787), arg(args, "--host") ?? "127.0.0.1");
     console.log(`pocketbrain serving ${root} on http://${s.hostname}:${s.port} (MCP /mcp, API /v1, /openapi.json)${cellsOn() ? ", reads from per-agent cells" : ""}`);
     if (role.mode === "hub") {
@@ -715,50 +951,105 @@ ${p.text}`);
     // (from agents, the channels, or replicas' ops), every capture.poll_minutes.
     const cap = captureConfig(rules);
     setInterval(() => void intakeTick(root).then((r) => { for (const p of r.problems) console.error(`capture: ${p}`); }, (e) => console.error(`capture tick: ${(e as Error).message}`)), cap.poll_minutes * 60000);
-    // Backups from the hub: hourly look, a backup when main moved and every_hours passed.
-    if (bk.loadBackupConfig(root)) setInterval(() => serial(() => { try { const r = bk.scheduled(root); if (r) console.log(`backup: ${r.file} (${r.bytes} bytes)${r.deleted.length ? `, rotated out ${r.deleted.length}` : ""}`); } catch (e) { console.error(`backup: ${(e as Error).message}`); } }), 3600000);
-    if (cmd === "start" || args.includes("--dashboard")) console.log(`owner dashboard (this machine only): ${serveDashboard(root, { port: Number(arg(args, "--dashboard-port") ?? 8788) }).loginUrl}`);
+    // Backups from the hub: an hourly look, a backup when main moved and every_hours passed, made by a
+    // child process so a backup folder that stops answering can't freeze the hub; and main pushed to
+    // the brain's origin hourly when rules/backup.yaml has push_origin: true (not under serial: a push
+    // only reads). Each also runs a few minutes after start when its last run is over an hour old, so
+    // frequent restarts can't starve it (src/backup.ts startBackupTimers).
+    bk.startBackupTimers(root, { backup: () => serial(() => bk.backupApart(root), { name: "backup", limitMs: 30 * 60_000 }).then((p) => p) });
+    if (cmd === "start" || args.includes("--dashboard")) {
+      const d = serveDashboard(root, { port: Number(arg(args, "--dashboard-port") ?? 8788), tailnet: args.includes("--dashboard-tailnet") || !!tailnetSettings(root).dashboard_tailnet, tailnetLogin: tailnetSettings(root).dashboard_tailnet_login, tailnetDevices: tailnetSettings(root).dashboard_tailnet_devices });
+      console.log(`owner dashboard (this machine only): ${d.loginUrl}`);
+      if ("tailnetLoginUrl" in d) console.log(`owner dashboard on your tailnet (your devices only): ${d.tailnetLoginUrl}`);
+      if ("serveLoginUrl" in d) console.log(`  or over https, after tailscale serve --bg --https=${d.servePort} http://127.0.0.1:${d.server.port} (never funnel): ${d.serveLoginUrl}`);
+      if ("tailnetProblem" in d) console.error(d.tailnetProblem);
+    }
+    // A stop (launchd, Ctrl-C) keeps what this hub parsed for the next start (src/brain.ts); start
+    // exits through its own handlers below, which save it on exit too.
+    if (cmd === "serve") for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { try { saveParseSnapshots(); } finally { process.exit(0); } });
     if (cmd === "start") {
-      startJobs(root, { localUrl: `http://127.0.0.1:${s.port}` });
-      // Hand restarts count against the real-use bar (src/measure.ts noteStart).
-      const app = resolve(import.meta.dir, "..");
-      const sha = Bun.spawnSync(["git", "-C", app, "rev-parse", "--short", "HEAD"]).stdout.toString().trim();
-      const hand = noteStart(root, { build: `${JSON.parse(readFileSync(join(app, "package.json"), "utf8")).version}@${sha || "unknown"}` });
-      if (hand) console.log(`noted a hand fix: ${hand}`);
+      // Hand restarts count against the real-use bar (src/measure.ts noteStart); planned ones
+      // don't count toward the probe's restart loop either (startKind, before noteStart logs this start).
+      const b = appBuild(resolve(import.meta.dir, ".."));
+      startJobs(root, { localUrl: `http://127.0.0.1:${s.port}`, startKind: startKind(root, { build: b.build, codeMovedAt: b.movedAt }) });
+      const hand = noteStart(root, { build: b.build, codeMovedAt: b.movedAt });
+      if (hand) console.log(handFixNotice(hand));
       for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { try { noteStop(root, sig); } finally { process.exit(0); } });
     }
     return -1; // keep running
+  }
+  if (cmd === "watchdog") {
+    // One look at the hub from outside it (launchd runs this every 5 minutes; src/watchdog.ts).
+    watchdogTick(root, { url: arg(args, "--url") ?? "http://127.0.0.1:8787", uid: process.getuid?.() ?? 501, platform: process.platform,
+      run: (c) => { const p = Bun.spawnSync(c, { stdout: "pipe", stderr: "pipe", timeout: 30_000 }); return { code: p.exitCode ?? 1, out: `${p.stdout}${p.stderr}` }; } }).then((r) => {
+      if (r.action !== "ok") console.log(`${new Date().toISOString()} watchdog ${r.action}: ${r.detail}`);
+      process.exit(r.action === "ok" || r.action === "waiting" ? 0 : 1);
+    }, (e) => { console.error(`watchdog: ${(e as Error).message}`); process.exit(1); });
+    return -1;
+  }
+  if (cmd === "dashboard" && args[0] === "tailnet") {
+    const on = args[1] === "on";
+    if (!on && args[1] !== "off") { console.error("dashboard tailnet on --device <Tailscale address> [--device …] | off"); return 2; }
+    const devices = args.flatMap((a, i) => (args[i - 1] === "--device" ? [a] : []));
+    try { console.log(setDashboardTailnet(root, on, devices)); }
+    catch (e) { console.error((e as Error).message); return e instanceof OwnerSetError && !/on the hub|couldn't commit/.test((e as Error).message) ? 2 : 1; }
+    console.log(`restart the hub to apply it (${on ? "its log then prints the link to open on the device" : "the dashboard goes back to this machine only"})`);
+    return 0;
+  }
+  // A sign-in link for the phone that outlives a restart: once, for a day, on the tailnet only.
+  if (cmd === "dashboard" && args[0] === "phone-link") {
+    const t = tailnetSelf();
+    if (!tailnetSettings(root).dashboard_tailnet || !t?.address) { console.error("the dashboard isn't on your tailnet: pocketbrain dashboard tailnet on --device <your phone's Tailscale address>"); return 1; }
+    console.log(`open on your phone (works once, for a day): http://${t.name ?? t.address}:${Number(arg(args, "--port") ?? 8788)}/login?key=${mintPhoneLink(root)}`);
+    return 0;
   }
   if (cmd === "dashboard") {
     const key = process.env.AGENTMAIL_RELAY_KEY;
     if (args.includes("--agentmail") && !key) { console.error("set AGENTMAIL_RELAY_KEY (a key scoped to the relay inbox only)"); return 2; }
     const transport = args.includes("--agentmail") ? () => agentMailTransport(loadRelayConfig(root), key!) : undefined;
-    const d = serveDashboard(root, { port: Number(arg(args, "--port") ?? 8788), transport });
+    const d = serveDashboard(root, { port: Number(arg(args, "--port") ?? 8788), transport, tailnet: args.includes("--tailnet") || !!tailnetSettings(root).dashboard_tailnet, tailnetLogin: tailnetSettings(root).dashboard_tailnet_login, tailnetDevices: tailnetSettings(root).dashboard_tailnet_devices });
     console.log(`owner dashboard for ${root}\nopen (this machine only, link works until restart): ${d.loginUrl}`);
+    if ("tailnetLoginUrl" in d) console.log(`on your tailnet (your devices only): ${d.tailnetLoginUrl}`);
+    if ("serveLoginUrl" in d) console.log(`  or over https, after tailscale serve --bg --https=${d.servePort} http://127.0.0.1:${d.server.port} (never funnel): ${d.serveLoginUrl}`);
+    if ("tailnetProblem" in d) console.error(d.tailnetProblem);
     return -1;
   }
   if (cmd === "connect") {
     const agent = args.find((a) => !a.startsWith("--"));
-    if (!agent) { console.error("connect <agent> [--url https://brain.example]"); return 2; }
+    if (!agent) { console.error("connect <agent> [--url https://brain.example] [--code <one-time code>]"); return 2; }
     const a = loadRules(root).policy.agents[agent];
     if (!a || a.inside_wall) { console.error(`no outside agent ${agent} in rules/policy.yaml`); return 1; }
     const url = (arg(args, "--url") ?? "http://127.0.0.1:8787").replace(/\/$/, "");
-    if (args.includes("--browser")) { connectBrowser(root, agent, url, args.includes("--key-only")); return 0; }
-    printConnect(root, agent, a.transport === "api" ? "api" : "mcp", url);
+    const code = arg(args, "--code");
+    try {
+      if (args.includes("--browser")) { connectBrowser(root, agent, url, args.includes("--key-only"), code); return 0; }
+      // An existing agent (the one init made) connected to Claude Code in one go, as add --kind does.
+      const kind = arg(args, "--kind");
+      if (kind !== undefined) {
+        if (!(kind in KINDS)) { console.error(`connect --kind takes ${Object.keys(KINDS).join(", ")}`); return 2; }
+        return connectKind(root, agent, kind as Kind, url, undefined, code);
+      }
+      printConnect(root, agent, a.transport === "api" ? "api" : "mcp", url, `connect ${agent}`, code);
+    } catch (e) { console.error((e as Error).message); return 1; }
     return 0;
   }
   if (cmd === "add") {
     const agent = args[0] && !args[0].startsWith("--") ? args[0] : "";
     // Switch day: --like starts from another agent's carve and defaults to an invite.
     const like = arg(args, "--like");
-    const door = arg(args, "--door") ?? (like ? "invite" : "mcp");
+    // --kind: the kind of assistant picks the door and, without --slices, a preset slice.
+    const kind = arg(args, "--kind");
+    if (kind !== undefined && !(kind in KINDS)) { console.error(`--kind is ${Object.keys(KINDS).join(", ")}`); return 2; }
+    const kindDoor = kind ? KINDS[kind as Kind] : undefined;
+    if (kindDoor && arg(args, "--door") && arg(args, "--door") !== kindDoor) { console.error(`--kind ${kind} uses --door ${kindDoor}; leave --door out`); return 2; }
+    const door = kindDoor ?? arg(args, "--door") ?? (like ? "invite" : "mcp");
     const name = arg(args, "--name");
-    if (!["mcp", "oauth", "api", "local", "invite"].includes(door)) { console.error("--door is mcp, oauth, api, local or invite"); return 2; }
+    if (!["mcp", "oauth", "api", "local", "invite", "browser"].includes(door) || (door === "browser" && !kind)) { console.error("--door is mcp, oauth, api, local or invite"); return 2; }
     if (door === "oauth" && !oauth.loadOAuth(root)) { console.error("no OAuth door yet: set it up first (docs/oauth.md, pocketbrain oauth setup)"); return 1; }
     const list = (v: string | undefined) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
     let req: NewAgent = {
       agent, name, transport: door === "api" ? "api" : "mcp",
-      slices: list(arg(args, "--slices")),
+      slices: kind && !arg(args, "--slices") ? slicePreset(loadRules(root), kind as Kind) : list(arg(args, "--slices")),
       exclude_types: list(arg(args, "--exclude-types") ?? "money").filter((x) => x !== "none"),
     };
     try {
@@ -768,16 +1059,31 @@ ${p.text}`);
         req = { ...req, ...base, slices: [...new Set([...base.slices, ...req.slices])], exclude_types: [...new Set([...base.exclude_types!, ...list(arg(args, "--exclude-types")).filter((x) => x !== "none")])], transport: door === "api" ? "api" : door === "invite" ? base.transport : "mcp" };
       }
       const head = like ? `${agent || "<new>"} like ${like}: ${req.slices.join(", ")}, leaving out ${req.exclude_types!.join(", ")}${req.exclude?.length ? ` and ${req.exclude.length} note(s) by name` : ""}. Trial, whatever ${like} is: it sees up to ${req.max_sensitivity ?? "personal"} and its writes wait for you.\n` : "";
-      if (!args.includes("--yes")) { console.log(head + previewNewAgent(root, req).text); console.log(`\nNothing granted yet. If this is right, run the same command with --yes.`); return 0; }
+      if (!args.includes("--yes")) {
+        console.log(head + previewNewAgent(root, req).text);
+        if (kind) console.log(`\nSlices: ${req.slices.join(", ")}; money left out; trial (its writes wait for you).`);
+        // On a terminal, --kind asks here instead of making you run the command again.
+        if (!(kind && process.stdin.isTTY && /^y(es)?$/i.test(String(prompt("Grant it? [y/N]") ?? "").trim()))) { console.log(`\nNothing granted yet. If this is right, run the same command with --yes.`); return 0; }
+      }
+      // G241: a door that makes a token here needs an agent no wider than add's default; checked
+      // before anything is granted. The OAuth door needs your own sign-in, so it isn't limited.
+      if (door !== "oauth") {
+        const r0 = loadRules(root);
+        const hypo = { ...r0, policy: { ...r0.policy, agents: { ...r0.policy.agents, [agent]: { tier: "trial" as const, slices: req.slices, exclude_types: req.exclude_types, ...(req.max_sensitivity ? { max_sensitivity: req.max_sensitivity } : {}) } } } };
+        const why = reachRefusal(hypo, agent);
+        if (why) { console.error(`${agent}: ${why}, so a terminal alone can't make it a ${door === "invite" ? "code" : "token"}. Nothing granted. Narrow it (one area, money left out), or use --door oauth (your own sign-in), or add it on the dashboard and make its key with a one-time code from its page.`); return 1; }
+      }
       console.log(head + addAgent(root, req).text);
-    } catch (e) { console.error(`add <agent> --slices a,b | --like <agent> [--door mcp|oauth|api|local|invite] [--url https://brain.example] [--name Label] [--yes]\n${(e as Error).message}`); return agent && (req.slices.length || like) ? 1 : 2; }
+    } catch (e) { console.error(`add <agent> --kind claude-ai|claude-code|town|browser | --slices a,b | --like <agent> [--door mcp|oauth|api|local|invite] [--url https://brain.example] [--name Label] [--yes]\n${(e as Error).message}`); return agent && (req.slices.length || like) ? 1 : 2; }
     const fresh = loadRules(root);
     const url = (arg(args, "--url") ?? "http://127.0.0.1:8787").replace(/\/$/, "");
     console.log(`\n${agent} added as a trial agent: it sees the slice above, and everything it writes waits for you.\n`);
+    // G184: add grants the agent; its token still passes the terminal gate (a wider preset needs the code).
+    if (kind) { try { return connectKind(root, agent, kind as Kind, url, name); } catch (e) { console.error((e as Error).message); return 1; } }
     if (door === "oauth") {
       const e = oauth.expectClient(root, agent, { name });
       const mins = Math.round((Date.parse(e.until) - Date.parse(e.opened)) / 60_000);
-      console.log(`In ${agent}'s connector settings, add the MCP server ${url}/mcp/oauth and sign in with your own account.\nYour next new sign-in in the next ${mins} minutes (until ${e.until}) is approved as ${agent}, once. A later one waits for you on the dashboard's Agents page.`);
+      console.log(`In ${agent}'s connector settings, add the MCP server ${url}/mcp/oauth and sign in with your own account.\nYour next new sign-in in the next ${mins} minutes (until ${e.until}) is approved as ${agent}, once. A later one waits for you on the dashboard's Assistants page.`);
       console.log(`\nThen paste this once into ${agent}'s own custom instructions, so it checks the brain without being asked:\n\n${standingInstruction(fresh, "mcp", url)}`);
       return 0;
     }
@@ -788,13 +1094,13 @@ ${p.text}`);
       return 0;
     }
     if (door === "local") {
-      const tok = issueToken(root, agent);
+      const tok = mintFromShell(root, agent, { via: `add ${agent}` });
       console.log(`For Claude Code on this machine:\n  claude mcp add --scope user --transport http pocketbrain http://127.0.0.1:${arg(args, "--port") ?? "8787"}/mcp --header "Authorization: Bearer ${tok}"`);
       console.log(`\nThen add this once to ~/.claude/CLAUDE.md, so it checks the brain without being asked:\n\n${standingInstruction(fresh, "mcp", url)}`);
       console.error(`token printed once; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
       return 0;
     }
-    printConnect(root, agent, door === "api" ? "api" : "mcp", url);
+    printConnect(root, agent, door === "api" ? "api" : "mcp", url, `add ${agent}`);
     return 0;
   }
   if (cmd === "invite") {
@@ -820,7 +1126,7 @@ ${p.text}`);
         const p = args.includes("--yes") ? share.addShare(root, req) : share.previewShare(root, req);
         console.log(p.text);
         if (!args.includes("--yes")) { console.log(`\n${p.name} would see this, read-only, until ${p.until}. Nothing shared yet. If this is right, run the same command with --yes.`); return 0; }
-        console.log(`\nShared with ${p.name} as ${agent} until ${p.until}, read-only.\nTheir assistant connects with a one-time code: pocketbrain invite ${agent} --url <your public url>\n(or, with the sign-in door, pocketbrain oauth coworker add <subject> --name "${p.name}" --agent ${agent}). End it any time: pocketbrain share end ${agent}`);
+        console.log(`\nShared with ${p.name} as ${agent} until ${p.until}, read-only.\nTheir assistant connects with a one-time code: ${shellMintRefusal(root, agent) ? `on the dashboard, open ${agent}'s page and press "One-time code" (this share is wider than a terminal may invite for); their assistant redeems it at <your public url>/v1/enroll` : `pocketbrain invite ${agent} --url <your public url>`}\n(or, with the sign-in door, pocketbrain oauth coworker add <subject> --name "${p.name}" --agent ${agent}). End it any time: pocketbrain share end ${agent}`);
         return 0;
       }
       if (sub === "extend" && agent && days !== undefined) { console.log(share.extendShare(root, agent, days)); return 0; }
@@ -830,6 +1136,10 @@ ${p.text}`);
     return 2;
   }
   if (cmd === "menubar") return menubarCli(args, root);
+  if (cmd === "agent" && args[0] === "tier") {
+    try { const r = setAgentTier(root, args[1] ?? "", args[2] ?? "", { dryRun: args.includes("--dry-run") }); console.log(r); return 0; }
+    catch (e) { console.error((e as Error).message); return e instanceof OwnerSetError && !/on the hub|couldn't commit|by hand/.test((e as Error).message) ? 2 : 1; }
+  }
   if (cmd === "agent") {
     // The owner's switches for one agent, from the menu-bar app or a terminal. Here they only tighten
     // (active, then read-only, then paused, or revoke): anything that can run a shell can call this,
@@ -850,7 +1160,7 @@ ${p.text}`);
     const agent = args[1] && !args[1].startsWith("--") ? args[1] : "";
     const role = arg(args, "--role") as TokenRole | undefined;
     const overlapHours = Number(arg(args, "--overlap") ?? 24);
-    if (!agent) { console.error("token rotate <agent> [--role reader] [--overlap <hours, default 24>] [--url https://brain.example] [--yes]"); return 2; }
+    if (!agent) { console.error("token rotate <agent> [--role reader] [--overlap <hours, default 24>] [--url https://brain.example] [--code <code>] [--yes]"); return 2; }
     const rules = loadRules(root), a = Object.hasOwn(rules.policy.agents, agent) ? rules.policy.agents[agent] : undefined;
     const when = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
     if (!args.includes("--yes")) {
@@ -860,46 +1170,58 @@ ${p.text}`);
       console.log(`${agent} sees: ${(a.slices ?? []).join(", ") || "nothing"}${a.exclude_types?.length ? ` (minus ${a.exclude_types.join(", ")})` : ""}
 A new ${role ? `${role} ` : ""}token for ${agent}, with the same slice. ${old.length ? `Its ${old.length} current ${role ? `${role} ` : ""}token(s) keep working until ${when(ends)}, then stop.` : "It has no current token to end."}
 
-Nothing changed yet. If this is right, run the same command with --yes.`);
+Nothing changed yet. If this is right, run the same command with --yes${shellMintRefusal(root, agent) && !arg(args, "--code") ? ` --code <code> (from the terminal, ${agent} needs your one-time code: on the dashboard, open its page and press "One-time code")` : ""}.`);
       return 0;
     }
-    let r;
-    try { r = rotateToken(root, agent, { role, overlapHours }); } catch (e) { console.error((e as Error).message); return 1; }
+    // G184: rotating mints a token, so it passes the terminal gate like every other door.
+    let r!: ReturnType<typeof rotateToken>;
+    try { mintFromShell(root, agent, { via: `token rotate ${agent}${role ? ` --role ${role}` : ""} --yes`, code: arg(args, "--code"), role, mint: () => (r = rotateToken(root, agent, { role, overlapHours })).token }); } catch (e) { console.error((e as Error).message); return 1; }
     const url = (arg(args, "--url") ?? hub.loadHub(root)?.public_url ?? "http://127.0.0.1:8787").replace(/\/$/, "");
     if (role) console.log(`${role} token for ${agent}: ${r.token}`);
-    else printConnect(root, agent, a!.transport === "api" ? "api" : "mcp", url, r.token);
+    else printConnect(root, agent, a!.transport === "api" ? "api" : "mcp", url, `token rotate ${agent}`, undefined, r.token);
     console.log(`\nPaste the new token into ${agent} now: ${r.expiring ? `the old token keeps working until ${when(r.expires)}, then stops` : "it had no other token"}.`);
     return 0;
   }
   if (cmd === "token") {
     const rev = arg(args, "--revoke");
-    if (rev) { console.log(`revoked ${revokeTokens(root, rev)} token(s) for ${rev}`); asks.cancelAsks(root, rev); cancelActions(root, rev, "access revoked"); return 0; }
+    if (rev) {
+      // G336: a revoke that can't take the invites lock throws before any key goes; asks and actions are cancelled either way.
+      let code = 0;
+      try { console.log(`revoked ${revokeTokens(root, rev)} token(s) for ${rev}`); } catch (e) { console.error((e as Error).message); code = 1; }
+      asks.cancelAsks(root, rev); cancelActions(root, rev, "access revoked");
+      return code;
+    }
     const agent = arg(args, "--agent");
     const role = arg(args, "--role");
-    if (!agent || (role !== undefined && !TOKEN_ROLES.includes(role as TokenRole))) { console.error("token --agent <agent> [--role reader|resolver] | --revoke <agent>"); return 2; }
-    try { console.log(issueToken(root, agent, role as TokenRole | undefined)); } catch (e) { console.error((e as Error).message); return 1; }
+    if (!agent || (role !== undefined && !TOKEN_ROLES.includes(role as TokenRole))) { console.error("token --agent <agent> [--role reader|resolver] [--code <one-time code>] | --revoke <agent>"); return 2; }
+    // G184: a narrow agent, or the owner's one-time code from the dashboard (src/invite.ts).
+    try { console.log(mintFromShell(root, agent, { via: `token --agent ${agent}${role ? ` --role ${role}` : ""}`, code: arg(args, "--code"), role: role as TokenRole | undefined })); } catch (e) { console.error((e as Error).message); return 1; }
     console.error(`${role ? `${role} ` : ""}token for ${agent} printed once; only its hash is in rules/tokens.yaml`);
     return 0;
   }
-  if (cmd === "ask") {
+  if (cmd === "ask" && args[0] !== "on" && args[0] !== "off") {
     const sub = args[0];
     if (sub === "list") {
       for (const a of asks.listAsks(root).slice(-30)) console.log(`${a.id}  ${a.at.slice(0, 16)}  ${a.agent}  ${a.state}  "${a.what}"  ${a.candidates.map((c) => c.id).join(", ") || "(no match)"}${a.approved ? `  approved via ${a.approved.via}: ${a.approved.note}` : ""}`);
       return 0;
     }
-    if (sub === "approve" && args[1]) {
-      const a = asks.listAsks(root).find((x) => x.id === args[1]);
-      console.log(asks.approveAsk(root, args[1], args[2] ?? a?.candidates[0]?.id ?? "", { via: "cli", by: "owner" }));
-      return 0;
-    }
+    // G244 (invariant 13): an approval comes only from the dashboard or a CIBA approval. Any program
+    // with a shell can run the CLI, an agent that asked included, so `approve` isn't here.
+    if (sub === "approve") { console.error("approve an ask on the dashboard (Overview, Asks to see) or on your phone: an approval from a terminal could be the asking agent's own"); return 1; }
     if (sub === "decline" && args[1]) { console.log(asks.declineAsk(root, args[1], "cli")); return 0; }
     if (sub === "test") {
       loadKeys();
       asks.testPush(root).then((m) => { console.log(m); process.exit(/^(approved|denied)/.test(m) ? 0 : 1); }, (e) => { console.error((e as Error).message); process.exit(1); });
       return -1;
     }
-    console.error("ask list | approve <id> [note] | decline <id> | test");
+    console.error("ask on [flags] | off | list | decline <id> | test (approve on the dashboard)");
     return 2;
+  }
+  if (cmd === "golden") {
+    // The golden set (src/golden.ts): the owner's weekly questions through an agent's view.
+    const r = runGolden(root, { agent: args[0] && !args[0].startsWith("--") ? args[0] : undefined, file: arg(args, "--file") });
+    console.log(args.includes("--json") ? JSON.stringify(r.rows) : r.text);
+    return r.file && !r.rows.some((x) => x.grade === "fail") ? 0 : 1;
   }
   if (cmd === "exam") {
     // The memory exam (src/exam.ts): each agent's own memory against the brain, from the logs.
@@ -910,6 +1232,13 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     console.log(r.text);
     console.log(`-> ${r.file}`);
     return r.rows.some((x) => x.grade === "fail") ? 1 : 0;
+  }
+  if (cmd === "diary" && args[0] === "catchup") {
+    // The owner's diary catching up with fact changes that came without a line (src/diary-catchup.ts).
+    // --dry-run reads and counts only: nothing is written, not even the cursor.
+    const r = catchUpDiary(root, new Date(), { dryRun: args.includes("--dry-run") });
+    console.log(JSON.stringify(r, null, 2));
+    return r.unsaved ? 1 : 0;
   }
   if (cmd === "fill") {
     // Is the brain filling? (src/fill.ts): the capture pipeline per source, against the targets.
@@ -939,6 +1268,10 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
   if (cmd === "memsync") {
     // Agent memory sync (src/memsync.ts): scan readable memories, quiz the others, and decide.
     const sub = args[0];
+    // The kill switch: prints the policy.yaml edit; rules/ is the owner's to change.
+    if (sub === "off" || sub === "on") {
+      try { console.log(memsync.switchEdit(root, sub, args.slice(1))); return 0; } catch (e) { console.error((e as Error).message); return 2; }
+    }
     if (sub === "run") { console.log(JSON.stringify(memsync.syncPass(root, Number(arg(args, "--n") ?? 3), args[1] && !args[1].startsWith("--") ? [args[1]] : undefined), null, 2)); return 0; }
     if (sub === "scan" && args[1]) {
       const f = memsync.scan(root, args[1]);
@@ -973,7 +1306,9 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
       { const why = pausedReason(root, CAPTURE_STEP); if (why) { console.error(`import ${why}`); return 1; } }
       const who = args[1];
       const model = modelFor(root, CAPTURE_STEP, who === ME ? "capture" : who);
-      importMemory(root, who, args.slice(2).filter((x) => !x.startsWith("--")), model).then((rs) => {
+      const given = args.slice(2).filter((x) => !x.startsWith("--"));
+      for (const s of skippedMemory(given)) console.log(`${s.name}: ${s.shape === "gemini-activity" ? "Gemini activity" : "chat history"}, not memory; nothing imported (pocketbrain logs import keeps chats)`);
+      importMemory(root, who, given, model).then((rs) => {
         for (const { name, result: r } of rs) {
           const state = r.refused ? `refused: ${r.refused}` : r.duplicate ? "already imported" : r.held ? `held for you: ${r.held.join("; ")}` : r.queued ? `queued as ${r.queued}` : `${r.items.filter((i) => i.proposal).length} proposal(s), ${r.items.filter((i) => i.status === "known").length} already known`;
           console.log(`${name}: ${state}`);
@@ -997,11 +1332,14 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
       }
       return 0;
     }
-    console.error("memsync run [agent] [--n 3] | scan <agent> | report <agent> [--json] | quiz <agent> [n] | list [--all] | approve <id> | decline <id> | key | import <agent|me> [files…] | ask <agent> | pointers <agent> | brainfirst [days]");
+    console.error("memsync off|on [corrections|change_feed|quiz…] | run [agent] [--n 3] | scan <agent> | report <agent> [--json] | quiz <agent> [n] | list [--all] | approve <id> | decline <id> | key | import <agent|me> [files…] | ask <agent> | pointers <agent> | brainfirst [days]");
     return 2;
   }
   if (cmd === "tend") {
-    if (!args.includes("--managed")) { console.error("tend --managed [--agent g] [--dir ~/pocketbrain-agents] [--url https://brain.example] [--profile pocketbrain] [--nightly-model m] [--weekly-model m] [--force] [--apply]"); return 2; }
+    if (!args.includes("--managed")) { console.error("tend --managed [--agent g] [--dir ~/pocketbrain-agents] [--url https://brain.example] [--profile pocketbrain] [--nightly-model m] [--weekly-model m] [--force] [--apply --code <code>]"); return 2; }
+    // G240/G285: --apply puts the gardener's token in a vault through ant, so from a terminal it
+    // needs the gardener's rotation code; refused here, before anything reaches ant.
+    if (args.includes("--apply") && arg(args, "--code") === undefined) { console.error(`tend --managed --apply needs your yes: on the dashboard, open the gardener's page, press "Rotation code", then run the same command with --code <code>. Nothing changed.`); return 1; }
     let plan: TendPlan;
     try { plan = tendPlan(root, { agent: arg(args, "--agent"), dir: arg(args, "--dir"), url: arg(args, "--url"), profile: arg(args, "--profile"), nightlyModel: arg(args, "--nightly-model"), weeklyModel: arg(args, "--weekly-model") }); }
     catch (e) { console.error((e as Error).message); return 1; }
@@ -1010,7 +1348,7 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     for (const f of w.written) console.log(`  wrote ${join(plan.dir, f)}`);
     for (const f of w.kept) console.log(`  kept  ${join(plan.dir, f)} (yours; --force to replace)`);
     if (!args.includes("--apply")) { console.log(`\nNothing sent to Anthropic yet. Next:\n${manualSteps(plan)}`); return 0; }
-    const r = applyManaged(root, plan);
+    const r = applyManaged(root, plan, { code: arg(args, "--code") });
     for (const l of r.lines) (r.ok ? console.log : console.error)(`  ${l}`);
     if (r.ok) console.log(`\nBoth deployments are paused. First run by hand: pocketbrain gardener open 60, then ant --profile ${plan.profile} beta:deployments run --deployment-id <nightly id>. Read its proposals in the dashboard before you unpause anything.`);
     return r.ok ? 0 : 1;
@@ -1020,7 +1358,42 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     try { const r = f(); console.log(Array.isArray(r) ? r.join("\n") : r); return 0; }
     catch (e) { console.error((e as Error).message); return e instanceof OwnerSetError && !/on the hub|couldn't commit/.test((e as Error).message) ? 2 : 1; }
   };
+  if (cmd === "ask") return ownerSet(() => setAskToSee(root, args[0] === "on", { approver: arg(args, "--approver"), never: arg(args, "--never"), maxPerDay: arg(args, "--max-per-day"), clientId: arg(args, "--client-id") }));
   if (cmd === "night") return ownerSet(() => setNight(root, args[0] ?? ""));
+  if (cmd === "filing" && args[0] === "all") return ownerSet(() => setFileAll(root, args[1] ?? ""));
+  if (cmd === "me" && args[0] === "name") {
+    // The owner's full name as an alias, then the open proposals that named the owner moved onto
+    // one page. --suggested takes the name the proposals give most, so nothing is typed or printed.
+    const guess = suggestOwnerName(root);
+    let full: string | undefined;
+    if (args.includes("--suggested")) full = guess;
+    else if (process.stdin.isTTY) full = String(prompt(`Your first and last name${guess ? " (Enter: the one your mail gives you most)" : ""}:`) ?? "").trim() || guess;
+    else { console.error("me name: run it in your own terminal, or with --suggested"); return 2; }
+    if (!full) { console.error(`me name: no name to set (your open proposals don't settle your full name; type it in your own terminal)\n${ownerNameReport(root)}`); return 2; }
+    const name = full;
+    return ownerSet(() => { const set = setOwnerAliases(root, name, args.includes("--suggested") || name === guess ? ownerSpellings(root) : []); const r = sweepOwnerProposals(root); return [set, `${r.moved} open proposal(s) about you moved onto your page (${r.onPage} onto a page that exists)`]; });
+  }
+  if (cmd === "next-steps") {
+    if (args[0] !== "newest") { console.error("next-steps newest"); return 2; }
+    return ownerSet(() => setNextStepNewest(root));
+  }
+  if (cmd === "backfill") return ownerSet(() => setNightlyBackfill(root, args[0] ?? ""));
+  if (cmd === "wiki") {
+    if (args[0] === "links" && args[1] === "preview") {
+      // The owner's own terminal: what upkeep would link, with the names (docs/wiki.md).
+      const plan = namePlan(loadBrain(root), loadRules(root));
+      for (const p of plan) {
+        for (const l of p.link) console.log(`${p.from}: "${l.name}" -> [[${l.to}]]`);
+        for (const l of p.blind) console.log(`${p.from}: "${l.name}" not linked: some assistants that see this note can't see ${l.to}`);
+        if (p.ambiguous) console.log(`${p.from}: ${p.ambiguous} name${p.ambiguous === 1 ? "" : "s"} fit more than one note`);
+      }
+      console.log(`${plan.reduce((a, p) => a + p.link.length, 0)} links would be added in ${plan.filter((p) => p.link.length).length} notes`);
+      return 0;
+    }
+    if (args[0] === "links") return ownerSet(() => setLinkNames(root, args[1] ?? ""));
+    if (args[0] !== "sync") { console.error("wiki sync on | off, or wiki links on | off"); return 2; }
+    return ownerSet(() => setWikiSync(root, args[1] ?? ""));
+  }
   if (cmd === "gardener") {
     const sub = args[0];
     if (sub === "setup") return ownerSet(() => gardenerSetup(root, { profile: arg(args, "--profile"), lock: arg(args, "--lock"), agent: arg(args, "--agent"), mcpUrl: arg(args, "--mcp-url"), vault: arg(args, "--vault") }));
@@ -1032,8 +1405,9 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
       return 0;
     }
     if (sub === "cleanup") { const r = cleanup(root); console.log(r.message); return r.ok ? 0 : 1; }
-    if (sub === "rotate") { const r = rotate(root); (r.ok ? console.log : console.error)(r.message); return r.ok ? 0 : 1; }
-    console.error("gardener open [minutes] | setup | cleanup | rotate");
+    // G240: from a terminal, rotation needs the owner's one-time code from the gardener's page.
+    if (sub === "rotate") { const r = rotate(root, { code: arg(args, "--code") }); (r.ok ? console.log : console.error)(r.message); return r.ok ? 0 : 1; }
+    console.error("gardener open [minutes] | setup | cleanup | rotate [--code <code>]");
     return 2;
   }
   if (cmd === "fga") {
@@ -1165,8 +1539,14 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     const sub = args[0];
     if (sub === "enroll" && args[1]) {
       const role = arg(args, "--role");
-      if (role && role !== "reader") { console.error("edge enroll <agent> [--role reader]: the resolver's routes need the hub"); return 2; }
-      console.log(edge.enroll(root, args[1], role as "reader" | undefined)); console.error(`${role ? "reader " : ""}token for ${args[1]}: shown once; it reads from the hub and from the sealed edge`); return 0;
+      if (role && role !== "reader") { console.error("edge enroll <agent> [--role reader] [--code <code>]: the resolver's routes need the hub"); return 2; }
+      // G184: the token passes the terminal's gate first; enroll only wraps it for the sealed cell.
+      let tok: string;
+      try { tok = mintFromShell(root, args[1], { via: `edge enroll ${args[1]}${role ? " --role reader" : ""}`, code: arg(args, "--code"), role: role as "reader" | undefined }); } catch (e) { console.error((e as Error).message); return 1; }
+      // If the edge can't take it (its home state can't be written), the token nobody was shown is revoked (G314).
+      try { console.log(edge.enroll(root, args[1], role as "reader" | undefined, tok)); }
+      catch (e) { const h = sha256(tok); retainTokens(root, args[1], (x) => x !== h); console.error(`edge enroll ${args[1]}: ${(e as Error).message}; the new token was revoked`); return 1; }
+      console.error(`${role ? "reader " : ""}token for ${args[1]}: shown once; it reads from the hub and from the sealed edge`); return 0;
     }
     const dir = arg(args, sub === "publish" ? "--out" : "--from");
     if (sub === "publish" && dir) {
@@ -1249,6 +1629,18 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     console.error("hub init | add-replica | status | sync | promote | replay | verify | tunnel-config");
     return 2;
   }
+  if (cmd === "support") {
+    if (args[0] !== "bundle") { console.error("support bundle [--out <file>]"); return 2; }
+    const out = resolve(arg(args, "--out") ?? `pocketbrain-support-${new Date().toISOString().slice(0, 10)}.txt`);
+    supportBundle(root).then((text) => {
+      writeFileSync(out, text, { mode: 0o600 });
+      chmodSync(out, 0o600);
+      console.log(`wrote ${out} (${text.split("\n").length - 1} lines, readable only by you). It has no note content; read it before you send it.`);
+      process.exit(0);
+    }, (e) => { console.error((e as Error).message); process.exit(1); });
+    return -1;
+  }
+
   if (cmd === "doctor") {
     const offline = args.includes("--offline");
     doctor(root, { offline }).then(async (f) => {
@@ -1307,11 +1699,46 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     // Metered; past the spend cap each model step is held (the morning note says so).
     const judge = args.includes("--no-judge") ? undefined : modelFor(root, "upkeep.duplicates");
     sleep(root, { model: modelFor(root, SLEEP_STEP), judge }).then((r) => {
-      console.log(`${r.run} -> ${r.file}`);
+      console.log(r.file ? `${r.run} -> ${r.file}` : r.run);
       for (const l of r.morning) console.log(l);
       process.exit(0);
     }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
     return -1;
+  }
+  if (cmd === "forget") {
+    // Someone asks to be taken out (docs/forget.md): an owner commit, undone within 14 days.
+    const id = args[0] === "--undo" ? args[1] : args[0];
+    if (!id || id.startsWith("--")) { console.error("forget <people/id> [--yes] | forget --undo <people/id>"); return 2; }
+    try {
+      if (args[0] === "--undo") { console.log(undoForget(root, id)); return 0; }
+      if (!args.includes("--yes")) {
+        const p = planForget(root, id);
+        console.log(`Would forget ${p.title} (${id}): the note, ${p.links.length} link(s) to them${p.links.length ? ` in ${p.links.join(", ")}` : ""}, ${p.inbox.length} inbox item(s), ${p.disputes.length} settled dispute(s)${p.standing ? ", their standing" : ""}.`);
+        if (p.named.length) console.log(`Still named in plain text, by name or address, in ${p.named.join(", ")}: a forget rewrites links, not prose, so edit those notes too.`);
+        console.log(`Nothing changed. To go ahead: pocketbrain forget ${id} --yes`);
+        return 1;
+      }
+      console.log(forgetPerson(root, id).message);
+      return 0;
+    } catch (e) { console.error((e as Error).message); return 1; }
+  }
+  if (cmd === "same-person") {
+    const [sub, id] = args.filter((x, i) => !x.startsWith("--") && args[i - 1] !== "--brain");
+    const run = (f: () => string) => { try { console.log(f()); return 0; } catch (e) { console.error((e as Error).message); return 1; } };
+    if (sub === "merge" && id) return run(() => mergeSamePerson(root, id, { swap: args.includes("--swap") }));
+    if (sub === "not" && id) return run(() => notSamePerson(root, id));
+    if (sub === "undo" && id) return run(() => undoPersonMerge(root, id));
+    if (sub) { console.error("same-person [merge <id> [--swap] | not <id> | undo <id>]"); return 2; }
+    const ps = samePersonProposals(root);
+    if (args.includes("--json")) { console.log(JSON.stringify({ proposals: ps, merges: personMerges(root) }, null, 2)); return 0; }
+    if (!ps.length) console.log("no same-person proposals");
+    // The card already says why a blocked pair can't merge; only the ways that can are offered.
+    for (const p of ps) console.log(`${p.id}  ${p.card}${p.blocked && p.swap_blocked ? "" : !p.blocked
+      ? `\n    pocketbrain same-person merge ${p.id}   (keeps ${p.keep}${p.swap_blocked ? "" : `; --swap keeps ${p.drop}`})`
+      : `\n    pocketbrain same-person merge ${p.id} --swap   (keeps ${p.drop})`}
+    pocketbrain same-person not ${p.id}`);
+    for (const m of personMerges(root)) console.log(`merged: ${m.drop} into ${m.keep}  (undo: pocketbrain same-person undo ${m.id})`);
+    return 0;
   }
   if (cmd === "merge") {
     const [keep, drop] = args.filter((x, i) => !x.startsWith("--") && args[i - 1] !== "--brain");
@@ -1320,8 +1747,25 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     console.log(r.message);
     return r.ok ? 0 : 1;
   }
+  if (cmd === "audit" && args[0] === "trust") {
+    // Can the brain be trusted? Counts only, no model (src/trust.ts, docs/trust.md).
+    const n = arg(args, "--check");
+    if (n !== undefined && !/^\d+$/.test(n)) { console.error("audit trust --check <number of source items to read>"); return 2; }
+    const report = () => {
+      const t = trustReport(root);
+      const weekAgo = recordTrust(root, t);
+      console.log(args.includes("--json") ? JSON.stringify(t, null, 2) : trustText(t, weekAgo));
+    };
+    if (!n) { report(); return 0; }
+    sweep(root, Number(n)).then((s) => {
+      console.log(`Read ${s.read} source item(s): ${s.confirmed} fact(s) confirmed, ${s.due} now need a look, ${s.unreachable} couldn't be read.`);
+      report();
+      process.exit(0);
+    }, (e) => { console.error(String((e as Error).message ?? e)); process.exit(1); });
+    return -1;
+  }
   if (cmd === "audit") {
-    if (args[0] !== "carve") { console.error("audit: say audit carve"); return 2; }
+    if (args[0] !== "carve") { console.error("audit: say audit carve or audit trust"); return 2; }
     const r = auditCarve(root, { save: !args.includes("--dry-run"), alert: !args.includes("--dry-run") });
     console.log(args.includes("--json") ? JSON.stringify(r, null, 2) : r.text);
     return r.alerts ? 1 : 0;
@@ -1429,11 +1873,24 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     }
     if (args[0] === "connect") {
       const cfg = args[1] ? file.sources?.[args[1]] : undefined;
-      if (!cfg || (cfg.kind !== "gmail" && cfg.kind !== "gcal" && cfg.kind !== "gdoc")) { console.error("sources connect <name>: a gmail, gcal or gdoc source in rules/sources.yaml"); return 2; }
+      if (!cfg || (cfg.kind !== "gmail" && cfg.kind !== "gcal" && cfg.kind !== "gdoc" && !(cfg.kind === "contacts" && !cfg.path))) { console.error("sources connect <name>: a gmail, gcal, gdoc or Google contacts source in rules/sources.yaml"); return 2; }
       connectGoogle(cfg, { open: (u) => { try { Bun.spawn(["open", u]); } catch { /* not a Mac: the URL is printed */ } } }).then(({ url, done }) => {
         console.log(`Sign in with the source's Google account (read-only access). If no browser opened:\n${url}`);
         return done;
       }).then((key) => { console.log(`saved ${key} in the keys folder (value not shown). Restart the hub to use it.`); process.exit(0); }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
+      return -1;
+    }
+    if (args[0] === "backfill") {
+      // A fact with no live source gets the mail that still states it as its source (src/backfill.ts).
+      const name = args[1] && !args[1].startsWith("--") ? args[1] : undefined;
+      if (!name) { console.error("sources backfill <gmail source> [--max N] [--dry-run]"); return 2; }
+      const mi = args.indexOf("--max");
+      sourceBackfill(root, name, { dryRun: args.includes("--dry-run"), ...(mi >= 0 ? { max: Number(args[mi + 1]) } : {}) }).then((r) => {
+        if (r.refused) { console.log(`${name}: ${r.refused}`); process.exit(1); }
+        console.log(`${name}${args.includes("--dry-run") ? " (dry run, nothing written)" : ""}: ${r.tried} fact(s) searched, ${r.attached.length} now sourced`);
+        for (const k of r.attached) console.log(`  ${k}`);
+        process.exit(0);
+      }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
       return -1;
     }
     if (args[0] === "pull" && args.includes("--dry-run")) {
@@ -1462,7 +1919,7 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
       p.then((rs) => { for (const r of rs) console.log(`${r.source}: ${r.refused ?? `${r.fetched} fetched, ${r.stored.length} read, ${r.confirmed ?? 0} confirmed, ${r.proposals ?? 0} proposed, ${r.due.length} note(s) due${r.capped ? ", daily cap reached (the rest waits for tomorrow)" : ""}`}`); process.exit(rs.some((r) => r.refused) ? 1 : 0); }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
       return -1;
     }
-    console.error("sources list | sources pull [<name>] [--dry-run [--show]] | sources connect <name>");
+    console.error("sources list | sources pull [<name>] [--dry-run [--show]] | sources connect <name> | sources backfill <name> [--max N] [--dry-run]");
     return 2;
   }
   if (cmd === "capture" && ["drop", "mail", "watch", "pending", "held", "release", "discard"].includes(args[0])) {
@@ -1591,6 +2048,23 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
       console.log("wrote rules/escalation.yaml; edit transport, quiet hours and phone numbers");
       return 0;
     }
+    if (sub === "use") {
+      const f = join(root, "rules", "escalation.yaml");
+      if (!existsSync(f)) { console.error("no rules/escalation.yaml yet: run `pocketbrain textline init` first"); return 1; }
+      const use = args[1], flag = arg(args, "--to");
+      if (!use || use.startsWith("--")) { console.error(`textline use <${TRANSPORTS.join("|")}> [--to <handle>|-]`); return 2; }
+      const to = flag === "-" ? readFileSync(0, "utf8").trim() || undefined : flag;
+      let next: string;
+      try { next = useTransport(readFileSync(f, "utf8"), use, to); } catch (e) { console.error((e as Error).message); return 1; }
+      if (next === readFileSync(f, "utf8")) { console.log(`transport is already ${use}`); return 0; }
+      writeFileSync(f, next);
+      // commitPaths puts the file back if the commit can't happen (a replica's hub gate, a lock).
+      let why: string | undefined;
+      try { why = commitPaths(root, ["rules/escalation.yaml"], `owner: text channel transport ${use}`, OWNER); } catch (e) { why = (e as Error).message; }
+      if (why) { console.error(`not changed: ${why}`); return 1; }
+      console.log(`transport: ${use}${to ? " (to the handle you gave)" : ""}. The next tick texts through it; \`pocketbrain textline status\` shows it.`);
+      return 0;
+    }
     if (sub === "reply") { fakeReply(root, args.slice(1).filter((a, i, all) => a !== "--brain" && all[i - 1] !== "--brain").join(" ")); console.log("queued; the next tick applies it"); return 0; }
     if (sub === "watch") { watch(root); return -1; }
     if (sub === "watchdog") {
@@ -1618,7 +2092,7 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
       }, (e) => { console.error(String(e?.message ?? e)); process.exit(1); });
       return -1;
     }
-    console.error("textline once | watch | status | init | reply <text> | watchdog --url <u>");
+    console.error("textline once | watch | status | init | use <transport> | reply <text> | watchdog --url <u>");
     return 2;
   }
 
@@ -1675,13 +2149,29 @@ Nothing changed yet. If this is right, run the same command with --yes.`);
     return r.outcome === "refused" ? 1 : 0;
   }
 
-  console.error(USAGE);
+  console.error(ownerError("cli.unknown", { cmd }));
   return 2;
 }
 
 function backupCli(cmd: string, args: string[], root: string): number {
   const fail = (e: unknown) => { if (e instanceof bk.BackupError || e instanceof hub.HubError) { console.error(`${cmd}: ${e.message}`); process.exit(1); } throw e; };
   if (cmd === "backup") {
+    if (args[0] === "offsite") {
+      const home = process.env.HOME ?? homedir(), uid = process.getuid?.() ?? 501;
+      const run = (c: string[]) => { const r = Bun.spawnSync(c); return { code: r.exitCode ?? 1, out: r.stderr.toString() + r.stdout.toString() }; };
+      if (args[1] === "copy") {
+        const to = arg(args, "--to");
+        if (!to) { console.error("backup offsite copy --to <folder>"); return 2; }
+        offsiteCopy(root, to).then((r) => { console.log(r.error ? `offsite: ${r.error}` : `offsite: ${r.copied.length} copied`); process.exit(r.error ? 1 : 0); });
+        return -1;
+      }
+      if (process.platform !== "darwin") { console.error("backup offsite is for a Mac (launchd); elsewhere copy the backup folder with your own scheduler"); return 1; }
+      try {
+        if (args[1] === "on" && args[2] && !args[2].startsWith("--")) { console.log(offsiteOn(root, args[2], { home, uid, run, bun: process.execPath, app: resolve(import.meta.dir, "..") })); return 0; }
+        if (args[1] === "off") { console.log(offsiteOff(root, { home, uid, run })); return 0; }
+      } catch (e) { console.error(`backup offsite: ${(e as Error).message}`); return 1; }
+      console.error("backup offsite on <folder> | off"); return 2;
+    }
     if (args.includes("--init")) {
       const pub = arg(args, "--pub");
       if (!pub || !/^age1[0-9a-z]{58}$/.test(pub)) { console.error("backup --init --pub <age1...>: the PUBLIC key (age-keygen -y). The private key goes in your password manager"); return 2; }
@@ -1718,11 +2208,31 @@ function backupCli(cmd: string, args: string[], root: string): number {
     }, fail);
     return -1;
   }
+  // --demo: the sample brain and a throwaway key; the owner's brain is never opened or recorded in.
+  if (args.includes("--demo")) {
+    bk.demoDrill().then((d) => {
+      console.log(d.ok ? bk.demoLine(d) : bk.renderDrill(d));
+      process.exit(d.ok ? 0 : 1);
+    }, fail);
+    return -1;
+  }
   bk.drill(root, { identity: arg(args, "--identity"), key: arg(args, "--key") }).then((d) => {
     console.log(bk.renderDrill(d));
     recordDrill(root, d.ok);
     process.exit(d.ok ? 0 : 1);
   }, fail);
+  return -1;
+}
+
+// pocketbrain search setup: the one time the semantic-search model is downloaded (src/semantic.ts), in a
+// child process (src/semantic-setup.ts) so the model never loads in this one.
+function searchCli(args: string[]): number {
+  if (args[0] !== "setup") { console.error(usageOf("search")); return 2; }
+  console.log(`Semantic search runs on this machine: only the model is downloaded, once; no note and no query leaves it.\nModel: ${MODEL_ID} (q8, MIT licence) from ${MODEL_PAGE} (large files from ${MODEL_FILE_HOST}, or another *.cdn.hf.co by region)\nInto:  ${modelDir()} (PB_MODEL_DIR to put it elsewhere)`);
+  setupInChild((file) => console.log(`  got ${file}`)).then((r) => {
+    console.log(`${r.already ? "Already here" : "Done"}: ${Math.round(r.bytes / 1e6)} MB in ${modelDir()}. Semantic search is on (a running hub uses it from its next search); PB_SEMANTIC=0 turns it off, deleting that folder removes it.`);
+    process.exit(0);
+  }, (e) => { console.error(`search setup: ${(e as Error).message}`); process.exit(1); });
   return -1;
 }
 
@@ -1732,8 +2242,10 @@ if (import.meta.main) {
     if (code >= 0) process.exit(code);
   } catch (e) {
     // A hub refusal is an answer, not a crash.
-    if (e instanceof hub.HubError) { console.error(e.message); process.exit(1); }
-    throw e;
+    if (e instanceof hub.HubError || e instanceof CoreError) { console.error(e.message); process.exit(1); }
+    if (process.env.PB_DEBUG) throw e;
+    console.error(ownerError("cli.crash", { cmd: process.argv[2] ?? "", message: (e as Error)?.message ?? String(e) }));
+    process.exit(1);
   }
 }
 
@@ -1763,7 +2275,7 @@ function menubarCli(args: string[], fallback: string): number {
       for (const l of installHub(root, { home, uid, run, bun: process.execPath, app: resolve(import.meta.dir, ".."), tunnel: arg(args, "--tunnel"), tunnelConfig: arg(args, "--tunnel-config") })) console.log(l);
       return 0;
     }
-    if (sub === "restart") { const said = restartHub({ home, uid, run }); recordFix(root, "restarted the hub from the menu", "auto:menubar"); console.log(said); return 0; }
+    if (sub === "restart") { console.log(restartHub({ home, uid, run, before: () => recordFix(root, "restarted the hub from the menu", "auto:menubar") })); return 0; }
     if (sub === "open-dashboard") { console.log(openDashboard({ home, run })); return 0; }
     if (sub === "setup") {
       // The first-run window: init + install in one step, the result as JSON for the window.

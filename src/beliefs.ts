@@ -11,7 +11,7 @@
 // the facts in its own carve, and the fix-everywhere action only asks an agent about a fact in its
 // own carve and only approves corrections already made for it, through memsync's own functions.
 import { loadBrain } from "./brain";
-import { loadRules, type Rules } from "./rules";
+import { loadRules, ownAssistant, type Rules } from "./rules";
 import { carve, grantFor } from "./carve";
 import { approve, decline, grade, oneLine, quiz, scan, state, stillCurrent, targetFor, targets, type Correction, type Quiz, type Target } from "./memsync";
 import { squash } from "./match";
@@ -21,10 +21,10 @@ export interface Cell { state: CellState; said?: string; at?: string; correction
 export interface Row { key: string; title: string; attr: string; now: string[]; cells: Record<string, Cell> }
 export interface Beliefs { agents: string[]; rows: Row[] }
 
-// Agents with a memory of their own: not the owner's inside-the-wall tools, not the gardener.
+// Agents with a memory of their own: the owner's own assistants (rules.ts ownAssistant).
 function memoryAgents(rules: Rules): string[] {
   return Object.entries(rules.policy.agents)
-    .filter(([, a]) => !a.inside_wall && a.role !== "gardener")
+    .filter(([n]) => ownAssistant(rules, n))
     .map(([n]) => n)
     .sort();
 }

@@ -25,6 +25,8 @@ export interface PB {
   freshness?: any;
   pull?: any;
   memsync?: any;
+  google?: any;
+  feeds?: any;
 }
 
 let cached: PB | undefined;
@@ -42,6 +44,8 @@ export async function loadPB(): Promise<PB> {
     freshness: await opt("freshness.ts"),
     pull: await opt("pull.ts"),
     memsync: await opt("memsync.ts"),
+    google: await opt("google.ts"),
+    feeds: await opt("feeds.ts"),
   };
   return cached;
 }

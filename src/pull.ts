@@ -13,23 +13,30 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import YAML from "yaml";
 import { join, isAbsolute } from "node:path";
 import { loadBrain, saveNote, today, isList, sensitivityRank, type FactRecord, type Fact, type Sensitivity } from "./brain";
-import { readYaml, loadRules, attributeSpec } from "./rules";
+import { readYaml, loadRules, attributeSpec, gardeners } from "./rules";
+import { nameKeys } from "./mentions";
 import { hubRole } from "./hub";
 import { factFreshness } from "./freshness";
 import { git } from "./git";
 import { alert, appendJsonl, readJsonl } from "./util";
 import { verifyLog, claimKey } from "./evidence";
 import { loadEscalation } from "./textline/policy";
-import { refString } from "./sources";
-import { extractCapture, captureModel, findCapture, previewExtraction, readCapture, unfinishedPull, type CaptureItem } from "./capture";
-import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchDrive, fetchDriveFile } from "./google";
+import { clock, ownerDay } from "./clock";
+import { refString, sourceRank } from "./sources";
+import { extractCapture, fileCard, checkCandidate, releaseHeldDaily, captureModel, findCapture, previewExtraction, readCapture, unfinishedPull, type CaptureItem } from "./capture";
+import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchUpcoming, fetchDrive, fetchDriveFile, fetchContacts, fetchContact } from "./google";
+import { cardItem, readCard, cardCandidates, cardAdjust, ownerRelations, fetchVcards, withoutDetails } from "./contacts";
 import { fetchDiscord, fetchDiscordMessage, fetchTexts, fetchText, fetchGranola, fetchGranolaNote } from "./feeds";
 import { findInjection, redactSecrets } from "./checks";
 import { compareKey } from "./normalize";
 import { logWrite } from "./write";
+import { recordCheckedRefs, checkedRefs } from "./louis";
+import { senderStanding } from "./sender";
 import { createHash } from "node:crypto";
 import type { Model } from "./model";
 import { recordInteraction } from "./standing";
+import { saveUpcoming, toUpcoming } from "./upcoming";
+import { keepWords, keptQuotes } from "./quotes";
 
 // Sources whose items are messages to or from the owner: they feed standing suggestions.
 // Phone handles compare by digits (the last 10, so +1 and spacing don't matter); emails and chat ids as written.
@@ -45,9 +52,10 @@ const STANDING_KINDS = new Set<SourceKind>(["gmail", "mail", "imessage"]);
 // mail is any other mailbox (IMAP, Outlook, iCloud): RFC 822 fields, keyed by Message-ID.
 // imessage is the owner's texts (iMessage/SMS) from the Mac's ~/Library/Messages/chat.db, read only.
 // granola is the owner's recorded conversations (Granola notes; its local cache on the Mac, read only).
-export type SourceKind = "slack" | "gmail" | "mail" | "gcal" | "gdoc" | "zoom" | "discord" | "imessage" | "granola";
+// contacts is the owner's address book (Google Contacts, or a vCard file): read by code, never a model (src/contacts.ts).
+export type SourceKind = "slack" | "gmail" | "mail" | "gcal" | "gdoc" | "zoom" | "discord" | "imessage" | "granola" | "contacts";
 // The ref scheme per kind. Gmail messages never change, so their ref has no version.
-export const SCHEME: Record<SourceKind, string> = { slack: "slack", gmail: "gmail", mail: "mail", imessage: "imessage", granola: "granola", gcal: "gcal", gdoc: "gdoc", zoom: "zoom", discord: "discord" };
+export const SCHEME: Record<SourceKind, string> = { slack: "slack", gmail: "gmail", mail: "mail", imessage: "imessage", granola: "granola", gcal: "gcal", gdoc: "gdoc", zoom: "zoom", discord: "discord", contacts: "contacts" };
 
 export interface SourceConfig {
   kind: SourceKind;
@@ -56,11 +64,13 @@ export interface SourceConfig {
   area?: string;               // the area new notes from this source land in
   min_sensitivity?: Sensitivity; // floor for every fact from this source (Zoom defaults to private)
   max_per_day?: number;        // items stored per day (default 30)
+  skip_bulk?: boolean;         // mail: false reads list, bulk and machine-sent mail too (default: skipped)
   every_minutes?: number;      // pull this source less often than poll_minutes (e.g. 1440: daily)
   // Mail another account forwards into this one: matched on the addresses the mail was delivered
-  // to (Delivered-To, X-Forwarded-For; never To or X-Forwarded-To, which the sender writes), each
-  // compared whole: "@school.example" is that domain exactly, "me@school.example" that address.
-  // It keeps that account's name and area; the floor is the highest of the source's and the rules'.
+  // to (Delivered-To, X-Forwarded-For), it keeps that account's name and area. A rule named only in
+  // To or Cc, which the sender writes, gives its area and floor, never its account (itemFloor). Each
+  // address is compared whole: "@school.example" is that domain exactly, "me@school.example" that
+  // address. The floor is the highest of the source's and every matching rule's.
   forwarded?: { to: string; account: string; area?: string; min_sensitivity?: Sensitivity }[];
   fixture?: string;            // a JSON file of items in the source's own shape (tests, dry runs)
   address?: string;            // live Gmail: the mailbox's address; connect refuses any other account
@@ -68,6 +78,8 @@ export interface SourceConfig {
   guild?: string;              // discord: the server id, when where: names channels ("#dev")
   path?: string;               // texts, granola: a database or cache other than the Mac's default
   silent_after_hours?: number; // no proposal or re-confirmation this long is a failing probe check (default 72; 0: never)
+  upcoming?: boolean;          // gcal: keep the coming 60 days' titles and times so next_* facts answer live (src/upcoming.ts)
+  new_notes_per_day?: number;  // new notes proposed per day; the rest wait in inbox/held (default 3, backlog 396)
 }
 export interface SourcesFile { consent?: string; poll_minutes?: number; sources?: Record<string, SourceConfig> }
 
@@ -84,8 +96,19 @@ export function consentProblem(c: unknown): string | undefined {
 }
 
 // One item as the hub keeps it: the source's id, its version, and the text the model may see.
-// delivered: the addresses the receiving server says it delivered to (forwarded: rules match these only).
-export interface SourceItem { id: string; version: string; text: string; at?: string; from?: string; to?: string; delivered?: string; subject?: string; where?: string; gone?: boolean }
+// delivered: the addresses the receiving server says it delivered to (a forwarded: rule matched here
+// routes the item); named: To and Cc as the sender wrote them (a rule matched only here can tighten).
+// A sender no person writes from (owner's phone, 2026-10-29: Apple receipts from a no-reply
+// address, none of the list headers, filled "Waiting on you"): no-reply, receipts, orders,
+// billing, invoices, payments, notifications, alerts, mailer-daemon, postmaster, bounces.
+const MACHINE_LOCAL = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|notifications?|notify|alerts?|receipts?|orders?|billing|invoices?|payments?|mailer-daemon|postmaster|bounces?)(?:[-_.+].*)?$/i;
+function machineSender(from: string | undefined): boolean {
+  const addr = /<([^>]+)>/.exec(from ?? "")?.[1] ?? from ?? "";
+  const local = addr.trim().split("@")[0] ?? "";
+  return addr.includes("@") && MACHINE_LOCAL.test(local);
+}
+
+export interface SourceItem { id: string; version: string; text: string; at?: string; from?: string; to?: string; delivered?: string; named?: string; subject?: string; where?: string; gone?: boolean; bulk?: boolean }
 
 export function loadSources(root: string): SourcesFile {
   return readYaml<SourcesFile>(join(root, "rules", "sources.yaml"), {});
@@ -116,12 +139,20 @@ export function toItem(kind: SourceKind, r: Raw): SourceItem | undefined {
       const to = ["to", "delivered-to", "x-forwarded-for", "x-forwarded-to"].map(h).filter(Boolean).join(", ");
       // Delivered-To and X-Forwarded-For are what Gmail adds on receipt and on forwarding.
       const delivered = [...all("delivered-to"), ...all("x-forwarded-for")].join(", ");
-      return { id: String(r.id), version: "1", text: String(r.text ?? r.snippet ?? ""), at: r.internalDate ? new Date(Number(r.internalDate)).toISOString() : undefined, from: h("from"), to, delivered, subject: h("subject"), where: (r.labelIds ?? []).join(","), gone: !!r.deleted };
+      const named = [...all("to"), ...all("cc")].join(", ");
+      // Mail to a list or from a machine (owner's phone, 2026-10-25: a social network's
+      // notification became a card): List-Unsubscribe, List-Id, Precedence bulk/list/junk,
+      // Auto-Submitted other than "no", or Gmail's Promotions, Social and Forums tabs.
+      const labels: string[] = r.labelIds ?? [];
+      const bulk = !!h("list-unsubscribe") || !!h("list-id") || /^(bulk|list|junk)$/i.test((h("precedence") ?? "").trim())
+        || (!!h("auto-submitted") && !/^no$/i.test(h("auto-submitted")!.trim())) || labels.some((l) => /^CATEGORY_(PROMOTIONS|SOCIAL|FORUMS)$/.test(l))
+        || machineSender(h("from"));
+      return { id: String(r.id), version: "1", text: String(r.text ?? r.snippet ?? ""), at: r.internalDate ? new Date(Number(r.internalDate)).toISOString() : undefined, from: h("from"), to, delivered, named, subject: h("subject"), where: labels.join(","), gone: !!r.deleted, ...(bulk ? { bulk } : {}) };
     }
     case "mail": {
       const id = String(r.message_id ?? r.messageId ?? "").replace(/^<|>$/g, "");
       if (!id) return undefined;
-      return { id, version: "1", text: String(r.text ?? ""), at: r.date ? new Date(r.date).toISOString() : undefined, from: r.from, to: [r.to, r.delivered_to].filter(Boolean).join(", "), delivered: r.delivered_to, subject: r.subject, where: r.folder ?? "INBOX", gone: !!r.deleted };
+      return { id, version: "1", text: String(r.text ?? ""), at: r.date ? new Date(r.date).toISOString() : undefined, from: r.from, to: [r.to, r.delivered_to].filter(Boolean).join(", "), delivered: r.delivered_to, named: [r.to, r.cc].filter(Boolean).join(", "), subject: r.subject, where: r.folder ?? "INBOX", gone: !!r.deleted };
     }
     case "imessage": {
       // A row of chat.db's message table joined to its handle and chat. where = the thread's name
@@ -150,6 +181,8 @@ export function toItem(kind: SourceKind, r: Raw): SourceItem | undefined {
       return { id: String(r.fileId ?? r.id), version: String(r.revisionId ?? r.version ?? "1"), text: String(r.text ?? ""), at: r.modifiedTime, subject: r.name, where: r.folder, gone: !!r.trashed || !!r.removed };
     case "zoom":
       return { id: String(r.uuid), version: "1", text: String(r.transcript ?? r.summary ?? ""), at: r.start_time, subject: r.topic, where: r.topic, gone: !!r.deleted };
+    case "contacts":
+      return cardItem(r);
   }
 }
 
@@ -162,6 +195,23 @@ const statePath = (root: string, name: string) => join(root, "log", "sources", `
 function loadState(root: string, name: string): State {
   const p = statePath(root, name);
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : { seen: {} };
+}
+
+// Every ref the hub has read at its source: what a pass, verify_source or a recheck recorded as
+// found (log/refs-checked.jsonl), and every item a pull has seen (its state), which covers what was
+// pulled before that log was kept. The write path ranks a ref of a kind the hub reads as exact only
+// when it is here (G441).
+export function hubReadRefs(root: string): Set<string> {
+  const out = new Set<string>();
+  for (const [ref, ok] of checkedRefs(root)) if (ok) out.add(ref);
+  let file: SourcesFile;
+  try { file = loadSources(root); } catch { return out; }
+  for (const [name, cfg] of Object.entries(file.sources ?? {})) {
+    let st: State;
+    try { st = loadState(root, name); } catch { continue; }
+    for (const [id, version] of Object.entries(st.seen ?? {})) out.add(refFor(cfg.kind, { id, version }, cfg.account));
+  }
+  return out;
 }
 
 // ---------- drift: a moved source turns its facts due ----------
@@ -181,14 +231,25 @@ export function cites(facts: Record<string, Fact>, attrs: Set<string> | "all", r
 }
 
 // Every live fact citing exactly `ref` gets review_after today and the reason. Returns the notes changed.
+// An item gone at its source (mail deleted, event cancelled, file removed): the fact turns due
+// with "source gone", and when that item was its only source it stops claiming verified-by-source.
+// The value and the note stay; a later read that finds the item saying it again restores it.
+function goneAt(r: FactRecord, ref: string, day: string) {
+  r.review_after = day;
+  r.recheck = { why: "source gone", ref, at: day };
+  if (r.verification !== "verified-by-source" || independentSources(r) > 1) return;
+  r.verification = "unverified";
+  r.note = `${r.note ? r.note + "; " : ""}verified-by-source until ${day}: source gone (${ref})`;
+}
+
 export function markDue(root: string, ref: string, why: string): string[] {
   const changed: string[] = [];
   for (const n of loadBrain(root)) {
     const keys: string[] = [];
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) eachRecord(f, (r) => {
       if (r.valid_to || !(r.sources ?? []).some((s) => refString(s) === ref)) return;
-      r.review_after = today();
-      r.recheck = { why, ref, at: today() };
+      if (why === "source gone") goneAt(r, ref, today());
+      else { r.review_after = today(); r.recheck = { why, ref, at: today() }; }
       if (!keys.includes(attr)) keys.push(attr);
     });
     if (!keys.length) continue;
@@ -203,6 +264,12 @@ export function markDue(root: string, ref: string, why: string): string[] {
 // The text of the item being distilled, while its facts are extracted (set by distil). Only a
 // pulled item can corroborate, and only a value whose every word it contains.
 let grounding: string | undefined;
+// corroborate() only confirms a value the text being read states; source backfill (src/backfill.ts)
+// runs it against a mail it found by searching.
+export function withGrounding<T>(text: string, fn: () => T): T {
+  grounding = text;
+  try { return fn(); } finally { grounding = undefined; }
+}
 const flatWords = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 export function groundedIn(value: unknown, text: string | undefined): boolean {
   if (!text) return false;
@@ -248,8 +315,15 @@ export function fetchFixture(root: string, cfg: SourceConfig): Raw[] {
 
 // Kinds added after the first consent line was written: the line must name them, so consent given
 // for Gmail and Calendar never quietly extends to a new kind of private data.
-const NAMED: Partial<Record<SourceKind, { label: string; word: RegExp }>> = { gdoc: { label: "Drive", word: /\bdrive\b/i } };
+const NAMED: Partial<Record<SourceKind, { label: string; word: RegExp }>> = { gdoc: { label: "Drive", word: /\bdrive\b/i }, contacts: { label: "Contacts", word: /\bcontacts?\b/i } };
 const consentCovers = (consent: string, kind: SourceKind) => !NAMED[kind] || NAMED[kind]!.word.test(consent);
+// Why a live source may not be read yet, as pullOne refuses it (doctor names the same, src/doctor.ts).
+export function consentGap(file: SourcesFile, name: string, cfg: SourceConfig): string | undefined {
+  const no = consentProblem(file.consent);
+  if (no) return `${name} is a live source; ${no}`;
+  if (!consentCovers(String(file.consent), cfg.kind)) return `${name}: the consent: line doesn't name ${NAMED[cfg.kind]!.label}; the owner adds it before anything is read`;
+  return undefined;
+}
 
 const WORDS = 4; // shorter than this is chatter ("ok", "thanks!", an emoji)
 const MAX_TRIES = 3; // an item whose extraction throws is tried this many passes, then skipped with an alert
@@ -259,19 +333,34 @@ type Fetched = Raw[] | { items: Raw[]; cursor?: string; more?: boolean };
 // fact change, alert or run line). It still reads real data, so a live source still needs consent.
 // seen(id, version?): the hub has this item (at that version) and nothing about it is waiting.
 type Seen = (id: string, version?: string) => boolean;
-type PullOpts = { fetch?: (cfg: SourceConfig, cursor?: string, seen?: Seen) => Fetched | Promise<Fetched>; model?: Model | null; dryRun?: boolean };
-const LIVE: Partial<Record<SourceKind, (cfg: SourceConfig, cursor?: string, seen?: Seen) => Promise<Fetched>>> = {
+// known(id): the hub has read this item before, whether or not something about it is waiting.
+type PullOpts = { upcoming?: (cfg: SourceConfig) => Raw[] | Promise<Raw[]>; fetch?: (cfg: SourceConfig, cursor?: string, seen?: Seen, known?: (id: string) => boolean) => Fetched | Promise<Fetched>; model?: Model | null; dryRun?: boolean };
+const LIVE: Partial<Record<SourceKind, (cfg: SourceConfig, cursor?: string, seen?: Seen, known?: (id: string) => boolean) => Promise<Fetched>>> = {
   gmail: fetchGmail, gcal: fetchCalendar, gdoc: fetchDrive, discord: fetchDiscord,
-  imessage: async (cfg, cursor) => fetchTexts(cfg, cursor), granola: async (cfg, cursor) => fetchGranola(cfg, cursor),
+  imessage: async (cfg, cursor, _seen, known) => fetchTexts(cfg, cursor, known), granola: async (cfg, cursor) => fetchGranola(cfg, cursor),
+  contacts: async (cfg, cursor, seen) => (cfg.path ? fetchVcards(cfg, cursor) : fetchContacts(cfg, cursor, seen)),
 };
 export async function pullSource(root: string, name: string, opts: PullOpts = {}): Promise<PullResult> {
   let r: PullResult;
   try { r = await pullOne(root, name, opts); }
   catch (e) { r = { source: name, fetched: 0, stored: [], skipped: 0, due: [], refused: `${name}: ${(e as Error).message}` }; }
   if (opts.dryRun) return r;
+  if (!r.refused) {
+    try { await refreshUpcoming(root, name, opts.upcoming); }
+    catch (e) { r = { ...r, refused: `${name}: coming events: ${(e as Error).message}` }; }
+  }
   if (r.refused) failed(root, name, r.refused);
-  appendJsonl(runsPath(root), { at: new Date().toISOString(), ...r, preview: undefined });
+  appendJsonl(runsPath(root), { at: clock().toISOString(), ...r, preview: undefined });
   return r;
+}
+
+// A calendar the owner marked `upcoming: true`: its coming events, after a pull that read it (and so
+// passed its consent check), into the read-time cache (src/upcoming.ts).
+async function refreshUpcoming(root: string, name: string, fetch?: (cfg: SourceConfig) => Raw[] | Promise<Raw[]>) {
+  const cfg = loadSources(root).sources?.[name];
+  if (!cfg || cfg.kind !== "gcal" || !cfg.upcoming) return;
+  const raw = fetch ? await fetch(cfg) : cfg.fixture ? fetchFixture(root, cfg) : await fetchUpcoming(cfg);
+  saveUpcoming(root, name, raw.flatMap((r) => toUpcoming(r, name, cfg.min_sensitivity) ?? []));
 }
 
 async function pullOne(root: string, name: string, opts: PullOpts): Promise<PullResult> {
@@ -283,16 +372,17 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   let fetchFn = opts.fetch;
   if (!fetchFn && !cfg.fixture) {
     // A live pull sends the owner's mail or messages to the extraction model: his consent first.
-    const no = consentProblem(file.consent);
-    if (no) return { ...out, refused: `${name} is a live source; ${no}` };
-    if (!consentCovers(file.consent!, cfg.kind)) return { ...out, refused: `${name}: the consent: line doesn't name ${NAMED[cfg.kind]!.label}; the owner adds it before anything is read` };
+    const no = consentGap(file, name, cfg);
+    if (no) return { ...out, refused: no };
     fetchFn = LIVE[cfg.kind];
     if (!fetchFn) return { ...out, refused: `${name}: live ${cfg.kind} fetching isn't built yet; use fixture: for now` };
   }
+  // Yesterday's held new notes go first, within today's share (capture.ts releaseHeldDaily).
+  releaseHeldDaily(root, name);
   const state = loadState(root, name);
   const waiting = (id: string) => (state.pending ?? []).includes(id) || id in (state.failed ?? {});
   const seen: Seen = (id, version) => id in state.seen && (version === undefined || state.seen[id] === version) && !waiting(id);
-  const got = fetchFn ? await fetchFn(cfg, state.live, seen) : fetchFixture(root, cfg);
+  const got = fetchFn ? await fetchFn(cfg, state.live, seen, (id) => id in state.seen) : fetchFixture(root, cfg);
   const raw = Array.isArray(got) ? got : got.items;
   const nextLive = Array.isArray(got) ? undefined : got.cursor;
   if (!Array.isArray(got) && got.more) out.more = true;
@@ -300,16 +390,22 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   // cursor where it was, so the next pass gets it again; the items already seen are skipped.
   let hold = false;
   const model = opts.model === undefined ? captureModel(root) : opts.model;
+  const card = cfg.kind === "contacts";
   if (opts.dryRun) {
-    if (!model) return { ...out, refused: `${name}: a dry run needs the extraction model (rules/models.yaml capture.extract)` };
+    if (!model && !card) return { ...out, refused: `${name}: a dry run needs the extraction model (rules/models.yaml capture.extract)` };
     out.preview = [];
   }
   // max_per_day is per day per source, kept in the state with its day (evals/gaps.ts G40).
-  const cap = cfg.max_per_day ?? 30;
+  // Contacts: most cards name no page and store nothing, so a first read of an address book gets more room.
+  const cap = cfg.max_per_day ?? (card ? 200 : 30);
   const by = `source:${name}`;
-  if (state.day !== today()) { state.day = today(); state.stored_today = 0; }
+  const day = process.env.PB_TODAY ?? ownerDay(loadRules(root));
+  if (state.day !== day) { state.day = day; state.stored_today = 0; }
   const contacts: Parameters<typeof recordInteraction>[1][] = [];
+  const read: Record<string, boolean> = {}; // mail and events this pass read, recorded as checked (G417)
   const echo = cfg.kind === "imessage" ? channelThreads(root) : new Set<string>();
+  // Contacts: the people the owner's own card names, the only new pages a card may start.
+  const family = card ? ownerRelations(raw, loadRules(root), loadBrain(root)) : new Set<string>();
   for (const r of raw) {
     const it = toItem(cfg.kind, r);
     if (!it) { out.skipped++; continue; }
@@ -320,7 +416,11 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
     const prev = state.seen[it.id];
     // A deleted item has lost its labels; it was allowed when it was read, which `prev` records.
     if (it.gone) {
-      if (prev && !opts.dryRun) { out.due.push(...markDue(root, refFor(cfg.kind, { id: it.id, version: prev }, cfg.account), "source gone")); delete state.seen[it.id]; }
+      if (prev && !opts.dryRun) {
+        const was = refFor(cfg.kind, { id: it.id, version: prev }, cfg.account);
+        out.due.push(...markDue(root, was, "source gone")); delete state.seen[it.id];
+        if (cfg.kind === "gmail" || cfg.kind === "gcal" || card) read[was] = false;
+      }
       continue;
     }
     if (cfg.where?.length && !(it.where ?? "").split(",").some((w) => cfg.where!.includes(w))) {
@@ -329,14 +429,17 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
       if (!opts.dryRun && (cfg.kind === "gmail" || cfg.kind === "gcal")) state.seen[it.id] = it.version;
       out.skipped++; continue;
     }
+    // List and machine mail carries no fact of the owner's: seen, never sent to a model.
+    if (it.bulk && cfg.skip_bulk !== false) { if (!opts.dryRun) state.seen[it.id] = it.version; out.skipped++; continue; }
     if (prev === it.version && !waiting(it.id)) { out.skipped++; continue; }
     if (opts.dryRun) {
       if (it.text.split(/\s+/).filter(Boolean).length < WORDS) { out.skipped++; continue; }
-      const { fwd, floor } = itemFloor(cfg, it);
+      const { fwd, floor, area } = itemFloor(cfg, it);
       const ref = refFor(cfg.kind, it, cfg.account);
-      const pv: Preview = { ref, account: fwd?.account ?? cfg.account, area: fwd?.area ?? cfg.area, floor, facts: [] };
+      const pv: Preview = { ref, account: fwd?.account ?? cfg.account, area, floor, facts: [] };
       const held = findInjection(it.text) ?? (it.subject ? findInjection(it.subject) : undefined);
       if (held) pv.skipped = `held: ${held}`;
+      else if (card) pv.facts = previewCard(root, r, it.text, family);
       else pv.facts = (await previewExtraction(root, redactSecrets([it.subject, it.text].filter(Boolean).join("\n")).text, model!, cfg.kind)).map((i) => ({ status: i.status, entity: i.candidate?.entity, attribute: i.candidate?.attribute, value: i.candidate?.value === undefined ? undefined : String(i.candidate.value) }));
       out.preview!.push(pv);
       out.extracted = (out.extracted ?? 0) + 1;
@@ -352,14 +455,17 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
     }
     if (prev && prev !== it.version) out.due.push(...markDue(root, refFor(cfg.kind, { id: it.id, version: prev }, cfg.account), "source changed"));
     state.seen[it.id] = it.version;
+    if (cfg.kind === "gmail" || cfg.kind === "gcal" || card) read[refFor(cfg.kind, it, cfg.account)] = true;
     if (it.at && (!state.cursor || it.at > state.cursor)) state.cursor = it.at;
     if (short) { out.skipped++; continue; }
     const ref = refFor(cfg.kind, it, cfg.account);
-    const { fwd, floor: fl } = itemFloor(cfg, it);
-    const area = fwd?.area ?? cfg.area;
-    let d: Awaited<ReturnType<typeof distil>>;
+    const { fwd, named, floor: fl, area } = itemFloor(cfg, it);
+    let d: Awaited<ReturnType<typeof distil>> | ReturnType<typeof distilCard>;
     try {
-      d = await distil(root, it, ref, { source: name, source_kind: cfg.kind, by, ...(fwd ? { forwarded_from: fwd.account } : {}), ...(area ? { area } : {}), ...(fl ? { min_sensitivity: fl } : {}) }, model);
+      // G420: known/unknown, never the address. A mail or text with no sender to name is unknown,
+      // never left without the field: a capture without one is judged as if from before G420.
+      const sender = STANDING_KINDS.has(cfg.kind) ? senderStanding(root, it.from) ?? "unknown" : undefined;
+      d = card ? distilCard(root, it, r, ref, { source: name, source_kind: cfg.kind, by, area: area ?? (loadRules(root).policy.areas?.personal ? "personal" : undefined), ...(fl ? { min_sensitivity: fl } : {}) }, family) : await distil(root, it, ref, { source: name, source_kind: cfg.kind, by, ...(sender ? { sender } : {}), ...(fwd ? { forwarded_from: fwd.account } : {}), ...(named ? { addressed_to: named.account } : {}), ...(area ? { area } : {}), ...(fl ? { min_sensitivity: fl } : {}) }, model);
     } catch (e) {
       // One item's bad model answer (or any throw) fails that item, not the pass (evals/gaps.ts G42).
       out.failed = (out.failed ?? 0) + 1;
@@ -382,6 +488,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
     out.proposals = (out.proposals ?? 0) + d.items!.filter((i) => i.proposal).length;
   }
   if (opts.dryRun) return out;
+  if (Object.keys(read).length) recordCheckedRefs(root, read);
   if (nextLive && !hold) state.live = nextLive;
   if (out.capped) delete out.more;
   mkdirSync(join(root, "log", "sources"), { recursive: true });
@@ -411,8 +518,11 @@ export async function pullAll(root: string, opts: { model?: Model | null } = {})
 
 // An item's sensitivity floor. Transcripts and texts are mostly other people's words: private
 // unless the owner lowers it. Mail forwarded from another account takes the higher of the two floors.
-// A forwarded: rule matches only the delivery addresses (never To, which the sender writes), each
-// address whole; when several rules match, the one with the highest floor wins (evals/gaps.ts G37).
+// A forwarded: rule matched on a delivery address picks the item's account and area (G37: never To,
+// which the sender writes). Mail Gmail fetched or a correspondent wrote to that account names it
+// only in To or Cc (G364): a rule matched only there gives its area and floor, never its account,
+// and its floor joins any other, so a sender can raise an item's floor but never lower one. Each
+// address is compared whole; when several rules match, the one with the highest floor wins.
 const addresses = (s?: string) => (s ?? "").toLowerCase().match(/[^\s<>,;:"'()[\]]+@[^\s<>,;:"'()[\]]+/g) ?? [];
 export function forwardMatches(rule: string, address: string): boolean {
   const r = rule.trim().toLowerCase();
@@ -422,12 +532,15 @@ export function forwardMatches(rule: string, address: string): boolean {
 }
 export function itemFloor(cfg: SourceConfig, it: SourceItem) {
   const base = cfg.min_sensitivity ?? (["zoom", "imessage", "granola"].includes(cfg.kind) ? "private" as Sensitivity : undefined);
-  const got = addresses(it.delivered);
   const rank = (s?: Sensitivity) => (s ? sensitivityRank(s) : -1);
-  const fwd = (cfg.forwarded ?? []).filter((f) => got.some((a) => forwardMatches(String(f.to ?? ""), a)))
-    .reduce<NonNullable<SourceConfig["forwarded"]>[number] | undefined>((best, f) => (!best || rank(f.min_sensitivity) > rank(best.min_sensitivity) ? f : best), undefined);
-  const floor = [base, fwd?.min_sensitivity].filter((x): x is Sensitivity => !!x).sort((a, b) => sensitivityRank(b) - sensitivityRank(a))[0];
-  return { fwd, floor };
+  type Rule = NonNullable<SourceConfig["forwarded"]>[number];
+  const best = (got: string[]) => (cfg.forwarded ?? []).filter((f) => got.some((a) => forwardMatches(String(f.to ?? ""), a)))
+    .reduce<Rule | undefined>((b, f) => (!b || rank(f.min_sensitivity) > rank(b.min_sensitivity) ? f : b), undefined);
+  const fwd = best(addresses(it.delivered));
+  const byName = best(addresses(it.named));
+  const named = fwd ? undefined : byName;
+  const floor = [base, fwd?.min_sensitivity, byName?.min_sensitivity].filter((x): x is Sensitivity => !!x).sort((a, b) => sensitivityRank(b) - sensitivityRank(a))[0];
+  return { fwd, named, floor, area: fwd?.area ?? named?.area ?? cfg.area };
 }
 
 export function floorFor(floor: Sensitivity | undefined, noteSens?: Sensitivity): Sensitivity | undefined {
@@ -457,7 +570,10 @@ export async function distil(root: string, it: SourceItem, ref: string, fm: Reco
   const received = it.at?.slice(0, 10) && it.at.slice(0, 10) <= today() ? it.at.slice(0, 10) : today();
   const id = `${received}-${hash}`;
   const rel = `inbox/captures/${id}.md`;
-  const head = { id, kind: "text", received, stored: today(), via: "source", ...fm, source_ref: ref, status: "pending" };
+  // The keys of the names the item uses (hashes, never the words): the page writer links a page
+  // whose fact cites this item to the other pages it names (src/wiki.ts, src/mentions.ts nameKeys).
+  const keys = nameKeys([text, subject].filter(Boolean).join("\n"));
+  const head = { id, kind: "text", received, stored: today(), via: "source", ...fm, source_ref: ref, ...(keys.length ? { name_keys: keys } : {}), status: "pending" };
   mkdirSync(join(root, "inbox", "captures"), { recursive: true });
   writeFileSync(join(root, rel), `---\n${YAML.stringify(head, { lineWidth: 0 })}---\nNot kept here: pocketBrain stores the facts, not a copy. The original is at ${ref}.\n`);
   grounding = text;
@@ -467,6 +583,43 @@ export async function distil(root: string, it: SourceItem, ref: string, fm: Reco
     rmSync(join(root, rel), { force: true }); // uncommitted; pullOne counts the failure and retries
     throw e;
   } finally { grounding = undefined; }
+}
+
+// A contact card, read by code (src/contacts.ts): the same capture record and filing as a pulled
+// mail's facts, with no model. A card that would file nothing (no page it names, nothing new)
+// leaves no record at all.
+export function distilCard(root: string, it: SourceItem, raw: Raw, ref: string, fm: Record<string, unknown>, family: Set<string>): { outcome: "done" | "held" | "duplicate" | "empty"; file?: string; items?: CaptureItem[] } {
+  const c = readCard(raw);
+  if (!c) return { outcome: "empty" };
+  const text = redactSecrets(it.text).text.slice(0, MAX_BYTES);
+  const inj = findInjection(text);
+  if (inj) { alert(root, { agent: String(fm.by), check: "source_held", from: `${ref}: ${inj}; nothing stored` }); return { outcome: "held" }; }
+  const rules = loadRules(root), notes = loadBrain(root);
+  const cands = cardCandidates(c, rules, notes);
+  const adjust = (x: CaptureItem) => cardAdjust(x, notes, family);
+  const useful = cands.map((x) => adjust(checkCandidate(x, text, notes, rules) as CaptureItem)).some((x) => typeof x !== "string" && ["known", "changes", "new-fact", "new-note"].includes(x.status));
+  if (!useful) return { outcome: "empty" };
+  const hash = createHash("sha256").update(compareKey(text)).digest("hex").slice(0, 8);
+  if (findCapture(root, hash)) return { outcome: "duplicate" };
+  const received = it.at?.slice(0, 10) && it.at.slice(0, 10) <= today() ? it.at.slice(0, 10) : today();
+  const id = `${received}-${hash}`;
+  const rel = `inbox/captures/${id}.md`;
+  const keys = nameKeys(text);
+  const head = { id, kind: "text", received, stored: today(), via: "source", ...fm, source_ref: ref, ...(keys.length ? { name_keys: keys } : {}), status: "pending" };
+  mkdirSync(join(root, "inbox", "captures"), { recursive: true });
+  writeFileSync(join(root, rel), `---\n${YAML.stringify(head, { lineWidth: 0 })}---\nNot kept here: pocketBrain stores the facts, not a copy. The card is at ${ref}.\n`);
+  try { return { outcome: "done", file: rel, items: withGrounding(text, () => fileCard(root, rel, text, cands, adjust)) }; }
+  catch (e) { rmSync(join(root, rel), { force: true }); throw e; }
+}
+// What a card would file, for `sources pull --dry-run`: nothing stored.
+function previewCard(root: string, raw: Raw, text: string, family: Set<string>): Preview["facts"] {
+  const c = readCard(raw);
+  if (!c) return [];
+  const rules = loadRules(root), notes = loadBrain(root);
+  return cardCandidates(c, rules, notes).map((x) => {
+    const a = cardAdjust(checkCandidate(x, text, notes, rules) as CaptureItem, notes, family);
+    return typeof a === "string" ? { status: "dropped", entity: x.entity, attribute: x.attribute } : { status: a.status, entity: a.candidate.entity, attribute: a.candidate.attribute, ...(["emails", "phones"].includes(a.candidate.attribute) ? {} : { value: a.candidate.value }) };
+  });
 }
 
 // ---------- running unattended ----------
@@ -486,9 +639,9 @@ export function pullsDue(root: string, now = new Date()): boolean {
 // A source that can't be read says so in the digest, once a day per source and reason, never
 // silently: an expired token or a missing consent line is the owner's to fix.
 function failed(root: string, name: string, why: string) {
-  const day = new Date().toISOString().slice(0, 10);
+  const rules = loadRules(root), day = ownerDay(rules); // the owner's day (src/clock.ts)
   const seen = readJsonl<Record<string, unknown>>(join(root, "log", "alerts.jsonl"))
-    .some((a) => a.check === "source_failed" && String(a.at).startsWith(day) && a.agent === `source:${name}` && a.from === why);
+    .some((a) => a.check === "source_failed" && typeof a.at === "string" && ownerDay(rules, a.at) === day && a.agent === `source:${name}` && a.from === why);
   if (!seen) alert(root, { agent: `source:${name}`, check: "source_failed", from: why });
 }
 
@@ -510,10 +663,12 @@ export function pullSummary(root: string, from: string): string | undefined {
 // the claim must be in the item, and most of its words.
 
 export type Verdict = "match" | "no-match" | "unreachable";
-export interface VerifyResult { ref: string; result: Verdict; quote?: string; why: string; confirmed?: string[]; due?: string[]; elsewhere?: string[] }
+// dated: the item's own day (the owner's day it was sent or last changed), the as_of for a newer
+// value it states (G375).
+export interface VerifyResult { ref: string; result: Verdict; quote?: string; dated?: string; why: string; confirmed?: string[]; due?: string[]; elsewhere?: string[] }
 export const VERIFY_PER_DAY = 40;
 
-const KIND_OF: Record<string, SourceKind> = { gmail: "gmail", mail: "mail", imessage: "imessage", granola: "granola", gcal: "gcal", gdoc: "gdoc", slack: "slack", zoom: "zoom", discord: "discord" };
+const KIND_OF: Record<string, SourceKind> = { gmail: "gmail", mail: "mail", imessage: "imessage", granola: "granola", gcal: "gcal", gdoc: "gdoc", slack: "slack", zoom: "zoom", discord: "discord", contacts: "contacts" };
 function parseRef(ref: string): { kind: SourceKind; id: string; version?: string; account?: string } | undefined {
   const t = ref.trim();
   const mailM = t.match(/^(gmail|mail):(?:([^/]+)\/)?(.+)$/);
@@ -524,17 +679,53 @@ function parseRef(ref: string): { kind: SourceKind; id: string; version?: string
 }
 
 // The one item a ref names, read through a listed source of that kind, or why it can't be.
+// A mail or calendar ref the hub read, or found missing or gone, is recorded as checked
+// (log/refs-checked.jsonl, src/louis.ts): the write path lets only such refs replace a value (G417).
 export async function fetchOne(root: string, ref: string): Promise<(SourceItem & { floor?: Sensitivity }) | string> {
+  const out = await fetchOneItem(root, ref);
+  if (EXACT_REF.test(ref)) {
+    // Only the version the hub holds counts as read: a ref naming another version of a real
+    // calendar event (made up, or old) is left unchecked rather than vouched for.
+    const v = parseRef(ref)?.version;
+    const ok = typeof out === "object" ? (v && v !== out.version ? undefined : !out.gone) : /not found in the/.test(out) ? false : undefined;
+    if (ok !== undefined) recordCheckedRefs(root, { [ref]: ok });
+  }
+  return out;
+}
+const EXACT_REF = /^(gmail|gmail-thread|gcal):/;
+const outside = (cfg: SourceConfig, it: SourceItem) => !!cfg.where?.length && !(it.where ?? "").split(",").some((w) => cfg.where!.includes(w));
+// An item the hub read from this source under its allowlist and captured (its capture record in
+// inbox/captures names the source and the item) may be read again by verify_source whatever its
+// labels are now: archived mail leaves INBOX (Gardener night 2026-10-27, G457). An item only
+// skipped as outside the allowlist is marked seen but was never read, so it has no capture record.
+function capturedFrom(root: string, source: string, kind: SourceKind, id: string): boolean {
+  const dir = join(root, "inbox", "captures");
+  if (!existsSync(dir)) return false;
+  const scheme = SCHEME[kind];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith(".md")) continue;
+    let head: string;
+    try { head = readFileSync(join(dir, f), "utf8").split(/^---$/m)[1] ?? ""; } catch { continue; }
+    const src = head.match(/^source: (.+)$/m)?.[1]?.trim(), at = head.match(/^source_ref: (.+)$/m)?.[1]?.trim();
+    if (src !== source || !at) continue;
+    const p = parseRef(at);
+    if (p && p.kind === kind && p.id === id && at.startsWith(`${scheme}:`)) return true;
+  }
+  return false;
+}
+
+async function fetchOneItem(root: string, ref: string): Promise<(SourceItem & { floor?: Sensitivity }) | string> {
   const r = parseRef(ref);
-  if (!r) return `${ref} isn't a ref the hub can read (gmail:, mail:, imessage:, granola:, gcal:, gdoc:, discord:)`;
+  if (!r) return `${ref} isn't a ref the hub can read (gmail:, mail:, imessage:, granola:, gcal:, gdoc:, discord:, contacts:)`;
   const file = loadSources(root);
   const listed = Object.entries(file.sources ?? {}).filter(([, s]) => s.kind === r.kind && (!r.account || s.account === r.account));
   if (!listed.length) return `no ${r.kind} source${r.account ? ` for ${r.account}` : ""} in rules/sources.yaml`;
-  for (const [, cfg] of listed) {
+  for (const [name, cfg] of listed) {
     if (!cfg.fixture) continue;
     const it = fetchFixture(root, cfg).map((x) => toItem(r.kind, x)).find((x) => x?.id === r.id);
     if (!it) continue;
-    if (cfg.where?.length && !(it.where ?? "").split(",").some((w) => cfg.where!.includes(w))) return `${ref} is outside the allowlist`;
+    if (it.gone) return { id: it.id, version: it.version, text: "", gone: true };
+    if (outside(cfg, it) && !capturedFrom(root, name, r.kind, it.id)) return `${ref} is outside the allowlist`;
     return { ...it, floor: itemFloor(cfg, it).floor };
   }
   const live = listed.filter(([, s]) => !s.fixture);
@@ -545,17 +736,22 @@ export async function fetchOne(root: string, ref: string): Promise<(SourceItem &
   const one: Partial<Record<SourceKind, (cfg: SourceConfig, id: string) => Promise<Raw | undefined>>> = {
     gmail: fetchGmailMessage, gcal: fetchCalendarEvent, gdoc: fetchDriveFile, discord: fetchDiscordMessage,
     imessage: async (cfg, id) => fetchText(cfg, id), granola: async (cfg, id) => fetchGranolaNote(cfg, id),
+    contacts: async (cfg, id) => cfg.path ? fetchVcards(cfg).items.find((x) => x.resourceName === id) ?? { resourceName: id, metadata: { deleted: true } } : fetchContact(cfg, id),
   };
   const get = one[r.kind];
   if (!get) return `live ${r.kind} reading isn't built yet`;
-  for (const [, cfg] of live) {
+  // Gone (deleted, cancelled, not found) counts only when every listed source says so: the item
+  // may live in another listed account. A gone item carries no text, so no allowlist applies.
+  let gone: SourceItem | undefined;
+  for (const [name, cfg] of live) {
     const m = await get(cfg, r.id);
     const it = m && toItem(r.kind, m);
     if (!it) continue;
-    if (cfg.where?.length && !(it.where ?? "").split(",").some((w) => cfg.where!.includes(w))) return `${ref} is outside the allowlist`;
+    if (it.gone) { gone = { id: it.id, version: it.version, text: "", gone: true }; continue; }
+    if (outside(cfg, it) && !capturedFrom(root, name, r.kind, it.id)) return `${ref} is outside the allowlist`;
     return { ...it, floor: itemFloor(cfg, it).floor };
   }
-  return `${ref} not found in the ${r.kind} source`;
+  return gone ?? `${ref} not found in the ${r.kind} source`;
 }
 
 const flat = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
@@ -564,7 +760,12 @@ const claimWords = (claim: string) => flat(claim).split(/[^\p{L}\p{N}]+/u).filte
 // read), so it is redacted, checked for injection whole (before it is cut, so a cut can't hide
 // the instruction), and capped. One that reads as instructions is withheld (G90).
 export const QUOTE_MAX = 200;
-export function checkClaim(text: string, claim: string): { result: "match" | "no-match"; quote?: string; withheld?: string } {
+// G194: redacted whole before it is cut into lines. A key's body line alone reads as any base64
+// run, so redacting the chosen line only let it through. Every BEGIN/END block (a key, a PGP block,
+// a certificate; to the end of the text when it never ends) goes first, then the secret shapes.
+const ARMOR = /-----BEGIN [^\n]*?-----[\s\S]*?(?:-----END [^\n]*?-----|$)/g;
+export function checkClaim(raw: string, claim: string): { result: "match" | "no-match"; quote?: string; withheld?: string } {
+  const text = redactSecrets(raw.replace(ARMOR, "[removed: armored block]")).text;
   const t = flat(text);
   const words = claimWords(claim);
   const nums = words.filter((w) => /\d/.test(w));
@@ -573,17 +774,19 @@ export function checkClaim(text: string, claim: string): { result: "match" | "no
   const sentences = text.split(/(?<=[.!?])\s+|\n+/).filter(Boolean);
   const best = sentences.map((s) => ({ s, n: words.filter((w) => flat(s).includes(w)).length })).sort((a, b) => b.n - a.n)[0]?.s ?? "";
   const result = ok ? "match" : "no-match";
-  const quote = redactSecrets(best.trim()).text;
-  const inj = findInjection(quote) ?? findInjection(best);
+  const quote = best.trim();
+  const inj = findInjection(quote);
   if (inj) return { result, withheld: `reads as instructions (${inj})` };
   return { result, quote: quote.slice(0, QUOTE_MAX) };
 }
 
 // `ceiling`: the caller's sensitivity ceiling. Above it the verdict still comes back, the quote doesn't.
 // `recheck`: also check every fact citing the item (recheckFacts), limited to `recheck` (the caller's view).
+// What verify_source checks a claim against: the item's text, less a contact card's emails and phones.
+const verifiable = (ref: string, text: string) => (parseRef(ref)?.kind === "contacts" ? withoutDetails(text) : text);
 export async function verifySource(root: string, agent: string, ref: string, claim: string, cap = VERIFY_PER_DAY, ceiling?: Sensitivity, recheck?: (noteId: string, attr: string) => boolean): Promise<VerifyResult> {
-  const day = new Date().toISOString().slice(0, 10);
-  const used = readJsonl<{ at: string; agent: string }>(verifyLog(root)).filter((e) => e.agent === agent && e.at.startsWith(day)).length;
+  const rules = loadRules(root), now = clock(), day = ownerDay(rules, now); // the owner's day (src/clock.ts)
+  const used = readJsonl<{ at: string; agent: string }>(verifyLog(root)).filter((e) => e.agent === agent && typeof e.at === "string" && ownerDay(rules, e.at) === day).length;
   let out: VerifyResult;
   let withheld: string | undefined;
   if (used >= cap) out = { ref, result: "unreachable", why: `${cap} checks today is the cap; the rest wait for tomorrow night` };
@@ -592,14 +795,16 @@ export async function verifySource(root: string, agent: string, ref: string, cla
     try { it = await fetchOne(root, ref); } catch (e) { it = (e as Error).message; }
     if (typeof it === "string") out = { ref, result: "unreachable", why: it };
     else if (it.gone) {
-      out = { ref, result: "no-match", why: "the item was deleted or cancelled" };
+      out = { ref, result: "no-match", why: "source gone: the item was deleted, cancelled or isn't at the source any more" };
       if (recheck) { const r = recheckFacts(root, ref, null, recheck); if (r.due.length) out.due = r.due; }
     }
     else {
       const want = parseRef(ref)?.version;
-      const c = checkClaim([it.subject, it.text].filter(Boolean).join("\n"), claim);
+      // A contact card's emails and phones are held until Show: never checked or quoted here.
+      const c = checkClaim(verifiable(ref, [it.subject, it.text].filter(Boolean).join("\n")), claim);
       const above = ceiling && it.floor && sensitivityRank(it.floor) > sensitivityRank(ceiling);
-      out = { ref, result: c.result, ...(above || !c.quote ? {} : { quote: c.quote }), why: c.result === "match" ? "the item says this" : "the item doesn't say this" };
+      const dated = it.at && !above ? [ownerDay(rules, it.at), day].sort()[0] : undefined; // never after the brain's day
+      out = { ref, result: c.result, ...(above || !c.quote ? {} : { quote: c.quote }), ...(dated ? { dated } : {}), why: c.result === "match" ? "the item says this" : "the item doesn't say this" };
       if (above) out.why += ` (no quote: the source is ${it.floor}, above your ${ceiling} level)`;
       else if (c.withheld) { out.why += ` (quote withheld: ${c.withheld})`; withheld = c.withheld; }
       if (want && want !== it.version && it.version !== "1") out.why += ` (the item changed since ${want}; read version ${it.version})`;
@@ -611,8 +816,21 @@ export async function verifySource(root: string, agent: string, ref: string, cla
       }
     }
   }
-  appendJsonl(verifyLog(root), { at: new Date().toISOString(), agent, ref, result: out.result, claim: claimKey(claim), ...(withheld ? { withheld } : {}) });
+  appendJsonl(verifyLog(root), { at: now.toISOString(), agent, ref, result: out.result, claim: claimKey(claim), ...(withheld ? { withheld } : {}) });
   return out;
+}
+
+// Does the cited item say this value? The hub reads it as verify_source does, by the same word
+// check, for a write that cites it (src/core.ts gardenerSourceSays). Nothing of the item comes
+// back. A value the word check can't judge, a ref the hub can't read or an unreachable source is
+// "unknown": the write goes on as before.
+export async function itemSays(root: string, ref: string, value: unknown): Promise<"says" | "not" | "gone" | "unknown"> {
+  if (!parseRef(ref) || !wordCheckable(value)) return "unknown";
+  let it: Awaited<ReturnType<typeof fetchOne>>;
+  try { it = await fetchOne(root, ref); } catch { return "unknown"; }
+  if (typeof it === "string") return "unknown";
+  if (it.gone) return "gone";
+  return checkClaim([it.subject, it.text].filter(Boolean).join("\n"), String(value)).result === "match" ? "says" : "not";
 }
 
 // ---------- corroborate: each fact checked against the item it cites ----------
@@ -629,6 +847,15 @@ const namedSentence = (text: string, name: string, value: string) => {
   const names = flatWords(name).filter((w) => w.length >= 3);
   return text.split(/(?<=[.!?])\s+|\n+/).some((s) => flatWords(s).some((w) => names.includes(w)) && checkClaim(s, value).result === "match");
 };
+
+// The sentence of `text` that says `value` (naming `name` when given), as checkClaim quotes it;
+// none when it reads as instructions.
+function saidIn(text: string, value: string, name?: string): string | undefined {
+  const names = name === undefined ? [] : flatWords(name).filter((w) => w.length >= 3);
+  const s = text.split(/(?<=[.!?])\s+|\n+/).find((x) => checkClaim(x, value).result === "match" && (!names.length || flatWords(x).some((w) => names.includes(w))));
+  const c = checkClaim(s ?? text, value);
+  return c.withheld ? undefined : c.quote || undefined;
+}
 
 export function recheckFacts(root: string, ref: string, text: string | null, allow?: (noteId: string, attr: string) => boolean): { confirmed: string[]; due: string[]; files: string[]; elsewhere?: string[] } {
   const id = idOfRef(ref), day = today();
@@ -650,13 +877,17 @@ export function recheckFacts(root: string, ref: string, text: string | null, all
         // coordinator" doesn't confirm Jane as coordinator. Said only about someone else: left alone.
         if (said && n.fm.type === "person" && !namedSentence(text!, n.fm.title ?? "", String(r.value))) { elsewhere.add(key); return; }
         if (said) {
+          // The sentence that says it is kept as the source's own words, owner-only and outside
+          // git, so the page can show what the source said (real-brain north star, 2026-10-30).
+          const words = saidIn(text!, String(r.value), n.fm.type === "person" ? n.fm.title ?? "" : undefined);
+          if (words) keepWords(root, [ref], words);
           r.last_confirmed = day;
           if (r.verification === "unverified" || r.verification === "self-reported") r.verification = "verified-by-source";
           if (r.recheck && idOfRef(r.recheck.ref) === id) { delete r.recheck; delete r.review_after; }
           confirmed.add(key);
         } else {
-          r.review_after = day;
-          r.recheck = { why: text === null ? "the source item was deleted or cancelled" : "the source no longer says this", ref, at: day };
+          if (text === null) goneAt(r, ref, day);
+          else { r.review_after = day; r.recheck = { why: "the source no longer says this", ref, at: day }; }
           due.add(key);
         }
         changed = true;
@@ -678,30 +909,130 @@ export function recheckFacts(root: string, ref: string, text: string | null, all
 // that item, at most `max` items a pass, without a model. A fact already flagged by that item
 // waits for an owner or a new value instead of spending a check every night.
 export const RECHECK_PER_PASS = 20;
-export interface Recheck { checked: number; confirmed: string[]; due: string[]; unreachable: number }
+export interface Recheck { checked: number; confirmed: string[]; due: string[]; unreachable: number; sampled: number }
+// Each pass also checks that a few more cited items still exist (sampleRefs), beyond the candidates.
+export const SAMPLE_PER_PASS = 10;
+// Cited items read each night only to keep the words a fact was drawn from.
+export const WORDS_PER_PASS = 10;
 // `allow` limits which facts it picks and touches (the gardener's view when it runs upkeep_run).
-export async function recheckDue(root: string, opts: { max?: number; allow?: (noteId: string, attr: string) => boolean } = {}): Promise<Recheck> {
-  const max = opts.max ?? RECHECK_PER_PASS;
-  const out: Recheck = { checked: 0, confirmed: [], due: [], unreachable: 0 };
-  if (!Object.keys(loadSources(root).sources ?? {}).length) return out;
-  const rules = loadRules(root), now = today();
-  const refs: string[] = [];
+// What rides on a weak fact (backlog 310, docs/gardener.md "What gets rechecked first"). Agent
+// reads per note over the last `days` days, the gardener's own reads left out: it reads to tend.
+export function readCounts(root: string, days = 30, end = today()): Map<string, number> {
+  const f = join(root, "log", "reads.jsonl"), out = new Map<string, number>();
+  if (!existsSync(f)) return out;
+  const since = new Date(Date.parse(`${end}T00:00:00Z`) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const skip = new Set(gardeners(loadRules(root)));
+  for (const e of readJsonl<{ at?: string; agent?: string; ids?: string[] }>(f)) {
+    const d = String(e.at ?? "").slice(0, 10);
+    if (d < since || d > end || skip.has(String(e.agent))) continue;
+    for (const id of new Set(e.ids ?? [])) out.set(id, (out.get(id) ?? 0) + 1);
+  }
+  return out;
+}
+// Sources that are different items: two versions of one mail are one source.
+export const independentSources = (r: Pick<FactRecord, "sources">) => new Set((r.sources ?? []).map((x) => idOfRef(refString(x)))).size;
+// Below an exact source (sourceRank in src/sources.ts): self-reported, relayed, inferred, vague.
+const weakBacking = (r: FactRecord) => sourceRank(r) < 3;
+// A fresh fact on one source that agents read is rechecked too, once a month at most.
+export const RECONFIRM_DAYS = 30;
+
+export interface RecheckPick { ref: string; keys: string[]; score: [number, number, number, number] }
+// The refs a recheck pass reads, most at stake first: facts on a single source, then weakly
+// backed ones, then the most read, then the most overdue. Candidates are due and stale facts,
+// plus fresh single-source facts agents read that weren't confirmed in RECONFIRM_DAYS (never the
+// owner's word). Ties keep the brain's order.
+export function recheckCandidates(root: string, opts: { allow?: (noteId: string, attr: string) => boolean } = {}): RecheckPick[] {
+  const rules = loadRules(root), now = today(), reads = readCounts(root, RECONFIRM_DAYS, now);
+  const cutoff = new Date(Date.parse(`${now}T00:00:00Z`) - RECONFIRM_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const picks = new Map<string, RecheckPick>();
+  const better = (a: RecheckPick["score"], b: RecheckPick["score"]) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
   for (const n of loadBrain(root)) {
     if (n.fm.status !== "active") continue;
+    const read = reads.get(n.fm.id) ?? 0;
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
       if (opts.allow && !opts.allow(n.fm.id, attr)) continue;
       const fr = factFreshness(f, attributeSpec(rules, n.fm.type, attr), now);
-      if (fr !== "due" && fr !== "stale") continue;
+      const overdue = fr === "stale" ? 2 : fr === "due" ? 1 : 0;
+      if (fr === "disputed") continue;
       eachRecord(f, (r) => {
         if (r.valid_to || !wordCheckable(r.value)) return;
+        const single = independentSources(r) < 2;
+        const unconfirmed = !r.last_confirmed || r.last_confirmed < cutoff;
+        if (!overdue && !(single && read > 0 && unconfirmed && !r.recheck && sourceRank(r) < 5)) return;
+        const score: RecheckPick["score"] = [single ? 1 : 0, weakBacking(r) ? 1 : 0, read, overdue];
         for (const s of (r.sources ?? []).map((x) => refString(x))) {
-          if (!parseRef(s) || (r.recheck && idOfRef(r.recheck.ref) === idOfRef(s)) || refs.some((x) => idOfRef(x) === idOfRef(s))) continue;
-          refs.push(s);
+          if (!parseRef(s) || (r.recheck && idOfRef(r.recheck.ref) === idOfRef(s))) continue;
+          const id = idOfRef(s), have = picks.get(id);
+          if (!have) { picks.set(id, { ref: s, keys: [`${n.fm.id}#${attr}`], score }); continue; }
+          if (!have.keys.includes(`${n.fm.id}#${attr}`)) have.keys.push(`${n.fm.id}#${attr}`);
+          if (better(score, have.score)) have.score = score;
         }
       });
     }
   }
-  for (const ref of refs.slice(0, Math.max(0, max))) {
+  const all = [...picks.values()];
+  return all.map((p, i) => [p, i] as const).sort(([a, i], [b, j]) => (better(a.score, b.score) ? -1 : better(b.score, a.score) ? 1 : i - j)).map(([p]) => p);
+}
+
+// Dead source refs: the items cited by live facts in view that this pass doesn't already read, the
+// ones checked longest ago (or never) first, so over the nights every cited item gets looked at,
+// fresh facts nobody reads included. A fact already flagged by an item doesn't put it back.
+export function sampleRefs(root: string, opts: { allow?: (noteId: string, attr: string) => boolean; skip?: Set<string> } = {}): string[] {
+  const last = new Map<string, string>();
+  for (const e of readJsonl<{ at?: string; ref?: string }>(verifyLog(root))) {
+    if (typeof e.ref !== "string" || typeof e.at !== "string") continue;
+    const id = idOfRef(e.ref);
+    if ((last.get(id) ?? "") < e.at) last.set(id, e.at);
+  }
+  const rules = loadRules(root), now = today(), refs = new Map<string, string>();
+  for (const n of loadBrain(root)) {
+    if (n.fm.status !== "active") continue;
+    for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+      if (opts.allow && !opts.allow(n.fm.id, attr)) continue;
+      if (factFreshness(f, attributeSpec(rules, n.fm.type, attr), now) === "disputed") continue;
+      eachRecord(f, (r) => {
+        if (r.valid_to) return;
+        for (const s of (r.sources ?? []).map((x) => refString(x))) {
+          const id = idOfRef(s);
+          if (!parseRef(s) || opts.skip?.has(id) || refs.has(id) || (r.recheck && idOfRef(r.recheck.ref) === id)) continue;
+          refs.set(id, s);
+        }
+      });
+    }
+  }
+  return [...refs].map(([id, ref], i) => ({ ref, at: last.get(id) ?? "", i })).sort((a, b) => a.at.localeCompare(b.at) || a.i - b.i).map((x) => x.ref);
+}
+
+// Cited items the hub can read whose words it never kept, from live facts the word check can
+// judge, newest recorded first.
+export function wordlessRefs(root: string, allow?: (noteId: string, attr: string) => boolean): string[] {
+  // An item read lately and still without words (it didn't say the value, or couldn't be reached)
+  // waits as long as a confirmation lasts.
+  const since = new Date(clock().getTime() - RECONFIRM_DAYS * 86_400_000).toISOString();
+  const seen = new Set(readJsonl<{ at?: string; ref?: string }>(verifyLog(root)).filter((e) => typeof e.ref === "string" && String(e.at ?? "") >= since).map((e) => idOfRef(e.ref!)));
+  const picks: { ref: string; at: string }[] = [];
+  for (const n of loadBrain(root)) {
+    if (n.fm.status !== "active") continue;
+    for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+      if (allow && !allow(n.fm.id, attr)) continue;
+      eachRecord(f, (r) => {
+        if (r.valid_to || r.recheck || !wordCheckable(r.value)) return;
+        for (const s of (r.sources ?? []).map((x) => refString(x))) {
+          if (!parseRef(s) || seen.has(idOfRef(s)) || keptQuotes(root, s).length) continue;
+          seen.add(idOfRef(s)); picks.push({ ref: s, at: String(r.recorded ?? r.as_of ?? "") });
+        }
+      });
+    }
+  }
+  return picks.sort((a, b) => b.at.localeCompare(a.at)).map((p) => p.ref);
+}
+
+export async function recheckDue(root: string, opts: { max?: number; sample?: number; allow?: (noteId: string, attr: string) => boolean } = {}): Promise<Recheck> {
+  const max = opts.max ?? RECHECK_PER_PASS;
+  const out: Recheck = { checked: 0, confirmed: [], due: [], unreachable: 0, sampled: 0 };
+  if (!Object.keys(loadSources(root).sources ?? {}).length) return out;
+  const refs = recheckCandidates(root, { allow: opts.allow }).map((p) => p.ref).slice(0, Math.max(0, max));
+  for (const ref of refs) {
     let it: Awaited<ReturnType<typeof fetchOne>>;
     try { it = await fetchOne(root, ref); } catch (e) { it = (e as Error).message; }
     out.checked++;
@@ -711,7 +1042,35 @@ export async function recheckDue(root: string, opts: { max?: number; allow?: (no
     out.due.push(...r.due);
     appendJsonl(verifyLog(root), { at: new Date().toISOString(), agent: "hub", ref, result: r.confirmed.length ? "match" : "no-match" });
   }
+  // Existence only: an item still there changes nothing; one gone turns its facts due.
+  const sample = sampleRefs(root, { allow: opts.allow, skip: new Set(refs.map(idOfRef)) }).slice(0, Math.max(0, opts.sample ?? SAMPLE_PER_PASS));
+  for (const ref of sample) {
+    let it: Awaited<ReturnType<typeof fetchOne>>;
+    try { it = await fetchOne(root, ref); } catch (e) { it = (e as Error).message; }
+    out.sampled++;
+    if (typeof it === "string") { out.unreachable++; appendJsonl(verifyLog(root), { at: new Date().toISOString(), agent: "hub", ref, result: "unreachable" }); continue; }
+    if (it.gone) out.due.push(...recheckFacts(root, ref, null, opts.allow).due);
+    appendJsonl(verifyLog(root), { at: new Date().toISOString(), agent: "hub", ref, result: it.gone ? "gone" : "present" });
+  }
   return out;
+}
+
+// A few cited items whose words were never kept, newest fact first, read only so a page can show
+// what its sources said, not only the hub's text (real-brain north star, 2026-10-30). Reading one
+// checks every fact citing it, as any read does (recheckFacts). Returns how many were read.
+export async function keepSourceWords(root: string, opts: { max?: number; allow?: (noteId: string, attr: string) => boolean } = {}): Promise<number> {
+  const role = hubRole(root).mode;
+  if ((role !== "single" && role !== "hub") || !Object.keys(loadSources(root).sources ?? {}).length) return 0;
+  let n = 0;
+  for (const ref of wordlessRefs(root, opts.allow).slice(0, Math.max(0, opts.max ?? WORDS_PER_PASS))) {
+    let it: Awaited<ReturnType<typeof fetchOne>>;
+    try { it = await fetchOne(root, ref); } catch (e) { it = (e as Error).message; }
+    n++;
+    if (typeof it === "string") { appendJsonl(verifyLog(root), { at: new Date().toISOString(), agent: "hub", ref, result: "unreachable" }); continue; }
+    const r = recheckFacts(root, ref, it.gone ? null : [it.subject, it.text].filter(Boolean).join("\n"), opts.allow);
+    appendJsonl(verifyLog(root), { at: new Date().toISOString(), agent: "hub", ref, result: it.gone ? "gone" : r.confirmed.length ? "match" : "no-match" });
+  }
+  return n;
 }
 
 // Inbox proposals whose only evidence is a link (an agent citing an email or an event) are checked

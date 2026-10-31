@@ -9,6 +9,8 @@ import { loadBrain } from "../../src/brain";
 import { loadRules } from "../../src/rules";
 import { carve, grantFor } from "../../src/carve";
 import { redactLinks, scrubCarved, statusBanner, renderNote, renderView, buildView } from "../../src/view";
+import { readNote } from "../../src/core";
+import { useCells } from "../../src/cell";
 
 const SRC = `sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-01`;
 function note(root: string, id: string, fm: string, facts = "", body = "") {
@@ -126,4 +128,71 @@ test("contract view: the updated date shown never comes from a write to a hidden
   const { res, rules } = setup("helper");
   const v = res.visible.get("projects/course-a")!;
   expect(renderNote(v, res, rules).join("\n")).toContain(`updated ${v.note.fm.updated}`);
+});
+
+test("contract view: a hidden note's link is redacted whole, even when one of its carved names is part of its id", () => {
+  // jane-roy private: above helper's ceiling, so its alias "Jane" is carved; the link must not
+  // come out as [[people/[withheld]-roy]] (half the id).
+  const { res } = setup("helper", undefined, (root) => {
+    const f = join(root, "people/jane-roy.md");
+    writeFileSync(f, readFileSync(f, "utf8").replace("sensitivity: personal", "sensitivity: private"));
+  });
+  expect(res.visible.has("people/jane-roy")).toBe(false);
+  for (const input of ["TA is [[people/jane-roy]].", "TA is [[people/jane-roy|Jane]]."]) expect(redactLinks(input, res), input).toBe("TA is [[redacted]].");
+});
+
+test("contract view: a link to a merged note shows the note it finally became when the agent sees it, else [[redacted]] (G266)", () => {
+  const { res } = setup("helper", undefined, (root) => {
+    note(root, "people/jay-roy", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/j-roy-b");
+    note(root, "people/j-roy-b", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/jane-roy");
+    note(root, "people/old-bank", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: money/main-bank");
+    note(root, "people/loop-a", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/loop-b");
+    note(root, "people/loop-b", "type: person\narea: work\nsensitivity: personal\nstatus: merged\nmerged_into: people/loop-a");
+  });
+  const rows: [string, string][] = [
+    ["See [[people/jay-roy]].", "See [[people/jane-roy]]."], // two merges on, helper sees Jane Roy
+    ["See [[people/jay-roy|Jay]].", "See [[people/jane-roy|Jay]]."],
+    ["See [[people/j-roy-b#phones]].", "See [[people/jane-roy#phones]]."],
+    ["See [[people/old-bank]].", "See [[redacted]]."], // merged into a note helper can't see
+    ["See [[people/old-bank|the bank]].", "See [[redacted]]."],
+    ["See [[people/loop-a]].", "See [[redacted]]."], // a loop resolves to nothing
+  ];
+  for (const [input, out] of rows) expect(redactLinks(input, res), input).toBe(out);
+});
+
+// Slice audit of why-provenance (round 1 low note): without cells, a read's JSON facts carried
+// `by: "planner"` and share_with lists naming other agents; a cell drops `by` and rewrites
+// share_with to the reader. A read now gives the same records in both modes.
+test("contract view: a read's JSON facts name no other agent, with or without cells", () => {
+  const { root } = setup("helper", undefined, (r) => note(r, "projects/course-d", "type: project\narea: work\nsensitivity: personal",
+    `  next_step: { value: Book the room, as_of: 2026-10-01, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: planner, recorded: 2026-10-01, share_with: [helper, planner], shared_by: planner, confirmed_by: planner }\n` +
+    `  room: { items: [{ value: B-210, as_of: 2026-10-01, ${SRC} }, { value: C-330, as_of: 2026-09-01, valid_to: 2026-10-01, ended_by: { step: 3, at: 2026-10-01, by: planner } , ${SRC} }] }\n` +
+    `  team: { items: [{ value: Ann, as_of: 2026-10-01, ${SRC} }, { value: Bea, as_of: 2026-10-01, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: planner, recorded: 2026-10-01 }] }`));
+  for (const cells of [false, true]) {
+    useCells(cells);
+    try {
+      const facts = JSON.stringify(readNote(root, "helper", "projects/course-d").facts);
+      expect(facts, `cells ${cells}`).toContain("Book the room");
+      expect(facts, `cells ${cells}`).toContain("Bea");
+      for (const name of ["planner", "steward", "gardener"]) expect(facts, `cells ${cells}`).not.toContain(name);
+      expect(facts).not.toContain('"by"');
+    } finally { useCells(false); }
+  }
+});
+
+// Same audit (round 1 low note): share_with is checked on every item and every dispute candidate,
+// not the first only, so one record shared away from the reader hides the whole fact, in both modes.
+test("contract view: one list item or dispute candidate shared with another agent only hides the fact, with or without cells", () => {
+  const rec = (v: string, sw: string) => `{ value: ${v}, as_of: 2026-10-01, ${SRC}, share_with: [${sw}] }`;
+  const { root } = setup("helper", undefined, (r) => note(r, "projects/course-e", "type: project\narea: work\nsensitivity: personal",
+    `  team: { items: [${rec("Ann", "helper")}, ${rec("Bob", "planner")}] }\n  room: { dispute: c-0042, candidates: [${rec("B-210", "helper")}, ${rec("C-330", "planner")}] }\n  next_step: { value: Grade, as_of: 2026-10-01, ${SRC} }`));
+  for (const cells of [false, true]) {
+    useCells(cells);
+    try {
+      const out = readNote(root, "helper", "projects/course-e");
+      const all = JSON.stringify(out);
+      expect(Object.keys(out.facts).sort(), `cells ${cells}`).toEqual(["next_step"]);
+      for (const v of ["Bob", "C-330", "Ann", "B-210"]) expect(all, `cells ${cells}`).not.toContain(v);
+    } finally { useCells(false); }
+  }
 });

@@ -6,6 +6,7 @@
 // Counts live in memory: a hub restart starts them over, which only ever lets more through.
 import { loadRules, type Rules } from "./rules";
 import { alert } from "./util";
+import { ownerDay } from "./clock";
 
 export interface Budget { requests_per_minute?: number; writes_per_hour?: number }
 export const DEFAULT_BUDGET = { requests_per_minute: 120, writes_per_hour: 300 };
@@ -41,7 +42,8 @@ const keyOf = (root: string, agent: string, kind: Spend, role?: string) => `${ro
 // day). Nothing is counted: record() does that once the request has done its work.
 export function check(root: string, agent: string, kind: Spend, o: { role?: string; now?: number; rules?: Rules } = {}): number | undefined {
   const now = o.now ?? Date.now();
-  const b = budgetFor(o.rules ?? loadRules(root), agent);
+  const rules = o.rules ?? loadRules(root);
+  const b = budgetFor(rules, agent);
   // The resolver token carries the owner's own answers and texts: ten times the room, never none.
   const base = kind === "request" ? b.requests_per_minute : b.writes_per_hour;
   const cap = o.role === "resolver" ? Math.max(base, 1) * 10 : base;
@@ -49,7 +51,7 @@ export function check(root: string, agent: string, kind: Spend, o: { role?: stri
   const xs = (spent.get(key) ?? []).filter((t) => t > now - WINDOW[kind]);
   spent.set(key, xs);
   if (xs.length < cap) return undefined;
-  const day = new Date(now).toISOString().slice(0, 10);
+  const day = ownerDay(rules, new Date(now)); // once per the owner's day, not UTC's
   if (told.get(key) !== day) {
     told.set(key, day);
     alert(root, { agent, check: "request_budget", detail: `${agent} went over ${cap} ${kind === "request" ? "requests a minute" : "writes an hour"}; it is turned away until it slows down. A loop or a retrying routine is the usual cause.` });

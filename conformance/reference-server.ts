@@ -49,11 +49,13 @@ export function referenceServer(data: Data, opts: Opts = {}) {
   const visibleValues = (a: AgentDef) => new Set([...notes.values()].filter((n) => sees(a, n.id)).flatMap((n) => Object.entries(n.facts).filter(([k]) => !hiddenAttr(a, n.id, k)).map(([, f]) => f.value)));
   const scrub = (a: AgentDef, text: string) => {
     let out = text;
-    for (const v of hiddenValues(a)) out = out.split(v).join("[withheld]");
+    // In any case: "MAPLE trust bank" names the same hidden value (G530).
+    for (const v of hiddenValues(a)) out = out.replace(new RegExp(v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "[withheld]");
     return out.replace(/\[\[([^\]]+)\]\]/g, (m, id) => (sees(a, id) ? m : "[withheld]"));
   };
   const view = (a: AgentDef, n: Note) => ({
-    id: n.id, title: n.title, type: n.type, area: n.area, aliases: n.aliases ?? [],
+    // A visible note's title and aliases are text too: a hidden value in them is withheld (G530).
+    id: n.id, title: scrub(a, n.title), type: n.type, area: n.area, aliases: (n.aliases ?? []).map((x) => scrub(a, x)),
     facts: Object.fromEntries(Object.entries(n.facts).filter(([k]) => !hiddenAttr(a, n.id, k))),
     body: scrub(a, n.body),
   });
@@ -102,8 +104,13 @@ export function referenceServer(data: Data, opts: Opts = {}) {
     if (!/^[a-z][a-z0-9_]*$/.test(attribute) || typeof b.value !== "string" || !b.value) return refuse("attribute and value are required");
     const n = notes.get(id);
     if (!n || !sees(a, id)) return refuse(`no note ${id}`);
-    // A hidden attribute takes the same path as a new one: nothing in the answer tells them apart.
-    if (a.writes === "propose") { inbox.push({ by: a.name, id, attribute, value: b.value, as_of: b.as_of, sources }); return json({ outcome: "inbox", message: `held for ${data.owner}'s approval` }); }
+    // A hidden attribute takes the same path as a new one: nothing in the answer tells them apart,
+    // and it never replaces the hidden fact: a direct writer's write goes to the owner (G530).
+    if (a.writes === "propose" || hiddenAttr(a, id, attribute)) {
+      inbox.push({ by: a.name, id, attribute, value: b.value, as_of: b.as_of, sources });
+      if (a.writes !== "propose") return json({ outcome: "committed", message: `${id}#${attribute} recorded` });
+      return json({ outcome: "inbox", message: `held for ${data.owner}'s approval` });
+    }
     n.facts[attribute] = { value: b.value, as_of: b.as_of, sources };
     return json({ outcome: "committed", message: `${id}#${attribute} recorded` });
   }

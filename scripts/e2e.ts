@@ -16,7 +16,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setupOAuth, clearJwksCache } from "../src/oauth";
-import { setAgentStatus } from "../src/dashboard/actions";
+import { setAgentStatus, runAction } from "../src/dashboard/actions";
 import { startFakeAS, connect } from "../test/fake-as";
 import { loadBrain, saveNote } from "../src/brain";
 import { quiz } from "../src/memsync";
@@ -31,11 +31,13 @@ export const STEPS = ["read", "write", "held", "hidden", "g74", "paused", "resum
 // `notes`: every note id the answer names, so a read that starts showing (or stops showing) a note
 // fails even when the first lines of the answer stay the same.
 export interface Step { step: string; status: number; says: string; notes?: string[] }
-export const noteIds = (s: string) => [...new Set(s.match(/\b(?:people|projects|money|decisions|notes|orgs)\/[a-z0-9-]+/g) ?? [])].sort();
+// A new note's id may end in a random 6-hex suffix (notes/garden-plan-planner-e77eee): masked.
+const idSuffix = (s: string) => s.replace(/(\b(?:people|projects|money|decisions|notes|orgs)\/[a-z0-9-]+-)[0-9a-f]{6}\b/g, "$1HASH");
+export const noteIds = (s: string) => [...new Set(idSuffix(s).match(/\b(?:people|projects|money|decisions|notes|orgs)\/[a-z0-9-]+(?:HASH)?/g) ?? [])].sort();
 
 // What changes from run to run is masked; everything else is the answer.
 export function normalize(s: string): string {
-  return s
+  return idSuffix(s)
     .replace(/127\.0\.0\.1:\d+/g, "127.0.0.1:PORT")
     .replace(/\bpb_[A-Za-z0-9_-]{8,}/g, "pb_TOKEN")
     .replace(/\bclient_[A-Za-z0-9_-]{6,}/g, "client_ID")
@@ -186,7 +188,9 @@ async function golden(c: Client, agent: string, root: string, env: Record<string
   const at = (step: string, s: Step) => out.push({ ...s, step });
   at("read", await c.context("course"));
   at("write", await c.remember({ id: "projects/course-a", attribute: "e2e_check", value: `checked by ${agent}`, as_of: TODAY, sources: ["gmail:f0000000000000e2"] }));
-  at("held", await c.remember({ title: `Garden plan ${agent}`, type: "note", area: "personal", attribute: "plan", value: "tomatoes in May", as_of: TODAY, sources: ["gmail:f0000000000000e3"] }));
+  // The held write: a fact on a private note waits for the owner at every door (since G422 a core
+  // assistant's note outside its area files itself, so area ownership alone no longer holds it).
+  at("held", await c.remember({ title: `Garden plan ${agent}`, type: "note", area: "personal", sensitivity: "private", attribute: "plan", value: "tomatoes in May", as_of: TODAY, sources: ["gmail:f0000000000000e3"] }));
   at("hidden", await c.read("money/main-bank"));
   at("g74", await g74(c, agent, root, env));
   setAgentStatus(root, agent, "paused");
@@ -224,7 +228,9 @@ export async function runE2E(o: { log?: (s: string) => void } = {}): Promise<Rec
     };
 
     log("door mcp (planner, pasted bearer)");
-    const tPlanner = token(["token", "--agent", "planner"]);
+    // planner is core tier: the terminal needs the owner's one-time code from the dashboard (G184).
+    const otc = runAction({ root }, "token-code", { agent: "planner" }).match(/[0-9A-Z]{5}-[0-9A-Z]{5}/)![0];
+    const tPlanner = token(["token", "--agent", "planner", "--code", otc]);
     res.mcp = await golden(mcpClient(base, "/mcp", () => tPlanner), "planner", root, env);
 
     log("door browser (helper, /b sign-in)");

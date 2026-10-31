@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, write
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
-import { bar, lastDays, measures, noteStart, noteStop, recordDrill, recordFix } from "../src/measure";
+import { appBuild, bar, handFixNotice, lastDays, measures, noteStart, noteStop, startKind, recordDrill, recordFix } from "../src/measure";
 import { loadState } from "../src/dashboard/data";
 import { overview } from "../src/dashboard/html";
 import { deployOnce, type Effects } from "../scripts/deploy";
@@ -65,6 +65,23 @@ test("a self-check warning doesn't break the streak; a failing probe check does"
   expect(bar(root, "2026-10-20").days).toBe(1);
 });
 
+test("why the hub started: the first start, an update, a reboot or a deploy.restart mark are planned; no stop line without a mark is a crash", () => {
+  const at = (t: string) => new Date(`2026-10-18T${t}:00Z`);
+  const boot = at("00:00");
+  const root = makeBrain();
+  expect(startKind(root, { now: at("01:00"), bootAt: boot })).toBe("first");
+  noteStart(root, { now: at("01:00"), bootAt: boot, build: "0.1.0@aaa" });
+  noteStop(root, "SIGTERM", at("02:00"));
+  expect(startKind(root, { now: at("02:01"), bootAt: boot, build: "0.1.0@aaa" })).toBe("hand");
+  expect(startKind(root, { now: at("02:01"), bootAt: boot, build: "0.1.0@bbb" })).toBe("planned");
+  expect(startKind(root, { now: at("02:01"), bootAt: at("01:30"), build: "0.1.0@aaa" })).toBe("hand");
+  expect(startKind(root, { now: at("02:05"), bootAt: at("02:03") })).toBe("planned");
+  noteStart(root, { now: at("02:01"), bootAt: boot, build: "0.1.0@aaa" });
+  // The watchdog's kickstart -k leaves no stop line; its mark says the start was meant.
+  expect(startKind(root, { now: at("03:00"), bootAt: boot, planned: at("02:59") })).toBe("planned");
+  expect(startKind(root, { now: at("03:00"), bootAt: boot })).toBe("crash");
+});
+
 test("a hand restart of the hub is a hand fix; a reboot, an update, a crash or the menu's restart (already logged) aren't counted again", () => {
   const at = (t: string) => new Date(`2026-10-18T${t}:00Z`);
   const boot = at("00:00");
@@ -99,6 +116,38 @@ test("a restart onto new code is an update, not a hand fix, whoever ran the kick
   noteStop(root, "SIGTERM", at("03:00"));
   expect(noteStart(root, { now: at("03:01"), bootAt: at("00:00"), build: "0.1.0@bbb2222" })).toBe("the hub was restarted by hand"); // same code
   expect(fixes(root).length).toBe(1);
+});
+
+test("a kickstart after a pull is an update even when the last start's build can't tell (older hub, or no git under launchd)", () => {
+  const at = (t: string) => new Date(`2026-10-18T${t}:00Z`);
+  const root = makeBrain();
+  // The hub before the update ran code that recorded no build: the case the Mac met on 2026-10-19.
+  noteStart(root, { now: at("01:00"), bootAt: at("00:00") });
+  noteStop(root, "SIGTERM", at("02:00"));
+  expect(noteStart(root, { now: at("02:01"), bootAt: at("00:00"), build: "0.1.0@bbb2222", codeMovedAt: at("01:58") })).toBeUndefined();
+  // The checkout's HEAD didn't move since that start: by hand, whatever the builds say.
+  noteStop(root, "SIGTERM", at("03:00"));
+  expect(noteStart(root, { now: at("03:01"), bootAt: at("00:00"), build: "0.1.0@unknown", codeMovedAt: at("01:58") })).toBe("the hub was restarted by hand");
+  // Git couldn't name the commit either time, but HEAD moved in between: an update.
+  noteStop(root, "SIGTERM", at("04:00"));
+  expect(noteStart(root, { now: at("04:01"), bootAt: at("00:00"), build: "0.1.0@unknown", codeMovedAt: at("03:30") })).toBeUndefined();
+  expect(fixes(root).length).toBe(1);
+});
+
+test("appBuild reads the app's commit and when its HEAD last moved from the checkout itself", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pb-app-"));
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "9.9.9" }));
+  const g = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@example.org", "-c", "commit.gpgsign=false", ...a], { cwd: dir });
+  g("init", "-q", "-b", "main"); g("add", "-A"); g("commit", "-q", "-m", "one");
+  const sha = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: dir }).stdout.toString().trim();
+  const b = appBuild(dir);
+  expect(b.build).toBe(`9.9.9@${sha}`);
+  expect(b.movedAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
+  expect(appBuild(mkdtempSync(join(tmpdir(), "pb-nogit-"))).movedAt).toBeUndefined();
+});
+
+test("the hub's log line for a hand restart carries its date, so an old one in the log isn't read as new", () => {
+  expect(handFixNotice("the hub was restarted by hand", new Date("2026-10-16T11:20:53.338Z"))).toBe("noted a hand fix (2026-10-16 11:20 UTC): the hub was restarted by hand");
 });
 
 test("the updater leaves a mark before it restarts the hub, so the start isn't taken for a hand restart", async () => {
@@ -140,6 +189,7 @@ test("the Overview has a real-use bar tile: days of use, days since the last han
   expect(page()).toMatch(/6 days<\/b> since the last hand fix/);
   expect(page()).toContain("re-pasted the standing instruction");
   expect(page()).toContain("Restore drill: not run yet");
-  recordDrill(root, true);
-  expect(page()).toMatch(/Restore drill passed \d{4}-\d\d-\d\d/);
+  // Dated inside the page's day: recordDrill stamps the real clock, which passed 2026-10-20.
+  line(root, "log/drills.jsonl", { at: "2026-10-20T11:00:00Z", ok: true });
+  expect(page()).toMatch(/Restore drill passed 2026-10-20/);
 });

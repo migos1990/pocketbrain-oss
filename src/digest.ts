@@ -9,11 +9,12 @@ import { loadBrain, today, isDisputed } from "./brain";
 import { loadRules } from "./rules";
 import { carve, grantFor } from "./carve";
 import { ownerMessagesPath } from "./louis";
-import { git } from "./git";
+import { git, porcelainPath } from "./git";
 import { readJsonl } from "./util";
 import { morningNote } from "./sleep";
 import { digestLines, openTasks } from "./measure";
 import { failingChecks, selfCheckLine } from "./probe";
+import { waitingCount } from "./dashboard/home";
 import { usageDigest } from "./usage";
 import { suggestStanding, orphanStanding, standingProblem } from "./standing";
 import { pullSummary } from "./pull";
@@ -24,8 +25,13 @@ import { scorecardLine } from "./scorecard";
 import { auditDigestLine } from "./audit";
 import { shareLines } from "./share";
 import { heldHandoffs } from "./handoff";
-import { migrateLegacyQuotes, sweepQuotes } from "./quotes";
-import { autoDigestLines } from "./deck";
+import { blindSpotNews } from "./blindspots";
+import { migrateLegacyQuotes, sweepQuotes, sweepKeptQuotes } from "./quotes";
+import { autoDigestLines, autoSaves } from "./filing";
+import { sensitiveShape, reasonText } from "./shape";
+import { heldForGardener, disputeSensitive, gardenerSeen } from "./textline/items";
+import { disputes } from "./dashboard/data";
+import { scanHandEdits } from "./wiki";
 
 const jsonl = (file: string) => readJsonl(file);
 // How much of a proposal's value and reason the digest prints (G92); the inbox file holds the rest.
@@ -38,14 +44,20 @@ export function digest(root: string, since?: string): { file: string; text: stri
   sweepQuotes(root); // quotes of proposals gone some other way than a decision (src/quotes.ts)
   const from = since ?? new Date(Date.now() - 86_400_000).toISOString();
   const notes = loadBrain(root);
+  sweepKeptQuotes(root, notes); // the words of sources no fact cites any more (G451)
   const rules = loadRules(root);
   const out: string[] = [`# pocketBrain digest, ${d}`, ""];
   const need: string[] = [];
 
-  // Disputes waiting for Louis.
-  for (const n of notes) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
-    if (!isDisputed(f)) continue;
-    need.push(`- **Dispute ${f.dispute}** on \`${n.fm.id}#${attr}\`: ${f.candidates.map((c, i) => `(${i + 1}) ${typeof c.value === "object" ? JSON.stringify(c.value) : c.value} [${c.verification}, ${c.as_of}]`).join(" vs ")}. Answer with the number.`);
+  // Disputes waiting for Louis, from their packets: one beside a live value too (G425). One the
+  // Gardener still holds isn't his yet, and a private, money, health or legal one never prints its
+  // values here (owner's re-audit, 2026-10-25: the digest asked held conflicts).
+  const seen = gardenerSeen(root, rules), now = new Date();
+  for (const d of disputes(notes).filter((x) => x.status === "open" || x.status === "escalated")) {
+    const target = notes.find((n) => n.fm.id === d.fact_key.split("#")[0]);
+    if (heldForGardener(rules, d, target, seen, now)) continue;
+    const shut = disputeSensitive(rules, d, target);
+    need.push(`- **Dispute ${d.id}** on \`${d.fact_key}\`: ${shut ? `${d.candidates.length} sides, private (open it in the dashboard to see them)` : d.candidates.map((c, i) => `(${i + 1}) ${typeof c.value === "object" ? JSON.stringify(c.value) : c.value} [${c.verification}, ${c.as_of}]`).join(" vs ")}. Answer with the number.`);
   }
   // Answers the resolver relayed on private facts wait for Louis.
   for (const n of notes.filter((x) => x.fm.type === "dispute" && x.fm.status === "answer-held")) {
@@ -62,13 +74,20 @@ export function digest(root: string, since?: string): { file: string; text: stri
   for (const h of heldHandoffs(root)) need.push(`- **Held handoff** ${h.id}, ${h.from} to ${h.to}: ${h.why}. \`pocketbrain handoff release\` or \`drop\`.`);
   // Proposals.
   // One card per fact: proposals of the same value are one line, answered together.
-  for (const { file: f, doc: p, twins } of inboxCards(root) as { file: string; doc: Record<string, any>; twins: { doc: Record<string, any> }[] }[]) {
+  // What files itself on the hub's next tick is not asked here either: its inbox record only
+  // carries the Undo (outside review v3; the home page skips them the same way).
+  const filing = autoSaves(root);
+  for (const { file: f, doc: p, twins } of (inboxCards(root) as { file: string; doc: Record<string, any>; twins: { doc: Record<string, any> }[] }[]).filter((c) => !filing.has(c.file))) {
     const r = p.request ?? {};
     // No source words here: the digest is a file that stays (src/quotes.ts); they're on the card.
     const sc = p.source_check ? ` Source check: **${p.source_check.result}** (${p.source_check.ref}).` : "";
     const also = twins.length ? ` Also said by ${[...new Set(twins.map((t) => String(t.doc.by)))].join(", ")} (${new Set([...(r.sources ?? []), ...twins.flatMap((t) => t.doc.request?.sources ?? [])].map(String)).size} sources).` : "";
     // The digest stays and is backed up: a value is shown as a short slice, the file holds the rest (G92).
-    need.push(`- **Proposal** ${f} from ${p.by}: \`${r.id ?? r.title}#${r.attribute ?? ""}\` = ${clip(JSON.stringify(r.value ?? r.text) ?? "", DIGEST_VALUE)} (${clip(String(p.reason ?? ""), DIGEST_REASON)}).${sc}${also} \`inbox --accept\` or \`--reject\`.`);
+    // A reason that reads like health, money or legal stays on the card behind Show it, and so
+    // does the value it explains (G414).
+    const shut = !!p.reason && !!sensitiveShape(rules, reasonText(String(p.reason)));
+    const said = shut ? "value and reason withheld: it reads like health, money or legal; the card shows it" : `${clip(JSON.stringify(r.value ?? r.text) ?? "", DIGEST_VALUE)} (${clip(String(p.reason ?? ""), DIGEST_REASON)})`;
+    need.push(`- **Proposal** ${f} from ${p.by}: \`${r.id ?? r.title}#${r.attribute ?? ""}\` = ${said}.${sc}${also} \`inbox --accept\` or \`--reject\`.`);
   }
   // Agent memory corrections (docs/memory-sync.md): proposed ones wait for the owner's word,
   // and an approved one the hub couldn't apply to the file needs his hand.
@@ -81,7 +100,10 @@ export function digest(root: string, since?: string): { file: string; text: stri
     else if (c.state === "needs-hand" || c.state === "still-wrong") need.push(`- **Memory fix by hand** ${c.id} for ${c.agent}: ${c.note ? oneLine(c.note) : `still wrong after the hub's edit to ${oneLine(c.from.file ?? "")}:${c.from.line}`}.`);
   }
   // The hub's own checks still failing, every day until they pass (the alert went out once).
-  for (const c of failingChecks(root)) need.push(`- **Hub problem** ${c.name}: ${c.detail} (since ${c.since.slice(0, 16).replace("T", " ")})`);
+  // The hub's own problems are worth a look, never a decision.
+  const hub = failingChecks(root).map((c) => `- **Hub problem** ${c.name}: ${c.detail} (since ${c.since.slice(0, 16).replace("T", " ")})`);
+  // What the Gardener couldn't do (src/blindspots.ts): once, then weekly while it holds.
+  need.push(...blindSpotNews(root));
   // What only the owner's hands can do (`pocketbrain task`).
   for (const t of openTasks(root)) need.push(`- **Hand task** ${t.id}: ${t.what} (since ${t.at.slice(0, 10)}).${t.cmd ? ` Run: \`${t.cmd}\`.` : ""} \`pocketbrain task --done ${t.id}\` when it's done.`);
   // Alerts.
@@ -96,7 +118,7 @@ export function digest(root: string, since?: string): { file: string; text: stri
 
   // Rules integrity: rules/ changes only by Louis. Anything else touching it is flagged.
   const dirty = git(root, ["status", "--porcelain", "--", "rules"]).split("\n").filter(Boolean);
-  if (dirty.length) need.push(`- **Rules changed outside git**: ${dirty.map((l) => l.slice(3)).join(", ")}. If you didn't do this, \`git checkout rules\`.`);
+  if (dirty.length) need.push(`- **Rules changed outside git**: ${dirty.map(porcelainPath).join(", ")}. If you didn't do this, \`git checkout rules\`.`);
   const agents = new Set(Object.keys(rules.policy.agents));
   for (const l of git(root, ["log", `--since=${from}`, "--format=%h %an %s", "--", "rules"]).split("\n").filter(Boolean)) {
     const [h, an] = l.split(" ");
@@ -109,17 +131,23 @@ export function digest(root: string, since?: string): { file: string; text: stri
   // The weekly memory exam (src/exam.ts): an agent that failed it needs the owner.
   const exam = examLines(root);
   need.push(...exam.need);
+  // Notes edited by hand that the hub would not commit (docs/wiki.md): still on disk, as written.
+  for (const h of scanHandEdits(root).held) need.push(`- **Hand edit held** \`${h.path}\`: ${h.why}. Fix the file and the next pass commits it.`);
 
   // Last night's sleep pass, on top: a few lines, only if it ran since the last digest.
   const night = morningNote(root);
   const ran = night.file?.match(/sleep-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
   if (ran && `${ran[1]}T${ran[2]}:${ran[3]}:${ran[4]}` >= from.slice(0, 19)) out.push("## Overnight", "", ...night.lines, `- Details: ${night.file}`, "");
 
-  out.push(`## Needs you (${need.length})`, "", ...(need.length ? need : ["Nothing."]), "");
+  // The count is what the home lists as waiting, as in the text; the list is everything waiting,
+  // one by one, for the record and the command line.
+  const n = waitingCount(root);
+  out.push(`## Needs you (${n})`, "", `${n ? `${n} waiting on you` : "Nothing waiting on you"}, as on your home.${need.length ? " Everything open:" : ""}`, "", ...need, ...(need.length ? [""] : []));
+  if (hub.length) out.push(`## Hub health (${hub.length})`, "", ...hub, "");
 
   // Done automatically.
   const auto = git(root, ["log", `--since=${from}`, "--format=%h %s", "-E", "--grep", "^Kind: (auto-fix|resolve|louis-answer|owner-answer)$"]).split("\n").filter(Boolean);
-  // Cards the owner left unanswered and the hub decided (docs/decision-deck.md), each undoable in the deck.
+  // What the hub filed or let expire on its own (docs/filing.md), each undoable on the overview.
   const decided = autoDigestLines(root, from);
   const writes = jsonl(join(root, "log", "writes.jsonl")).filter((w) => String(w.at) >= from);
   const resolved = writes.filter((w) => typeof w.step === "number" && (w.step as number) >= 2 && (w.step as number) <= 5 && w.outcome === "committed" && !w.dispute);
@@ -170,5 +198,5 @@ export function digest(root: string, since?: string): { file: string; text: stri
   mkdirSync(join(root, "digest"), { recursive: true });
   const file = join(root, "digest", `${d}.md`);
   writeFileSync(file, text);
-  return { file, text, needsLouis: need.length };
+  return { file, text, needsLouis: n };
 }

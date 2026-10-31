@@ -14,10 +14,12 @@ Every call through `modelFor()` / `metered()` is one line in `log/usage.jsonl`: 
 usage:
   currency: USD
   prices: { model_minute: 0 }   # optional; model_input_per_million / model_output_per_million override src/pricing.ts
-  cap: { monthly: 20, alert_at: 0.8, steps: { capture.extract: 5 } }
+  cap: { monthly: 20, alert_at: 0.8, steps: { capture.extract: 5 }, daily_default: 2, daily: { dashboard.ask: 1 } }
 ```
 
-Without a `usage:` block calls are still recorded, at a price of 0, with no cap.
+Without a `usage:` block calls are still recorded, at list price (src/pricing.ts), with no monthly cap and a $2 daily cap per job.
+
+The ledger is `log/usage.jsonl`. It covers every model call the hub makes: the request check (`relay.flag`), the check after each write (`write.conflicts`, `write.classify`), capture extraction (including the hub's capture route and pulled sources), nightly consolidation and the duplicates judge from the hub's own night, the dashboard's Ask and Edit, and the box's reading of each typed sentence (`say.read`, [owner-home.md](owner-home.md)). Memory sync uses no model. The managed Gardener's runs bill on your Anthropic account, not through the hub, so they aren't in it; their budgets are set by `pocketbrain tend` ([gardener.md](gardener.md)).
 
 ## Past a cap
 
@@ -28,6 +30,14 @@ Without a `usage:` block calls are still recorded, at a price of 0, with no cap.
 - The owner hears at `alert_at` and at the cap: a line at the top of the digest (with amounts), a banner on the dashboard, and a text-channel item.
 
 Raising the cap (dashboard Spend page, or policy.yaml) resumes at once.
+
+## Past a daily cap
+
+Each job has a daily cap: `usage.cap.daily.<step>`, else `usage.cap.daily_default`, else $2; `0` turns it off. Past it, the job runs on its provider's cheapest priced model (same key; Opus or Sonnet drop to `claude-haiku-5-5`) for the rest of the day instead of failing. Each such call is recorded with `downgraded_from`. A job already on the cheapest model pauses until the next day with the reason, like a step cap, but only under a cap you set: the built-in $2 never pauses anything. The monthly cap and step caps still apply first.
+
+## Cost per job, week on week
+
+`pocketbrain week` has a "Model cost per job" table: each job's cost over the last 7 days and the 7 before, with **doubled** next to a job whose cost at least doubled (from a cent or more). That is the place to look before moving a job to a cheaper model.
 
 ## Agents never see it
 

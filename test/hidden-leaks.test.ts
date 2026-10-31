@@ -145,14 +145,14 @@ test("a new note's id leaves out a value carved from any agent", () => {
   const w = remember(root, "steward", { title: "Joe at Maple Trust Bank", type: "person", area: "personal", attribute: "role", value: "Teller", as_of: "2026-10-01", sources: ["gmail:f000000000000009"], verification: "verified-by-source" });
   expect(w.outcome).toBe("committed");
   const joe = loadBrain(root).find((n) => n.fm.title === "Joe at Maple Trust Bank")!;
-  expect(joe.fm.id).toBe("people/joe");
+  expect(joe.fm.id).toMatch(/^people\/joe-[0-9a-f]{6}$/); // every new note gets a suffix (G28)
   const hits = search(root, "planner", "Joe teller");
-  expect(hits.map((h) => h.id)).toContain("people/joe");
+  expect(hits.map((h) => h.id)).toContain(joe.fm.id);
   expect(JSON.stringify(hits)).not.toContain("Maple");
-  // Ordinary titles keep their usual slug.
+  // Ordinary titles keep their usual slug, with the suffix every new note gets (G28).
   const plain = remember(root, "steward", { title: "Ana Silva", type: "person", area: "personal", attribute: "role", value: "Chef", as_of: "2026-10-01", sources: ["gmail:f00000000000000a"], verification: "verified-by-source" });
   expect(plain.outcome).toBe("committed");
-  expect(loadBrain(root).some((n) => n.fm.id === "people/ana-silva")).toBe(true);
+  expect(loadBrain(root).some((n) => /^people\/ana-silva-[0-9a-f]{6}$/.test(n.fm.id))).toBe(true);
 });
 
 // ---- slice audit of the branch: guesses, shown names, disguised spellings ----
@@ -190,7 +190,7 @@ test("a by-title write can't land on a note by guessing its withheld word; the g
   expect(right.outcome).toBe("refused");
   expect(right.message).toMatch(/^leak_tripwire: the title/);
   expect(right.message).not.toMatch(/course-d|sponsor/);
-  expect(wrong.fact_key).toBe("projects/course-d-sponsored-by-redfin-partners#room");
+  expect(wrong.fact_key).toMatch(/^projects\/course-d-sponsored-by-redfin-partners-[0-9a-f]{6}#room$/);
   expect(note(root, "projects/course-d").fm.facts?.room).toBeUndefined();
   // A disguised spelling is refused too, so the guess can't be read back as [withheld].
   expect(remember(root, "planner", by("Zed from Bluefin-Holdings")).outcome).toBe("refused");
@@ -228,7 +228,7 @@ test("a disguised spelling of a carved value is withheld in names, flagged, and 
   const rules = loadRules(root), notes = loadBrain(root);
   expect(carve(notes, rules, grantFor(rules, "planner")).flags.filter((f) => f.detail.startsWith("title or alias")).map((f) => f.id).sort()).toEqual(["people/ana", "people/bo", "people/cy"]);
   const w = remember(root, "steward", { title: "Joe at Maple-Trust Bank", type: "person", area: "personal", attribute: "role", value: "Teller", as_of: "2026-10-01", sources: ["gmail:f000000000000009"], verification: "verified-by-source" });
-  expect(w.fact_key).toBe("people/joe#role");
+  expect(w.fact_key).toMatch(/^people\/joe-[0-9a-f]{6}#role$/);
 });
 
 test("a title with no Latin letters still gets a real id (bug hunt A8)", () => {
@@ -240,7 +240,7 @@ test("a title with no Latin letters still gets a real id (bug hunt A8)", () => {
   const byTitle = new Map(loadBrain(root).map((n) => [n.fm.title, n.fm.id]));
   const ids = ["山田太郎", "Иван Петров"].map((t) => byTitle.get(t)!).filter(Boolean);
   expect(ids).toHaveLength(2);
-  for (const id of ids) expect(id).toMatch(/^people\/note-[0-9a-f]{6}$/);
+  for (const id of ids) expect(id).toMatch(/^people\/note-[0-9a-f]{6}-[0-9a-f]{6}$/);
   expect(new Set(ids).size).toBe(2);
   expect(readNote(root, "steward", ids[0]).title).toBe("山田太郎");
 });
@@ -287,7 +287,8 @@ test("once the owner confirms the value, the agent's shared-away fact is out of 
 
 test("once the owner accepts another agent's proposal into it, the agent's shared-away fact is out of its reach", () => {
   const root = plannerShared();
-  const p = remember(root, "steward", { id: "projects/course-a", attribute: "grant_code", value: "Falcon-88", as_of: "2026-08-20", sources: ["gmail:f000000000000004"], verification: "verified-by-source" });
+  // Claiming the owner's word outside its area, steward's fact still waits for the owner (G422).
+  const p = remember(root, "steward", { id: "projects/course-a", attribute: "grant_code", value: "Falcon-88", as_of: "2026-08-20", sources: ["gmail:f000000000000004", "owner:2026-08-20/text"], verification: "confirmed-by-owner" });
   expect(p.outcome).toBe("inbox");
   expect(decideProposal(root, p.file!, "accept").outcome).toBe("committed");
   const r = remember(root, "planner", next);

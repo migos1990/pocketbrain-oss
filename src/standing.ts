@@ -19,7 +19,8 @@ import type { Rules, StandingEntry, StandingFile, StandingTier } from "./rules";
 import { attributeSpec, readYaml } from "./rules";
 import { factHiddenReason, records, visibleFacts, type CarveResult, type Visible } from "./carve";
 import { normalizeValue } from "./normalize";
-import { isOwnerConfirmed, OWNER } from "./owner";
+import { OWNER } from "./owner";
+import { ownerVouched } from "./sources";
 import { git } from "./git";
 import { hubRole } from "./hub";
 
@@ -28,7 +29,7 @@ const RANK: Record<string, number> = { unknown: 0, unlisted: 1, known: 2, close:
 
 // The only files that may import this one or read `.standing`. Each only shows, records or sets
 // standing; none decides a check. Adding a file here is a design change: say why in docs/standing.md.
-export const STANDING_READERS = ["cell.ts", "cli.ts", "core.ts", "digest.ts", "passport.ts", "people.ts", "pull.ts", "quizplan.ts", "rules.ts", "view.ts"];
+export const STANDING_READERS = ["cell.ts", "cli.ts", "core.ts", "digest.ts", "forget.ts", "passport.ts", "people.ts", "pull.ts", "quizplan.ts", "rules.ts", "sameperson.ts", "view.ts"];
 
 const file = (root: string) => join(root, "rules", "standing.yaml");
 
@@ -110,7 +111,7 @@ function isAddressAttr(rules: Rules, type: string, attr: string) {
 // Current values the owner or a source vouched for. Self-reported and unverified addresses, ended
 // or forgotten ones, and both sides of a dispute never count.
 function trusted(r: FactRecord) {
-  return !r.valid_to && !r.retired && (isOwnerConfirmed(r.verification) || r.verification === "verified-by-source");
+  return !r.valid_to && !r.retired && (ownerVouched(r) || r.verification === "verified-by-source");
 }
 function addressesIn(note: Note, rules: Rules, attrs?: [string, unknown][], ok: (r: FactRecord) => boolean = trusted): string[] {
   const out = new Set<string>();
@@ -223,7 +224,7 @@ export function setStanding(root: string, person: string, tier: StandingTier | "
     const bad = pin.filter((a) => !vouched.includes(a));
     if (bad.length) throw new Error(`${bad.join(", ")} is not a confirmed or source-verified address on ${person}`);
     const kept = samePerson ? (prev.addresses ?? []).map((a) => parseAddress(a) ?? a).filter((a) => vouched.includes(a)) : [];
-    addresses = [...new Set([...addressesIn(note, rules, undefined, (r) => isOwnerConfirmed(r.verification)), ...kept, ...pin])].sort();
+    addresses = [...new Set([...addressesIn(note, rules, undefined, ownerVouched), ...kept, ...pin])].sort();
   }
   const authority = opts.authority === undefined ? (samePerson ? prev.authority : undefined) : opts.authority === "none" ? undefined : opts.authority;
   const e: StandingEntry = { tier, ...(authority ? { authority } : {}), ...(addresses.length ? { addresses } : {}), ...(note.fm.created ? { note_created: String(note.fm.created) } : {}) };
@@ -246,7 +247,7 @@ export function confirmedAddresses(root: string, person: string, notes = loadBra
   const note = notes.find((n) => n.fm.id === person);
   if (!note) return [];
   const rules = { checks: readYaml(join(root, "rules", "checks.yaml"), { checks: [], types: {} }) } as unknown as Rules;
-  return addressesIn(note, rules, undefined, (r) => isOwnerConfirmed(r.verification));
+  return addressesIn(note, rules, undefined, ownerVouched);
 }
 
 // What the owner wrote that the code doesn't apply (an unknown tier): shown by `standing list`.
@@ -329,7 +330,7 @@ export function suggestStanding(root: string, notes = loadBrain(root)): Suggesti
       : inn + out_ >= 4 && out_ >= 1 ? "known" : undefined;
     const d = dismissed[n.fm.id];
     if (!tier || (d && d.note_created === String(n.fm.created ?? "") && RANK[tier] <= RANK[d.tier])) continue;
-    const confirmed = new Set(addressesIn(n, rules, undefined, (r) => isOwnerConfirmed(r.verification)));
+    const confirmed = new Set(addressesIn(n, rules, undefined, ownerVouched));
     out.push({ person: n.fm.id, title: n.fm.title, tier, why: `${inn} from them, ${out_} from you${reply !== undefined ? `, usually answered within ${reply < 60 ? `${reply} min` : `${Math.round(reply / 60)} h`}` : ""}`, via: used.map((address) => ({ address, confirmed: confirmed.has(address) })) });
   }
   return out.sort((a, b) => RANK[b.tier] - RANK[a.tier] || a.person.localeCompare(b.person));
@@ -349,6 +350,43 @@ function saveDismissed(root: string, d: Record<string, Dismissed>) {
   writeFileSync(join(root, "log", "standing", ".gitignore"), "*\n");
   writeFileSync(dismissedFile(root), JSON.stringify(d, null, 2) + "\n");
 }
+// ---------- forget a person (src/forget.ts, backlog 330) ----------
+// The person's entry leaves rules/standing.yaml (the caller commits it with the rest of the
+// forget) and their local signals leave log/standing: the dismissed suggestion, and the traffic
+// counts for addresses no other person note holds. What was taken is returned, so an undo within
+// the forget's window puts it back exactly.
+export interface StandingTraces { dismissed?: Dismissed; contacts: Record<string, Contact> }
+export const addressesOf = (n: Note): string[] =>
+  Object.values(n.fm.facts ?? {}).flatMap((f) => records(f)).map((r) => typeof r.value === "string" ? parseAddress(r.value) : undefined).filter((a): a is string => !!a);
+export function dropPersonStanding(root: string, note: Note, others: Note[]): { inFile: boolean; traces: StandingTraces } {
+  onHub(root);
+  const broken = standingProblem(root);
+  if (broken) throw new Error(`${broken}; fix it by hand first, nothing was changed`);
+  const id = note.fm.id, raw = readStandingYaml(file(root)) as { people?: Record<string, unknown> };
+  const inFile = !!raw.people && id in raw.people;
+  if (inFile) {
+    delete raw.people![id];
+    writeFileSync(file(root), "# Who matters to the owner (docs/standing.md). Only the owner edits this file (pocketbrain standing).\n" + YAML.stringify(raw, { aliasDuplicateObjects: false }));
+  }
+  const traces: StandingTraces = { contacts: {} };
+  const d = loadDismissed(root);
+  if (d[id]) { traces.dismissed = d[id]; delete d[id]; saveDismissed(root, d); }
+  const kept = new Set(others.filter((n) => n.fm.id !== id).flatMap(addressesOf));
+  const c = loadContacts(root);
+  for (const a of addressesOf(note)) if (c[a] && !kept.has(a)) { traces.contacts[a] = c[a]; delete c[a]; }
+  if (Object.keys(traces.contacts).length) writeFileSync(contactsFile(root), JSON.stringify(c, null, 2) + "\n");
+  return { inFile, traces };
+}
+export function restorePersonTraces(root: string, id: string, t: StandingTraces) {
+  if (t.dismissed) { const d = loadDismissed(root); d[id] = t.dismissed; saveDismissed(root, d); }
+  if (Object.keys(t.contacts).length) {
+    const c = { ...loadContacts(root), ...t.contacts };
+    mkdirSync(join(root, "log", "standing"), { recursive: true });
+    writeFileSync(join(root, "log", "standing", ".gitignore"), "*\n");
+    writeFileSync(contactsFile(root), JSON.stringify(c, null, 2) + "\n");
+  }
+}
+
 function onHub(root: string) {
   const role = hubRole(root);
   if (role.mode === "replica" || role.mode === "unnamed") throw new Error(`standing is set on the hub${role.mode === "replica" ? ` (${role.cfg.hub})` : ""}; this clone commits nothing to rules/`);

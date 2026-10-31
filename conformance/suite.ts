@@ -11,6 +11,8 @@ export interface Fixture {
     visible_note: string; visible_fact: { attribute: string; value: string };
     hidden_note: string; missing_note: string; partly_hidden_note: string; hidden_attribute: string; missing_attribute: string;
     hidden_values: string[]; redacted_note: string; full_write_note: string;
+    // A visible note whose title, alias and text name a hidden value in other cases (G532).
+    cased_note: string; cased_search: string;
     search_visible: { q: string; expect: string }; search_hidden: { q: string; expect_full: string };
     write: { attribute: string; value: string; as_of: string; sources: string[] };
   };
@@ -115,6 +117,17 @@ export async function runConformance(fetcher: Fetcher, fx: Fixture, full: Agent,
     if (r.status !== 200) return `status ${r.status}`;
     const l = leaks(r.text);
     return l.length ? `shows ${l.join(", ")}` : undefined;
+  });
+  await check("R7", "MUST", "a hidden value is withheld in any case, and from a visible note's title and aliases", async () => {
+    const r = await note(limited, p.cased_note);
+    if (r.status !== 200) return `status ${r.status}`;
+    const l = leaks(r.text);
+    if (l.length) return `the note shows ${l.join(", ")}`;
+    const s = await call(limited, "GET", `/v1/search?q=${encodeURIComponent(p.cased_search)}`);
+    if (s.status !== 200 || !Array.isArray(s.json)) return `search: status ${s.status}, not a list`;
+    if (!s.json.some((h: { id?: string }) => h.id === p.cased_note)) return `search: no hit ${p.cased_note}`;
+    const ls = leaks(s.text);
+    return ls.length ? `a search hit shows ${ls.join(", ")}` : undefined;
   });
   await check("S1", "MUST", "search finds visible notes", async () => {
     const r = await call(limited, "GET", `/v1/search?q=${encodeURIComponent(p.search_visible.q)}`);
@@ -313,7 +326,10 @@ export async function runConformance(fetcher: Fetcher, fx: Fixture, full: Agent,
     if (leaks(first.text).length) return `429 shows ${leaks(first.text).join(", ")}`;
     const h = await note(limited, p.hidden_note), m = await note(limited, p.missing_note), v = await note(limited, p.visible_note);
     if (h.status !== 429 || m.status !== 429 || v.status !== 429) return `over the budget: hidden ${h.status}, missing ${m.status}, visible ${v.status}`;
-    if (!twins(h, p.hidden_note, m, p.missing_note)) return differ("over the budget", h, m);
+    // The wait counts down while the check runs: a slow run sees 59 then 58 s. Only the wait may
+    // differ between the two; any other difference still tells a hidden note from a missing one.
+    const waitless = (g: Got): Got => { const w = g.headers["retry-after"] ?? "\u0000"; return { ...g, text: g.text.split(w).join("<wait>"), json: undefined, headers: { ...g.headers, "retry-after": "<wait>" } }; };
+    if (!twins(waitless(h), p.hidden_note, waitless(m), p.missing_note)) return differ("over the budget", h, m);
     const other = await note(full, p.visible_note);
     return other.status === 200 ? undefined : `${fullName} answered ${other.status} while ${fx.agents.limited.name} was over its budget`;
   });

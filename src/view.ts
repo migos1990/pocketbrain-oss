@@ -3,16 +3,18 @@
 // (phase 0/1) plus a manifest of exactly which notes and fact keys it holds.
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Note } from "./brain";
-import { today } from "./brain";
+import type { Note, Fact, FactRecord } from "./brain";
+import { today, isList, isDisputed } from "./brain";
 import type { Rules } from "./rules";
 import { tierOf, ownerName } from "./rules";
 import type { CarveResult, Visible } from "./carve";
-import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords } from "./carve";
+import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFor } from "./carve";
 import { needleFor, findCarried, type Needle } from "./match";
 import { escapeRe, tokenIndex } from "./util";
+import { summaryOf } from "./wiki";
 import { headCommit } from "./git";
 import { visibleStanding, standingLine } from "./standing";
+import { tokensOf, fitBlocks, cutLine, contextBudget } from "./context";
 
 // Prose is scrubbed as well as linked notes: a carved value that turns up in a visible
 // note's text ("Paid through <bank>") is replaced, so the view can't carry it. The preview
@@ -61,9 +63,25 @@ export function scrubCarved(text: string, res: CarveResult, deep = true): string
   return out.split("\n").map((line) => findCarried(line, needles) ? line.replace(/^(\s*(?:[-*] )?).*$/, "$1[withheld]") : line).join("\n");
 }
 
+// Links to hidden notes go first: scrubbing a carved name inside one (an alias that is also part of
+// the note's id) would otherwise leave [[people/[withheld]-roy]], half an id the agent can't see.
+// A link to a merged note shows the note it became, when the agent sees that one (G266, linkFor).
 export function redactLinks(text: string, res: CarveResult, deep = true): string {
-  return scrubCarved(text, res, deep).replace(/\[\[([^\]|#]+)((?:#[^\]|]*)?(?:\|[^\]]*)?)\]\]/g, (all, id: string) =>
-    res.visible.has(id.trim()) ? all : "[[redacted]]");
+  return scrubCarved(text.replace(/\[\[([^\]|#]+)((?:#[^\]|]*)?(?:\|[^\]]*)?)\]\]/g, (all, id: string, rest: string) => {
+    const to = linkFor(id.trim(), res);
+    return to === undefined ? "[[redacted]]" : to === id.trim() ? all : `[[${to}${rest}]]`;
+  }), res, deep);
+}
+
+// The owner's guidance (rules/RULES.md) as one agent gets it, in its view and its cell: scrubbed
+// like a note (carved values withheld, links to hidden notes redacted) and naming no other
+// agent (G30).
+export function guidanceFor(rules: Rules, res: CarveResult): string {
+  let out = redactLinks(rules.guidance, res);
+  const names = Object.entries(rules.policy.agents).filter(([id]) => id !== res.grant.agent).flatMap(([id, a]) => [id, ...(a.aliases ?? []), ...(a.label ? [a.label] : [])]);
+  for (const n of names.sort((a, b) => b.length - a.length))
+    out = out.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(n)}(?=$|[^\\p{L}\\p{N}])`, "giu"), "$1another assistant");
+  return out;
 }
 
 // Every string inside a fact record, scrubbed one by one (the hub's render and the cells share
@@ -75,6 +93,27 @@ export function scrubLeaves(v: unknown, res: CarveResult): unknown {
   return v;
 }
 
+// A fact as one agent gets it in JSON, from a cell or straight from the hub: every string scrubbed,
+// no writer (`by`, `shared_by`, `confirmed_by`, an end's or a forgetting's `by`) and a share_with
+// naming only the reader. Who wrote a fact and who else may see it name
+// other agents, and an agent shouldn't learn they exist.
+function agentRecord(r: FactRecord, agent: string, res: CarveResult): FactRecord {
+  const out = scrubLeaves(r, res) as FactRecord;
+  delete (out as { by?: string }).by;
+  delete out.shared_by;
+  delete out.confirmed_by;
+  if (out.ended_by) delete (out.ended_by as { by?: string }).by;
+  if (out.retired) delete (out.retired as { by?: string }).by;
+  if (out.share_with) out.share_with = [agent];
+  return out;
+}
+
+export function agentFact(f: Fact, agent: string, res: CarveResult): Fact {
+  if (isList(f)) return { ...f, items: f.items.map((r) => agentRecord(r, agent, res)) };
+  if (isDisputed(f)) return { ...f, candidates: f.candidates.map((r) => agentRecord(r, agent, res)) };
+  return agentRecord(f as FactRecord, agent, res);
+}
+
 // One visible note as the agent gets it: allowed facts with freshness, body if granted,
 // links to notes it can't see shown as [[redacted]].
 // A replaced or stalled decision says so first, with a link both ways, so an agent can answer
@@ -82,7 +121,7 @@ export function scrubLeaves(v: unknown, res: CarveResult): unknown {
 // can't see shows as [[redacted]], like any other link.
 export function statusBanner(v: Visible, res: CarveResult): string[] {
   const fm = v.note.fm as typeof v.note.fm & { superseded_by?: string; supersedes?: string | string[]; stalled_on?: string };
-  const link = (id: string) => (res.visible.has(id) ? `[[${id}]]` : "[[redacted]]");
+  const link = (id: string) => { const to = linkFor(id, res); return to ? `[[${to}]]` : "[[redacted]]"; };
   const out: string[] = [];
   if (fm.status === "superseded") out.push(`**Replaced${fm.superseded_by ? ` by ${link(String(fm.superseded_by))}` : ""}. History only: don't act on this decision.**`);
   else if (fm.status === "stalled") out.push(`**Stalled${fm.stalled_on ? ` since ${fm.stalled_on}` : ""}: not in effect.${fm.superseded_by ? ` See ${link(String(fm.superseded_by))}.` : ""} Don't act on it without asking.**`);
@@ -91,11 +130,21 @@ export function statusBanner(v: Visible, res: CarveResult): string[] {
   return out;
 }
 
-export function renderNote(v: Visible, res: CarveResult, rules: Rules, now = today()): string[] {
+// A page's one-line summary (src/wiki.ts) as this agent may read it: text like the body, so only
+// with the body grant, and scrubbed of links and carved values the same way.
+export function pageSummary(v: Visible, res: CarveResult): string | undefined {
+  const sum = summaryOf(v.note);
+  return v.body && sum ? redactLinks(sum, res) : undefined;
+}
+
+// `body` replaces the note's text (one section, from read's section); it must already be redacted.
+export function renderNote(v: Visible, res: CarveResult, rules: Rules, now = today(), body?: string): string[] {
   const fm = v.note.fm;
   const lines = [`### ${fm.title} \`${fm.id}\``,
     `${fm.type} · area ${fm.area} · updated ${shownUpdated(v, res)}${fm.status && fm.status !== "active" ? ` · ${fm.status}` : ""}${fm.aliases?.length ? ` · also: ${fm.aliases.join(", ")}` : ""}`,
     ...statusBanner(v, res)];
+  const summary = pageSummary(v, res);
+  if (summary) lines.push(`Summary: ${summary}`);
   // How much this person's ask weighs with the owner (docs/standing.md), if the slice shares it.
   const standing = visibleStanding(v, res, rules);
   if (standing) lines.push(standingLine(standing));
@@ -104,14 +153,17 @@ export function renderNote(v: Visible, res: CarveResult, rules: Rules, now = tod
     lines.push("");
     for (const [attr, f] of facts) lines.push(...factSummary(attr, scrubLeaves(f, res) as typeof f, fm.type, rules, now).map((l) => redactLinks(l, res, false)));
   }
-  if (v.body && v.note.body.trim()) {
+  const text = body ?? (v.body && v.note.body.trim() ? redactLinks(v.note.body.trim(), res) : "");
+  if (text) {
     lines.push("");
-    lines.push(redactLinks(v.note.body.trim(), res).replace(/^(#{1,3}) /gm, "#### "));
+    lines.push(text.replace(/^(#{1,3}) /gm, "#### "));
   }
   return lines;
 }
 
-export function renderView(notes: Note[], rules: Rules, res: CarveResult, root: string): string {
+// The view as its header and one block per note, so a caller can cut whole notes (src/context.ts).
+// `updated` is the date the agent is shown (shownUpdated, G222): ranking by it says nothing new.
+export function renderViewParts(_notes: Note[], rules: Rules, res: CarveResult, root: string): { head: string; notes: { id: string; updated: string; text: string }[] } {
   const agent = res.grant.agent;
   const now = today();
   const a = rules.policy.agents[agent];
@@ -132,7 +184,7 @@ export function renderView(notes: Note[], rules: Rules, res: CarveResult, root: 
   if (rules.guidance.trim()) {
     lines.push("## Rules");
     lines.push("");
-    lines.push(rules.guidance.replace(/^#\s.*\n/, "").replace(/^## /gm, "### ").trim());
+    lines.push(guidanceFor(rules, res).replace(/^#\s.*\n/, "").replace(/^## /gm, "### ").trim());
     lines.push("");
   }
   const instr = join(root, "rules", "instructions", `${agent}.md`);
@@ -143,13 +195,33 @@ export function renderView(notes: Note[], rules: Rules, res: CarveResult, root: 
     lines.push("");
   }
   lines.push("## Brain");
-  for (const v of res.visible.values()) lines.push("", ...renderNote(v, res, rules, now));
-  return lines.join("\n") + "\n";
+  return { head: lines.join("\n"), notes: [...res.visible.values()].map((v) => ({ id: v.note.fm.id, updated: shownUpdated(v, res), text: renderNote(v, res, rules, now).join("\n") })) };
 }
 
+export function renderView(notes: Note[], rules: Rules, res: CarveResult, root: string): string {
+  const { head, notes: ns } = renderViewParts(notes, rules, res, root);
+  return [head, ...ns.map((n) => n.text)].join("\n\n") + "\n";
+}
+
+// The whole view held to a token budget (src/context.ts): over it, the most recently updated notes
+// (by the date the agent is shown, G222) are kept whole and the rest are named in a closing line.
+export function cappedView(notes: Note[], rules: Rules, res: CarveResult, root: string, cap: number, how: string): { text: string; kept: string[]; cut: number } {
+  const parts = renderViewParts(notes, rules, res, root);
+  const full = [parts.head, ...parts.notes.map((n) => n.text)].join("\n\n") + "\n";
+  if (tokensOf(full) <= cap) return { text: full, kept: parts.notes.map((n) => n.id), cut: 0 };
+  const ranked = [...parts.notes].sort((a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id));
+  const byText = new Map(ranked.map((n) => [n.text, n.id]));
+  const fit = fitBlocks(parts.head, ranked.map((n) => n.text), cap, "\n\n", (left, ids) => cutLine(left, ids, cap, how), (b) => byText.get(b));
+  return { text: fit.text, kept: ranked.slice(0, fit.kept).map((n) => n.id), cut: fit.cut };
+}
+
+// The pasted file is held to the same context_pack budget as the doors (backlog 311): at 10k notes
+// the whole view is over a million tokens, more than any assistant can take in.
 export function buildView(notes: Note[], rules: Rules, res: CarveResult, root: string, outDir = join(root, "views")) {
   mkdirSync(outDir, { recursive: true });
-  const md = renderView(notes, rules, res, root);
+  const cap = contextBudget(rules, res.grant.agent).context_pack;
+  const v = cappedView(notes, rules, res, root, cap, `This file is the newest part of your view. Ask the brain for a topic (context_pack) or a note by id, or ask ${ownerName(rules)} to raise context_budget.context_pack for you.`);
+  const md = v.text;
   const agent = res.grant.agent;
   writeFileSync(join(outDir, `${agent}.md`), md);
   // A dated copy is the agent's fallback snapshot for when the hub at home is asleep.
@@ -162,9 +234,11 @@ export function buildView(notes: Note[], rules: Rules, res: CarveResult, root: s
     slices: res.grant.slices,
     not_shared: res.notShared,
     pasted_to: rules.policy.agents[agent]?.pasted_to ?? [],
-    notes: [...res.visible.keys()],
-    facts: [...res.visible.values()].flatMap((v) => visibleFacts(v, res).map(([a]) => `${v.note.fm.id}#${a}`)),
+    // What is in this file: a note left out over the budget isn't listed as pasted.
+    notes: v.kept,
+    facts: v.kept.map((id) => res.visible.get(id)!).flatMap((x) => visibleFacts(x, res).map(([a]) => `${x.note.fm.id}#${a}`)),
     approx_tokens: Math.round(md.length / 4),
+    ...(v.cut ? { budget: cap, left_out: v.cut } : {}),
   };
   writeFileSync(join(outDir, `${agent}.manifest.json`), JSON.stringify(manifest, null, 2) + "\n");
   return { file: join(outDir, `${agent}.md`), tokens: manifest.approx_tokens };

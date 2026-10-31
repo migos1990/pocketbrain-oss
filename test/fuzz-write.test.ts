@@ -81,7 +81,7 @@ function body(r: () => number, writer: string): Record<string, unknown> {
 }
 
 const git = (root: string, args: string[]) => Bun.spawnSync(["git", ...args], { cwd: root }).stdout.toString();
-const ALLOWED = (writer: string) => new RegExp(`^(people|orgs|projects|decisions|notes|money|disputes|inbox)/[^/]+$|^agents/${writer}/[^/]+$|^journal/${writer}/[^/]+$`);
+const ALLOWED = (writer: string) => new RegExp(`^(people|orgs|projects|decisions|notes|money|disputes|inbox)/[^/]+$|^agents/${writer}/[^/]+$|^journal/${writer}/[^/]+$|^diary/\\d{4}-\\d{2}\\.jsonl$`);
 
 test(`fuzz: ${N} mutated writes from every agent keep the write path's invariants (seed ${SEED})`, () => {
   const outer = mkdtempSync(join(tmpdir(), "pb-fuzz-"));

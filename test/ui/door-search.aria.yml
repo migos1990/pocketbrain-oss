@@ -1,10 +1,34 @@
 - main:
-  - 'heading "Search: Jane" [level=1]'
+  - 'heading "Search: Maya" [level=1]'
   - list:
     - listitem:
-      - link "Jane Roy":
-        - /url: /b/notes/people%2Fjane-roy
-      - text: people/jane-roy · person
+      - link "Maya Chen":
+        - /url: /b/notes/people%2Fmaya-chen
+      - text: people/maya-chen · person Maya Chen's role is design lead.[^p-role] Maya Chen works at [[orgs/harbourline|Harbourline Software]].[^p-role] Maya Chen works with you on Atlas.[^p-relations
+    - listitem:
+      - link "Hire a senior designer, not two juniors":
+        - /url: /b/notes/decisions%2F2026-09-15-hire-senior-designer
+      - text: decisions/2026-09-15-hire-senior-designer · decision Decided on 2026-09-15 for the [[projects/designer-hire]], with [[people/maya-chen]] and [[people/priya-shah]].[^1]
+    - listitem:
+      - link "Senior designer hire":
+        - /url: /b/notes/projects%2Fdesigner-hire
+      - text: projects/designer-hire · project Senior designer hire is final round.[^p-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^p-status] Due for Senior designer hir
+    - listitem:
+      - link "Atlas launch":
+        - /url: /b/notes/projects%2Fatlas-launch
+      - text: "projects/atlas-launch · project Atlas launch is in beta.[^p-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^p-status] Due for Atlas launch: 3 Nov 2026.[^p-status"
+    - listitem:
+      - link "Harbourline Software":
+        - /url: /b/notes/orgs%2Fharbourline
+      - text: orgs/harbourline · org Harbourline Software's kind is software company.[^p-kind] Harbourline Software's city is Montréal.[^p-kind] [[people/aisha-rahman|Aisha Rahman]], [[people/danie
+    - listitem:
+      - link "Weekly Atlas review on Wednesdays":
+        - /url: /b/notes/decisions%2F2026-10-01-weekly-team-review
+      - text: decisions/2026-10-01-weekly-team-review · decision Decided on 2026-10-01 for the [[projects/atlas-launch]], with [[people/omar-haddad]] and [[people/maya-chen]] and [[people/hannah-becker]].[^1]
+    - listitem:
+      - link "Lucas Fontaine":
+        - /url: /b/notes/people%2Flucas-fontaine
+      - text: "people/lucas-fontaine · person #### Earlier notes Lucas is a candidate for the [[projects/designer-hire]]; strong portfolio, did the second panel with [[people/maya-chen]].[^1]"
   - paragraph:
     - link "Back to the start page":
       - /url: /b

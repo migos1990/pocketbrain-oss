@@ -30,14 +30,17 @@ test("background polls and fetches don't count as the owner's time", async () =>
 
 test("page loads count, but at most one line a minute however many pages are opened", async () => {
   const { get, lines } = await setup();
+  // The cap is per wall-clock minute (server.ts): start well inside one, so the loads can't straddle two.
+  const s = new Date().getSeconds();
+  if (s >= 50) await Bun.sleep((61 - s) * 1000);
   const before = lines();
   for (let i = 0; i < 20; i++) await get(i % 2 ? "/agents" : "/", { "sec-fetch-mode": "navigate" });
   expect(lines() - before).toBe(1);
-});
+}, 20_000);
 
 test("a POST that isn't a form, or has a malformed Referer, gets a 4xx, not a 500", async () => {
   const { get, post } = await setup();
-  const csrf = (await (await get("/")).text()).match(/name="csrf" value="([^"]+)"/)![1];
+  const csrf = (await (await get("/overview")).text()).match(/name="csrf" value="([^"]+)"/)![1];
   expect((await post("/action/x", "{}", { "content-type": "application/json" })).status).toBe(400);
   expect((await post("/action/x", "x", {})).status).toBeLessThan(500);
   const bad = await post("/action/nope", `csrf=${csrf}`, { referer: "not a url", "content-type": "application/x-www-form-urlencoded" });

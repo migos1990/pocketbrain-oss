@@ -7,7 +7,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { makeBrain } from "./fixture";
 import { handle } from "../src/server";
 import { setupOAuth, bindClient, revokeClient, bindMachine, addCoworker, bindCoworkerClient, expectClient, loadOAuth, setManagement, cleanupReplaced, clearJwksCache } from "../src/oauth";
-import { dashboardHandler } from "../src/dashboard/server";
+import { dashboardHandler, flashOf } from "../src/dashboard/server";
 import { main } from "../src/cli";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -133,7 +133,7 @@ test("the dashboard lists replaced apps and deletes them in one click; oauth sta
   expect(page).toContain("c-old");
   const csrf = page.match(/name="csrf" value="([^"]+)"/)![1];
   const r = await d.handle(new Request(`http://${H}/action/oauth-cleanup`, { method: "POST", body: new URLSearchParams({ csrf }), headers: { host: H, cookie, origin: `http://${H}`, referer: `http://${H}/agents`, "content-type": "application/x-www-form-urlencoded" } }));
-  expect(decodeURIComponent(r.headers.get("location") ?? "")).toContain("Deleted 1 old app");
+  expect(flashOf(r.headers.get("location") ?? "").ok).toContain("Deleted 1 old app");
   expect(loadOAuth(root)!.replaced).toBeUndefined();
   const after = await (await d.handle(new Request(`http://${H}/agents`, { headers: { host: H, cookie } }))).text();
   expect(after).not.toContain("/action/oauth-cleanup");

@@ -1,0 +1,20 @@
+# Checks on every write. The security checks run whatever this file says.
+checks: [schema, rules_read_only, no_agent_in_ids, source_present, source_resolvable,
+         source_matches_type, approval_needs_message_id, no_secret_shapes, no_secret_level, as_of_not_future, note_size, third_party_sensitive]
+# Words that point at a type an agent isn't given. An agent without money that writes one of
+# these goes to your inbox instead of the brain.
+categories:
+  money: ["bank","salary","credit card","mortgage","loan","investment","pension","RRSP","TFSA","401k","IRA","brokerage","tax return"]
+types:
+  person:
+    attributes:
+      role: { merge: replace, normalize: text, shelf_life: 180d }
+      org: { merge: replace, normalize: link }
+      emails: { merge: set, normalize: email }
+      phones: { merge: set, normalize: e164 }
+      last_contact: { merge: max, normalize: date }
+  project:
+    attributes:
+      next_step: { merge: replace, shelf_life: 14d }
+  money:
+    sensitivity: private

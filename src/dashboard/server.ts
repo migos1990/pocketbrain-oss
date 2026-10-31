@@ -1,27 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The owner dashboard: Louis's control panel (architecture 0). It is a separate listener from
 // the agents' server and binds to loopback only, so the tunnel that exposes /mcp and /v1
-// never reaches it. Auth is a local owner session: a login link printed once at start-up
+// never reaches it. The owner can also opt in to their own tailnet (src/dashboard/tailnet.ts). Auth is a local owner session: a login link printed once at start-up
 // sets an HttpOnly cookie; every action also needs the session's CSRF token, and requests
 // for any other Host are refused (DNS rebinding).
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { buildDeck, recordSwipe } from "../deck";
-import { deckPage } from "./html-deck";
+import { markSeen } from "../seen";
+import { displayName } from "../diary";
+import { plain } from "./home";
+import { pageParam } from "./paging";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { withFileLock } from "../filelock";
+import { join } from "node:path";
 import { loadRules } from "../rules";
 import { loadBrain } from "../brain";
 import { carve, grantFor } from "../carve";
 import { renderView } from "../view";
-import { CoreError, ownerWhy } from "../core";
-import type { MailTransport } from "../relay";
-import { loadState, latestDigest } from "./data";
+import { CoreError, ownerWhy, ownerDecide, ownerKeepBoth, ownerConflict } from "../core";
+import { settlePage, heldMailPage } from "./html-settle";
+import { ownerError, ownerErrorHtml, ownerStatus, type OwnerErrorId, type Vars } from "../owner-errors";
+import { decideHeld, fileTransport, type MailTransport } from "../relay";
+import { loadState, latestDigest, keptFor, comms } from "./data";
 import { layout, overview, agentsPage, agentPage, activityPage, upkeepPage, digestPage, esc, button, type Page } from "./html";
 import { runAction } from "./actions";
-import { ask, proposeEdit, defaultModelFor, type ModelFor, type EditProposal } from "./ask";
+import { proposeEdit, defaultModelFor, type ModelFor, type EditProposal } from "./edit-chat";
 import { editableNote, noteText, saveNoteText, editorCommits } from "./edit";
-import { brainPage, brainResults, askPage, notePage, whyPage, proposalPage, editorCard, oauthCard, newAgentPage } from "./html-brain";
+import { brainPage, brainResults, notePage, whyPage, proposalPage, editorCard, oauthCard, newAgentPage } from "./html-brain";
 import { previewNewAgent } from "../addagent";
-import { cap, agentLabel } from "./labels";
-import { audience } from "./browse";
+import { cap, agentLabel, refusalWords } from "./labels";
+import { audience, kindCounts, kindLabel, folderOf, browsable, searchNotes, byTitle } from "./browse";
 
 const names = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
 import { noteSaves, noteVersions, versionAt, revertedHashes, savesSince, brainAt } from "./history";
@@ -30,61 +37,351 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
+import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, learnedThisWeek, backedUpWords } from "./home";
+import type { Note } from "../brain";
+import { ownerPage } from "./html-page";
+import { signInAgain } from "./html-home";
+import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY } from "./html-app";
+import { withMarks, marksFor, markAgents, shorts } from "./marks";
+import { lastBackup } from "../backup";
+import { readDiary } from "../diary";
+import { inboxConflict, settleInbox } from "../settle-inbox";
+import { ownerSay, ownerSayModel, boxModel, type SayReply } from "../owner-say";
+import { undoFact } from "../undo";
+import { fixEverywhere } from "../beliefs";
+import { withRadar } from "./home-beliefs";
 import { mapPage, mapGrid } from "./html-map";
 import { fgaPage, fgaGrid } from "./html-fga";
 import { loadOAuth, listPending, cleanupReplaced } from "../oauth";
 import { loadKeys } from "../secrets";
-import { askPolicy, pollAsks } from "../asks";
+import { askPolicy, pollAsks, offerOnce, openOffers, mayOffer } from "../asks";
 import * as consent from "../consent";
 import { consentPage, type ConsentProposal } from "./html-consent";
+import { isTailnetIp, tailnetSelf, SERVE_PORT } from "./tailnet";
+import { loadEscalation } from "../textline/policy";
+import { makeTransport } from "../textline/transport";
 
 // Requests pages make by themselves (polls, search as you type), not the owner opening a page.
 const BACKGROUND = /^\/(map\/grid|fga\/grid|brain\/results)$/;
 
-export interface DashboardOptions { port?: number; hostname?: string; loginKey?: string; transport?: () => MailTransport; modelFor?: ModelFor }
+// tailnet: also listen on this machine's Tailscale address (src/dashboard/tailnet.ts). `true`
+// asks Tailscale for the address and name; tests and odd setups pass them. tailnetLogin: the
+// owner's Tailscale login, the only identity the `tailscale serve` path lets in.
+// devices: the tailnet addresses (100.x) of the owner's own devices that may open it; none, none do.
+type Tailnet = { address?: string; name?: string; login?: string; devices?: string[] };
+export interface DashboardOptions { port?: number; hostname?: string; loginKey?: string; transport?: () => MailTransport; modelFor?: ModelFor; tailnet?: boolean | Tailnet; tailnetLogin?: string; tailnetDevices?: string[]; now?: () => Date }
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
-const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+// Compared as bytes: two strings of the same length can differ in bytes (non-ASCII), and
+// timingSafeEqual throws on buffers of different sizes.
+const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 const rand = () => randomBytes(24).toString("base64url");
+
+// Sign-ins outlive a hub restart: kept in .git/ (never committed, never in a view or backup's
+// notes), owner-only, by the hash of the cookie so the file alone signs nobody in. A sign-in
+// lasts 30 days; the newest 20 are kept. The login link still changes at every start.
+const SESSION_DAYS = 30;
+type Kept = Record<string, { csrf: string; at: string }>;
+const sessionFile = (root: string) => join(root, ".git", "pb-dashboard-sessions.json");
+const sidHash = (sid: string) => createHash("sha256").update(sid).digest("hex");
+function keptSessions(root: string, now: Date): Kept {
+  try {
+    const all = JSON.parse(readFileSync(sessionFile(root), "utf8")) as Kept;
+    return Object.fromEntries(Object.entries(all).filter(([, v]) => typeof v?.csrf === "string" && now.getTime() - Date.parse(v.at) < SESSION_DAYS * 86_400_000));
+  } catch { return {}; }
+}
+// A sign-in from the last few minutes (phone UI spec §8, the login re-prompt where there is no
+// WebAuthn): a forget from the box, a private or held value on a page, and Show ask for one.
+export const FRESH_MINUTES = 10;
+// The rule for every button (re-audit 2026-10-30, G525: Let it through sent a held message on the
+// 30-day sign-in, and /action/mail-release did the same from any old form). Only what the three owner
+// screens (/home, /p, /settle) offer, and only what keeps a thing back or puts one right, runs on the
+// 30-day sign-in; every other action, and anything that lets a held thing out, needs a sign-in from
+// the last FRESH_MINUTES. Checked once, before any action runs.
+export const STALE_OK: Record<string, (form: Record<string, string>) => boolean> = {
+  "sign-in-again": () => true,
+  "settle-mail": (form) => form.n === "drop",
+  "settle-pick": () => true,
+  "settle-both": () => true,
+  "diary-undo": () => true,
+  "fix-everywhere": () => true,
+  "note-hide": () => true,
+};
+export const needsFresh = (action: string, form: Record<string, string>): boolean => !STALE_OK[action]?.(form);
+// A folder with no .git keeps no sign-in file, so its sign-in times live in this run only.
+const signedInHere = new Map<string, string>();
+function freshSignIn(root: string, sid: string, now: Date): boolean {
+  const at = keptSessions(root, now)[sidHash(sid)]?.at ?? signedInHere.get(sidHash(sid));
+  return !!at && now.getTime() - Date.parse(at) < FRESH_MINUTES * 60_000;
+}
+function dropSession(root: string, sid: string, now: Date) {
+  const all = keptSessions(root, now);
+  delete all[sidHash(sid)];
+  try { writeFileSync(sessionFile(root), JSON.stringify(all), { mode: 0o600 }); } catch { /* the cookie is gone from this run anyway */ }
+}
+function keepSession(root: string, sid: string, csrf: string, now: Date) {
+  if (!existsSync(join(root, ".git"))) { signedInHere.set(sidHash(sid), now.toISOString()); return; }
+  const all = Object.entries({ ...keptSessions(root, now), [sidHash(sid)]: { csrf, at: now.toISOString() } }).sort((a, b) => b[1].at.localeCompare(a[1].at)).slice(0, 20);
+  try { writeFileSync(sessionFile(root), JSON.stringify(Object.fromEntries(all)), { mode: 0o600 }); chmodSync(sessionFile(root), 0o600); }
+  catch (e) { console.error(`dashboard: couldn't keep the sign-in across restarts: ${(e as Error).message}`); }
+}
+
+// Phone links (owner, 2026-10-24: yesterday's link was dead after a hub restart, and the signed-out
+// page offered only a Mac command). One-time, a day long, kept in .git/ by hash so they outlive a
+// restart and the file alone signs nobody in; they open only on the tailnet listener, never loopback.
+const PHONE_LINK_HOURS = 24;
+const phoneFile = (root: string) => join(root, ".git", "pb-phone-links.json");
+function phoneLinks(root: string, now: Date): Record<string, string> {
+  try {
+    const all = JSON.parse(readFileSync(phoneFile(root), "utf8")) as Record<string, string>;
+    return Object.fromEntries(Object.entries(all).filter(([, at]) => typeof at === "string" && now.getTime() - Date.parse(at) < PHONE_LINK_HOURS * 3_600_000));
+  } catch { return {}; }
+}
+// Written whole and renamed into place, under a lock the CLI and the hub share, so a link used in
+// one process is never written back by the other (slice audit, G379).
+function savePhoneLinks(root: string, links: Record<string, string>) {
+  const tmp = `${phoneFile(root)}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(links), { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, phoneFile(root));
+}
+export function mintPhoneLink(root: string, now = new Date()): string {
+  if (!existsSync(join(root, ".git"))) throw new Error("phone links need the brain's git folder");
+  const token = rand();
+  const done = withFileLock(root, "phone-links", () => {
+    const kept = Object.entries({ ...phoneLinks(root, new Date()), [sidHash(token)]: now.toISOString() }).sort((a, b) => b[1].localeCompare(a[1])).slice(0, 5);
+    savePhoneLinks(root, Object.fromEntries(kept));
+    return true;
+  });
+  if (!done) throw new Error("another sign-in link is being made or used right now; try again");
+  return token;
+}
+function usePhoneLink(root: string, token: string, now: Date): boolean {
+  if (!token) return false;
+  return withFileLock(root, "phone-links", () => {
+    const links = phoneLinks(root, now), h = sidHash(token);
+    if (!links[h]) return false;
+    delete links[h];
+    savePhoneLinks(root, links);
+    return true;
+  }) ?? false;
+}
+
+// What an error says to the owner (audit v5): a refusal keeps its own words, never a file path;
+// anything else from inside the code is one plain sentence, the details in the hub's log.
+const PATHS = /(?:[A-Za-z]:)?(?:\/[\w.@~-]+){2,}\/?/g;
+export function ownerFacingError(e: unknown): string {
+  if (e instanceof CoreError) return e.message.replace(PATHS, "a file");
+  return ownerError("dash.internal");
+}
+
+// Messages after a button, per sign-in, by a random id (audit v5: Show put a held value in the
+// address). The URL carries only the id; a few minutes is plenty for a redirect.
+const flashes = new Map<string, { sid: string; msg: string; at: number }>();
+function keepFlash(sid: string, msg: string) {
+  const now = Date.now(); for (const [k, f] of flashes) if (now - f.at > 15 * 60_000 || flashes.size > 500) flashes.delete(k);
+  const id = rand().slice(0, 16); flashes.set(id, { sid, msg, at: now }); return `@${id}`;
+}
+const takeFlash = (sid: string, id: string) => { const f = flashes.get(id); return f && f.sid === sid ? f.msg : undefined; };
+/** The words a redirect's ?ok= or ?err= stands for, for tests that read them off the Location. */
+export function flashOf(loc: string): { ok: string; err: string } {
+  const one = (k: string) => { const v = decodeURIComponent(loc.match(new RegExp(`[?&]${k}=([^&#]*)`))?.[1] ?? ""); return v.startsWith("@") ? flashes.get(v.slice(1))?.msg ?? "" : v; };
+  return { ok: one("ok"), err: one("err") };
+}
+
+// How many of Ask's turns a sign-in keeps (owner app step 4).
+export const ASK_TURNS = 20;
+interface AskTurn { said: string; reply: SayReply; fresh: boolean; at: number }
 
 export function dashboardHandler(root: string, opts: DashboardOptions & { port: number }) {
   const loginKey = opts.loginKey ?? rand();
-  const sessions = new Map<string, string>(); // session id -> csrf token
+  const now = opts.now ?? (() => new Date());
+  const sessions = new Map<string, string>(); // session id -> csrf token, this run's sign-ins
   const proposals = new Map<string, EditProposal>(); // model-proposed edits waiting for Louis
   const consents = new Map<string, ConsentProposal>(); // proposed slices from a sentence (src/consent.ts)
   const modelFor = opts.modelFor ?? defaultModelFor(root);
   const allowedHosts = new Set<string>();
+  const tailnetHosts = new Set<string>();
   // Called again with the real port after binding, so port 0 (pick a free one) works too.
-  const setPort = (port: number) => { allowedHosts.clear(); for (const h of LOOPBACK) allowedHosts.add(`${h}:${port}`); };
+  // Tailnet names are allowed only on the tailnet listener (handleTailnet), never on loopback,
+  // except the MagicDNS name as `tailscale serve` sends it (https on 443, proxied to loopback):
+  // that one only on its own https port and only with the owner's Tailscale login (serveHosts, below).
+  let tn: Tailnet | undefined;
+  const serveHosts = new Set<string>();
+  const setPort = (port: number) => {
+    allowedHosts.clear(); tailnetHosts.clear(); serveHosts.clear();
+    for (const h of LOOPBACK) allowedHosts.add(`${h}:${port}`);
+    if (tn) for (const h of [tn.address, tn.name]) if (h) tailnetHosts.add(`${h}:${port}`);
+    if (tn?.name && tn.login) serveHosts.add(`${tn.name}:${SERVE_PORT}`);
+  };
+  const setTailnet = (t: Tailnet, port: number) => { tn = t; setPort(port); };
   setPort(opts.port);
 
   const PAGE_HEADERS = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; form-action 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" };
   const html = (p: Page, status = 200, extra: Record<string, string> = {}) =>
     new Response(layout({ root }, p), { status, headers: { ...PAGE_HEADERS, ...extra } });
+  // The owner app's four tabs (html-app.ts): On your mind is the home, with a mark per assistant
+  // under each memory (marks.ts); Who knows has the assistants' rows; Memory and Ask stand alone.
+  const clock = () => process.env.PB_NOW ? new Date(process.env.PB_NOW) : new Date();
+  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false) => {
+    const rules = loadRules(root), notes = loadBrain(root, { shared: true });
+    const v = homeView(root, rules, notes, clock(), { all });
+    const of = marksFor(rules, notes);
+    v.since = withMarks(v.since, rules, notes, of);
+    v.earlier = v.earlier.map((d) => ({ ...d, lines: withMarks(d.lines, rules, notes, of) }));
+    return new Response(homePage(v, csrf, { said, reply, flash }), { headers: PAGE_HEADERS });
+  };
+  const who = (csrf: string, fresh: boolean, flash?: string) => {
+    const rules = loadRules(root), notes = loadBrain(root, { shared: true });
+    const v = homeView(root, rules, notes, clock(), { fresh });
+    v.reads = withRadar(root, rules, notes, v.reads, fresh);
+    const pages = notes.filter((n) => folderOf(n.fm.id) !== "disputes" && n.fm.sensitivity !== "secret");
+    const agents = markAgents(rules), short = shorts(agents.map((a) => a.name));
+    return new Response(whoPage(v, csrf, {
+      flash,
+      memory: { pages: pages.length, people: pages.filter((n) => folderOf(n.fm.id) === "people").length, learned: learnedThisWeek(root, clock()), backup: backedUpWords(lastBackup(root)?.at, clock()) },
+      trial: Object.entries(rules.policy.agents).filter(([, a]) => a.tier === "trial").map(([k]) => k),
+      shorts: Object.fromEntries(agents.map((a, i) => [a.agent, short[i]!])),
+    }), { headers: PAGE_HEADERS });
+  };
+  // A turn made right after a sign-in may hold a private value: on an older sign-in it isn't shown again.
+  const ask = (csrf: string, sid: string, flash?: string) => {
+    const rules = loadRules(root), fresh = freshSignIn(root, sid, now());
+    const day = now().getTime() - 86_400_000;
+    const all = (chats.get(sid) ?? []).filter((t) => t.at >= day);
+    const shown = all.filter((t) => fresh || !t.fresh);
+    const titles = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, displayName(n.fm.id, n.fm.title)]));
+    const turns = shown.map((t) => ({ ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}) }));
+    return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, older: all.length - shown.length, flash }), { headers: PAGE_HEADERS });
+  };
+  // The sheet a dashed mark opens: only for one of the owner's assistants that doesn't get the fact.
+  // The area is offered only when sharing it would let that assistant get the fact.
+  const letSheet = (csrf: string, q: URLSearchParams) => {
+    const key = q.get("key") ?? "", agent = q.get("agent") ?? "";
+    const hash = key.lastIndexOf("#");
+    const rules = loadRules(root), notes = loadBrain(root, { shared: true });
+    const id = key.slice(0, hash), attr = key.slice(hash + 1);
+    const note = hash > 0 ? notes.find((n) => n.fm.id === id) : undefined;
+    const a = markAgents(rules).find((x) => x.agent === agent);
+    const mark = a && note?.fm.facts?.[attr] ? marksFor(rules, notes)(key).find((m) => m.agent === agent) : undefined;
+    if (!a || !note || !mark || mark.holds) return undefined;
+    const line = pageLines(root, rules, notes, id).find((l) => l.key === key && l.undo !== "undone");
+    const area = note.fm.area ? String(note.fm.area) : undefined;
+    const grant = grantFor(rules, agent);
+    const widened = area && !grant.slices.includes(`area:${area}`) ? carve(notes, rules, grantFor(rules, agent, [...grant.slices, `area:${area}`]), { flags: false }) : undefined;
+    const opens = !!widened && !!widened.visible.get(id) && !widened.hiddenFacts.some((h) => h.key === key);
+    return new Response(letPage({ agent, name: a.name, short: mark.short, id, key, offered: openOffers(root, agent).some((o) => o.approved?.note === id), once: mayOffer(rules, agent, note), what: line?.what ?? `${displayName(id, note.fm.title)}: ${attrWords(attr)}`, ...(opens ? { area, areaPages: notes.filter((n) => n.fm.area === area).length } : {}) }, csrf), { headers: PAGE_HEADERS });
+  };
+  // Memory: titles only, and a secret page's title only right after a sign-in. Its search reads
+  // values only right after a sign-in too: on the 30-day one it matches titles and aliases alone,
+  // so the pages that come back can't confirm a guessed private or held value (slice audit,
+  // 2026-10-30, G542).
+  const memory = (q: URLSearchParams, fresh: boolean) => {
+    const s = loadState(root, clock());
+    const shown = (n: Note) => fresh || n.fm.sensitivity !== "secret";
+    const page = (n: Note) => ({ id: n.fm.id, title: displayName(n.fm.id, n.fm.title), ...(n.fm.area ? { area: String(n.fm.area) } : {}) });
+    const kind = q.get("kind") ?? undefined, query = (q.get("q") ?? "").trim().slice(0, 200);
+    const all = browsable(s).filter(shown);
+    return new Response(memoryPage({
+      pages: all.length, people: all.filter((n) => folderOf(n.fm.id) === "people").length,
+      name: firstName(s.rules), kinds: kindCounts(s), week: changedPages(root, s.rules, s.notes, s.now, shown),
+      ...(q.get("changes") === "week" && !query && !kind ? { allWeek: true } : {}),
+      ...(query ? { q: query, found: (fresh ? searchNotes(s, query, 20).map((h) => h.note) : byTitle(browsable(s), query)).filter(shown).map(page) } : {}),
+      ...(kind && !query ? { kind: { label: kindLabel(kind), pages: browsable(s).filter((n) => folderOf(n.fm.id) === kind && shown(n)).sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))).map(page) } } : {}),
+    }), { headers: PAGE_HEADERS });
+  };
+
+  // A page as the owner reads it (phone UI spec §2.2).
+  const pageScreen = (csrf: string, id: string, o: { said?: string; reply?: ReturnType<typeof ownerSay>; flash?: string; fresh?: boolean } = {}) => {
+    const s = loadState(root);
+    const n = s.notes.find((x) => x.fm.id === id);
+    if (!n) return undefined;
+    return new Response(ownerPage(s, csrf, n, pageLines(root, s.rules, s.notes, id), o), { headers: PAGE_HEADERS });
+  };
   const text = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  // Owner-facing errors, as plain text (before sign-in, and for fetches) or as a page; the words
+  // and the fix come from src/owner-errors.ts, never typed here.
+  const oops = (id: OwnerErrorId, vars: Vars = {}) => text(ownerError(id, vars), ownerStatus(id));
+  const page = (id: OwnerErrorId, tab: string, vars: Vars = {}, status = ownerStatus(id)) =>
+    html({ title: status === 404 ? "Not found" : status >= 500 ? "Something broke" : "Can't do that", tab, body: ownerErrorHtml(id, vars, esc) }, status);
+
+  // Signed out on the phone: one button texts a fresh link to the owner's own phone.
+  const signedOutPhone = () => html({ title: "Sign in", tab: "", body: `<h1>Sign in on this phone</h1><p>You're not signed in here. A sign-in lasts 30 days on this browser.</p><form method="post" action="/send-link"><button class="go">Text me a sign-in link</button></form><p class="sub">The link goes to your own phone by text, works once, and lasts a day.</p>` }, 401);
+  // A phone link that's spent or old: plain words and the same button, never a Mac command.
+  const usedLink = () => html({ title: "Sign in", tab: "", body: `${ownerErrorHtml("dash.phone-link-used", {}, esc)}<form method="post" action="/send-link"><button class="go">Text me a sign-in link</button></form>` }, ownerStatus("dash.phone-link-used"));
+  const sends: number[] = [];
+  async function sendLink(req: Request, hosts: Set<string>, secure: boolean): Promise<Response> {
+    const origin = req.headers.get("origin");
+    if (!origin || !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
+    const t0 = now().getTime();
+    while (sends.length && t0 - sends[0] > 3_600_000) sends.shift();
+    if (sends.length >= 3) return oops("dash.link-cap");
+    // Counted before the send, failed or not, so parallel requests or retries can't pass the cap (G378).
+    sends.push(t0);
+    const cfg = loadEscalation(root).transport;
+    let tr: ReturnType<typeof makeTransport>, link: string;
+    try { tr = makeTransport(root, cfg.use, cfg); } catch (e) { return oops("dash.link-no-channel", { reason: (e as Error).message }); }
+    // Only a channel that reaches the owner's own phone directly; never one an assistant relays.
+    if (!tr.trusted) return oops("dash.link-relayed");
+    try { link = `${secure ? "https" : "http"}://${req.headers.get("host")}/login?key=${mintPhoneLink(root, now())}`; } catch { return oops("dash.link-busy"); }
+    const r = await tr.send({ id: `signin-${t0}`, text: `pocketBrain sign-in link for your phone (works once, for a day): ${link}`, at: now().toISOString() });
+    if (!r.ok) return oops("dash.link-not-sent", { reason: r.detail ?? "no reason given" });
+    return html({ title: "Sent", tab: "", body: `<h1>Sent</h1><p>Open the link in the text on this phone. It works once, for a day.</p>` });
+  }
 
   function session(req: Request): string | undefined {
     const sid = req.headers.get("cookie")?.match(/(?:^|;\s*)pb_owner=([A-Za-z0-9_-]+)/)?.[1];
-    return sid && sessions.has(sid) ? sid : undefined;
+    if (!sid) return undefined;
+    if (sessions.has(sid)) return sid;
+    const kept = keptSessions(root, now())[sidHash(sid)];
+    if (!kept) return undefined;
+    sessions.set(sid, kept.csrf);
+    return sid;
   }
 
+  // The chips the box last offered each sign-in (only those count as taps).
+  const offered = new Map<string, Set<string>>();
+  // Ask's conversation per sign-in (owner app step 4): in this run's memory only, never on disk, the
+  // last ASK_TURNS turns, gone a day after the last one or when the sign-in ends.
+  const chats = new Map<string, AskTurn[]>();
   let lastOwnerMinute = "";
-  async function handle(req: Request): Promise<Response> {
+  async function handle(req: Request, hosts = allowedHosts, secure = false): Promise<Response> {
     const url = new URL(req.url);
     const host = req.headers.get("host") ?? "";
-    if (!allowedHosts.has(host)) return text("This dashboard only answers on localhost.", 421);
-    const flash = url.searchParams.get("ok") ? { msg: url.searchParams.get("ok")! } : url.searchParams.get("err") ? { msg: url.searchParams.get("err")!, err: true } : undefined;
+    if (!hosts.has(host)) return oops("dash.host");
 
+    // The tailnet and tailscale serve: a phone link works here, and a signed-out phone can ask for one.
+    const remote = hosts !== allowedHosts;
     if (url.pathname === "/login") {
-      const k = url.searchParams.get("key") ?? "";
-      if (!same(k, loginKey)) return text("Wrong or missing login key. Use the link the dashboard printed when it started.", 403);
+      // Already signed in (the old text tapped again, or a restart in between): home, not an error.
+      if (session(req)) return new Response(null, { status: 303, headers: { location: "/", "cache-control": "no-store" } });
+      let k = url.searchParams.get("key") ?? "";
+      if (!same(k, loginKey)) {
+        if (!remote) return oops("dash.login-key");
+        // A phone link is spent by the Sign in button, never by opening it: a message preview or a
+        // second fetch of the link spends nothing (owner, 2026-10-24). The button posts from this
+        // page only.
+        if (req.method !== "POST") return !k || !phoneLinks(root, now())[sidHash(k)] ? usedLink() : html({ title: "Sign in", tab: "", body: `<h1>Sign in on this phone</h1><form method="post" action="/login"><input type="hidden" name="key" value="${esc(k)}"><button class="go">Sign in</button></form><p class="sub">The link works once, for a day.</p>` });
+        const origin = req.headers.get("origin");
+        if (!origin || !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
+        try { k = String((await req.formData()).get("key") ?? ""); } catch { return oops("dash.bad-form"); }
+        if (!usePhoneLink(root, k, now())) return usedLink();
+      }
       const sid = rand();
       sessions.set(sid, rand());
-      return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `pb_owner=${sid}; HttpOnly; SameSite=Strict; Path=/`, "cache-control": "no-store" } });
+      keepSession(root, sid, sessions.get(sid)!, now());
+      // Lax on the tailnet, so the phone's browser keeps the sign-in when a link is opened from
+      // Messages; every action still needs the session's CSRF token and a same-origin Origin.
+      return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `pb_owner=${sid}; HttpOnly; SameSite=${remote ? "Lax" : "Strict"}; Path=/; Max-Age=${SESSION_DAYS * 86_400}${secure ? "; Secure" : ""}`, "cache-control": "no-store" } });
     }
+    if (remote && url.pathname === "/send-link" && req.method === "POST") return sendLink(req, hosts, secure);
     const sid = session(req);
-    if (!sid) return text("Not signed in. Open the login link the dashboard printed when it started.", 401);
+    if (!sid) return remote ? signedOutPhone() : oops("dash.signed-out");
     const csrf = sessions.get(sid)!;
+    // ?ok= and ?err= name a message kept for this sign-in (keepFlash); plain text is still read, so
+    // an old link shows its words, but the hub itself never puts a message in an address.
+    for (const k of ["ok", "err"]) { const v = url.searchParams.get(k); if (v?.startsWith("@")) url.searchParams.set(k, takeFlash(sid, v.slice(1)) ?? ""); }
+    const flash = url.searchParams.get("ok") ? { msg: url.searchParams.get("ok")! } : url.searchParams.get("err") ? { msg: refusalWords(url.searchParams.get("err")!), err: true } : undefined;
     // The week's "your time" (src/measure.ts): page loads only, not the grids' 2 s polls or other
     // fetches, and one line a minute at most (minutes are counted per minute anyway).
     const minute = new Date().toISOString().slice(0, 16);
@@ -96,28 +393,32 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (req.method === "POST") {
       // Same-origin only, and the form's token must match this session's.
       const origin = req.headers.get("origin");
-      if (origin && !allowedHosts.has(origin.replace(/^https?:\/\//, ""))) return text("cross-origin request refused", 403);
+      if (origin && !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
       let fd: FormData;
-      try { fd = await req.formData(); } catch { return text("send the dashboard's own form", 400); }
+      try { fd = await req.formData(); } catch { return oops("dash.bad-form"); }
       const form = Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]));
-      if (!form.csrf || !same(form.csrf, csrf)) return text("bad or missing CSRF token; reload the page", 403);
-      // The deck sends how long a card was on screen: the owner's minutes (src/deck.ts). Counted
-      // only for an answer that went through; Later isn't one.
-      const swiped = (a: string) => { if (form.deck_ms && a !== "deck-later") recordSwipe(root, `${a}:${form.id ?? form.file ?? form.key ?? ""}`, Number(form.deck_ms)); };
+      if (!form.csrf || !same(form.csrf, csrf)) return oops("dash.csrf");
       const ref = req.headers.get("referer");
+      // Back to the page the form was on; a path starting `//` would leave the dashboard.
       const refUrl = ref ? URL.parse(ref) : null;
       // Back to the page the form was on, on this host only: a path starting // or /\ is read by
       // browsers as another host (backlog #207), so it goes home instead.
       const back = refUrl?.host === host && /^\/(?![/\\])/.test(refUrl.pathname) ? refUrl.pathname : "/";
-      const go = (path: string, r: { ok?: string; err?: string; undo?: string; wrong?: string }, hash = "") => new Response(null, { status: 303, headers: { location: `${path}?${r.err !== undefined ? `err=${encodeURIComponent(r.err)}` : `ok=${encodeURIComponent(r.ok ?? "")}${r.undo ? `&undo=${r.undo}` : ""}${r.wrong ? `&wrong=${encodeURIComponent(r.wrong)}` : ""}`}${hash}` } });
-      const fail = (e: unknown) => { if (!(e instanceof CoreError)) console.error(e); return e instanceof Error ? e.message : String(e); };
+      // The message stays on the hub for this sign-in; the URL carries only its id (audit v5: Show
+      // put a held value in the address).
+      const go = (path: string, r: { ok?: string; err?: string; undo?: string; wrong?: string }, hash = "") => new Response(null, { status: 303, headers: { location: `${path}?${r.err !== undefined ? `err=${keepFlash(sid, r.err)}` : `ok=${keepFlash(sid, r.ok ?? "")}${r.undo ? `&undo=${r.undo}` : ""}${r.wrong ? `&wrong=${encodeURIComponent(r.wrong)}` : ""}`}${hash}` } });
+      const fail = (e: unknown) => { if (!(e instanceof CoreError)) console.error(e); return ownerFacingError(e); };
+      const gated = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : /^\/(propose|consent)\//.test(url.pathname) ? url.pathname.split("/")[1]! : "";
+      if (gated && needsFresh(gated, form) && !freshSignIn(root, sid, now())) {
+        if (gated === "settle-mail") return go(`/settle/${encodeURIComponent(form.id ?? "")}`, { err: "Sign in again to let it through: it may hold something private." });
+        return go(gated === "diary-seen" ? "/home" : back, { err: gated === "diary-seen" ? "Sign in again to see it: a held value shows only right after you sign in." : "Sign in again to do that: it needs a sign-in from the last few minutes." });
+      }
 
-      if (url.pathname === "/ask") return html(askPage(loadState(root), csrf, await ask(root, form.q ?? "", modelFor)));
       const pm = url.pathname.match(/^\/propose\/(.+)$/);
       if (pm) {
         const id = decodeURIComponent(pm[1]);
         try {
-          const p = { ...(await proposeEdit(root, id, form.instruction ?? "", modelFor)), id: rand().slice(0, 12) };
+          const p = { ...(await proposeEdit(root, id, form.instruction ?? "", modelFor, form.section || undefined)), id: rand().slice(0, 12) };
           proposals.set(p.id, p);
           return new Response(null, { status: 303, headers: { location: `/proposal/${p.id}` } });
         } catch (e) { return go(back, { err: fail(e) }); }
@@ -133,7 +434,92 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           return new Response(null, { status: 303, headers: { location: `/consent/${p.id}` } });
         } catch (e) { return go(back, { err: fail(e) }, "#for"); }
       }
+      // The owner's text box (src/owner-say.ts): the answer is the home page with it under the box.
+      if (url.pathname === "/say") {
+        const said = (form.q ?? "").slice(0, 500);
+        let reply;
+        const fresh = freshSignIn(root, sid, now());
+        try { // A chip counts as a tap only when the box offered that exact sentence to this sign-in;
+        // anything else posted as a chip is read as typed words (coordinator, 2026-10-27).
+        const chip = form.chip === "1" && !!offered.get(sid)?.has(said);
+        reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip }, chip ? undefined : boxModel(root));
+        if (reply.chips?.length) offered.set(sid, new Set(reply.chips.map((c) => c.say))); } catch (e) { return go("/home", { err: fail(e) }); }
+        if (form.page && reply.kind !== "say.unknown-name" && reply.kind !== "say.forgotten") { const r = pageScreen(csrf, reply.page ?? form.page, { said, reply, fresh }); if (r) return r; }
+        if (form.from === "ask") {
+          const turns = [...(chats.get(sid) ?? []), { said, reply, fresh, at: now().getTime() }].slice(-ASK_TURNS);
+          chats.set(sid, turns);
+          return ask(csrf, sid);
+        }
+        return home(csrf, said, reply);
+      }
       const action = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : "";
+      // Undo from a diary line (src/undo.ts): a forward write, back to the home with what happened.
+      // A held message, from its settle screen: send it as it is, or keep it back.
+      if (action === "settle-mail") {
+        const id = (form.id ?? "").replace(/^m-/, "");
+        const m = comms(root).find((x) => x.id === id && x.verdict === "held");
+        if (!m || !["send", "drop"].includes(form.n ?? "")) return go("/home", { err: "Nothing to settle there any more." });
+        try {
+          const r = decideHeld(root, (opts.transport ?? (() => fileTransport(root)))(), m.id, form.n === "send" ? "release" : "drop");
+          if (!/: (released|dropped)-by-owner$/.test(r)) return go("/home", { err: "Nothing to settle there any more." });
+          const to = agentLabel(loadRules(root), m.to);
+          return go("/home", { ok: form.n === "send" ? `Sent it to ${to}.` : `Kept it back. ${to} never sees it.` });
+        } catch (e) { return go("/home", { err: fail(e) }); }
+      }
+      if (action === "settle-pick" || action === "settle-both") {
+        const id = form.id ?? "", value = (form.value ?? "").trim();
+        const c = id.startsWith("p-") ? inboxConflict(root, id) : ownerConflict(root, id);
+        if (!c) return go("/home", { err: "Nothing to settle there any more." });
+        const back = `/settle/${encodeURIComponent(id)}`;
+        // A conflict that waits in the inbox (src/settle-inbox.ts): keep yours, take the new one, or type it.
+        if (id.startsWith("p-")) {
+          try {
+            if (action === "settle-both") { settleInbox(root, id, { n: 1 }); return go("/home", { ok: "Kept what you had. I won't ask again unless something newer comes in." }); }
+            if (!form.n && !value) return go(back, { err: "Pick one, or type what it is." });
+            settleInbox(root, id, value ? { typed: value } : { n: Number(form.n) });
+            return go(`/p/${c.page.split("/").map(encodeURIComponent).join("/")}`, { ok: "Noted." });
+          } catch (e) { return go(back, { err: fail(e) }); }
+        }
+        try {
+          if (action === "settle-both") { ownerKeepBoth(root, id); return go("/home", { ok: "Kept both. I won't ask again unless something newer comes in." }); }
+          if (!form.n && !value) return go(back, { err: "Pick one, or type what it is." });
+          ownerDecide(root, id, value || form.n!, `settle-${id}`, { typed: !!value });
+          return go(`/p/${c.page.split("/").map(encodeURIComponent).join("/")}`, { ok: "Noted. Undo is under Changed." });
+        } catch (e) { return go(back, { err: fail(e) }); }
+      }
+      if (action === "sign-in-again") {
+        sessions.delete(sid);
+        chats.delete(sid);
+        dropSession(root, sid, now());
+        return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `pb_owner=; HttpOnly; Path=/; Max-Age=0`, "cache-control": "no-store" } });
+      }
+      if (action === "diary-seen") {
+        // Show: the owner sees a held value, and from now on their assistants get it (src/seen.ts).
+        const key = form.key ?? "";
+        const r = markSeen(root, key);
+        if (r.outcome !== "seen") return go("/home", { err: r.outcome === "not_found" ? "Nothing waiting there any more." : r.message });
+        const hash = key.lastIndexOf("#"), id = key.slice(0, hash);
+        const n = loadBrain(root).find((x) => x.fm.id === id);
+        return go("/home", { ok: `${displayName(id, n?.fm.title)}: ${key.slice(hash + 1).replace(/_/g, " ")} is ${plain(r.value)}. Your assistants get it now.` });
+      }
+      if (action === "fix-everywhere") {
+        // The belief radar's one tap (src/dashboard/home-beliefs.ts): every assistant gets the brain's
+        // value for this fact, through memory sync's own corrections and questions. The flash names
+        // the page and the fact, never a value.
+        const key = form.key ?? "";
+        const hash = key.lastIndexOf("#"), id = key.slice(0, hash);
+        try {
+          const r = fixEverywhere(root, key);
+          const n = loadBrain(root).find((x) => x.fm.id === id);
+          const what = `${displayName(id, n?.fm.title)}: ${key.slice(hash + 1).replace(/[_-]+/g, " ")}`;
+          return go("/home", { ok: r.approved.length || r.asked.length || r.rescanned.length ? `${what}. Your assistants get the right answer at their next check.` : `${what}. Nothing to fix now.` });
+        } catch { return go("/home", { err: "That isn't wrong anywhere any more." }); }
+      }
+      if (action === "diary-undo") {
+        const to = form.page ? `/p/${form.page.split("/").map(encodeURIComponent).join("/")}` : "/home";
+        // A sentence that noted several things carries all their tokens: newest first, so a page it started goes too.
+        try { const done = (form.token ?? "").split(",").filter(Boolean).reverse().map((t) => undoFact(root, t)); return go(to, { ok: (done.at(-1) ?? undoFact(root, "")).message }); } catch (e) { return go(to, { err: fail(e) }); }
+      }
       if (action === "proposal-apply" || action === "proposal-discard") {
         const p = proposals.get(form.pid ?? "");
         if (!p) return go("/brain", { err: "that proposal is gone (the dashboard restarted, or it was already used)" });
@@ -141,7 +527,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         if (action === "proposal-discard") return go(`/note/${p.noteId}`, { ok: "discarded; nothing changed" });
         // The note may have changed since the model read it; never overwrite that.
         if (noteText(root, p.noteId) !== p.before) return go(`/note/${p.noteId}`, { err: "the note changed since the proposal; ask again" });
-        try { return go(`/note/${p.noteId}`, { ok: saveNoteText(root, p.noteId, p.after, `apply ${p.model}'s proposal ("${p.instruction.slice(0, 60)}") to`, { stamp: true }) }); }
+        try { return go(`/note/${p.noteId}`, { ok: saveNoteText(root, p.noteId, p.after, `apply ${p.model}'s proposal ("${p.instruction.slice(0, 60)}") to`, { stamp: true, ...(p.section ? { trailers: ["Via: edit-with-chat", `Section: ${p.section}`] } : {}) }) }); }
         catch (e) { return go(`/note/${p.noteId}`, { err: fail(e) }); }
       }
       if (action === "consent-apply" || action === "consent-discard") {
@@ -156,22 +542,32 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         } catch (e) { return go(page, { err: fail(e) }); }
       }
       // Louis's own edits on the Brain tab come back with a plain sentence and an Undo.
-      if (action === "fact-set" || action === "note-body-save" || action === "fact-confirm") {
+      if (action === "fact-set" || action === "note-body-save" || action === "section-save" || action === "fact-confirm") {
         const attr = form.attribute?.trim() ?? "";
         const isNew = action === "fact-set" && !!attr && !loadBrain(root).find((n) => n.fm.id === form.id?.replace(/\.md$/, ""))?.fm.facts?.[attr];
         try {
           const raw = runAction({ root, transport: opts.transport }, action, form);
-          swiped(action);
           if (/: no change$/.test(raw)) return go(back, { ok: "No change." });
           const head = git(root, ["rev-parse", "HEAD"]);
-          const ok = action === "note-body-save" ? "Saved the notes." : action === "fact-confirm" ? `Marked ${cap(attr)} as still true.` : isNew ? `Added ${cap(attr)}.` : `Saved ${cap(attr)}. The old value is under Earlier values.`;
+          const ok = action === "note-body-save" ? "Saved the notes." : action === "section-save" ? `Saved the ${form.heading?.trim()} section.` : action === "fact-confirm" ? `Marked ${cap(attr)} as still true.` : isNew ? `Added ${cap(attr)}.` : `Saved ${cap(attr)}. The old value is under Earlier values.`;
           // A replaced single value can then be marked as never right: a correction, not a change.
           const replaced = action === "fact-set" && !isNew && !!loadBrain(root).find((n) => n.fm.id === form.id?.replace(/\.md$/, ""))?.fm.history?.[attr];
           return go(back, { ok, undo: head, wrong: replaced ? attr : undefined }, attr ? `#f-${encodeURIComponent(attr)}` : "");
         } catch (e) { return go(back, { err: fail(e) }); }
       }
+      // Just this one, from a dashed mark's sheet: one read, for one of the owner's own assistants
+      // (the marks' own list), behind a fresh sign-in like every other widening.
+      if (action === "let-once") {
+        try {
+          const key = form.key ?? "", id = key.slice(0, Math.max(0, key.lastIndexOf("#")));
+          const a = markAgents(loadRules(root)).find((x) => x.agent === form.agent);
+          if (!a || !id) throw new CoreError(404, "no such assistant or page");
+          offerOnce(root, a.agent, id);
+          return go("/home", { ok: APP_COPY.onItsWay.replace("{name}", a.name) });
+        } catch (e) { return go("/home", { err: fail(e) }); }
+      }
       // Forgetting, correcting and who-can-see come back with Undo too. A forgotten note has no page.
-      if (["note-forget", "note-bring-back", "fact-wrong", "note-hide", "note-show", "note-sensitivity"].includes(action)) {
+      if (["note-forget", "note-bring-back", "fact-wrong", "fact-done", "fact-forget", "note-hide", "note-show", "note-sensitivity"].includes(action)) {
         try {
           let ok = runAction({ root, transport: opts.transport }, action, form);
           const head = git(root, ["rev-parse", "HEAD"]);
@@ -180,7 +576,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
             ok += seen.length ? ` Seen by ${names(seen.map((a) => agentLabel(loadRules(root), a)))}.` : " Only you can see it.";
           }
           const changed = / now\.$| again\.$| as it was\.$|^Forgot |^Marked /.test(ok);
-          return go(action === "note-forget" ? "/brain" : back, { ok, undo: changed ? head : undefined });
+          return go(action === "note-forget" ? "/brain" : action === "note-hide" && form.from === "let" ? "/home" : back, { ok, undo: changed ? head : undefined });
         } catch (e) { return go(back, { err: fail(e) }); }
       }
       // Replaced connections deleted at the sign-in service (backlog 289): a network call, so awaited here.
@@ -190,36 +586,62 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         if (cut.skipped && !cut.deleted.length) return go(back, { err: `nothing deleted: ${cut.skipped}` });
         return go(back, cut.failed.length ? { err: `Deleted ${cut.deleted.length} old app(s); ${cut.failed.length} failed (${cut.failed.map((f) => f.why).join(", ")}). They stay refused here.` } : { ok: `Deleted ${cut.deleted.length} old app${cut.deleted.length === 1 ? "" : "s"} at the sign-in service.` });
       }
+      // G184: the one-time code goes on the page itself, never into a redirect URL (browser history).
+      if (action === "token-code") {
+        try {
+          const msg = runAction({ root, transport: opts.transport }, action, form);
+          const pg = agentPage(loadState(root), csrf, form.agent ?? "");
+          return html(pg ? { ...pg, flash: { msg } } : { title: "One-time code", tab: "agents", body: "", flash: { msg } });
+        } catch (e) { return go(back, { err: fail(e) }); }
+      }
       if (action) {
-        try { const ok = runAction({ root, transport: opts.transport }, action, form); swiped(action); return go(back, { ok }); }
+        try { const ok = runAction({ root, transport: opts.transport }, action, form); return go(back, { ok }); }
         catch (e) { return go(back, { err: fail(e) }); }
       }
-      return text("not found", 404);
+      return oops("dash.no-button");
     }
-    if (req.method !== "GET") return text("method not allowed", 405);
+    if (req.method !== "GET") return oops("dash.method");
 
     // An approval on the phone shows up here even if the agent hasn't checked yet.
     if (askPolicy(loadRules(root))?.approver === "guardian") await pollAsks(root).catch(() => 0);
     const s = loadState(root);
     const p = url.pathname.replace(/\/+$/, "") || "/";
+    // Audit v5: only the owner screens open on the 30-day sign-in, each shutting what is private on
+    // its own: the four tabs (Memory lists titles only), the page and settle screens. Every other
+    // page can show a private value, so it needs a sign-in from the last 10 minutes, like a private
+    // value on /p.
+    if (!/^\/(home|memory|ask|who|let|p\/.+|settle\/.+)?$/.test(p) && !freshSignIn(root, sid, now()))
+      return html({ title: "Sign in again", tab: "", body: ownerErrorHtml("dash.sign-in-again", {}, esc) + signInAgain(csrf) }, ownerStatus("dash.sign-in-again"));
     const undo = url.searchParams.get("undo")?.match(/^[0-9a-f]{7,40}$/)?.[0];
     const wrong = url.searchParams.get("wrong")?.match(/^[a-z][a-z0-9_]*$/)?.[0];
     const noteId = p.match(/^\/note\/(.+)$/)?.[1].split("/").map(decodeURIComponent).join("/");
     const fix = wrong && noteId ? button(csrf, "fact-wrong", { id: noteId, attribute: wrong }, "It was never right", "", "The old value was a mistake, not something that changed? It stays in history, marked as never right.") : "";
     const withFlash = (pg: Page) => html({ ...pg, flash: flash && undo && !flash.err ? { ...flash, extra: button(csrf, "owner-undo", { hash: undo }, "Undo") + fix } : flash });
-    if (p === "/") return withFlash(overview(s, csrf));
-    if (p === "/deck") return new Response(deckPage(buildDeck(root), csrf, flash), { headers: PAGE_HEADERS });
+    // The home is the front door (audit v4); the old overview is one tap away from it.
+    if (p === "/overview") return withFlash(overview(s, csrf, url.searchParams));
+    const op = p.match(/^\/p\/(.+)$/);
+    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, fresh: freshSignIn(root, sid, now()) }) ?? page("dash.no-note", "brain", { id: op[1]! });
+    const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
+    if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
+    const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];
+    if (settleId) return new Response(settlePage(settleId.startsWith("p-") ? inboxConflict(root, settleId) : ownerConflict(root, settleId), csrf, loadRules(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
+    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1");
+    const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
+    if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);
+    if (p === "/let") return letSheet(csrf, url.searchParams) ?? page("dash.no-note", "brain", { id: url.searchParams.get("key")?.split("#")[0] ?? "" });
+    if (p === "/ask") return ask(csrf, sid, flashed);
+    if (p === "/memory") return memory(url.searchParams, freshSignIn(root, sid, now()));
     const editor = s.rules.policy.owner_editor;
     if (p === "/agents") return withFlash(agentsPage(s, csrf, oauthCard(s, csrf, loadOAuth(root), listPending(root)) + editorCard(s, csrf, editor, editor ? editorCommits(root, editor) : [])));
     if (p === "/agents/new") {
       const q = url.searchParams;
       const clientId = q.get("client_id") ?? "";
       const req = { agent: (q.get("agent") ?? "").trim(), name: q.get("name")?.trim().slice(0, 60) || undefined, slices: q.getAll("slices").flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean) };
-      if (!listPending(root).some((x) => x.client_id === clientId)) return html({ title: "Gone", tab: "agents", body: "<h1>That connection isn't waiting any more</h1><a href=\"/agents\">Back</a>" }, 404);
+      if (!listPending(root).some((x) => x.client_id === clientId)) return page("dash.connection-gone", "agents");
       try { return html(newAgentPage(csrf, clientId, req, previewNewAgent(root, req))); }
-      catch (e) { return html({ title: "Can't add", tab: "agents", body: `<h1>${esc(e instanceof Error ? e.message : String(e))}</h1><a href="/agents">Back</a>` }, 400); }
+      catch (e) { return page("dash.cant-add", "agents", { reason: e instanceof Error ? e.message : String(e) }); }
     }
-    if (p === "/brain") return withFlash(brainPage(s, csrf, { q: url.searchParams.get("q") ?? "", kind: url.searchParams.get("kind") || url.searchParams.get("folder") || undefined }));
+    if (p === "/brain") return withFlash(brainPage(s, csrf, { q: url.searchParams.get("q") ?? "", kind: url.searchParams.get("kind") || url.searchParams.get("folder") || undefined, page: pageParam(url) }));
     // The search box asks for this as you type: results only, from this computer, no model.
     if (p === "/brain/results") return new Response(brainResults(s, csrf, (url.searchParams.get("q") ?? "").slice(0, 300)), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
     const nm = p.match(/^\/note\/(.+)$/);
@@ -228,7 +650,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       try {
         const note = editableNote(root, id);
         return withFlash(notePage(s, csrf, note, noteText(root, id), editor, url.searchParams.get("edit") ?? undefined));
-      } catch (e) { return html({ title: "Not found", tab: "brain", body: `<h1>${esc(e instanceof Error ? e.message : String(e))}</h1>` }, e instanceof CoreError ? e.status : 500); }
+      } catch (e) { if (!(e instanceof CoreError)) throw e; return page("dash.note", "brain", { reason: e.message }, e.status); }
     }
     const wm = p.match(/^\/why\/(.+)$/);
     if (wm) {
@@ -238,48 +660,47 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       try {
         if (!note) throw new CoreError(404, `no note ${id}`);
         return withFlash(whyPage(s, note, attr, ownerWhy(root, `${id}#${attr}`)));
-      } catch (e) { return html({ title: "Not found", tab: "brain", body: `<h1>${esc(e instanceof Error ? e.message : String(e))}</h1>` }, e instanceof CoreError ? e.status : 500); }
+      } catch (e) { if (!(e instanceof CoreError)) throw e; return page("dash.note", "brain", { reason: e.message }, e.status); }
     }
     // History, read from git: what changed this week, one note's facts over time, a note as it was.
     if (p === "/history") {
       const day = url.searchParams.get("at")?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0];
       if (day) {
-        const b = brainAt(root, day);
-        return b ? withFlash(brainOnPage(s, day, b.notes, b.at)) : html({ title: "Not found", tab: "brain", body: `<h1>The brain has no saved version from ${esc(day)}</h1>` }, 404);
+        const b = keptFor(root, `brain-at:${day}`, s.dayKey, () => brainAt(root, day));
+        return b ? withFlash(brainOnPage(s, day, b.notes, b.at, pageParam(url))) : page("dash.no-day", "brain", { day });
       }
       const days = 7;
-      return withFlash(weekPage(s, savesSince(root, new Date(s.now.getTime() - days * 86_400_000).toISOString()), days));
+      return withFlash(weekPage(s, keptFor(root, "week", s.key, () => savesSince(root, new Date(s.now.getTime() - days * 86_400_000).toISOString())), days));
     }
     const hm = p.match(/^\/history\/(.+)$/);
     if (hm) {
       const id = hm[1].split("/").map(decodeURIComponent).join("/");
       const note = s.notes.find((n) => n.fm.id === id);
-      if (!note) return html({ title: "Not found", tab: "brain", body: `<h1>No note ${esc(id)}</h1>` }, 404);
-      const versions = noteVersions(root, id);
-      const saves = noteSaves(root, id, versions);
+      if (!note) return page("dash.no-note", "brain", { id });
+      const { versions, saves } = keptFor(root, `history:${id}`, s.key, () => { const versions = noteVersions(root, id); return { versions, saves: noteSaves(root, id, versions) }; });
       const at = url.searchParams.get("at");
       if (at) {
         const v = versionAt(versions, at);
-        return v ? withFlash(snapshotPage(s, csrf, note, v, saves, at)) : html({ title: "Not found", tab: "brain", body: "<h1>The note has no saved version from then</h1>" }, 404);
+        return v ? withFlash(snapshotPage(s, csrf, note, v, saves, at)) : page("dash.no-version", "brain");
       }
-      return withFlash(noteHistoryPage(s, csrf, note, saves, revertedHashes(root)));
+      return withFlash(noteHistoryPage(s, csrf, note, saves, keptFor(root, "reverted", s.dayKey, () => revertedHashes(root))));
     }
     const cp = p.match(/^\/consent\/([A-Za-z0-9_-]+)$/);
     if (cp) {
       const prop = consents.get(cp[1]);
-      return prop ? html(consentPage(s, csrf, prop)) : html({ title: "Gone", tab: "agents", body: "<h1>That proposal is gone</h1>" }, 404);
+      return prop ? html(consentPage(s, csrf, prop)) : page("dash.consent-gone", "agents");
     }
     const pr = p.match(/^\/proposal\/([A-Za-z0-9_-]+)$/);
     if (pr) {
       const prop = proposals.get(pr[1]);
-      return prop ? withFlash(proposalPage(s, csrf, prop)) : html({ title: "Gone", tab: "brain", body: "<h1>That proposal is gone</h1>" }, 404);
+      return prop ? withFlash(proposalPage(s, csrf, prop)) : page("dash.proposal-gone", "brain");
     }
     if (p === "/fga") return withFlash(await fgaPage(s));
     if (p === "/fga/grid") return new Response(await fgaGrid(s), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY" } });
-    if (p === "/map") return withFlash(mapPage(s, url.searchParams.get("as") || undefined));
+    if (p === "/map") return withFlash(mapPage(s, url.searchParams.get("as") || undefined, pageParam(url), { q: url.searchParams.get("q") ?? "", read: url.searchParams.get("read") ?? "" }));
     // The map page asks for this every 2 seconds, so a revoke or an FGA change shows as it lands.
-    if (p === "/map/grid") return new Response(mapGrid(s, url.searchParams.get("as") || undefined), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY" } });
-    if (p === "/activity") return withFlash(activityPage(s, url.searchParams.get("agent") || undefined, url.searchParams.get("op") || undefined));
+    if (p === "/map/grid") return new Response(mapGrid(s, url.searchParams.get("as") || undefined, pageParam(url)), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY" } });
+    if (p === "/activity") return withFlash(activityPage(s, url.searchParams.get("agent") || undefined, url.searchParams.get("op") || undefined, url.searchParams));
     if (p === "/upkeep") return withFlash(upkeepPage(s, csrf));
     if (p === "/digest") return withFlash(digestPage(s, csrf, latestDigest(root)));
     if (p === "/people") return withFlash(peoplePage(s, csrf));
@@ -288,21 +709,51 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (m) {
       const name = decodeURIComponent(m[1]);
       if (m[2]) {
-        const rules = loadRules(root);
-        if (!s.agents.some((a) => a.name === name)) return text("no such agent", 404);
-        const notes = loadBrain(root);
-        return text(renderView(notes, rules, carve(notes, rules, grantFor(rules, name)), root));
+        // The same carve the page state holds (kept until the brain or rules change, data.ts).
+        const res = s.carves.get(name);
+        if (!res || !s.agents.some((a) => a.name === name)) return oops("dash.no-agent", { name });
+        return text(renderView(s.notes, s.rules, res, root));
       }
-      const pg = agentPage(s, csrf, name);
-      return pg ? withFlash(pg) : html({ title: "Not found", tab: "", body: `<h1>No agent ${esc(name)}</h1>` }, 404);
+      const pg = agentPage(s, csrf, name, url.searchParams);
+      return pg ? withFlash(pg) : page("dash.no-agent", "agents", { name });
     }
-    return html({ title: "Not found", tab: "", body: "<h1>Not found</h1>" }, 404);
+    return page("dash.not-found", "");
   }
 
-  return { loginKey, setPort, handle: async (req: Request) => {
-    try { return await handle(req); }
-    catch (e) { console.error(e); return text("internal error", 500); }
-  } };
+  const guarded = async (req: Request, hosts: Set<string>, secure = false) => {
+    try { return await handle(req, hosts, secure); }
+    catch (e) { console.error(e); return oops("dash.internal"); }
+  };
+  // One of the owner's own devices, by its tailnet address (dashboard_tailnet_devices in
+  // rules/hub.yaml). A Tailscale account can hold other machines (a box an assistant runs on), so
+  // the owner's login alone is not enough; a list naming none lets no device in.
+  const ownDevice = (ip: string | undefined) => { const a = ip?.replace(/^::ffff:/i, ""); return !!a && isTailnetIp(a) && !!tn?.devices?.includes(a); };
+  return {
+    loginKey, setPort, setTailnet,
+    // Loopback. A request naming this machine's MagicDNS name on SERVE_PORT came through
+    // `tailscale serve`, which sets Tailscale-User-Login to the tailnet user and X-Forwarded-For to
+    // the device's tailnet address (replacing any the client sent). Only the owner's login, from one
+    // of the owner's listed devices, gets in: not another tailnet user or machine, not a funnel
+    // request, and nothing carrying Cloudflare's headers. Any other loopback sender could set the
+    // headers too, so the dashboard's own login key and cookie still apply on top.
+    handle: (req: Request) => {
+      const host = req.headers.get("host") ?? "";
+      if (!serveHosts.has(host)) return guarded(req, allowedHosts);
+      const who = req.headers.get("tailscale-user-login")?.trim().toLowerCase();
+      const viaFunnel = req.headers.has("tailscale-funnel-request") || [...req.headers.keys()].some((k) => k.startsWith("cf-"));
+      if (viaFunnel || !who || !tn?.login || !same(who, tn.login.trim().toLowerCase())) return Promise.resolve(oops("dash.tailnet-owner-only"));
+      if (!ownDevice(req.headers.get("x-forwarded-for")?.trim())) return Promise.resolve(oops("dash.tailnet-device"));
+      return guarded(req, serveHosts, true);
+    },
+    // The tailnet listener: only one of the owner's listed devices, only this machine's tailnet
+    // names as Host and Origin. `peer` is the connection's address, never a header.
+    handleTailnet: async (req: Request, peer: string | undefined) => {
+      if (!tn?.address) return oops("dash.not-found");
+      if (!isTailnetIp(peer)) return oops("dash.tailnet-owner-only");
+      if (!ownDevice(peer)) return oops("dash.tailnet-device");
+      return guarded(req, tailnetHosts);
+    },
+  };
 }
 
 export function serveDashboard(root: string, opts: DashboardOptions = {}) {
@@ -313,5 +764,19 @@ export function serveDashboard(root: string, opts: DashboardOptions = {}) {
   const server = Bun.serve({ port, hostname, fetch: h.handle });
   h.setPort(server.port!);
   const loginUrl = `http://${hostname === "::1" ? "[::1]" : hostname}:${server.port}/login?key=${h.loginKey}`;
-  return { server, loginUrl };
+  if (!opts.tailnet) return { server, loginUrl };
+  // Opt-in: the same dashboard on this machine's Tailscale address, same port.
+  const t: Tailnet = { ...(opts.tailnet === true ? (tailnetSelf() ?? {}) : opts.tailnet), ...(opts.tailnetLogin ? { login: opts.tailnetLogin } : {}), ...(opts.tailnetDevices ? { devices: opts.tailnetDevices } : {}) };
+  if (!isTailnetIp(t.address)) return { server, loginUrl, tailnetProblem: "dashboard_tailnet is on, but this machine has no Tailscale address (is Tailscale up?); the dashboard stays on localhost" };
+  let tailnetServer: ReturnType<typeof Bun.serve>;
+  try { tailnetServer = Bun.serve({ port: server.port!, hostname: t.address, fetch: (req, srv) => h.handleTailnet(req, srv.requestIP(req)?.address) }); }
+  catch (e) { return { server, loginUrl, tailnetProblem: `couldn't listen on ${t.address}:${server.port} (${e instanceof Error ? e.message : String(e)}); the dashboard stays on localhost` }; }
+  h.setTailnet(t, server.port!);
+  return {
+    server, loginUrl, tailnetServer,
+    tailnetLoginUrl: `http://${t.name ?? t.address}:${server.port}/login?key=${h.loginKey}`,
+    // With `tailscale serve --bg --https=SERVE_PORT http://127.0.0.1:<port>` on this machine,
+    // and the owner's Tailscale login set (dashboard_tailnet_login in rules/hub.yaml).
+    ...(t.name && t.login ? { serveLoginUrl: `https://${t.name}:${SERVE_PORT}/login?key=${h.loginKey}`, servePort: SERVE_PORT } : {}),
+  };
 }

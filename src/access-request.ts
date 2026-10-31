@@ -20,7 +20,7 @@ const TOOL = {
     properties: {
       name: { type: "string", description: "What to call you, e.g. Hark" },
       purpose: { type: "string", description: "One or two sentences: what you will do with the brain" },
-      slices: { type: "array", items: { type: "string" }, description: "Slices you would like (the owner may give fewer)" },
+      slices: { type: "array", items: { type: "string" } as { type: string; enum?: string[] }, description: "Slices you would like, by the names listed (the owner may give fewer)" },
     },
     required: ["name", "purpose", "slices"],
   },
@@ -48,7 +48,7 @@ function shapeRequest(root: string, args: Record<string, unknown>): AccessReques
   // A name that reads as the owner or another assistant gets a plain id instead (G70).
   // So does an existing agent's own id, or one with a number after it ("planner2", "steward-1"):
   // the push would show helper-2 alone, a near-copy of helper (G167).
-  const stem = asName.replace(/-?\d+$/, "");
+  const stem = asName.replace(/(?:-?\d)+$/, ""); // every number at the end, as pocketbrain add strips them
   const base = rules.policy.agents[asName] || rules.policy.agents[stem] || lookalike(rules, name) || lookalike(rules, asName) || lookalike(rules, stem) || isOwnerId(asName, rules.policy.owner?.name) ? "assistant" : asName;
   if (!purpose) return "say in a sentence what you will use the brain for";
   const taken = (a: string) => !!rules.policy.agents[a] || RESERVED.has(a) || isOwnerId(a, rules.policy.owner?.name) || !!lookalike(rules, a);
@@ -84,6 +84,13 @@ export function comingBack(rules: Rules, c: OAuthConfig | undefined, rq: AccessR
 export const comingBackText = (b: { agent: string; status: string; on?: string }) =>
   `${b.status === "paused" ? "paused" : b.status === "read-only" ? "set read-only" : "revoked"} ${b.agent}${b.on ? ` on ${b.on}` : ""}; this looks like it coming back`;
 
+// Area slices only: the owner's own named slices can name people or topics. Not every client shows
+// the server's instructions, so tools/list names them too, as the only values the tool takes.
+const areaSlices = (root: string) => Object.keys(loadRules(root).slices).filter((x) => x.startsWith("area:")).sort();
+const toolFor = (slices: string[]) => slices.length
+  ? { ...TOOL, inputSchema: { ...TOOL.inputSchema, properties: { ...TOOL.inputSchema.properties, slices: { ...TOOL.inputSchema.properties.slices, items: { type: "string", enum: slices } } } } }
+  : TOOL;
+
 const SENT = "Sent to the owner. Nothing is readable until the owner approves; reconnect later to find out.";
 
 const WAITING = (slices: string[]) => [
@@ -111,11 +118,10 @@ export async function waitingMcp(root: string, clientId: string, req: Request): 
         protocolVersion: String(msg.params?.protocolVersion ?? "2025-06-18"),
         capabilities: { tools: {} },
         serverInfo: { name: "pocketbrain", version: "0.1.0" },
-        // Area slices only: the owner's own named slices can name people or topics.
-        instructions: WAITING(Object.keys(loadRules(root).slices).filter((x) => x.startsWith("area:")).sort()),
+        instructions: WAITING(areaSlices(root)),
       });
     case "ping": return reply({});
-    case "tools/list": return reply({ tools: [TOOL] });
+    case "tools/list": return reply({ tools: [toolFor(areaSlices(root))] });
     case "tools/call": {
       if (msg.params?.name !== TOOL.name) return toolText("This connection is waiting for the owner's approval; the only tool until then is request_access.", true);
       const r = shapeRequest(root, (msg.params?.arguments ?? {}) as Record<string, unknown>);

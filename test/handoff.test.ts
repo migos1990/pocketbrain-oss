@@ -297,3 +297,54 @@ test("a handoff left checking by a hub restart is settled at the next start: re-
   const { heldHandoffs } = await import("../src/handoff");
   expect(heldHandoffs(two).find((h) => h.id === b.id)?.why).toMatch(/didn't finish/);
 });
+test("a handoff is stamped by the hub's day (PB_TODAY), so its id, date and folder agree with the brain's today", async () => {
+  const root = makeBrain();
+  const prev = { day: process.env.PB_TODAY, now: process.env.PB_NOW };
+  process.env.PB_TODAY = "2001-02-03";
+  delete process.env.PB_NOW;
+  try {
+    const r = await handOff(root, "planner", job);
+    expect(r.id.startsWith("ho-20010203")).toBe(true);
+    const [h] = openHandoffs(root, "helper");
+    expect(h.at.slice(0, 10)).toBe("2001-02-03");
+    expect(files(root)).toEqual([join("2001-02-03", `${r.id}.md`)]);
+  } finally {
+    if (prev.day === undefined) delete process.env.PB_TODAY; else process.env.PB_TODAY = prev.day;
+    if (prev.now === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = prev.now;
+  }
+});
+
+// G201: the handoff record was committed with the raw task, so any agent could stop every backup.
+test("G201: a handoff is kept with its secrets removed, so it can't stop a backup", async () => {
+  const { secretIn } = await import("../src/backup");
+  const root = makeBrain();
+  const tok = "pb_town_" + "a1B2c3D4".repeat(4);
+  const key = "AGE-SECRET-KEY-1" + "Q".repeat(58);
+  await handOff(root, "planner", { to: "helper", task: `Log in with ${tok} and draft the reminder.`, next_step: `Then decrypt with ${key}` });
+  const tracked = Bun.spawnSync(["git", "ls-files", "handoffs"], { cwd: root }).stdout.toString().trim().split("\n").filter(Boolean);
+  expect(tracked).toHaveLength(1);
+  const text = readFileSync(join(root, tracked[0]), "utf8");
+  expect(secretIn(text)).toBeUndefined();
+  expect(text).toContain("draft the reminder");
+  expect(text).toContain("verdict: held");
+});
+
+test("G201: a key split between next_step and task is kept out of the committed handoff", async () => {
+  const { secretIn } = await import("../src/backup");
+  const root = makeBrain();
+  const head = "-----BEGIN OPENSSH PRIVATE " + "KEY-----";
+  const body = "b3BlbnNzaC1rZXktdjEAAAAA" + "BG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW";
+  await handOff(root, "planner", { to: "helper", task: body, next_step: head });
+  const f = Bun.spawnSync(["git", "ls-files", "handoffs"], { cwd: root }).stdout.toString().trim();
+  expect(secretIn(readFileSync(join(root, f), "utf8"))).toBeUndefined();
+});
+
+test("G243: a released handoff shows the recipient the task as written, kept outside git until then", async () => {
+  const root = makeBrain();
+  const task = "Log in to the portal, my password is hunter2xx, and draft the reminder.";
+  const r = await handOff(root, "helper", { to: "planner", task, next_step: "Send the draft." });
+  expect(Bun.spawnSync(["git", "grep", "-l", "hunter2xx"], { cwd: root }).stdout.toString().trim()).toBe("");
+  decideHandoff(root, r.id, "release");
+  expect(openHandoffs(root, "planner").find((h) => h.id === r.id)?.task).toBe(task);
+  expect(Bun.spawnSync(["git", "grep", "-l", "hunter2xx"], { cwd: root }).stdout.toString().trim()).toBe("");
+});

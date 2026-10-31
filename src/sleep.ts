@@ -20,7 +20,8 @@
 //                   `pocketbrain merge <keep> <drop>` carries out Louis's yes.
 //   4. morning:     a short note in inbox/sleep/<run>.md that the digest puts on top.
 import { sha256, escapeRe } from "./util";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
 import type { Note, FactRecord, Sensitivity } from "./brain";
@@ -32,11 +33,12 @@ import { checkCandidate, type Candidate } from "./capture";
 import { redactSecrets, type WriteRequest } from "./checks";
 import { schemeOf } from "./sources";
 import { compareKey } from "./normalize";
-import { readEntries, specificReads } from "./readlog";
+import { readEntries, readLogStart, specificReads } from "./readlog";
 import { judgeDuplicates } from "./judge";
 import { loadSuppressions } from "./upkeep";
 import { type Model, logJudgment, parseJson } from "./model";
 import { git } from "./git";
+import { hubRole } from "./hub";
 
 export const STEP = "sleep.consolidate";
 export const RETIRE_AFTER_SHELVES = 3; // stale is 2x shelf life; forgetting waits for 3x
@@ -75,7 +77,7 @@ export function journalLines(root: string, dirs = ["journal", "archive/journal"]
         for (const l of readFileSync(join(base, agent, f), "utf8").split("\n")) {
           const m = l.match(/^- (\d{4}-\d{2}-\d{2}): (.*?)(?: \(([^()]*)\))?\s*$/);
           if (!m) continue;
-          const refs = (m[3] ?? "").split(",").map((x) => x.trim()).filter((x) => x && schemeOf(x));
+          const refs = (m[3] ?? "").split(",").map((x) => x.trim()).filter((x) => x && schemeOf(x) && schemeOf(x) !== "approved");
           out.push({ agent, file: `${d}/${agent}/${f}`, date: m[1], text: m[2], refs, hash: sha256(`${agent}\n${l.trim()}`).slice(0, 16) });
         }
       }
@@ -97,7 +99,7 @@ export function notesInUse(root: string, notes: Note[], now: string): { used: Se
     const names = [n.fm.title, ...(n.fm.aliases ?? [])].filter((x) => x && x.length >= 4).map((x) => x.toLowerCase());
     if (recent.some((t) => names.some((nm) => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(nm)}($|[^\\p{L}\\p{N}])`, "u").test(t)))) used.add(n.fm.id);
   }
-  return { used, logSince: entries.map((e) => e.at).sort()[0] };
+  return { used, logSince: [readLogStart(root), ...entries.map((e) => e.at)].filter((x): x is string => !!x).sort()[0] };
 }
 
 
@@ -108,6 +110,7 @@ function forget(root: string, run: string, notes: Note[], rules: Rules, now: str
   const logOldEnough = !!logSince && logSince.slice(0, 10) <= daysBefore(now, UNUSED_DAYS);
   const sup = loadSuppressions(root);
   let waiting = 0;
+  const changed: string[] = [], forgotten: string[] = [];
   for (const n of notes) {
     if (n.fm.status !== "active" || n.fm.id.startsWith("disputes/")) continue;
     const keys: string[] = [];
@@ -141,9 +144,21 @@ function forget(root: string, run: string, notes: Note[], rules: Rules, now: str
     if (keys.length) {
       if (n.fm.facts && !Object.keys(n.fm.facts).length) delete n.fm.facts;
       saveNote(root, n);
-      git(root, ["add", n.fm.id + ".md"]);
-      git(root, ["commit", "-q", "-m", `reflect: forget ${keys.length} unused fact(s) in ${n.fm.id}\n\nAgent: reflect\nRun: ${run}\nKind: auto-fix\nFact-Keys: ${keys.join(", ")}`], "reflect");
+      changed.push(n.fm.id + ".md");
+      forgotten.push(...keys);
     }
+  }
+  // One commit for the pass: a commit per note took half an hour at 50k notes (docs/perf.md).
+  // undo --run reverts it whole, as it reverts every auto-fix of a run.
+  if (changed.length) {
+    for (let i = 0; i < changed.length; i += 500) git(root, ["add", "--", ...changed.slice(i, i + 500)]);
+    // The message from a file: thousands of keys don't fit in one command-line argument.
+    // Outside the brain: in a worktree brain .git is a file, not a folder.
+    const dir = mkdtempSync(join(tmpdir(), "pb-forget-"));
+    try {
+      writeFileSync(join(dir, "msg"), `reflect: forget ${forgotten.length} unused fact(s) in ${changed.length} note(s)\n\nAgent: reflect\nRun: ${run}\nKind: auto-fix\nFact-Keys: ${forgotten.join(", ")}\n`);
+      git(root, ["commit", "-q", "-F", join(dir, "msg")], "reflect");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   }
   out.waiting = waiting;
   if (waiting) out.morning.push(`- Forgetting is waiting for ${UNUSED_DAYS} days of read log (${logSince ? `it starts ${logSince.slice(0, 10)}` : "none yet"}): ${waiting} unused fact(s) past ${RETIRE_AFTER_SHELVES}x shelf life kept for now.`);
@@ -286,6 +301,16 @@ export async function sleep(root: string, opts: { now?: string; model?: Model; j
   const run = `sleep-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}`;
   const rules = loadRules(root);
   const out: SleepResult = { run, file: `inbox/sleep/${run}.md`, retired: [], waiting: 0, review: [], proposals: [], known: 0, held: [], linesRead: 0, duplicates: [], morning: [] };
+
+  // Only the hub sleeps. A replica's agent writes and journals are queued as ops for the hub,
+  // and forgetting here would rewrite notes the hub gate then refuses to commit: the dirty tree
+  // jammed `hub sync` every night after (bug hunt #125). Nothing is written on a replica.
+  const role = hubRole(root);
+  if (role.mode === "replica" || role.mode === "unnamed") {
+    out.file = "";
+    out.morning = [`- Sleep runs on the hub (${role.cfg.hub}); ${role.name ?? "this clone"} is a replica and changed nothing.`];
+    return out;
+  }
 
   if (opts.steps?.forget !== false) forget(root, run, loadBrain(root), rules, now, out);
   if (opts.steps?.consolidate !== false) await consolidate(root, run, loadBrain(root), rules, opts.model, out, opts.maxProposals ?? 8);

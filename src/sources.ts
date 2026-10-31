@@ -20,6 +20,8 @@ export const SCHEMES: Record<string, "louis" | "exact" | "vague" | "self" | "non
   // the brain, so exact, unlike imsg: (a message the owner sent the brain itself).
   imessage: "exact",
   granola: "exact",
+  // A card in the owner's address book (src/contacts.ts): contacts:<card id>@<version>.
+  contacts: "exact",
   doc: "exact",
   url: "exact",
   call: "exact",
@@ -29,6 +31,9 @@ export const SCHEMES: Record<string, "louis" | "exact" | "vague" | "self" | "non
   "town-routine": "vague",
   "agent-relay": "vague",
   agent: "self",
+  // The owner tapping Yes on a proposal (2026-10-25): a record of the approval, not evidence. It
+  // never raises a fact's rank; the fact ranks as the source it cites.
+  approved: "none",
   // A line of an agent's own archived log (src/logs.ts): agent-log:<agent>/<hid>.
   "agent-log": "self",
   unverified: "none",
@@ -36,6 +41,12 @@ export const SCHEMES: Record<string, "louis" | "exact" | "vague" | "self" | "non
   prior: "exact",
   "prior-note": "vague",
 };
+
+// The schemes a refusal lists. The rest still parse (old brains carry them) but aren't advertised:
+// `louis` is the old spelling of `owner`, and the `*-mem`/`*-wiki`/`*-routine` ones are named
+// after one owner's assistants; a new agent cites its own memory as `agent:`.
+const UNLISTED = new Set(["louis", "instinct-mem", "town-wiki", "town-routine"]);
+export const PUBLIC_SCHEMES = Object.keys(SCHEMES).filter((s) => !UNLISTED.has(s));
 
 // Refs that name an agent's own memory, never Louis's word (write-quality N5).
 export const AGENT_MEMORY_SCHEMES = new Set(["instinct-mem", "town-wiki", "town-routine", "agent", "agent-relay", "agent-log"]);
@@ -101,8 +112,14 @@ export function normalizeRef(ref: string): string {
 }
 
 // 5 louis, 4 verified, 3 exact, 2 vague, 1 inferred, 0 unverified.
+// The owner's tap on a card (approved:, written only by the hub's accept) or the owner's own word:
+// what code that trusts an owner-vouched value (addresses for same-person and standing) accepts.
+export const isApprovedRef = (ref: string) => schemeOf(ref) === "approved";
+export const ownerVouched = (r: Pick<FactRecord, "sources" | "verification">) => isOwnerConfirmed(r.verification) || (r.sources ?? []).some((x) => isApprovedRef(refString(x)));
+
 export function sourceRank(r: Pick<FactRecord, "sources" | "verification" | "confidence">): number {
   if (r.verification === "unverified") return 0;
+  r = { ...r, sources: (r.sources ?? []).filter((x) => schemeOf(refString(x)) !== "approved") };
   // Something another agent said in passing ranks below everything else (architecture 0.7 rule 5).
   if ((r.sources ?? []).length && (r.sources ?? []).every((x) => schemeOf(refString(x)) === "agent-relay")) return 0.5;
   if (r.confidence === "inferred") return 1;

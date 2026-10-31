@@ -24,7 +24,7 @@ import YAML from "yaml";
 import { keysDir } from "./secrets";
 import { alert, sha256, appendJsonl, readJsonl } from "./util";
 import { loadRules } from "./rules";
-import { issueToken, tokenInfo } from "./auth";
+import { issueToken, tokenInfo, tokenExpiry } from "./auth";
 import { buildCell, buildReaderCell, cellDir } from "./cell";
 import { handle } from "./server";
 import * as core from "./core";
@@ -37,7 +37,7 @@ const V = 2;
 type CellKind = "full" | "reader";
 const INFO = "pocketbrain edge v1";
 type Sealed = { iv: string; tag: string; ct: string };
-export interface Bundle { v: number; agent: string; sealed_at: string; brain_commit: string; salt: string; hub_key: string; wraps: Record<string, Sealed>; cells: Partial<Record<CellKind, Sealed>> }
+export interface Bundle { v: number; agent: string; sealed_at: string; brain_commit: string; salt: string; hub_key: string; wraps: Record<string, Sealed>; expires?: Record<string, number>; cells: Partial<Record<CellKind, Sealed>> }
 
 // ---------- crypto ----------
 
@@ -77,6 +77,11 @@ function loadHome(): Home {
   const { publicKey, privateKey } = generateKeyPairSync("x25519");
   return { salt: randomBytes(16).toString("base64"), hub_public: publicKey.export({ type: "spki", format: "der" }).toString("base64"), hub_private: privateKey.export({ type: "pkcs8", format: "der" }).toString("base64"), agents: {} };
 }
+// Whether any agent is enrolled for the edge: then bundles may be published that a change on the
+// hub doesn't reach until `edge publish` runs again (src/forget.ts says so).
+export const edgeEnrolled = (): boolean => {
+  try { return existsSync(homeFile()) && Object.values((JSON.parse(readFileSync(homeFile(), "utf8")) as Home).agents ?? {}).some((t) => Object.keys(t).length > 0); } catch { return false; }
+};
 function saveHome(h: Home) {
   mkdirSync(edgeHome(), { recursive: true, mode: 0o700 });
   const tmp = `${homeFile()}.tmp`;
@@ -88,10 +93,11 @@ function saveHome(h: Home) {
 // A new token for the agent that also opens its sealed cell. The token is returned once and
 // never stored; only its hash (rules/tokens.yaml) and its wrap key (home state). `reader` makes it
 // a reader token (G18): its wrap opens only the reader-capped cell (G249) and its replayed writes
-// keep that role (G202).
-export function enroll(root: string, agent: string, role?: "reader"): string {
+// keep that role (G202). `token`: one the caller already minted with that role (the CLI's, through
+// its G184 gate, mintFromShell).
+export function enroll(root: string, agent: string, role?: "reader", token?: string): string {
   if (role !== undefined && role !== "reader") throw new Error("an edge token is plain or reader: the resolver's routes need the hub");
-  const token = issueToken(root, agent, role);
+  token ??= issueToken(root, agent, role);
   const h = loadHome();
   (h.agents[agent] ??= {})[sha256(token)] = wrapKey(token, h.salt).toString("base64");
   saveHome(h);
@@ -128,7 +134,7 @@ export function publish(root: string, out: string): { published: string[]; left_
     // One cell per kind of token (G249): a reader token's key opens only the cell carved under the
     // reader role, so what it decrypts holds nothing above personal, whatever client opens it.
     const roleOf = (hash: string) => (live[agent] ?? []).find((t) => t.hash === hash)?.role === "reader" ? "reader" : "full";
-    const cells: Partial<Record<CellKind, Sealed>> = {}, wrapsOut: Record<string, Sealed> = {};
+    const cells: Partial<Record<CellKind, Sealed>> = {}, wrapsOut: Record<string, Sealed> = {}, expires: Record<string, number> = {};
     let brainCommit = "";
     const staging = mkdtempSync(join(tmpdir(), "pb-edge-pack-"));
     try {
@@ -145,9 +151,15 @@ export function publish(root: string, out: string): { published: string[]; left_
         writeFileSync(join(at, "rules", "tokens.yaml"), YAML.stringify(tokens));
         const key = randomBytes(32);
         cells[kind] = seal(key, packDir(at), `${agent}:${V}:${kind}`);
-        for (const [, wk] of mine) wrapsOut[wrapId(Buffer.from(wk, "base64"))] = seal(Buffer.from(wk, "base64"), key, `${agent}:${V}`);
+        for (const [hash, wk] of mine) {
+          const id = wrapId(Buffer.from(wk, "base64"));
+          wrapsOut[id] = seal(Buffer.from(wk, "base64"), key, `${agent}:${V}`);
+          // Each token's end date travels with its wrap, so the edge refuses it on time (G419).
+          const t = (live[agent] ?? []).find((x) => x.hash === hash);
+          if (t) expires[id] = tokenExpiry(t);
+        }
       }
-      const bundle: Bundle = { v: V, agent, sealed_at: new Date().toISOString(), brain_commit: brainCommit, salt: h.salt, hub_key: h.hub_public, wraps: wrapsOut, cells };
+      const bundle: Bundle = { v: V, agent, sealed_at: new Date().toISOString(), brain_commit: brainCommit, salt: h.salt, hub_key: h.hub_public, wraps: wrapsOut, expires, cells };
       const f = join(out, `${agent}.json`);
       writeFileSync(`${f}.tmp`, JSON.stringify(bundle));
       renameSync(`${f}.tmp`, f);
@@ -213,14 +225,19 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 export async function edgeHandle(dir: string, req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (url.pathname === "/health") return json({ ok: true, edge: true });
-  const inPath = url.pathname.match(/^\/mcp\/(pb_[A-Za-z0-9_-]+)\/?$/)?.[1];
-  const token = req.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1] ?? inPath;
+  // The token comes in the Authorization header only: a token in a URL lands in logs and history.
+  const token = req.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
   const agent = token?.match(/^pb_([a-z0-9-]+)_/)?.[1];
   const f = agent ? join(dir, `${agent}.json`) : "";
   if (!token || !agent || !existsSync(f)) return json({ error: "missing or unknown token" }, 401);
   const b = JSON.parse(readFileSync(f, "utf8")) as Bundle;
   const files = openBundle(b, token);
   if (!files) return json({ error: "missing or unknown token" }, 401);
+  // Past its end date a token opens nothing here, reads or queued writes, without waiting for the
+  // next publish. An unreadable date counts as past, as at the hub.
+  const ends = b.expires?.[wrapId(wrapKey(token, b.salt))];
+  const now = process.env.PB_NOW ? Date.parse(process.env.PB_NOW) : Date.now();
+  if (ends !== undefined && !(ends > now)) return json({ error: "this token has expired: ask the owner for a new one" }, 401);
   const body = req.method === "POST" ? await req.text() : "";
   const queue = (op: Record<string, unknown>) => {
     const qd = join(dir, "queue");
@@ -237,7 +254,7 @@ export async function edgeHandle(dir: string, req: Request): Promise<Response> {
     return json(queue({ tool: url.pathname.split("/").pop(), args: a }), 202);
   }
   let rpc: { id?: unknown; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } } | undefined;
-  if (url.pathname === "/mcp" || url.pathname === "/mcp/" || inPath) {
+  if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
     try { rpc = JSON.parse(body); } catch { return json({ error: "body must be JSON-RPC" }, 400); }
     const name = rpc?.method === "tools/call" ? String(rpc.params?.name ?? "") : "";
     if (WRITE_TOOLS.has(name)) return json({ jsonrpc: "2.0", id: rpc?.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(queue({ tool: name, args: rpc?.params?.arguments ?? {} }), null, 2) }], isError: false } });
@@ -313,7 +330,7 @@ export async function replay(root: string, dir: string): Promise<ReplayResult[]>
       try {
         // Under the token's role, as the live server runs each request (G202): a reader token's
         // write keeps the G18 guard (its owner message ids wait for the owner) and the reader cap.
-        const res = await withTokenRole(op.agent, tok?.role, async () => op.tool === "remember" ? core.remember(root, op.agent, op.args)
+        const res = await withTokenRole(op.agent, tok?.role, async () => op.tool === "remember" ? (await core.gardenerSourceSays(root, op.agent, op.args)) ?? core.remember(root, op.agent, op.args)
           : op.tool === "retire" ? core.retire(root, op.agent, op.args)
           : op.tool === "capture" ? await core.captureFromAgent(root, op.agent, op.args)
           : undefined);

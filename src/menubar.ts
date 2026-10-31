@@ -9,6 +9,7 @@ import { bar } from "./measure";
 import { hubPlists } from "./start";
 import { initBrain } from "./init";
 import { standingInstruction } from "./orientation";
+import { watchdogState } from "./watchdog";
 
 export const START_LABEL = "com.pocketbrain.start";
 export const TUNNEL_LABEL = "com.pocketbrain.tunnel";
@@ -30,6 +31,8 @@ export interface MenuState {
   agents: MenuAgent[];
   // Whether the dashboard can be opened now. Never the link itself: it carries the owner's login key.
   dashboard: boolean;
+  // What the watchdog found from outside the hub (src/watchdog.ts), one line each; shown even with the hub down.
+  problems: string[];
 }
 
 const plistDir = (home: string) => join(home, "Library", "LaunchAgents");
@@ -91,12 +94,23 @@ export async function menuState(root: string, o: { home: string; port?: number; 
     barLine: b.text,
     agents,
     dashboard: hubUp && !!latestDashboardLink(o.home),
+    problems: brainReady ? watchdogProblems(root, o.home) : [],
   };
 }
 
-// One line for the menu bar itself: a dot for the hub, then the day count.
-export function menuTitle(s: Pick<MenuState, "hubUp" | "barDays" | "barTarget" | "barMet">): string {
-  return `${s.hubUp ? "●" : "○"} ${s.barMet ? "bar met" : `day ${s.barDays}/${s.barTarget}`}`;
+// The watchdog's problem lines, and one more when it is installed but stopped running.
+const WATCHDOG_LABEL = "com.pocketbrain.watchdog";
+function watchdogProblems(root: string, home: string): string[] {
+  const s = watchdogState(root);
+  const out = (s.problems ?? []).map((p) => p.detail);
+  if (existsSync(plistFile(home, WATCHDOG_LABEL)) && (!s.last || Date.now() - Date.parse(s.last) > 15 * 60_000))
+    out.push(s.last ? `the watchdog hasn't run since ${s.last.slice(0, 16)}` : "the watchdog is installed but hasn't run yet");
+  return out;
+}
+
+// One line for the menu bar itself: a warning sign when something is wrong, a dot for the hub, then the day count.
+export function menuTitle(s: Pick<MenuState, "hubUp" | "barDays" | "barTarget" | "barMet"> & { problems?: string[] }): string {
+  return `${s.problems?.length ? "⚠ " : ""}${s.hubUp ? "●" : "○"} ${s.barMet ? "bar met" : `day ${s.barDays}/${s.barTarget}`}`;
 }
 
 export type Run = (cmd: string[]) => { code: number; out: string };
@@ -105,11 +119,13 @@ export type Run = (cmd: string[]) => { code: number; out: string };
 // already installed, since that one is running the owner's brain; restart it instead.
 export function installHub(root: string, o: { home: string; bun: string; app: string; uid: number; run: Run; tunnel?: string; tunnelConfig?: string }): string[] {
   const plists = hubPlists(root, { bun: o.bun, app: o.app, home: o.home, tunnel: o.tunnel, tunnelConfig: o.tunnelConfig });
-  const taken = plists.filter((p) => existsSync(join(plistDir(o.home), p.file)));
-  if (taken.length) throw new Error(`already installed: ${taken.map((p) => p.file).join(", ")}. Use "Restart hub" (pocketbrain menubar restart)`);
+  // A job already installed is never rewritten (it may be running the owner's brain); one added
+  // since (the watchdog, 2026-10-22) is installed beside it.
+  const missing = plists.filter((p) => !existsSync(join(plistDir(o.home), p.file)));
+  if (!missing.length) throw new Error(`already installed: ${plists.map((p) => p.file).join(", ")}. Use "Restart hub" (pocketbrain menubar restart)`);
   mkdirSync(plistDir(o.home), { recursive: true });
   const done: string[] = [];
-  for (const p of plists) {
+  for (const p of missing) {
     const file = join(plistDir(o.home), p.file);
     writeFileSync(file, p.text);
     const r = o.run(["launchctl", "bootstrap", `gui/${o.uid}`, file]);
@@ -120,8 +136,10 @@ export function installHub(root: string, o: { home: string; bun: string; app: st
 }
 
 // Restart the running hub (launchd starts a fresh process). Never unloads it and never touches the tunnel.
-export function restartHub(o: { home: string; uid: number; run: Run }): string {
+// `before` runs once the hub is known to be installed, just before the kickstart.
+export function restartHub(o: { home: string; uid: number; run: Run; before?: () => void }): string {
   if (!existsSync(plistFile(o.home, START_LABEL))) throw new Error("the hub isn't installed yet: use Install hub (pocketbrain menubar install)");
+  o.before?.();
   const r = o.run(["launchctl", "kickstart", "-k", `gui/${o.uid}/${START_LABEL}`]);
   if (r.code !== 0) throw new Error(`launchctl kickstart failed: ${r.out.trim().slice(0, 200)}`);
   return "hub restarted";

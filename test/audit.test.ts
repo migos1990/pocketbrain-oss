@@ -16,6 +16,9 @@ const edit = (root: string, rel: string, from: string | RegExp, to: string) => w
 const commit = (root: string, author: string, msg = "change") => { git(root, ["add", "-A"]); git(root, ["commit", "-q", "-m", msg], author); };
 const HELPER = /helper: \{ tier: trial, slices: \[area:work, contacts-basic\]/;
 
+// Owner wall-clock in October (EDT, UTC-4): dueJobs counts the owner's day (src/clock.ts).
+const toronto = (d: number, h: number, m: number) => new Date(Date.UTC(2026, 9, d, h + 4, m));
+
 test("audit: the first run records a baseline and finds nothing on an untouched brain", () => {
   const root = makeBrain();
   const r = auditCarve(root);
@@ -115,9 +118,9 @@ test("audit: a new agent the owner added is reported, one an agent added is an a
 
 test("audit: runs weekly from start (Sundays after the night hour) and shows in the digest", () => {
   const root = makeBrain();
-  expect(dueJobs(root, new Date(2026, 9, 10, 9, 0))).toEqual(["night", "digest"]); // Saturday
-  expect(dueJobs(root, new Date(2026, 9, 11, 3, 5))).toEqual(["night", "audit"]); // Sunday
-  expect(dueJobs(root, new Date(2026, 9, 11, 9, 0))).toEqual(["digest"]);
+  expect(dueJobs(root, toronto(10, 9, 0))).toEqual(["night", "digest"]); // Saturday
+  expect(dueJobs(root, toronto(11, 3, 5))).toEqual(["night", "audit"]); // Sunday
+  expect(dueJobs(root, toronto(11, 9, 0))).toEqual(["digest"]);
   auditCarve(root);
   edit(root, "rules/policy.yaml", HELPER, "helper: { tier: trial, slices: [all]");
   commit(root, "helper");
@@ -125,4 +128,25 @@ test("audit: runs weekly from start (Sundays after the night hour) and shows in 
   const d = digest(root).text;
   expect(d).toContain("**Alert** (carve_widened): helper");
   expect(d).toMatch(/Carve audit .*: \d+ widening\(s\), [1-9]\d* not by you/);
+});
+
+// The owner's own hand commits carry the brain repo's git identity (their user.name, such as a
+// GitHub handle), not "owner": a widening they make by hand isn't someone else's (G376).
+test("audit: a widening the owner commits by hand, under the brain repo's git user.name, is no alert", () => {
+  const root = makeBrain();
+  git(root, ["config", "user.name", "handle1990"]);
+  auditCarve(root);
+  edit(root, "rules/policy.yaml", HELPER, "helper: { tier: trial, slices: [area:work, area:personal, contacts-basic]");
+  commit(root, "handle1990", "owner: helper gets personal");
+  const r = auditCarve(root);
+  expect(r.widenings.filter((x) => x.agent === "helper").every((x) => x.ok)).toBe(true);
+  expect(alerts(root)).toEqual([]);
+  // Any other name is still not the owner, and an agent's name never is, whatever user.name says.
+  edit(root, "rules/policy.yaml", "helper: { tier: trial, slices: [area:work, area:personal", "helper: { tier: core, slices: [area:work, area:personal");
+  commit(root, "someone-else", "tier");
+  expect(auditCarve(root).alerts).toBe(1);
+  git(root, ["config", "user.name", "planner"]);
+  edit(root, "people/paul-advisor.md", "tags: [finance]\n", "");
+  commit(root, "planner", "planner: tags");
+  expect(auditCarve(root).widenings.some((x) => !x.ok && x.causes.some((c) => c.author === "planner"))).toBe(true);
 });

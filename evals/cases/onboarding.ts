@@ -76,7 +76,7 @@ export const onboardingCases: Case[] = [
     const p = add.addAgent(root, { agent: "newbot", slices: ["area:work", "contacts-basic"] });
     const r = rules.loadRules(root);
     // newbot exists now, so its preview would refuse; the same slice under a fresh name must match.
-    const twin = add.previewNewAgent(root, { agent: "newbot2", slices: ["area:work", "contacts-basic"] });
+    const twin = add.previewNewAgent(root, { agent: "otherbot", slices: ["area:work", "contacts-basic"] });
     return steps([
       ["trial", r.policy.agents.newbot.tier === "trial" && rules.tierOf(r, "newbot").writes === "propose"],
       ["money out", (r.policy.agents.newbot.exclude_types ?? []).includes("money") && !p.money],

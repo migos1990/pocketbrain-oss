@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The hackathon video's reset (scripts/video-reset.ts) rebuilds Robin's brain (a President's) the same way every take.
+import { markSeen } from "../src/seen";
 import { test, expect } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -87,6 +88,10 @@ test("video brain: Priya's Claude Code writes a teammate's medical leave, the ke
   const r = await core.remember(brain, "claude-code", { id: "projects/platform-roadmap", attribute: "staffing", value: "Sam Ortiz, the lead architect, is out two weeks in November for chemo; keep it quiet", as_of: "2026-01-05", source_type: "email", sources: ["gmail:f000000000000009"], verification: "verified-by-source" });
   expect(r.outcome).toBe("committed");
   const sees = () => { const rules = loadRules(brain); const c = carve(loadBrain(brain), rules, grantFor(rules, "claude-code")); return c.visible.has("projects/platform-roadmap") && !c.hiddenFacts.some((h) => h.key === "projects/platform-roadmap#staffing"); };
+  // "chemo" is health-shaped, so the hub holds it from every assistant until the owner has seen it
+  // (phone UI spec §7); the owner's Show lets it serve, and Jev's check still makes it private.
+  expect(sees()).toBe(false);
+  markSeen(brain, r.fact_key!);
   expect(sees()).toBe(true);
   queueAftercheck(brain, "claude-code", r.fact_key);
   const jev: Model = { config: { provider: "typesafe", model: "jev-latest", max_sensitivity: "personal" }, complete: async () => { throw new Error("unused"); }, decide: async () => ({ answers: { third_party_sensitive: { type: "noul", noul: 0.95 }, category: { type: "choice", choice: "health", confidence: 0.9 } }, provider: "typesafe", model: "jev-test" }) } as unknown as Model;

@@ -41,3 +41,14 @@ export function costOf(provider: Provider, model: string, usage: Usage | undefin
   if (!p || !usage) return undefined;
   return (usage.input_tokens * p.input + usage.output_tokens * p.output) / 1e6;
 }
+
+// The cheaper model a job falls back to past its daily cap (backlog 272): the cheapest priced model
+// of the same provider, so the same key works, and only if it costs less than the one asked for.
+export function cheaperModel(provider: Provider, model: string): string | undefined {
+  const table = PRICES[provider];
+  const cur = table?.[model];
+  if (!table || !cur) return undefined;
+  const cost = (p: Price) => p.input + p.output;
+  const best = Object.entries(table).filter(([, p]) => cost(p) < cost(cur)).sort(([, a], [, b]) => cost(a) - cost(b))[0];
+  return best?.[0];
+}

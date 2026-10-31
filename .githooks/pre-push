@@ -3,7 +3,35 @@
 set -e
 # Git exports these to hooks; test fixtures that run git would otherwise write into this repo.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+# What is being pushed (git's stdin: <local ref> <local sha> <remote ref> <remote sha>), read first.
+refs=$(cat)
+# The release job's own push (.github/workflows/release.yml: the tag, then refs/heads/release) runs
+# where the suite's tools aren't installed. A tag or the release branch only points at a commit
+# already on origin/main, which passed all of this and CI; any other ref is checked in full (G541).
+released=no
+if [ -n "$refs" ]; then
+  released=yes
+  while read -r lref lsha rref rsha; do
+    case "$rref" in
+      refs/tags/*|refs/heads/release) git merge-base --is-ancestor "$lsha^{commit}" refs/remotes/origin/main 2>/dev/null || released=no ;;
+      *) released=no ;;
+    esac
+  done <<REFS
+$refs
+REFS
+fi
+if [ "$released" = yes ]; then echo "pre-push: only a tag or the release branch, at a commit on origin/main; nothing to check again"; exit 0; fi
 bun test
 bunx tsc --noEmit
 bun run deadcode
 bun evals/run.ts --ci
+# The north star blocks a merge (scripts/gate.ts), so it blocks a push too (audit v4: nothing
+# automated ran the gate).
+bun scripts/north-star.ts
+# A push to main: the gate's rules against what main was (test first, docs, the slice audit and
+# agent evals recorded for this tree). The long checks above already ran.
+echo "$refs" | while read -r lref lsha rref rsha; do
+  if [ "$rref" = "refs/heads/main" ] && [ -n "$rsha" ] && [ "$rsha" != "0000000000000000000000000000000000000000" ]; then
+    bun scripts/gate.ts "$rsha" --no-run
+  fi
+done

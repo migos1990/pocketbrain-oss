@@ -7,9 +7,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rename
 import { join } from "node:path";
 import YAML from "yaml";
 import type { Note, FactRecord, Sensitivity } from "./brain";
-import { loadBrain, saveNote, today, linksIn, isDisputed, sensitivityRank } from "./brain";
+import { loadBrain, saveNote, today, linksIn, isDisputed, isList, sensitivityRank } from "./brain";
 import { loadRules, attributeSpec, readYaml } from "./rules";
-import { factFreshness, daysBetween } from "./freshness";
+import { factFreshness, daysBetween, passedDay } from "./freshness";
 import { records, carve, grantFor } from "./carve";
 import { compareKey } from "./normalize";
 import { refString, sourceRank } from "./sources";
@@ -18,7 +18,16 @@ import { archiveOldLogs } from "./logs";
 import { git } from "./git";
 import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
+import { wikiLint, renderTouchedPages } from "./wiki";
+import { setAsideReceipts } from "./receipt-pages";
 import { OWNER } from "./owner";
+import { staleMentions } from "./drift";
+import { linkMentions, namePlan } from "./mentions";
+
+// Notes whose names upkeep links in one run; the rest wait for the next night.
+export const MENTION_NOTES_PER_RUN = 50;
+// How far back upkeep looks for touched pages: a day and a margin, so a late night run misses none.
+export const PAGE_TEXT_HOURS = 26;
 
 export interface Finding {
   rule: string;
@@ -123,6 +132,55 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     }
   }
 
+  // 1c. Names become links (src/mentions.ts, docs/wiki.md): a note's text that names exactly one
+  //     other note by its title or alias gets a link there, the words kept as written. Only where
+  //     every assistant that sees this note also sees the note named, so no reader's view loses a
+  //     name to [[redacted]]; otherwise, and when a name fits two notes, a review line. A brain-
+  //     writing job, so nothing at all until `pocketbrain wiki links on` (`wiki links preview`
+  //     shows the owner what it would do). A finding reaches the Gardener when it sees the note
+  //     (gardenerUpkeep filters by key), possibly without its text: no line names a name, a note
+  //     or a value; the commit itself says what changed.
+  if ((rules.policy as { link_names?: boolean }).link_names === true) {
+    let touched = 0;
+    for (const p of namePlan(notes, rules)) {
+      if (touched >= MENTION_NOTES_PER_RUN) break;
+      const n = byId.get(p.from)!;
+      if (p.ambiguous) add({ rule: "name-ambiguous", key: n.fm.id, kind: "review", detail: `${p.ambiguous === 1 ? "a name in the text fits" : `${p.ambiguous} names in the text each fit`} more than one note; link the right one by hand` });
+      if (p.blind) add({ rule: "name-unlinked", key: n.fm.id, kind: "review", detail: "the text names a page that some assistants who see this note can't see; left as plain text" });
+      const fresh = p.link.length && add({ rule: "link-mention", key: n.fm.id, kind: "auto-fix", detail: `linked ${p.link.length === 1 ? "a name" : `${p.link.length} names`} in the text to the one note each names` });
+      if (!fresh) continue;
+      n.body = linkMentions(n.body, p.link, p.index);
+      saveNote(root, n);
+      commitFix(root, run, [n.path], `link names in ${n.fm.id}`, [n.fm.id]);
+      touched++;
+    }
+  }
+
+  // 1c2. Receipts held as pages before no-reply mail stopped being read (src/receipt-pages.ts):
+  //      set aside once, a diary line each with Undo; one hub commit with a why.
+  if (setAsideReceipts(root).length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+
+  // 1d. Page text (src/wiki.ts renderTouchedPages, docs/wiki.md): every page a commit touched in
+  //     the last day gets an opening paragraph from its facts, each sentence citing its source,
+  //     linked to the pages its sources name. One hub commit with a why; a person's or the
+  //     Gardener's prose is kept as it is.
+  {
+    const w = renderTouchedPages(root, new Date(Date.now() - PAGE_TEXT_HOURS * 3_600_000).toISOString());
+    // Not a finding: nothing was wrong. The hub commit says which pages and why.
+    if (w.written.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+  }
+
+  // 1e. A summary is one plain line under the title: a reference marker in it ("…[^1]", from a
+  //     Gardener sync that cited it) shows raw wherever the summary is read, so it is taken out.
+  for (const n of notes) {
+    if (typeof n.fm.summary !== "string" || !/\[\^[^\]\s]+\]/.test(n.fm.summary)) continue;
+    const plain = n.fm.summary.replace(/\s*\[\^[^\]\s]+\]/g, "").trim();
+    if (!add({ rule: "summary-marker", key: n.fm.id, kind: "auto-fix", detail: "took a reference marker out of the summary" })) continue;
+    n.fm.summary = plain;
+    saveNote(root, n);
+    commitFix(root, run, [n.path], `plain summary for ${n.fm.id}`, [n.fm.id]);
+  }
+
   // 2. Dates: malformed dates in frontmatter get normalized (2026-9-5 -> 2026-09-05).
   for (const n of notes) {
     let changed = false;
@@ -146,17 +204,28 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   // 3. Freshness: due and stale facts become a review list, most stale first.
   for (const n of notes) {
     if (n.fm.status !== "active") continue;
+    // A project whose due date has passed but is still active.
+    const due = n.fm.facts?.due as FactRecord | undefined;
+    const pastDue = n.fm.type === "project" && due && typeof due.value === "string" && isoDate(due.value) && due.value < now;
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+      if (attr === "due" && pastDue) continue; // past-due below says it once
       const fr = factFreshness(f, attributeSpec(rules, n.fm.type, attr), now);
       if (fr === "due" || fr === "stale") {
         const r = records(f)[0];
         add({ rule: `freshness-${fr}`, key: `${n.fm.id}#${attr}`, kind: "review", detail: `${fr}: last confirmed ${r.last_confirmed ?? r.as_of}${r.as_of_approx ? " (approx.)" : ""}` });
       }
     }
-    // A project whose due date has passed but is still active.
-    const due = n.fm.facts?.due as FactRecord | undefined;
-    if (n.fm.type === "project" && due && typeof due.value === "string" && isoDate(due.value) && due.value < now)
+    if (pastDue)
       add({ rule: "past-due", key: `${n.fm.id}#due`, kind: "review", detail: `due ${due.value}, still active` });
+    // A deadline or an event whose day went by and that still reads as current (`passedDay` in
+    // src/freshness.ts): a review line; nothing asks the owner about it, only a conflict asks.
+    if (n.fm.type !== "dispute" && !["archived", "superseded"].includes(String(n.fm.status ?? ""))) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+      if (isList(f) || isDisputed(f) || (n.fm.type === "project" && attr === "due")) continue;
+      const r = f as FactRecord;
+      if (r.retired || (r.valid_to && r.valid_to <= now)) continue;
+      const date = passedDay(r, attributeSpec(rules, n.fm.type, attr), now);
+      if (date) add({ rule: "past-date", key: `${n.fm.id}#${attr}`, kind: "review", detail: `names ${date}, which has passed; not confirmed since` });
+    }
   }
 
   // 4. Duplicate entities: same type, same normalized title or alias. Notes count only as
@@ -323,6 +392,17 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     }
   }
 
+  // 8b. A change reaches its neighbours (src/drift.ts, docs/wiki.md): a page whose fact changed, or
+  //     a note linking to it, that still states the earlier value is a review line. The Gardener
+  //     gets findings on the notes it sees (gardenerUpkeep filters by key), sometimes without their
+  //     text or with a title or an earlier value carved from it, so a line names no page, fact,
+  //     date or value; the owner opens the note.
+  for (const d of staleMentions(loadBrain(root).filter((n) => !n.fm.id.startsWith("disputes/"))))
+    add({ rule: "neighbour-drift", key: d.note, kind: "review", detail: d.note === d.page ? "the text still states an earlier value of one of this note's facts; update it or check it" : "the text still states a value that has since changed on a note it links to; update it or check it" });
+
+  // 9. The wiki's lint (src/wiki.ts, docs/wiki.md): page and structure findings for review only.
+  for (const f of wikiLint(loadBrain(root).filter((n) => !n.fm.id.startsWith("disputes/")))) add(f);
+
   // Findings go to inbox/reflect/<run>.md for the digest.
   const rel = `inbox/reflect/${run}.md`;
   mkdirSync(join(root, "inbox", "reflect"), { recursive: true });
@@ -377,7 +457,7 @@ export function undoRun(root: string, run: string): string {
   const findingsFile = [join(root, "inbox", "reflect", `${run}.md`), join(root, "inbox", "sleep", `${run}.md`)].find((f) => existsSync(f)) ?? "";
   const fired = findingsFile ? [...readFileSync(findingsFile, "utf8").matchAll(/^- \[([a-z?-]+)\] `([^`]+)`/gm)] : [];
   const sup = loadSuppressions(root);
-  const autoRules = new Set(["link-repoint", "date-format", "recheck-confirmed", "journal-archive", "stored-recheck", "retire"]);
+  const autoRules = new Set(["link-repoint", "link-mention", "date-format", "recheck-confirmed", "journal-archive", "stored-recheck", "retire"]);
   for (const [, rule, key] of fired) if (autoRules.has(rule) && !sup.some((s) => s.key === key && s.rule === rule)) sup.push({ key, rule, since: today(), why: `reverted ${run}` });
   mkdirSync(join(root, "rules"), { recursive: true });
   writeFileSync(join(root, "rules", "suppressions.yaml"), YAML.stringify({ suppressions: sup }, { lineWidth: 0 }));

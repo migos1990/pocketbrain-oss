@@ -26,7 +26,7 @@ test("a missing tool is named once with how to get it, unless the run allows it"
   try {
     const m = missingTools("");
     for (const n of ["ssh-keygen", "age", "ffmpeg"]) expect(m.some((l) => l.startsWith(`${n} (for `) && l.includes("install"))).toBe(true);
-    expect(missingTools("ssh-keygen,age,ffmpeg,chromium")).toEqual([]);
+    expect(missingTools("ssh-keygen,age,ffmpeg,python3,chromium")).toEqual([]);
   } finally { process.env.PATH = saved; }
 });
 

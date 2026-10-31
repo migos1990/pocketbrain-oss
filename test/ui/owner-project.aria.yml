@@ -1,0 +1,121 @@
+- main:
+  - link "‹ Home":
+    - /url: /home
+  - heading "Atlas launch" [level=1]
+  - paragraph: project · 2 sources
+  - text: Atlas launch is in beta.
+  - superscript:
+    - link "[1]":
+      - /url: "#fn-1"
+  - text: The lead of Atlas launch is
+  - link "Robin Lefebvre":
+    - /url: /p/people/robin-lefebvre
+  - text: .
+  - superscript:
+    - link "[1]":
+      - /url: "#fn-1"
+  - text: "Due for Atlas launch: 3 Nov 2026."
+  - superscript:
+    - link "[1]":
+      - /url: "#fn-1"
+  - text: "Next for Atlas launch: freeze the beta build on 15 October."
+  - superscript:
+    - link "[2]":
+      - /url: "#fn-2"
+  - text: A different value is waiting to be checked. The people of Atlas launch are
+  - link "Maya Chen":
+    - /url: /p/people/maya-chen
+  - text: ","
+  - link "Omar Haddad":
+    - /url: /p/people/omar-haddad
+  - text: ","
+  - link "Daniel Okoro":
+    - /url: /p/people/daniel-okoro
+  - text: ","
+  - link "Sofia Marquez":
+    - /url: /p/people/sofia-marquez
+  - text: and
+  - link "Hannah Becker":
+    - /url: /p/people/hannah-becker
+  - text: .
+  - superscript:
+    - link "[1]":
+      - /url: "#fn-1"
+  - text: (Written by the hub from this page's facts.)
+  - heading "Earlier notes" [level=2]
+  - text: "The Atlas launch is the big one this fall: ten beta customers, a public launch on 3 November."
+  - link "Grace Liu":
+    - /url: /p/people/grace-liu
+  - text: collects what the beta customers say every Friday. With
+  - link "Robin Lefebvre":
+    - /url: /p/people/robin-lefebvre
+  - text: ","
+  - link "Maya Chen":
+    - /url: /p/people/maya-chen
+  - text: ","
+  - link "Omar Haddad":
+    - /url: /p/people/omar-haddad
+  - text: ","
+  - link "Daniel Okoro":
+    - /url: /p/people/daniel-okoro
+  - text: ","
+  - link "Sofia Marquez":
+    - /url: /p/people/sofia-marquez
+  - text: and
+  - link "Hannah Becker":
+    - /url: /p/people/hannah-becker
+  - text: ". Decided so far:"
+  - link "Atlas beta scope":
+    - /url: /p/decisions/2026-09-08-atlas-beta-scope
+  - text: and
+  - link "Weekly Atlas review on Wednesdays":
+    - /url: /p/decisions/2026-10-01-weekly-team-review
+  - text: .
+  - superscript:
+    - link "[3]":
+      - /url: "#fn-3"
+  - heading "References" [level=2]
+  - list:
+    - listitem: Email, 12 Sep 2026
+    - listitem:
+      - text: Email, 7 Oct 2026
+      - group: What the source said
+    - listitem: Email, 12 Sep 2026
+  - heading "Mentioned on" [level=2]
+  - list:
+    - listitem:
+      - link "Atlas beta scope":
+        - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - listitem:
+      - link "Weekly Atlas review on Wednesdays":
+        - /url: /p/decisions/2026-10-01-weekly-team-review
+    - listitem:
+      - link "Daniel Okoro":
+        - /url: /p/people/daniel-okoro
+    - listitem:
+      - link "Hannah Becker":
+        - /url: /p/people/hannah-becker
+    - listitem:
+      - link "Maya Chen":
+        - /url: /p/people/maya-chen
+    - listitem:
+      - link "Omar Haddad":
+        - /url: /p/people/omar-haddad
+    - listitem:
+      - link "Robin Lefebvre":
+        - /url: /p/people/robin-lefebvre
+    - listitem:
+      - link "Sofia Marquez":
+        - /url: /p/people/sofia-marquez
+  - heading "Changed" [level=2]
+  - list:
+    - listitem:
+      - 'link "Next for Atlas launch: freeze the beta build on 15 October"':
+        - /url: /p/projects/atlas-launch
+      - text: "from an email, Wed · was: freeze the beta build"
+      - 'button "Undo: Next for Atlas launch: freeze the beta build on 15 October"': Undo
+  - group: Details
+  - group: Who sees this
+  - text: What changed about Atlas?
+  - textbox "What changed about Atlas?"
+  - button "Send"

@@ -1,6 +1,6 @@
 # Releases, CI and the Mac's auto-update
 
-How a change gets from a branch to the hub on the Mac, and who has to do what. Short version: branches go through the merge gate, `main` runs CI on every push, a release is a dated version cut on `main`, CI runs again on it and makes the tag `vX.Y.Z`, and only then does the Mac pick it up by itself, with a health check and an automatic rollback, once its update job is installed (below).
+How a change gets from a branch to the hub on the Mac, and who has to do what. Short version: branches go through the merge gate and `main` runs CI on every push. Today the Mac runs a `main` sha: the coordinator says "go <sha>" and the Mac thread runs `bun scripts/deploy.ts go <sha>`, which keeps it only when the restarted hub itself reports that sha, then prints the real brain's north star ([The Mac takes a main sha](#the-mac-takes-a-main-sha)). The release flow below (a dated version cut on `main`, a CI-made tag `vX.Y.Z`, the Mac following the `release` branch by itself) is kept for when tags exist; none has yet, since cloud sessions can't push tags.
 
 ```
 branch ──gate──▶ main ──CI──▶ release cut ──CI again──▶ tag vX.Y.Z + GitHub release + `release` branch ──▶ Mac (every 10 min)
@@ -23,11 +23,11 @@ Every change is in one or more lanes, worked out from the files it touches by `s
 bun scripts/lane.ts main      # Lane: ui, docs
 ```
 
-A backlog item names its lane and is ready for a thread only when it has: **Spec** (what changes, in a sentence or two), **Why now**, **Done when** (checks a test or a command can show), **Blast radius** (lane, and whether it touches the access core, a prompt, or anything Louis has to do), **Test** (the failing-first test). A thread sends back an item missing one of them instead of guessing. Items marked **advisor** get a written finding only, **draft** get a branch the builder doesn't merge without Louis, and the rest go through the gate as usual.
+A backlog item names its lane and is ready for a thread only when it has: **Spec** (what changes, in a sentence or two), **Why now**, **Done when** (checks a test or a command can show), **Blast radius** (lane, and whether it touches the access core, a prompt, or anything the owner has to do), **Test** (the failing-first test). A thread sends back an item missing one of them instead of guessing. Items marked **advisor** get a written finding only, **draft** get a branch the builder doesn't merge without the owner, and the rest go through the gate as usual.
 
 ## Regression
 
-Two suites run on every push in CI, and the git pre-push hook runs the plain `bun test` and the evals, against the fictional sample brain in `examples/brain` (never the real one):
+Two suites run on every push in CI, and the git pre-push hook runs the plain `bun test` and the evals (then the north-star replay, and on a push to main the merge gate's rules), against the fictional sample brain in `examples/brain` (never the real one):
 
 - **Behaviour:** `bun test` (twice in CI: once plain, once with every read through per-agent cells), `bun evals/run.ts --ci` (the deterministic evals, red team included) and, in CI only, the demo.
 - **UI:** `test/ui-regression.test.ts` opens every dashboard page and every browser-door (`/b`) page in Chromium and compares what a person or a screen reader gets (headings, links, buttons, fields, their text) with the saved snapshot in `test/ui/`. It compares structure and words, not pixels, so it is the same on a Mac and in CI. A page with no snapshot fails. Without Chromium (a machine that never installed it), the UI suite skips itself locally; only CI, which counts screenshots, catches that.
@@ -45,7 +45,16 @@ CI also saves a full-page screenshot of each page (`PB_UI_SHOT_DIR=<dir>`), uplo
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every branch push and every PR: gitleaks over the whole history, the personal-term denylist (repo secret `PB_DENYLIST`), typecheck, dead code, both test runs, evals, the demo. The test and eval steps have their own timeout below the job's, so a hang there shows as a red step rather than a cancelled job. Without the `PB_DENYLIST` secret the denylist step warns and passes. Paid agent evals (`--llm`) never run in CI; they stay with the one batched runner.
+`.github/workflows/ci.yml` runs on every branch push and every PR: gitleaks over the whole history, the personal-term denylist (repo secret `PB_DENYLIST`), the [dependency gate](#dependencies), the merge gate's rules (`bun scripts/gate.ts <base> --no-run --no-ledger`: the base is the PR's base, the previous tip on a push to `main`, else `origin/main`; the slice-audit and agent-eval evidence lives in the builder's ledger outside the repo, so CI prints those as notes and blocks on the rest), typecheck, dead code, both test runs, evals, the north-star replay (`bun scripts/north-star.ts`, blocking), the demo. The test and eval steps have their own timeout below the job's, so a hang there shows as a red step rather than a cancelled job. Without the `PB_DENYLIST` secret the denylist step warns and passes. Paid agent evals (`--llm`) never run in CI; they stay with the one batched runner.
+
+## Dependencies
+
+What the package pulls in is checked before anything goes public, in CI on every push (`scripts/deps.ts`):
+
+- **Lockfile.** `bun.lock` is tracked and every `bun install` in `.github/workflows/` uses `--frozen-lockfile`, so CI and a release install exactly what was reviewed (`bun scripts/deps.ts lock`).
+- **Licenses.** Every package under `node_modules`, dev tools included, has a license on the allowlist in `scripts/deps.ts` (`ALLOWED`): permissive licenses (MIT, ISC, BSD, Apache-2.0, MPL-2.0 and the like) and the AGPL-compatible GPL family (GPL-2.0-or-later, LGPL-2.1-or-later, GPL-3.0, AGPL-3.0). An SPDX expression passes when every `AND` part does and one side of each `OR` does. A package with no license field, `UNLICENSED`, `SEE LICENSE IN`, GPL-2.0-only, SSPL or BUSL fails `bun scripts/deps.ts licenses`. To keep such a package, read its license and add it to `REVIEWED` with the version and why; a new version fails again until it is read again.
+- **Advisories.** `bun audit --audit-level=high` fails CI on a high or critical advisory in any locked package. `bun audit fix` upgrades within the declared ranges.
+- **SBOM.** Each GitHub release carries `sbom.cdx.json`, a CycloneDX 1.5 list of what `npm install pocketbrain` brings in (the runtime dependencies and theirs, resolved like Node; dev tools never ship), from `bun scripts/deps.ts sbom`.
 
 ## Releases
 
@@ -53,7 +62,9 @@ A release is a tag `vX.Y.Z` on `main` whose `CHANGELOG.md` section is dated and 
 
 **Versions.** Before 1.0: a change to the brain format or the agent door (anything an owner or an agent must act on) is a minor bump and is listed under **Changed** with what to do; everything else is a patch.
 
-**Changelog.** A branch that changes behaviour adds its line under `## [Unreleased]` in the same branch, in plain words a user would understand.
+**Changelog.** A branch that changes behaviour adds its line under `## [Unreleased]` in the same branch, in plain words a user would understand, under its group (`### Added`, `### Changed`, `### Fixed`, `### Security`). Anything the owner must do by hand when the Mac takes the release (a rules/ change, a command to run once, a new key) also gets a line under `### Before you update`.
+
+**Release notes.** `bun scripts/release.ts notes <tag>` builds a release's notes from its section (`releaseNotes`, contract in `test/release.test.ts`): opening prose, then **Before you update** first, then Security, Changed, Added, Fixed, then any other group in order. A group named twice (two branches' keep-both merge) becomes one, and a line under no heading goes last as **Other changes**. The tag message `cut` writes and the GitHub release both carry these notes, and `verify-tag` (run by CI on every release) fails a section with no entries, so a tag can't go out with empty notes.
 
 **Releasable** means all of these, checked by `bun scripts/release.ts check`:
 
@@ -71,18 +82,57 @@ bun scripts/release.ts cut patch      # or minor; a prepared "- unreleased" sect
 git push origin main
 ```
 
-`cut` dates the changelog section and sets `package.json`'s version on a `claude/release-X.Y.Z` branch, merges it into `main` and makes a local annotated tag. It never pushes. Pushing `main` is enough: cloud sessions can push branches but GitHub refuses their tag pushes (HTTP 403), so CI makes the tag. On every push to `main`, `.github/workflows/release.yml` asks `bun scripts/release.ts due` whether `package.json`'s version has a dated section and no tag yet. When it has: the whole CI again on that commit, then a check that it matches `package.json` and a dated section (`bun scripts/release.ts verify-tag`) and is on `main`, then CI makes the tag `vX.Y.Z`, then the GitHub release (its text is the changelog section, `bun scripts/release.ts notes <tag>`), and last the `release` branch moves to the tag. It only fast-forwards, so an older tag can't move it back. A plain merge to `main` is not due and the workflow stops after its first step. A tag pushed by hand (Louis, from the Mac) runs the same steps and skips making the tag.
+`cut` dates the changelog section and sets `package.json`'s version and the README's status line on a `claude/release-X.Y.Z` branch, merges it into `main` and makes a local annotated tag. It never pushes. Pushing `main` is enough: cloud sessions can push branches but GitHub refuses their tag pushes (HTTP 403), so CI makes the tag. On every push to `main`, `.github/workflows/release.yml` asks `bun scripts/release.ts due` whether `package.json`'s version has a dated section and no tag yet. When it has: the whole CI again on that commit, then a check that it matches `package.json`, the README's status line and a dated section with entries (`bun scripts/release.ts verify-tag`) and is on `main`, then CI makes the tag `vX.Y.Z`, then the GitHub release (its text is the release notes, `bun scripts/release.ts notes <tag>`), and last the `release` branch moves to the tag. It only fast-forwards, so an older tag can't move it back. A plain merge to `main` is not due and the workflow stops after its first step. A tag pushed by hand (the owner, from the Mac) runs the same steps and skips making the tag.
+
+## The Mac takes a main sha
+
+How the Mac runs new code today (outside audit 2026-10-27). After the builder pushes `main`, the coordinator tells the Mac thread "go <sha>", and the Mac thread runs:
+
+```sh
+cd ~/pocketbrain && bun scripts/deploy.ts go <sha>     # or: go main, for origin/main's tip
+```
+
+1. fetches `origin/main`; the sha must be a commit on it (a sha from another branch is refused, nothing moves); on hold, or with uncommitted changes in `~/pocketbrain`, it stops;
+2. checks out exactly that commit (detached), runs `bun install --frozen-lockfile`, restarts the hub with a plain `launchctl kickstart -k` of `com.pocketbrain.start`, and waits for `http://127.0.0.1:8787/health`;
+3. **verifies**: `/health` answers `{ "ok": true, "code": "<sha>" }`, where `code` is the sha the hub's own checkout was at when that process started serving (`codeAtStart` in `src/util.ts`), not what is checked out now. `code` is answered only to a loopback caller (a `127.0.0.1`, `localhost` or `[::1]` Host and no `cf-*`, `X-Forwarded-For`, `Forwarded` or `Tailscale-*` header), so the public door never names the running sha; `go` refuses a `--health` that isn't on loopback. A healthy hub that reports another sha, or none, has not taken the new code, and counts as a failure like an unhealthy one;
+4. on a failure, checks out the sha it ran before, installs, restarts, and records the rollback (`down` if that doesn't come up either);
+5. on success, runs the real brain's north star once for that code (`northStarFor` in `src/probe.ts`: `scripts/north-star.ts --brain <brain> --json`, the same run the hub would make 5 minutes after it starts, which then finds the record and skips) and prints its counts line. Report-only: a FAIL, or a north star that can't run, never changes the deploy's status or raises an alert. The brain is `--brain <dir>`, else `$PB_BRAIN`, else the one `init` remembered in `~/.config/pocketbrain/brain`. It only writes `log/north-star.json` there, the untracked file the hub writes; nothing is committed to the brain.
+
+Already on that sha with the hub reporting it: no restart, it says `current` and prints the north star for it. Checked out but never restarted (the hub reports the old sha): it restarts and verifies.
+
+What it prints (the Mac thread reports these lines with the result):
+
+```
+2026-10-27T12:00:00.000Z deploying 1a2b3c4 (was 9f8e7d6)
+north star (real brain, code 1a2b3c4): FAIL, 8 asks, 6 not about a contradiction, 2 on the home, 63/99 pages ok
+2026-10-27T12:01:40.000Z deployed: deployed 1a2b3c4 (was 9f8e7d6); hub healthy and running 1a2b3c4
+```
+
+and on a failure, exit 1:
+
+```
+2026-10-27T12:01:40.000Z 1a2b3c4 failed (healthy but reported 9f8e7d6); rolling back to 9f8e7d6
+2026-10-27T12:03:10.000Z rolled-back: 1a2b3c4 healthy but reported 9f8e7d6, asked 1a2b3c4; back on 9f8e7d6
+```
+
+Exit 0 means `deployed` or `current`: the hub said it runs that sha. Where the running sha is recorded, for the owner and the Mac thread:
+
+- `curl -s http://127.0.0.1:8787/health` on the Mac — the live answer, `code` is the running sha (loopback only);
+- `bun scripts/deploy.ts status` — `deploy.json`: `sha` (asked), `running` (what `/health` reported), `previous`, `mode: "go"`, and `north_star` (counts only);
+- the hub's `update` check (`deployCheck`, in `log/probe.json`, the digest and the dashboard): `deploy go deployed: … running 1a2b3c4; north star FAIL, 8 asks, …`. A `go` record never goes stale (it is a one-off by hand); a rollback, a block or a `down` fails the check like the release follower's.
+
+The first time, the Mac's checkout predates `go`, so: `cd ~/pocketbrain && git fetch origin main && git checkout --detach <sha> && bun scripts/deploy.ts go <sha>` (the checkout is there, the hub still reports the old code or none, so `go` restarts and verifies). The working copy stays detached from then on; hand `git pull`s stop.
 
 ## The Mac follows releases
 
-`scripts/deploy.ts` runs every 10 minutes under launchd (`com.pocketbrain.update`). Each pass:
+Kept for when tags exist (none has yet). `scripts/deploy.ts run` runs every 10 minutes under launchd (`com.pocketbrain.update`). Each pass:
 
 1. fetches `origin/release` and its tags; the tip must carry a `vX.Y.Z` tag;
 2. stops if `~/pocketbrain` is already on that tag, if `~/pocketbrain` has uncommitted changes (it never overwrites them), or if it is on hold;
 3. checks out the tag, runs `bun install --frozen-lockfile`, restarts the hub with a plain `launchctl kickstart -k` of `com.pocketbrain.start`, and waits about 90 seconds (up to three minutes if the hub is slow to answer) for `http://127.0.0.1:8787/health`;
 4. if the install fails or the hub doesn't come back healthy, checks out the version it ran before, installs and restarts again, and records the rollback.
 
-It never touches the tunnel, never boots anything out, and never reads or writes the brain. Each pass writes `deploy.json` in the config folder (`~/.config/pocketbrain`), including `unreleased_since`, the date of the oldest commit on `main` that `release` lacks (the hub's self-check warns after 7 days); the hub's health probe (`src/probe.ts`) turns a rollback, a block, a failed fetch, or a pass that stopped running for over 3 hours into one `hub` alert, which reaches the owner like any other.
+It never touches the tunnel, never boots anything out, and never reads or writes the brain (only `go` runs the north star on it, read-only apart from `log/north-star.json`). Each pass writes `deploy.json` in the config folder (`~/.config/pocketbrain`), including `unreleased_since`, the date of the oldest commit on `main` that `release` lacks (the hub's self-check warns after 7 days); the hub's health probe (`src/probe.ts`) turns a rollback, a block, a failed fetch, or a pass that stopped running for over 3 hours into one `hub` alert, which reaches the owner like any other.
 
 ```sh
 bun scripts/deploy.ts status          # the last pass
@@ -90,9 +140,11 @@ bun scripts/deploy.ts hold            # stay on this version (unhold to follow r
 bun scripts/deploy.ts run             # one pass now
 ```
 
+It only moves forward: a hub that `go` put on a `main` commit the release tag doesn't contain stays where it is (`current`, "not moving back").
+
 A bad release is fixed forward: cut a new release with the fix (or with the change reverted). After a rollback the hub stays on the old version, and later passes leave the bad tag alone, until a newer tag reaches the `release` branch.
 
-**Setting it up on the Mac** (once, by Louis, in the Mac thread). The working copy moves from following `main` by hand to running tags, so hand `git pull`s stop:
+**Setting it up on the Mac** (once, by the owner, in the Mac thread). The working copy moves from following `main` by hand to running tags, so hand `git pull`s stop:
 
 ```sh
 cd ~/pocketbrain && bun scripts/deploy.ts plist > ~/Library/LaunchAgents/com.pocketbrain.update.plist
@@ -111,6 +163,27 @@ The brain carries a format number in the `FORMAT` file at its root (`pocketbrain
 
 That second rule is what makes a rollback safe. If a release migrated the brain and then failed its health check, the updater goes back to the old tag, and the old hub refuses to start rather than run on a layout it predates. `deploy.json` then says `down`, the hub's log has the line, and the fix is forward: a release that knows the new format (`bun scripts/deploy.ts unhold`, then `bun scripts/deploy.ts run` once it is on the `release` branch). A release that raises the format should say so in its changelog section, since the version before it can't run that brain any more.
 
+## The public repo and the site
+
+The public repo (`pocketbrain-oss`, beside this repo under the same GitHub owner; `PB_PUBLIC_REPO` names another) holds what `main` holds, and pocketbrain.dev names the newest release (owner, 2026-10-31: the public repo is always in sync with what is built, and the site never names a version that isn't tagged).
+
+**The public repo follows `main` by itself.** `.github/workflows/public-sync.yml` runs after `ci.yml` passes on a push to `main`, for `main`'s tip only (an older green run skips):
+
+1. `sh scripts/public-export.sh` writes the tracked files minus `scripts/public-exclude.txt` and refuses if any term of the private denylist (repo secret `PB_DENYLIST`: the employer, school, family names, addresses, phones) is in them. Without the secret it refuses; it never publishes unchecked;
+2. gitleaks scans the export; only a rule already allowed for the same test file in `.gitleaksignore` passes (`bun scripts/public-sync.ts leaks`), anything else stops it;
+3. the export replaces the public repo's files as one new commit on its `main`, `pocketBrain <version> (main)` with a `Source: <private sha>` line and no private commit subject, pushed with the deploy key in repo secret `PB_OSS_DEPLOY_KEY` (write access on pocketbrain-oss only). Never a force push; a commit that changes nothing is not made.
+
+The public repo keeps its own history of these commits; the private history (which holds unscrubbed early docs) never goes there. The sync workflow and its test are left out of the export.
+
+**The site follows tags.** The site's one version is the `data-pb-version` attribute in `site/index.html` on branch `claude/pocketbrain-site` (never merged into `main`). After a release is tagged, the thread that cut it updates that version and the site's status and "What you see" lines from the release's **What you see** section, pushes the branch, and the coordinator asks the Mac thread to deploy it (the cloud can't reach Cloudflare):
+
+```sh
+cd /tmp && rm -rf pb-site && mkdir pb-site && git -C ~/pocketbrain archive origin/claude/pocketbrain-site site | tar -x -C pb-site
+cd pb-site/site && npx wrangler pages deploy . --project-name pocketbrain --branch main
+```
+
+**Checking both.** `bun scripts/public-sync.ts check` reads the live site and the public repo and prints IN SYNC or OUT OF SYNC with what lags: a site naming a version that is not a tag, or not the newest tag; a public repo whose last commit names another source than `main`'s tip, or another version. `--site <file>` checks a site file before deploying it, `--no-site` and `--no-public` check one side. `verify-tag` (CI, on every release) also refuses a tag whose README status line names another version, and `cut` moves that line with `package.json`.
+
 ## Who pushes
 
 | Step | Who |
@@ -118,7 +191,9 @@ That second rule is what makes a rollback safe. If a release migrated the brain 
 | Merge a branch into `main` | the builder thread, after `bun scripts/gate.ts main` says MERGE |
 | Push `main` to the private repo | the builder, when the gate passed and `bun run check` is green; CI runs again there |
 | Cut a release and push `main` | the builder, after a merge batch, when CI on `main` is green and nothing waits on a paid eval or slice audit; CI makes the tag |
-| Deploy to the Mac | nobody, once the update job is installed: the Mac takes a tag once its CI passed |
-| Public repo, npm, the launch site, `rules/` in the brain | Louis only |
+| Deploy to the Mac | the Mac thread, on the coordinator's "go <sha>": `bun scripts/deploy.ts go <sha>`, reporting its last lines (verified sha, north star). Once tags exist and the update job is installed, the Mac also takes a tag by itself once its CI passed |
+| Public repo | CI's public-sync workflow, after CI passes on `main` (owner, 2026-10-31); a first-time push or any other change to it, the owner only |
+| The site | after each tag, the thread that cut it updates and pushes `claude/pocketbrain-site`; the Mac thread deploys it on the coordinator's word |
+| npm, `rules/` in the brain | The owner only |
 
-GitHub enforces the rest with a ruleset on `main` and `release` (Louis sets it once, `release-ruleset-steps.md`): no force-push, no deletion. It doesn't require the `test` check, which would refuse the builder's direct pushes; CI on `main` and the release workflow's own CI run stand in for it. It must not restrict tag creation, or CI can't tag.
+GitHub enforces the rest with a ruleset on `main` and `release` (the owner sets it once in the repository's Settings, Rules): no force-push, no deletion. It doesn't require the `test` check, which would refuse the builder's direct pushes; CI on `main` and the release workflow's own CI run stand in for it. It must not restrict tag creation, or CI can't tag.
