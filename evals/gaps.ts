@@ -3663,4 +3663,11 @@ export const GAPS: Record<string, Gap> = {
     finding: "Audit v10 2026-11-01: three commits that day (G598 63d913b, G600 4778190, G603 9686cc7) took proposals held by access, by the capture rule and by ambiguity out of asks on a coordinator's call the owner never made, so the measure passed while items waited for the owner; home_asks counted ownerConflicts only while the home (waitingCount) also counted held values and held mail. The audit asked that changes to the test need the owner's sign-off.",
     fix: "scripts/north-star.ts: one counted list (the owner left the choice to the coordinator, which chose it): every held item counts in asks under its own kind (held_by_access, held_by_capture, held_by_ambiguity), the held lines stay as the breakdown, and home_asks is the home's waitingCount; the definition says a change to what it counts needs the owner's own typed word in a thread. Tests: test/north-star-one-list.test.ts, test/ambiguous-name.test.ts, test/filing-twins.test.ts, test/import-files-rest.test.ts.",
   },
+  G622: {
+    closed: "542fd79",
+    title: "A proposal filed by name that contradicted its page waited on Settings, not the settle screen",
+    severity: "medium",
+    finding: "Shape script on the owner's brain after the G618 deploy (2026-11-01): one open proposal filed by name (no id) disagreed with a page holding a private fact; filing held it as a conflict (\"Two sources disagree about a page that holds a private fact\"), but inboxConflicts skipped every proposal without request.id, so it never reached the home or the settle screen and the north star counted it as an ask not about a contradiction.",
+    fix: "src/settle-inbox.ts inboxConflicts: a by-name proposal resolves to its page with resolveEntity, as filing weighs it; a name that fits no page or more than one is no conflict. Test: test/inbox-conflict-by-name.test.ts.",
+  },
 };

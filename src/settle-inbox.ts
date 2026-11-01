@@ -12,7 +12,7 @@ import { loadRules } from "./rules";
 import { compareKey } from "./normalize";
 import { refString } from "./sources";
 import { sourceKind } from "./diary";
-import { inboxCards, decideProposal, write } from "./write";
+import { inboxCards, decideProposal, resolveEntity, write } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
 import { today } from "./brain";
 import { CoreError, type SettleCase } from "./core";
@@ -26,8 +26,13 @@ export function inboxConflicts(root: string): InboxConflict[] {
   const out: InboxConflict[] = [];
   for (const card of inboxCards(root)) {
     const req = card.doc.request;
-    if (!req?.id || !req.attribute || (req as { retract?: boolean }).retract || req.value === undefined) continue;
-    const note = notes.find((n) => n.fm.id === req.id);
+    if (!req?.attribute || (req as { retract?: boolean }).retract || req.value === undefined) continue;
+    // A proposal by name lands where the write path would put it, as filing weighs it (G622); a
+    // name that fits no page or more than one is no conflict here.
+    const named = req as { title?: unknown; type?: unknown };
+    const id = req.id ?? (typeof named.title === "string" && typeof named.type === "string" ? resolveEntity(notes, named.type, named.title).id : undefined);
+    if (!id) continue;
+    const note = notes.find((n) => n.fm.id === id);
     const f = note?.fm.facts?.[req.attribute];
     if (!note || !f || isDisputed(f) || isList(f)) continue;
     const live = records(f).find((r) => !r.valid_to && !r.retired);
