@@ -35,7 +35,7 @@ function maya(lastContact = "2026-10-07") {
 
 test("a person reads like a person: full name once, then the first name; role and org in one sentence; this year's dates without the year", () => {
   const lead = body(maya(), "people/maya-chen").split("\n\n")[0]!;
-  expect(lead).toBe("Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^p-role] Maya works with you on Atlas.[^p-relationship] Maya's city is Montréal.[^p-city] You were last in touch with Maya on 7 Oct.[^p-last-contact]");
+  expect(lead).toBe("Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Maya works with you on Atlas.[^pf-relationship] Maya's city is Montréal.[^pf-city] You were last in touch with Maya on 7 Oct.[^pf-last-contact]");
 });
 
 test("a date from another year keeps its year", () => {
@@ -60,7 +60,7 @@ test("a role that doesn't read as a title is said as work, never 'the' in front"
   page(root, "orgs/harbourline", "org", "Harbourline Software");
   page(root, "people/sam-roy", "person", "Sam Roy", fact("role", "coach tennis", "gmail:f0000000000000b1") + fact("org", "\"[[orgs/harbourline]]\"", "gmail:f0000000000000b2"));
   renderTouchedPages(root, "2000-01-01T00:00:00Z");
-  expect(body(root, "people/sam-roy")).toContain("Sam Roy works as coach tennis at [[orgs/harbourline|Harbourline Software]].[^p-role][^p-org]");
+  expect(body(root, "people/sam-roy")).toContain("Sam Roy works as coach tennis at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org]");
 });
 
 test("a title with 'of' reads as a title: 'the VP of Product at'", () => {
@@ -68,7 +68,7 @@ test("a title with 'of' reads as a title: 'the VP of Product at'", () => {
   page(root, "orgs/harbourline", "org", "Harbourline Software");
   page(root, "people/priya-shah", "person", "Priya Shah", fact("role", "VP of Product", "gmail:f0000000000000c1") + fact("org", "\"[[orgs/harbourline]]\"", "gmail:f0000000000000c1"));
   renderTouchedPages(root, "2000-01-01T00:00:00Z");
-  expect(body(root, "people/priya-shah")).toStartWith("Priya Shah is the VP of Product at [[orgs/harbourline|Harbourline Software]].[^p-role]\n\n");
+  expect(body(root, "people/priya-shah")).toStartWith("Priya Shah is the VP of Product at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org]\n\n");
 });
 
 test("a name that starts with a title or an initial is said in full every time", () => {

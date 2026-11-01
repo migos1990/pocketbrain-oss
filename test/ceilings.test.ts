@@ -483,3 +483,19 @@ test("a hidden date in a link's text, or year-less beside a granted date of anot
   const out = JSON.stringify(readNote(root, "claude", ID));
   expect(out).toContain("Due 8 Dec. See [[projects/final-projects|hand-in 2026-12-08]].");
 }, 60_000);
+
+// G596: a summary carries no reference labels (the wiki sync strips them, src/core.ts), so the
+// writer's label-keyed removal can't reach it. A summary the Gardener wrote from a fact that was
+// made private later keeps saying that fact's date until the next sync rewrites it.
+test("a stale summary stating a fact made private since passes (ceiling)", async () => {
+  const { makeDemoBrain } = await import("./fixture");
+  const { readNote } = await import("../src/core");
+  const { withTokenRole } = await import("../src/tokenrole");
+  const { root } = await makeDemoBrain();
+  const ID = "projects/product-discovery-course", f = join(root, `${ID}.md`);
+  const txt = readFileSync(f, "utf8").replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    sensitivity: private\n");
+  writeFileSync(f, txt.replace(/^title:/m, "summary: Final projects are due 8 Dec.\ntitle:"));
+  const out = withTokenRole("claude", "reader", () => readNote(root, "claude", ID)) as { summary?: string; body: string };
+  expect(out.summary).toBe("Final projects are due 8 Dec.");
+  expect(out.body).not.toContain("8 Dec");
+}, 60_000);

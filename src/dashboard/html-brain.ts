@@ -230,9 +230,20 @@ export function wikiBody(s: State, body: string, quote?: (ref: string) => string
   const h = `h${level}`;
   const f = footnotes(body);
   const num = new Map(f.notes.map((x) => [x.label, x.n]));
-  const refs = (html: string) => html.replace(/\[\^([^\]\s]+)\]/g, (m, label) => num.has(label) ? `<sup><a href="#fn-${num.get(label)}" class="b-ref">[${num.get(label)}]</a></sup>` : m);
+  // Labels that share a number (one mail behind two facts) read as one reference: "[1]", not "[1][1]".
+  const sup = (n: number) => `<sup><a href="#fn-${n}" class="b-ref">[${n}]</a></sup>`;
+  const refs = (html: string) => html.replace(/(?:\[\^[^\]\s]+\])+/g, (run) => {
+    const seen = new Set<number>();
+    return [...run.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => {
+      const n = num.get(m[1]!);
+      if (n === undefined) return m[0];
+      if (seen.has(n)) return "";
+      seen.add(n);
+      return sup(n);
+    }).join("");
+  });
   const parts = sections(f.text).map((x) => `${x.heading !== undefined ? `<${h}>${esc(x.heading)}</${h}>` : ""}${refs(wikiLinks(s, idsAsWords(x.text)))}`);
-  const list = f.notes.length ? `<${h}>References</${h}><ol class="b-refs">${f.notes.map((x) => `<li id="fn-${x.n}">${referenceText(s, x.text)}${quotesOf(x.text, quote)}</li>`).join("")}</ol>` : "";
+  const list = f.notes.length ? `<${h}>References</${h}><ol class="b-refs">${f.notes.filter((x, i) => f.notes.findIndex((y) => y.n === x.n) === i).map((x) => `<li id="fn-${x.n}">${referenceText(s, x.text)}${quotesOf(x.text, quote)}</li>`).join("")}</ol>` : "";
   return parts.join("") + list;
 }
 

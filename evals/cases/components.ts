@@ -621,7 +621,7 @@ const pullCases: Case[] = [
     const head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: root }).stdout.toString();
     wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
     const again = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: root }).stdout.toString() === head;
-    const cited = /Ana Diaz's role is program director\.\[\^p-role\]/.test(text) && /\[\^p-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)/.test(text);
+    const cited = /Ana Diaz's role is program director\.\[\^pf-role\]/.test(text) && /\[\^pf-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)/.test(text);
     const hidden = !/Kestrelmoor/.test(text);
     return ok(cited && hidden && again, `cited sentence ${cited}; shared-with fact left out ${hidden}; second run commits nothing ${again}`);
   } },
@@ -637,8 +637,8 @@ const pullCases: Case[] = [
     Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: maya"], { cwd: root });
     wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
     const [lead, made] = readFileSync(join(root, "people", "maya-chen.md"), "utf8").split(/^---$/m).slice(2).join("---").trim().split("\n\n");
-    const merged = (lead ?? "").startsWith("Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^p-role][^p-org]");
-    const first = (lead ?? "").includes("You were last in touch with Maya on 4 Oct.[^p-last-contact]");
+    const merged = (lead ?? "").startsWith("Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org]");
+    const first = (lead ?? "").includes("You were last in touch with Maya on 4 Oct.[^pf-last-contact]");
     const own = made === wiki.MADE && !(lead ?? "").includes(wiki.MADE);
     return ok(merged && first && own, `one sentence for role and org ${merged}; first name and no year ${first}; made-by line apart ${own}`);
   } },

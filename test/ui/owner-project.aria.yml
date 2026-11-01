@@ -75,15 +75,14 @@
     - /url: /p/decisions/2026-10-01-weekly-team-review
   - text: .
   - superscript:
-    - link "3":
-      - /url: "#fn-3"
+    - link "1":
+      - /url: "#fn-1"
   - heading "References" [level=2]
   - list:
     - listitem: Email, 12 Sep 2026
     - listitem:
       - text: Email, 7 Oct 2026
       - group: What the source said
-    - listitem: Email, 12 Sep 2026
   - 'link "Atlas launch Next: freeze the beta build on 15 October Two sources disagree · settle"':
     - /url: /settle/c-0001
   - heading "What changed" [level=2]

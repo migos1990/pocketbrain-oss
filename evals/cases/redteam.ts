@@ -3714,7 +3714,7 @@ const samePersonCases: Case[] = [
     // text moved under ("Earlier notes", or "Your notes") are no part of the repoint: they are set
     // aside, and the writer's text names neither note.
     const writer = after.match(/^[^\n]*\n\n\(Written by the hub from this page's facts\.\)\n\n/m)?.[0] ?? "";
-    const refs = [...after.matchAll(/^\[\^p-[^\]]+\]: .*\n?/gm)].map((m) => m[0]);
+    const refs = [...after.matchAll(/^\[\^pf?-[^\]]+\]: .*\n?/gm)].map((m) => m[0]);
     const rest = refs.reduce((t, r) => t.replace(r, ""), after.replace(writer, "").replace(/^#{2,4} (Earlier|Your) notes\n/m, "")).replace(/\n{3,}/g, "\n\n").trimEnd();
     return [["helper sees TA is [[redacted]]", before.includes("TA is [[redacted]]")], [`merge refused (${p?.blocked})`, refused], ["helper's view after upkeep is unchanged", rest === before.trimEnd()], ["the writer's text names neither note", !/ev-ann|Ann L/.test(writer + refs.join(""))]];
   }, "G205"),

@@ -129,13 +129,12 @@
       - /url: /p/decisions/2026-10-01-weekly-team-review
     - text: .
     - superscript:
-      - link "[3]":
-        - /url: "#fn-3"
+      - link "[1]":
+        - /url: "#fn-1"
     - heading "References" [level=3]
     - list:
       - listitem: Email, 12 Sep 2026
       - listitem: Email, 7 Oct 2026
-      - listitem: Email, 12 Sep 2026
   - group: Edit the Earlier notes section
   - heading "Recent updates" [level=2]
   - text: "Edited the notes of Atlas launch today by hub Added an Earlier notes section to Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide New page: Atlas launch 8 days ago by you"

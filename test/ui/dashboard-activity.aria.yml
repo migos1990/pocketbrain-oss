@@ -50,21 +50,21 @@
         - cell "Claude"
         - cell "· loaded its notes \"Product Discovery course\""
         - cell "· Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie"
-      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Luc Gauthier, Simone Laurent, Ahmed Saleh":
+      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Kitchen renovation\""
-        - cell "· Kitchen renovation, Luc Gauthier, Simone Laurent, Ahmed Saleh"
+        - cell "· Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent"
       - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
         - cell "· Grace Liu, Karen Liu, Harbourline Software"
-      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
+      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
+        - cell "· Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah"
       - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch":
         - cell "3 h ago"
         - cell "Claude"
@@ -95,11 +95,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Priya Shah\""
         - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman"
-      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Robin Lefebvre":
+      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre":
         - cell "2 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Mom's move\""
-        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Robin Lefebvre"
+        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre"
       - row "3 days ago Gemini · loaded its notes \"Product Discovery course\"":
         - cell "3 days ago"
         - cell "Gemini"

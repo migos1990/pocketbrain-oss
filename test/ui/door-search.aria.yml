@@ -4,7 +4,7 @@
     - listitem:
       - link "Maya Chen":
         - /url: /b/notes/people%2Fmaya-chen
-      - text: people/maya-chen · person Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^p-role] Maya works with you on Atlas.[^p-relationship] Maya's city is Montréal.[^p-r
+      - text: people/maya-chen · person Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Maya works with you on Atlas.[^pf-relationship] Maya's city is Mon
     - listitem:
       - link "Hire a senior designer, not two juniors":
         - /url: /b/notes/decisions%2F2026-09-15-hire-senior-designer
@@ -12,15 +12,15 @@
     - listitem:
       - link "Senior designer hire":
         - /url: /b/notes/projects%2Fdesigner-hire
-      - text: projects/designer-hire · project Senior designer hire is final round.[^p-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^p-status] Due for Senior designer hir
-    - listitem:
-      - link "Atlas launch":
-        - /url: /b/notes/projects%2Fatlas-launch
-      - text: "projects/atlas-launch · project Atlas launch is in beta.[^p-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^p-status] Due for Atlas launch: 3 Nov.[^p-status] Nex"
+      - text: projects/designer-hire · project Senior designer hire is final round.[^pf-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for Senior designer hir
     - listitem:
       - link "Harbourline Software":
         - /url: /b/notes/orgs%2Fharbourline
-      - text: orgs/harbourline · org Harbourline Software's kind is software company.[^p-kind] Harbourline Software's city is Montréal.[^p-kind] [[people/aisha-rahman|Aisha Rahman]], [[people/danie
+      - text: orgs/harbourline · org Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/aisha-rahman|Aisha Rahman]], [[people/dan
+    - listitem:
+      - link "Atlas launch":
+        - /url: /b/notes/projects%2Fatlas-launch
+      - text: "projects/atlas-launch · project Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3 Nov.[^pf-due] Next"
     - listitem:
       - link "Weekly Atlas review on Wednesdays":
         - /url: /b/notes/decisions%2F2026-10-01-weekly-team-review

@@ -58,6 +58,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - A held card on On your mind no longer names a page called like a statement, a claim or a card ("Visa statement", "Manulife claim"), whoever the mail came from; it says "Something new only you can see" (G585).
 - Settle on an older sign-in no longer shows the two values of a conflict whose current value you made private, or whose values look like money, health or legal; they show after a fresh sign-in, as on the home (G583).
 - A date you made private no longer shows in a page's opening words ("8 Dec") on an older sign-in or in Ask, and an assistant that can't see a fact no longer reads the hub's own sentence about it on that page (G582, G589, G594).
+- An assistant that can't see one fact on a page still reads the page's other sentences, even when they come from the same email; the references on a page still show one number per email (G596).
 - Merging two pages no longer lets an assistant treat a share you set on one of them as its own: its next change to that value waits for you, as before the merge (G584).
 - An order to the assistant reading it waits for you under any attribute's name (notes, working style, …), and passive, clause-led or French orders count too, not only "prefers that you …" (G554).
 - The optional local search model's image library (sharp, via @huggingface/transformers) is pinned to 0.35.5, past three high advisories in libvips, libheif and librsvg; search setup still loads the model.

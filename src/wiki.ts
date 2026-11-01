@@ -94,7 +94,8 @@ export function sectionWithRefs(body: string, heading: string): string | undefin
 export interface Footnote { label: string; n: number; text: string }
 
 // Lines `[^label]: text` are definitions; they leave the text and are numbered in the order the
-// text first cites them (then any never cited). A ref with no definition stays as written.
+// text first cites them (then any never cited), one number per distinct reference. A ref with no
+// definition stays as written.
 export function footnotes(text: string): { text: string; notes: Footnote[] } {
   const defs = new Map<string, string>();
   const kept = text.split("\n").filter((line) => {
@@ -105,7 +106,9 @@ export function footnotes(text: string): { text: string; notes: Footnote[] } {
   const order: string[] = [];
   for (const m of kept.matchAll(/\[\^([^\]\s]+)\]/g)) if (defs.has(m[1]) && !order.includes(m[1])) order.push(m[1]);
   for (const l of defs.keys()) if (!order.includes(l)) order.push(l);
-  return { text: kept, notes: order.map((label, i) => ({ label, n: i + 1, text: defs.get(label)! })) };
+  // Labels with the same reference share its number (the writer gives each fact its own label).
+  const byText = new Map<string, number>();
+  return { text: kept, notes: order.map((label) => { const text = defs.get(label)!; let n = byText.get(text); if (n === undefined) byText.set(text, n = byText.size + 1); return { label, n, text }; }) };
 }
 
 // The wiki's lint (upkeep step 9): review findings only, no model, nothing changed. Details
@@ -575,7 +578,10 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     if (o.said && recs.every((r) => { const k = plainWords(shown(r.value)).slice(0, 40); return k.length >= 20 && o.said!.includes(k); })) continue;
     // Facts with the same references share one footnote, so a reader sees one number, not two for one email.
     const text = [...new Set(recs.map(reference))].join("; ");
-    const lab = refs.find((x) => x.text === text)?.label ?? `p-${attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+    // Each fact keeps its own label (pf-<attr>), even when another fact cites the same mail: an
+    // agent's read drops exactly the sentences of a fact hidden from it (scrubPage in view.ts), and
+    // footnotes() gives labels with the same reference one number, so the owner still reads one.
+    const lab = `pf-${attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
     const waits = !isList(f) && typeof (f as { contested?: unknown }).contested === "string";
     // A value that links to a page is written by its id, so every reader resolves it; one nobody
     // made yet, or that some reader of this page can't see, reads as its plain name.
@@ -672,7 +678,7 @@ function withLead(n: Note, lead: { text: string; refs: { label: string; text: st
   const secs = sections(f.text).filter((x) => x.heading !== undefined);
   const rest = secs.map((x) => `## ${x.heading}\n${x.text}`).join("\n\n");
   const cited = new Set([...rest.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]));
-  const defs = [...lead.refs.map((r) => `[^${r.label}]: ${r.text}`), ...f.notes.filter((x) => cited.has(x.label) && !x.label.startsWith("p-")).map((x) => `[^${x.label}]: ${x.text}`)];
+  const defs = [...lead.refs.map((r) => `[^${r.label}]: ${r.text}`), ...f.notes.filter((x) => cited.has(x.label) && !/^pf?-/.test(x.label)).map((x) => `[^${x.label}]: ${x.text}`)];
   return `${lead.text}\n\n${MADE}\n${rest ? `\n${rest}\n` : ""}\n${defs.join("\n")}\n`;
 }
 
@@ -685,7 +691,7 @@ const OLD_HEADS = new Set(["Related", "From its facts"]);
 export const MADE = "(Written by the hub from this page's facts.)";
 // An opening text the writer may replace: its own (its p- references only), last changed by the
 // writer or by upkeep's link passes. Any other text, or a person's edit of the writer's, is kept.
-const writersOwn = (text: string, by: string) => [WRITER, "reflect"].includes(by) && /\[\^p-/.test(text) && [...text.matchAll(/\[\^([^\]\s]+)\]/g)].every((m) => m[1].startsWith("p-"));
+const writersOwn = (text: string, by: string) => [WRITER, "reflect"].includes(by) && /\[\^pf?-/.test(text) && [...text.matchAll(/\[\^([^\]\s]+)\]/g)].every((m) => /^pf?-/.test(m[1]));
 
 // What the commit says about why each page was written, and true of each: its facts changed (or
 // it is new), a page it's linked with changed, or only something else on it did (a link, its text).

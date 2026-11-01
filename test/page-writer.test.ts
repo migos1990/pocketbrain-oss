@@ -36,8 +36,8 @@ test("page writer: a touched page gets one cited sentence per fact; a second run
   expect(r.written).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
   // Role and org are one sentence with both references (G559).
-  expect(b).toContain("Ana Diaz is the program director at North College.[^p-role][^p-org]");
-  expect(b).toMatch(/^\[\^p-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
+  expect(b).toContain("Ana Diaz is the program director at North College.[^pf-role][^pf-org]");
+  expect(b).toMatch(/^\[\^pf-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
   const log = sh(root, "hub", "log", "-1", "--format=%an%n%B");
   expect(log.split("\n")[0]).toBe("hub");
   expect(log).toMatch(/^Why: /m);
@@ -54,7 +54,7 @@ test("page writer: opening text in the owner's commit is kept word for word, und
   const before = body(root, "people/jane-roy");
   const r = renderTouchedPages(root, SINCE);
   expect(r.kept).toContain("people/jane-roy");
-  expect(body(root, "people/jane-roy")).toStartWith("Jane Roy's role is Course coordinator.[^p-role]");
+  expect(body(root, "people/jane-roy")).toStartWith("Jane Roy's role is Course coordinator.[^pf-role]");
   expect(body(root, "people/jane-roy")).toContain(`## Earlier notes\n${before.split("\n\n[^")[0]}`);
 });
 
@@ -87,7 +87,7 @@ test("page writer: links the pages a fact's source names, only where every reade
   capture(root, "gmail:f0000000000000a1", ["Ben Okafor", "Eve Hidden", "Ana Diaz"]);
   renderTouchedPages(root, SINCE);
   const b = body(root, "people/ana-diaz");
-  expect(b).toContain("Its sources also name [[people/ben-okafor|Ben Okafor]].[^p-role]");
+  expect(b).toContain("Its sources also name [[people/ben-okafor|Ben Okafor]].[^pf-role]");
   // helper sees Ana's text (area work) but not a private page: no link, no name.
   expect(b).not.toContain("Eve");
 });
@@ -133,7 +133,7 @@ test("page writer: a source read before name keys gets them at night, capped, ha
   expect(kept).toContain(nameKey("Ben Okafor"));
   expect(kept).not.toContain("Ben");
   renderTouchedPages(root, SINCE);
-  expect(body(root, "people/ana-diaz")).toContain("Its sources also name [[people/ben-okafor|Ben Okafor]].[^p-role]");
+  expect(body(root, "people/ana-diaz")).toContain("Its sources also name [[people/ben-okafor|Ben Okafor]].[^pf-role]");
 });
 
 test("shipped defaults: a new brain links names in its text (link_names on)", async () => {
@@ -186,7 +186,7 @@ test("page writer: what someone did reads as a sentence to you; a linked page is
   capture(root, "gmail:f0000000000000a1", ["Ben Okafor", "North College"]);
   renderTouchedPages(root, SINCE);
   const ana = body(root, "people/ana-diaz");
-  expect(ana).toContain("Ana Diaz sent you a request for feedback on your grant plan.[^p-relationship]");
+  expect(ana).toContain("Ana Diaz sent you a request for feedback on your grant plan.[^pf-relationship]");
   expect(ana).not.toContain("Relationship of");
   expect(ana).toContain("Its sources also name [[people/ben-okafor|Ben Okafor]].");
   expect(ana).not.toMatch(/also name[^\n]*North College/);
@@ -194,7 +194,7 @@ test("page writer: what someone did reads as a sentence to you; a linked page is
   // The org page wasn't touched by a fact of its own: its people's org facts name it.
   const org = body(root, "orgs/north-college");
   expect(org).toContain("[[people/ana-diaz|Ana Diaz]] and [[people/ben-okafor|Ben Okafor]] work at North College.");
-  expect(org).toMatch(/^\[\^p-[a-z-]+\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
+  expect(org).toMatch(/^\[\^pf?-[a-z-]+\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
 });
 
 test("page writer: an org never lists a person some reader of the org page can't see", () => {
@@ -238,7 +238,7 @@ test("page writer: pages whose facts cite the same item link to each other, cite
   const cy = body(root, "people/cy-moss"), ana = body(root, "people/ana-diaz");
   expect(cy).toContain("[[people/ana-diaz|Ana Diaz]]");
   expect(ana).toContain("[[people/cy-moss|Cy Moss]]");
-  expect(cy).toMatch(/\[\[people\/ana-diaz\|Ana Diaz\]\]\.\[\^p-[a-z-]+\]/);
+  expect(cy).toMatch(/\[\[people\/ana-diaz\|Ana Diaz\]\]\.\[\^pf?-[a-z-]+\]/);
   expect(cy).not.toContain("Eve Park");
   expect(ana).not.toContain("Eve Park");
 });
@@ -260,7 +260,7 @@ test("page writer: an org named in plain words lists its people, under text some
   expect(org).toStartWith("[[people/ana-diaz|Ana Diaz]] and [[people/ben-okafor|Ben Okafor]] work at North College.");
   expect(org).toContain("## Earlier notes\nImported from your notes.[^1]");
   expect(org).toMatch(/^\[\^1\]: Your notes, 2026-09-01$/m);
-  expect(org).toMatch(/^\[\^p-[a-z-]+\]: Email, 2026-10-05 \(gmail:f0000000000000b1\)$/m);
+  expect(org).toMatch(/^\[\^pf?-[a-z-]+\]: Email, 2026-10-05 \(gmail:f0000000000000b1\)$/m);
   // A second run changes nothing.
   const head = sh(root, "hub", "rev-parse", "HEAD");
   renderTouchedPages(root, SINCE);
@@ -324,10 +324,10 @@ test("page writer: a page opening with someone else's text gets its facts' cited
   const r = renderTouchedPages(root, SINCE);
   expect(r.written).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
-  expect(b).toStartWith("Ana Diaz's role is program director.[^p-role]\n\n(Written by the hub from this page's facts.)");
+  expect(b).toStartWith("Ana Diaz's role is program director.[^pf-role]\n\n(Written by the hub from this page's facts.)");
   expect(b).toContain("## Earlier notes\nImported from your notes.[^1]");
   expect(b).toMatch(/^\[\^1\]: Your notes, 2026-09-01$/m);
-  expect(b).toMatch(/^\[\^p-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
+  expect(b).toMatch(/^\[\^pf-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
 });
 
 test("page writer: a longer text in the owner's commit is kept under Earlier notes, beneath the facts' sentences", () => {
@@ -341,8 +341,8 @@ test("page writer: a longer text in the owner's commit is kept under Earlier not
   expect(b).toStartWith("Ana Diaz works as coach tennis at North College.");
   expect(b).toContain("## Earlier notes\nMet Ana at the spring retreat;");
   // Every reference says what kind of source it is.
-  expect(b).toMatch(/^\[\^p-org\]: Notion import, 2026-10-05 \(notion:import\/2026-09-15\)$/m);
-  expect(b).toMatch(/^\[\^p-hobby\]: No source given, 2026-10-05$/m);
+  expect(b).toMatch(/^\[\^pf-org\]: Notion import, 2026-10-05 \(notion:import\/2026-09-15\)$/m);
+  expect(b).toMatch(/^\[\^pf-hobby\]: No source given, 2026-10-05$/m);
 });
 
 test("upkeep takes reference markers out of every summary, whoever wrote it; an assistant's note names the assistant", async () => {
@@ -353,7 +353,7 @@ test("upkeep takes reference markers out of every summary, whoever wrote it; an 
   upkeep(root);
   const fm = YAML.parse(readFileSync(join(root, "people", "ana-diaz.md"), "utf8").split(/^---$/m)[1]);
   expect(fm.summary).toBe("Ana Diaz, head of engineering.");
-  expect(body(root, "people/ana-diaz")).toMatch(/^\[\^p-role\]: Planner's note, 2026-10-05 \(agent:planner\/2026-10-05\)$/m);
+  expect(body(root, "people/ana-diaz")).toMatch(/^\[\^pf-role\]: Planner's note, 2026-10-05 \(agent:planner\/2026-10-05\)$/m);
 });
 
 // Phone check on the real brain, 2026-10-26 16:2xZ: an org page had the hub's paragraph twice (as
@@ -383,7 +383,7 @@ test("page writer: old text on a person page moves under Earlier notes; the hub'
   const root = makeBrain();
   person(root, "ben-okafor", "Ben Okafor", fact("role", "senior assistant", "gmail:f0000000000000b1"));
   capture(root, "gmail:f0000000000000a1", ["Ben Okafor"]);
-  writeFileSync(join(root, "people", "ana-diaz.md"), `---\nid: people/ana-diaz\ntype: person\ntitle: Ana Diaz\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: gardener\nfacts:\n${fact("role", "program director", "gmail:f0000000000000a1")}---\nAna runs the evening programme at the college and has done since the spring; she mentors two of the new lecturers.[^1]\n\n## Who they are\nThe program director.[^1]\n\n## Related\nIts sources also name [[people/ben-okafor|Ben Okafor]].[^p-role] ${MADE_LINE}\n\n## From its facts\nAna Diaz's role is program director.[^p-role] Its sources also name [[people/ben-okafor|Ben Okafor]].[^p-role] ${MADE_LINE}\n\n[^1]: Email, 2026-10-01 (gmail:f0000000000000a1)\n[^p-role]: Email, 2026-10-05 (gmail:f0000000000000a1)\n`);
+  writeFileSync(join(root, "people", "ana-diaz.md"), `---\nid: people/ana-diaz\ntype: person\ntitle: Ana Diaz\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: gardener\nfacts:\n${fact("role", "program director", "gmail:f0000000000000a1")}---\nAna runs the evening programme at the college and has done since the spring; she mentors two of the new lecturers.[^1]\n\n## Who they are\nThe program director.[^1]\n\n## Related\nIts sources also name [[people/ben-okafor|Ben Okafor]].[^pf-role] ${MADE_LINE}\n\n## From its facts\nAna Diaz's role is program director.[^pf-role] Its sources also name [[people/ben-okafor|Ben Okafor]].[^pf-role] ${MADE_LINE}\n\n[^1]: Email, 2026-10-01 (gmail:f0000000000000a1)\n[^pf-role]: Email, 2026-10-05 (gmail:f0000000000000a1)\n`);
   sh(root, "gardener", "add", "-A"); sh(root, "gardener", "commit", "-qm", "gardener: ana");
   // The two sections as the hub wrote them: last changed by the hub.
   const p = join(root, "people", "ana-diaz.md");
@@ -394,7 +394,7 @@ test("page writer: old text on a person page moves under Earlier notes; the hub'
   sh(root, "hub", "commit", "-qam", "hub: page text for 1 page");
   renderTouchedPages(root, SINCE);
   const b = body(root, "people/ana-diaz");
-  expect(b).toStartWith("Ana Diaz's role is program director.[^p-role]");
+  expect(b).toStartWith("Ana Diaz's role is program director.[^pf-role]");
   expect(b).toContain("## Earlier notes\nAna runs the evening programme");
   expect(b).toContain("## Who they are\nThe program director.[^1]");
   expect(count(b, MADE_LINE)).toBe(1);
@@ -447,7 +447,7 @@ test("page writer: a Your notes section the hub itself moved there becomes Earli
   const root = makeBrain();
   person(root, "ana-diaz", "Ana Diaz", fact("role", "program director", "gmail:f0000000000000a1"));
   const p = join(root, "people", "ana-diaz.md");
-  writeFileSync(p, readFileSync(p, "utf8") + `Ana Diaz's role is program director.[^p-role] (Written by the hub from this page's facts.)\n\n## Your notes\nMet Ana at the spring retreat; she runs the evening programme.\n\n[^p-role]: Email, 2026-10-05 (gmail:f0000000000000a1)\n`);
+  writeFileSync(p, readFileSync(p, "utf8") + `Ana Diaz's role is program director.[^pf-role] (Written by the hub from this page's facts.)\n\n## Your notes\nMet Ana at the spring retreat; she runs the evening programme.\n\n[^pf-role]: Email, 2026-10-05 (gmail:f0000000000000a1)\n`);
   sh(root, "hub", "commit", "-qam", "hub: page text for 1 page");
   writeFileSync(p, readFileSync(p, "utf8").replace("updated: 2026-10-01", "updated: 2026-10-02"));
   sh(root, "planner", "commit", "-qam", "planner: touch");
@@ -516,7 +516,7 @@ test("page writer: a page left with no fact loses the hub's opening, keeps the r
   person(root, "ana-diaz", "Ana Diaz", fact("role", "program director", "gmail:f0000000000000a1"));
   renderTouchedPages(root, SINCE);
   const p = join(root, "people", "ana-diaz.md");
-  writeFileSync(p, readFileSync(p, "utf8").replace(/(\n\[\^p-role\]:)/, "\n## Notes\nMet at the fair.\n$1"));
+  writeFileSync(p, readFileSync(p, "utf8").replace(/(\n\[\^pf-role\]:)/, "\n## Notes\nMet at the fair.\n$1"));
   sh(root, "louis", "commit", "-qam", "louis: notes");
   writeFileSync(p, readFileSync(p, "utf8").replace(/facts:\n  role:\n(?:    [^\n]*\n|      [^\n]*\n)+/, ""));
   sh(root, "louis", "commit", "-qam", "undo: role");
@@ -525,7 +525,7 @@ test("page writer: a page left with no fact loses the hub's opening, keeps the r
   const b = body(root, "people/ana-diaz");
   expect(b).not.toContain("program director");
   expect(b).not.toContain("Written by the hub");
-  expect(b).not.toMatch(/\[\^p-/);
+  expect(b).not.toMatch(/\[\^pf-/);
   expect(b).toContain("## Notes\nMet at the fair.");
 });
 
@@ -560,5 +560,5 @@ test("page writer: a list whose items share one source cites it once", () => {
   person(root, "ana-diaz", "Ana Diaz", `  teams:\n    items: [${["Admissions", "Finance", "Research"].map(item).join(", ")}]\n`);
   renderTouchedPages(root, SINCE);
   const b = body(root, "people/ana-diaz");
-  expect(b).toMatch(/^\[\^p-teams\]: Email, 2026-10-05 \(gmail:f0000000000000b1\)$/m);
+  expect(b).toMatch(/^\[\^pf-teams\]: Email, 2026-10-05 \(gmail:f0000000000000b1\)$/m);
 });

@@ -58,8 +58,8 @@
     - /url: /p/projects/designer-hire
   - text: .
   - superscript:
-    - link "6":
-      - /url: "#fn-6"
+    - link "1":
+      - /url: "#fn-1"
   - heading "References" [level=2]
   - list:
     - listitem: Email, 10 Aug 2026
@@ -69,7 +69,6 @@
       - group: What the source said
     - listitem: Email, 12 Sep 2026
     - listitem: Email, 18 Sep 2026
-    - listitem: Email, 10 Aug 2026
   - heading "What changed" [level=2]
   - list:
     - listitem:

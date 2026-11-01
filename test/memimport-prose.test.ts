@@ -88,5 +88,5 @@ test("G490: the page writer says a person's preferences in their own words", asy
   for (const f of inbox(root)) decideProposal(root, `inbox/${f}`, "accept");
   renderTouchedPages(root, "2000-01-01T00:00:00Z");
   const text = readFileSync(join(root, "people", "jane-roy.md"), "utf8");
-  expect(text).toMatch(/How Jane likes things: (likes agendas sent the day before; prefers email over phone calls|prefers email over phone calls; likes agendas sent the day before)\.\[\^p-prefers\]/);
+  expect(text).toMatch(/How Jane likes things: (likes agendas sent the day before; prefers email over phone calls|prefers email over phone calls; likes agendas sent the day before)\.\[\^pf-prefers\]/);
 });

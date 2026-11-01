@@ -11,7 +11,7 @@ import type { CarveResult, Visible } from "./carve";
 import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFor } from "./carve";
 import { needleFor, findCarried, type Needle } from "./match";
 import { escapeRe, tokenIndex } from "./util";
-import { summaryOf, reference, MADE } from "./wiki";
+import { summaryOf, reference } from "./wiki";
 import { headCommit } from "./git";
 import { visibleStanding, standingLine } from "./standing";
 import { tokensOf, fitBlocks, cutLine, contextBudget } from "./context";
@@ -63,43 +63,53 @@ export function scrubCarved(text: string, res: CarveResult, deep = true): string
   return out.split("\n").map((line) => findCarried(line, needles) ? line.replace(/^(\s*(?:[-*] )?).*$/, "$1[withheld]") : line).join("\n");
 }
 
-// The writer's own sentences about a fact hidden from this agent (G589, G594). The page writer
-// (src/wiki.ts pageLead) says each fact in one sentence ending with its reference label, and leaves a
-// fact hidden from any reader out, but a fact hidden after the writer last ran stays in its text
-// until the page is written again. Such a sentence is found by its label, never by matching the
-// value: matching dates against what the page grants let a writer probe the hidden value (security
-// review of the stack, G594). The label is the fact's own (p-<attr>) or one shared with facts citing
-// the same source, whose sentences go too. Hand-written dates are ceiling rows (test/ceilings.test.ts).
-const hidLabelCache = new WeakMap<CarveResult, Map<string, Set<string>>>();
-function hiddenLabels(v: Visible, res: CarveResult, defs: Map<string, string>): Set<string> {
-  let byNote = hidLabelCache.get(res);
+// The writer's own sentences about a fact hidden from this agent (G589, G594, G596). The page writer
+// (src/wiki.ts pageLead) says each fact in one sentence ending with that fact's own label (pf-<attr>),
+// and leaves a fact hidden from any reader out, but a fact hidden after the writer last ran stays in
+// its text until the page is written again. Such a sentence is found by its label, never by matching
+// the value: matching dates against what the page grants let a writer probe the hidden value (G594).
+// Text from before the writer gave each fact its own label (p-<attr>, shared by facts citing the same
+// mail), anywhere on the page and also beside a rewritten pf- lead, loses every sentence with a
+// label the hidden fact used (p-<attr>, or any label but a pf- one whose reference names its source).
+// Hand-written dates are ceiling rows (test/ceilings.test.ts).
+const hidAttrCache = new WeakMap<CarveResult, Map<string, Set<string>>>();
+function hiddenAttrs(v: Visible, res: CarveResult): Set<string> {
+  let byNote = hidAttrCache.get(res);
   if (!byNote) {
     byNote = new Map();
     for (const h of res.hiddenFacts) { const i = h.key.indexOf("#"); const id = h.key.slice(0, i); (byNote.get(id) ?? byNote.set(id, new Set()).get(id)!).add(h.key.slice(i + 1)); }
-    hidLabelCache.set(res, byNote);
+    hidAttrCache.set(res, byNote);
   }
+  return byNote.get(v.note.fm.id) ?? new Set();
+}
+const slug = (attr: string) => attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+function hiddenLabels(v: Visible, attrs: Set<string>, defs: Map<string, string>): Set<string> {
+  // Always the union (security review of G596's replay): a page whose lead the writer rewrote with
+  // exact pf- labels can still hold a section citing an older label. A pf- label is exact, so it is
+  // never taken by the older match on its reference text (that dropped other facts' sentences).
   const out = new Set<string>();
-  for (const attr of byNote.get(v.note.fm.id) ?? []) {
-    out.add(`p-${attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`);
+  for (const attr of attrs) {
+    out.add(`pf-${slug(attr)}`);
+    out.add(`p-${slug(attr)}`);
     const f = v.note.fm.facts?.[attr];
     const recs: FactRecord[] = [...(f ? (isList(f) ? f.items : [f as FactRecord]) : []), ...((v.note.fm.history?.[attr] ?? []) as FactRecord[])];
     const said = recs.map((r) => reference(r));
-    for (const [label, text] of defs) if (said.some((x) => text.includes(x))) out.add(label);
+    for (const [label, def] of defs) if (!label.startsWith("pf-") && said.some((x) => def.includes(x))) out.add(label);
   }
   return out;
 }
 
 function withoutHiddenSentences(text: string, v: Visible, res: CarveResult): string {
-  const at = text.indexOf(MADE);
-  if (at < 0 || !res.hiddenFacts.length) return text;
+  // The whole text, not only the writer's paragraph: a section that cites the hidden fact's label
+  // goes the same way, and a value that spells the writer's marker can't move where removal starts.
+  const attrs = hiddenAttrs(v, res);
+  if (!attrs.size || !/\[\^[^\]\s]+\]/.test(text)) return text;
   const defs = new Map<string, string>();
   for (const m of text.matchAll(/^\[\^([^\]\s]+)\]:\s*(.*)$/gm)) defs.set(m[1]!, m[2]!);
-  const hid = hiddenLabels(v, res, defs);
-  if (!hid.size) return text;
+  const hid = hiddenLabels(v, attrs, defs);
   const cites = (s: string) => [...s.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!);
-  const lead = text.slice(0, at).split(/(\n\s*\n)/).map((para) =>
-    para.replace(/[^\n]*?(?:\[\^[^\]\s]+\])+(?: A different value is waiting to be checked\.)?[ \t]*/g, (s) => cites(s).some((l) => hid.has(l)) ? "" : s).replace(/[ \t]+$/, "")).join("");
-  let out = lead + text.slice(at);
+  let out = text.split("\n").map((line) => /^\[\^[^\]\s]+\]:/.test(line) ? line :
+    line.replace(/[^\n]*?(?:\[\^[^\]\s]+\])+(?: A different value is waiting to be checked\.)?[ \t]*/g, (s) => cites(s).some((l) => hid.has(l)) ? "" : s).replace(/[ \t]+$/, "")).join("\n");
   // A reference no sentence cites any more goes too (it names the hidden fact's source and date).
   const left = new Set(cites(out.replace(/^\[\^[^\]\s]+\]:.*$/gm, "")));
   out = out.replace(/^\[\^([^\]\s]+)\]:.*\n?/gm, (line, l: string) => hid.has(l) && !left.has(l) ? "" : line);

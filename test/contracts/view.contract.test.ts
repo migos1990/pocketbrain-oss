@@ -279,3 +279,58 @@ test("a hidden fact's own sentence never comes back when the page grants its val
   expect(hit).not.toContain("Due for");
   expect(hit).toBe(miss);
 }, 120_000);
+
+// G596: the writer's labels are per fact (pf-<attr>), so withholding is exact: hiding one fact never
+// takes another fact's sentence with it, even when both cite the same mail.
+test("a hidden fact's label takes only its own sentence, never one about a shown fact", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const ID = "projects/product-discovery-course";
+  const { root } = await makeDemoBrain();
+  const f = join(root, `${ID}.md`);
+  writeFileSync(f, readFileSync(f, "utf8").replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    share_with: [chatgpt]\n"));
+  const all = (readNote(root, "chatgpt", ID) as { body: string }).body;
+  const cut = (readNote(root, "claude", ID) as { body: string }).body;
+  const sentences = [...all.matchAll(/[^\n.]*?\.(?:\[\^pf-[a-z0-9-]+\])+/g)].map((m) => m[0].trim());
+  const shown = sentences.filter((s) => !s.includes("[^pf-due]"));
+  expect(sentences.some((s) => s.includes("[^pf-due]"))).toBe(true);
+  expect(shown.length).toBeGreaterThan(1);
+  for (const s of shown) expect(cut).toContain(s);
+  expect(cut).not.toContain("[^pf-due]");
+}, 60_000);
+
+// Security review of G596's replay (65320f99): a page whose lead the writer rewrote with pf- labels
+// can still hold a section citing an older label, [^p-<attr>] or a label whose reference names the
+// hidden fact's source. Exact pf- labels never turned the older matching off for the whole page.
+test("a page with a pf- lead still loses a section sentence citing the hidden fact's older label", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const ID = "projects/product-discovery-course";
+  const { root } = await makeDemoBrain();
+  const f = join(root, `${ID}.md`);
+  const src = readFileSync(f, "utf8");
+  expect(src).toContain("[^pf-due]");
+  writeFileSync(f, src.replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    share_with: [chatgpt]\n")
+    .trimEnd() + "\n\n## Notes\n\nHand-ins close that week.[^p-due] The room is booked.\n");
+  const body = (readNote(root, "claude", ID) as { body: string }).body;
+  expect(body).not.toContain("Hand-ins close that week.");
+  expect(body).not.toContain("[^p-due]");
+  expect(body).toContain("The room is booked.");
+  expect(body).not.toContain("[^pf-due]");
+  expect(body).toContain("week 6 of 13");
+}, 60_000);
+
+// Slice audit of G596's replay (tree 1585ee91), F2: a page whose opening still has the shared p-
+// labels lost no sentence once any [^pf- label sat elsewhere on it (a section a person or the
+// Gardener wrote), so the agent read the hidden date in the old opening.
+test("an old p- opening still loses the hidden fact's sentence when a section carries a pf- label", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const ID = "projects/product-discovery-course";
+  const { root } = await makeDemoBrain();
+  const f = join(root, `${ID}.md`);
+  const raw = readFileSync(f, "utf8");
+  const head = raw.slice(0, raw.indexOf("\n---\n", 4) + 5).replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    share_with: [chatgpt]\n");
+  const REF = "Email, 2026-09-27 (gmail:000000000000d02c)";
+  writeFileSync(f, head + `Product Discovery course is week 6 of 13.[^p-status] Due for Product Discovery course: 8 Dec.[^p-status]\n\n(Written by the hub from this page's facts.)\n\n## Notes\nRoom booked.[^pf-room]\n\n[^pf-room]: Email, 2026-10-01 (gmail:000000000000aaaa)\n[^p-status]: ${REF}\n`);
+  const body = (readNote(root, "claude", ID) as { body: string }).body;
+  expect(body).not.toContain("8 Dec");
+  expect(body).toContain("Room booked.");
+}, 60_000);
