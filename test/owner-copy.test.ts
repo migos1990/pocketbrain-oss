@@ -31,7 +31,12 @@ for (const [where, strings] of Object.entries(OWNER_FACING)) {
   });
 }
 
-test("the two first words: Here's what I have (nothing written) and Noted (written)", () => {
+// "Noted" says something was written (say.earlier writes an earlier value). Nothing else wears a fixed lead-in: the audits v8 to v10 read
+// "Here's what I have: nothing new" and "Here's what I have: that already" as a form, not a person (G623).
+test("only a write says Noted; no reply opens with a stock phrase", () => {
   expect(OWNER_SAY["say.noted"]).toStartWith("Noted:");
-  for (const id of ["say.lookup", "say.no-match", "say.already", "say.later", "say.refused", "say.act"] as const) expect(OWNER_SAY[id]).toStartWith("Here's what I have:");
+  for (const [id, s] of Object.entries(OWNER_SAY)) {
+    expect({ id, s: s.startsWith("Here's what I have") }).toEqual({ id, s: false });
+    if (!["say.noted", "say.earlier"].includes(id)) expect({ id, noted: s.startsWith("Noted") }).toEqual({ id, noted: false });
+  }
 });

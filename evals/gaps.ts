@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G623: {
+    closed: "6f58da30",
+    title: "The box opened every non-write reply with a stock phrase; the owner's to-do came back as Next for",
+    severity: "low",
+    finding: "Audits v8 to v10 and the owner app (2026-11-01): replies that saved nothing all began \"Here's what I have:\" (\"Here's what I have: nothing new.\", \"Here's what I have: that already.\"), a form rather than a person; and \"I owe Ben the sample by Friday\" came back as \"Noted: Next for Ben Carter: owe Ben the sample by 9 Oct 2026\", on the home too.",
+    fix: "src/owner-errors.ts OWNER_SAY: no stock opener, Noted only on a write. src/owner-say.ts parseClause keeps the to-do's verb (need to, have to); src/dashboard/home.ts yourToDo says it back with You in the reply and on the home's line for the owner's own word. Tests: test/owner-copy.test.ts, test/box-owe.test.ts.",
+  },
   G619: {
     closed: "92f8565e",
     title: "The settle screen said where each side came from, never what the source said",

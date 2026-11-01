@@ -41,7 +41,7 @@ test("Ask keeps the conversation, oldest first, with Undo and Open after a write
     expect(turns(r.text)).toEqual(["what is Isabelle Roy&#39;s role?", "Product Discovery course&#39;s next step is book the exam room"]);
     const a = (await req("GET", "/ask")).text;
     expect(turns(a)).toHaveLength(2);
-    expect(a).toContain("Here&#39;s what I have:");
+    expect(a).toContain("Isabelle Roy&#39;s role is ");
     expect(a).toContain('action="/action/diary-undo"');
     expect(a).toMatch(/<a class="open" href="\/p\/projects\/product-discovery-course">Open Product Discovery course<\/a>/);
     expect(a).not.toContain(APP_COPY.askHint);

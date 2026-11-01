@@ -2,8 +2,8 @@
 // The owner's one text box (phone UI spec §4, owner 2026-10-26): what the owner types or dictates on
 // the home or a page becomes a lookup, a fact, a forget or an act. A told fact goes through write()
 // as the owner's own word; a question never writes. Every reply is one fixed sentence from OWNER_SAY
-// (src/owner-errors.ts), starting "Here's what I have:" when nothing was written and "Noted:" when
-// something was, with the audience in fixed words.
+// (src/owner-errors.ts), starting "Noted:" only when something was written, with the audience in
+// fixed words; a question is answered plainly, with no stock opener (G623).
 // Reading (Louis, 2026-10-29, G472): with a model set up for the step say.read, ownerSayModel asks it
 // what the sentence means; it sees the sentence and the attribute names, never a page or a fact. Code
 // checks every part of its reading (the names and values are the owner's own words, the attribute is
@@ -22,7 +22,7 @@ import { clock } from "./clock";
 import { ownerConflicts, ownerDecide } from "./core";
 import { forgetPerson } from "./forget";
 import { forgetNote } from "./dashboard/edit";
-import { plain, attrWords, isVerbAttribute, lineWords, privateNow, shutBody, type LineKey } from "./dashboard/home";
+import { plain, attrWords, isVerbAttribute, lineWords, yourToDo, privateNow, shutBody, type LineKey } from "./dashboard/home";
 import { findSecret, SENSITIVE_WORDS } from "./checks";
 import { KEY_ENV, logJudgment, modelConfigFor, parseJson, type Model } from "./model";
 import { modelFor } from "./usage";
@@ -126,6 +126,12 @@ export function nameShaped(name: string): boolean {
   return ws.every((w, i) => /^\p{Lu}[\p{L}'’.-]*$/u.test(w) || (i > 0 && PARTICLE.has(w.toLowerCase())));
 }
 
+// "I've got to" is kept as "have got to", "I'm going to" as "are going to": said back with "You".
+function todoVerb(v: string): string {
+  const w = v.toLowerCase().replace(/’/g, "'");
+  return w === "'ve got to" ? "have got to" : w === "'m going to" || w === "am going to" ? "are going to" : w;
+}
+
 // One clause: "<name>'s <attribute> is <value>", "<project>: next step is <value>", "met <name>",
 // "<name> moved to / works at / joined / is now at <value>", "<name> is (now) <value>".
 export function parseClause(clause: string, d = today()): Told | undefined {
@@ -134,7 +140,8 @@ export function parseClause(clause: string, d = today()): Told | undefined {
   if ((m = clean(clause).match(/^(?:please )?remind me (?:to|about) (.+)$/i))) return { name: "", attribute: "next_step", value: clean(m[1]!), remind: true };
   // "I owe Ben the sample by tomorrow", "I need to send Jane the slides": the owner's own to-do, on the
   // page of the person it names (found like a reminder's), in their words (G557).
-  if ((m = clean(clause).match(/^I (?:(owe|promised) (.+)|(?:need to|have to|must|should|['’]ve got to|have got to|['’]m going to|am going to) (.+))$/i))) return { name: "", attribute: "next_step", value: clean(m[1] ? `${m[1].toLowerCase()} ${m[2]!}` : m[3]!), remind: true };
+  // The verb stays ("need to send Jane the slides"), so the home can say it as "You need to send…" (G623).
+  if ((m = clean(clause).match(/^I(?: (owe|promised|need to|have to|must|should|have got to|am going to)|(['’]ve got to|['’]m going to)) (.+)$/i))) return { name: "", attribute: "next_step", value: clean(`${todoVerb(m[1] ?? m[2]!)} ${m[3]!}`), remind: true };
   const { rest, when } = whenOf(clean(clause), d);
   const c = rest.replace(/^(so |and |but |actually,? )/i, "").trim();
   if ((m = c.match(/^(.+?)\s*:\s*(?:the )?next step is (?:to )?(.+)$/i))) return { name: m[1]!, attribute: "next_step", value: clean(m[2]!), when };
@@ -608,7 +615,7 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   const title = String(page.fm.title), had = page.fm.facts?.[told.attribute] !== undefined;
   const own = told.attribute === "next_step" ? "next" : told.attribute === "last_contact" ? "contact" : told.attribute === "role" ? "role" : isVerbAttribute(told.attribute) ? "verb" : undefined;
   const label = told.attribute === "role" && /^(runs|leads|heads|manages|directs|chairs|teaches|coaches|founded|owns)\b/i.test(v) ? `${title} ${v}`
-    : lineWords((own ? `${own}${had ? "Changed" : "New"}` : had ? "changed" : "new") as LineKey, { title, attr: attrWords(told.attribute), value: told.attribute === "last_contact" ? sayDay(told.value) : v }).replace(/\.$/, ""); // the reply adds its own full stop
+    : (own === "next" && yourToDo(v)) || lineWords((own ? `${own}${had ? "Changed" : "New"}` : had ? "changed" : "new") as LineKey, { title, attr: attrWords(told.attribute), value: told.attribute === "last_contact" ? sayDay(told.value) : v }).replace(/\.$/, ""); // the reply adds its own full stop
   const guess = told.when?.approx ? ` ${say("say.guessed-date", { day: told.when.as_of, phrase: told.when.phrase })}` : "";
   if (r.outcome === "noop" || (r.outcome === "committed" && readDiary(root).length === before)) return { kind: "say.already", page: page.fm.id, fact_key, text: say("say.already") };
   if (r.outcome === "refused") return { kind: "say.refused", page: page.fm.id, text: say("say.refused", { why: plainWhy(r.fails?.[0]?.check, r.message) }) };

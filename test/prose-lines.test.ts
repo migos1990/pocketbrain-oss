@@ -37,5 +37,5 @@ test("a question about a preference is answered as a sentence", () => {
   ownerSay(root, "Jane Roy's prefers is long novels");
   const r = ownerSay(root, "what is Jane Roy's prefers?");
   expect(r.kind).toBe("say.answer");
-  expect(r.text).toBe("Here's what I have: Jane Roy prefers long novels.");
+  expect(r.text).toBe("Jane Roy prefers long novels.");
 });

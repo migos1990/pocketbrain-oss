@@ -104,7 +104,7 @@ test("Ask: the same box, and its answer comes back on Ask", async () => {
     const r = await req("POST", "/say", { csrf, q: "what is Isabelle Roy's role?", from: "ask" });
     expect(r.status).toBe(200);
     expect(r.text).toMatch(/<a href="\/ask" aria-current="page"/);
-    expect(r.text).toContain("Here&#39;s what I have:");
+    expect(r.text).toContain("Isabelle Roy&#39;s role is ");
   } finally { delete process.env.PB_NOW; }
 }, 60_000);
 

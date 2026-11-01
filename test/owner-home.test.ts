@@ -60,7 +60,7 @@ test("a question answers on the page and writes nothing", async () => {
   const { root, req, login, csrf } = setup();
   await login();
   const r = await req("POST", "/say", { csrf: await csrf(), q: "what is Jane Roy's role?" });
-  expect(r.text).toContain("Here&#39;s what I have: Jane Roy&#39;s role is Course coordinator.");
+  expect(r.text).toContain("Jane Roy&#39;s role is Course coordinator.");
   expect(role(root)).toBe("Course coordinator");
 });
 

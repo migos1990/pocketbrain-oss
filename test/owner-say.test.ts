@@ -43,7 +43,7 @@ test("a question never writes", () => {
   const n = commits(root);
   const r = ownerSay(root, "what is Jane Roy's role?");
   expect(r.kind).toBe("say.answer");
-  expect(r.text).toStartWith("Here's what I have:");
+  expect(r.text).toStartWith("Jane Roy's role is ");
   expect(r.text).toContain("Course coordinator");
   expect(commits(root)).toBe(n);
   expect(readDiary(root)).toHaveLength(0);
@@ -112,7 +112,7 @@ test("a secret is refused in plain words, by its name or its shape", () => {
   for (const t of ["Jane's password is hunter2-" + "Xy9!kQ", "Jane's card is 4111 1111 " + "1111 1111", "Jane's pin is 4421"]) {
     const r = ownerSay(root, t);
     expect(r.kind).toBe("say.refused");
-    expect(r.text).toBe("Here's what I have: nothing new. That looks like a password or a number to keep secret; I don't keep those.");
+    expect(r.text).toBe("Nothing saved. That looks like a password or a number to keep secret; I don't keep those.");
   }
   expect(commits(root)).toBe(n);
 });

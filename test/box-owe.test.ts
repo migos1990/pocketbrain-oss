@@ -7,6 +7,8 @@ import { test, expect } from "bun:test";
 import { makeBrain, makeDemoBrain } from "./fixture";
 import { ownerSay } from "../src/owner-say";
 import { loadBrain, type FactRecord } from "../src/brain";
+import { loadRules } from "../src/rules";
+import { homeView } from "../src/dashboard/home";
 
 const step = (root: string, title: string) => (loadBrain(root).find((n) => n.fm.title === title)?.fm.facts?.next_step as FactRecord | undefined)?.value;
 
@@ -16,18 +18,27 @@ test("the brief's sentence, with no model, is a next step on Ben's page", async 
   expect(r.kind).toBe("say.noted");
   expect(String(step(root, "Ben Carter"))).toMatch(/^owe Ben the sample by /);
   expect(r.text).not.toContain("left out");
+  // Said back as the owner's own to-do, not "Next for Ben Carter: owe Ben…" (audits v8 to v10, G623).
+  expect(r.text).toStartWith("Noted: You owe Ben the sample by ");
+  expect(r.text).not.toContain("Next for");
+  // and the home says it the same way.
+  const v = homeView(root, loadRules(root), loadBrain(root), new Date(process.env.PB_NOW ?? Date.now()), { all: true }); const lines = [...v.since, ...v.earlier.flatMap((e) => e.lines)].map((l) => l.what);
+  expect(lines.some((w) => w.startsWith("You owe Ben the sample by "))).toBe(true);
 }, 60_000);
 
 test("what the owner means to do for someone is theirs too, and names the page it's about", () => {
   const cases: [string, RegExp][] = [
-    ["I need to send Jane the slides by Friday", /^send Jane the slides by Friday$/],
+    ["I need to send Jane the slides by Friday", /^need to send Jane the slides by Friday$/],
     ["I promised Jane the grades", /^promised Jane the grades$/],
-    ["I have to call Jane Roy tomorrow", /^call Jane Roy on /],
+    ["I have to call Jane Roy tomorrow", /^have to call Jane Roy on /],
+    ["I've got to call Jane Roy tomorrow", /^have got to call Jane Roy on /],
+    ["I’m going to send Jane the slides", /^are going to send Jane the slides$/],
   ];
   for (const [said, value] of cases) {
     const root = makeBrain();
     const r = ownerSay(root, said);
     expect({ said, kind: r.kind }).toEqual({ said, kind: "say.noted" });
+    expect(r.text).toStartWith("Noted: You ");
     expect(String(step(root, "Jane Roy"))).toMatch(value);
   }
 });

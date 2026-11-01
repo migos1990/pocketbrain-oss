@@ -177,6 +177,12 @@ export const SAID_COPY = {
 } as const;
 export type LineKey = keyof typeof LINE_COPY;
 // Each line is a sentence: capitalised, and ending with a full stop unless it asks.
+// A next step the owner told as their own to-do ("owe Ben the sample", "need to call Jane"),
+// said back to them with "You"; anything else (a reminder's "call Jane") keeps "Next for".
+export function yourToDo(value: string): string | undefined {
+  return /^(owe|promised|need to|have to|must|should|have got to|are going to) /i.test(value) ? `You ${value}` : undefined;
+}
+
 export function lineWords(k: LineKey, v: Partial<Record<"title" | "attr" | "value" | "older" | "source" | "until" | "was" | "a" | "b", string>>): string {
   const s = LINE_COPY[k].replace(/\{title\}'s/g, () => /s$/i.test(v.title ?? "") ? `${v.title}'` : `${v.title}'s`).replace(/\{(\w+)\}/g, (_m, x: string) => (v as Record<string, string>)[x] ?? "");
   return (s.charAt(0).toUpperCase() + s.slice(1)).replace(/(?<![.?!…”])$/, ".");
@@ -337,6 +343,9 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
     : row.kind === "confirmed" ? (row.added?.length ? w("confirmed") : w("saidAgain"))
     : undefined;
   if (!what) return undefined; // a conflict line waits on the owner instead
+  // The owner's own to-do says it as they did: "You owe Ben the sample", never "Next for Ben: owe…" (G623).
+  const todo = own === "next" && row.source_word === "you" && (row.kind === "new" || row.kind === "changed") ? yourToDo(val(row.to)) : undefined;
+  if (todo) what = todo;
   // "You settled" only of the owner's own settle (Mac, 2026-10-31): an assistant's names it, and a
   // row that doesn't say who settled it says neither.
   const who = row.kind !== "settled" || isOwnerId(row.settled_by) ? undefined : row.settled_by ? agentTitle(rules, row.settled_by) : "";
