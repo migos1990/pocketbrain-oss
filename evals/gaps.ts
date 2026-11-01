@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G599: {
+    closed: "cf90e25d",
+    title: "An assistant's proposal a write check sent to the owner was planned for a save every minute and failed each time",
+    severity: "low",
+    finding: "Builder's slice audit of G598 (tree 19798906, 2026-11-01), on c3f4f834 already: an order-shaped value from a core assistant for a new page (projects/plain-guild) waits in the inbox (injection_shapes). Under file all, hub filing weighed it as the assistant's own fact and planned to accept it each tick; the hub's yes is weighed as the assistant's write again, the check sent it back as the same proposal, and decideOne refused it (\"the owner decides this one; it stays in the inbox\"): an error a minute and a plan that never ran.",
+    fix: "src/filing.ts: a proposal whose checks list (written by the write path, never read from its reason) holds a check with outcome inbox (injection_shapes, link_only_source, approval_needs_message_id) waits for the owner with no plan. Tests: test/order-new-page.test.ts.",
+  },
   G603: {
     closed: "9686cc74",
     title: "A by-name fact whose name fits a page and a new one was counted as an ask, and could be reopened after it landed",

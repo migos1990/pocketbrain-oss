@@ -175,6 +175,8 @@ The public repo (`pocketbrain-oss`, beside this repo under the same GitHub owner
 
 The public repo keeps its own history of these commits; the private history (which holds unscrubbed early docs) never goes there. The sync workflow and its test are left out of the export.
 
+**CI on the public repo.** The public repo runs the same `ci.yml` and `release.yml`. Its commits have other shas than the private ones, so the fingerprints in `.gitleaksignore` (commit:file:rule:line) never match there: in `pocketbrain-oss` the gitleaks step scans the checked-out tree and applies the same file-and-rule check as step 2, instead of the whole history. Nothing CI needs may live only in a file `scripts/public-exclude.txt` leaves out: `scripts/film/take.ts` once gave every file the DOM types, so the public typecheck failed until `tsconfig.json` named `DOM` itself (`test/public-ci.test.ts` holds both). When a dated version reaches the public repo untagged, its `release.yml` tags it and publishes the GitHub release there too.
+
 **The site follows tags.** The site's one version is the `data-pb-version` attribute in `site/index.html` on branch `claude/pocketbrain-site` (never merged into `main`). After a release is tagged, the thread that cut it updates that version and the site's status and "What you see" lines from the release's **What you see** section, pushes the branch, and the coordinator asks the Mac thread to deploy it (the cloud can't reach Cloudflare):
 
 ```sh

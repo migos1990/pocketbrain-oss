@@ -18,14 +18,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # gitleaks scans every commit, not just the tip
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
       # Secret scan of the whole history: a second net beside the write checks and
       # scripts/check-public.sh. Pinned release, checked against its published SHA-256.
+      # The public repo (pocketbrain-oss) has its own history, so the commit shas in .gitleaksignore
+      # never match there: it scans its tree the way public-sync.yml scans each export before the push
+      # (only a rule already allowed for the same test file passes, test/public-ci.test.ts).
       - name: gitleaks
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           curl -sSL -o /tmp/gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
           echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  /tmp/gitleaks.tgz" | sha256sum -c -
           tar xzf /tmp/gitleaks.tgz -C /tmp gitleaks
-          /tmp/gitleaks git --no-banner --redact .
+          if [ "$REPO_NAME" = pocketbrain-oss ]; then
+            mkdir /tmp/tree && git archive HEAD | tar x -C /tmp/tree
+            (cd /tmp/tree && /tmp/gitleaks dir --no-banner --redact --exit-code 0 -f json -r /tmp/leaks.json .)
+            bun scripts/public-sync.ts leaks /tmp/leaks.json .gitleaksignore
+          else
+            /tmp/gitleaks git --no-banner --redact .
+          fi
       # Personal terms (employer, family names...) must never reach a tracked file. The list is
       # private: a repo secret PB_DENYLIST, one term per line. Without it the step says so and passes.
       - name: personal-term denylist
@@ -35,9 +49,6 @@ jobs:
           if [ -z "$PB_DENYLIST" ]; then echo "::warning::PB_DENYLIST secret not set; personal-term check skipped"; exit 0; fi
           printf '%s\n' "$PB_DENYLIST" > /tmp/denylist.txt
           sh scripts/check-public.sh /tmp/denylist.txt
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       # The dependency gate (docs/release.md#dependencies): bun.lock frozen everywhere, every
       # installed license on the AGPL-compatible allowlist, no high or critical advisory.

@@ -15,8 +15,12 @@ test("the hackathon film kit is left out of the public repo", () => {
   for (const p of ["docs/video-kit.md", "scripts/film/"]) expect(excluded()).toContain(p);
 });
 
-test("every excluded path is a tracked file or folder", () => {
-  expect(excluded().filter((p) => !tracked.some((f) => (p.endsWith("/") ? f.startsWith(p) : f === p)))).toEqual([]);
+test("every excluded path is a tracked file or folder here, and none is in the public copy", () => {
+  // This test ships in the public repo too, which is HEAD minus these paths: there all are missing.
+  const missing = excluded().filter((p) => !tracked.some((f) => (p.endsWith("/") ? f.startsWith(p) : f === p)));
+  const publicCopy = missing.length === excluded().length;
+  expect(publicCopy ? [] : missing).toEqual([]);
+  if (publicCopy) expect(existsSync(join(ROOT, ".github", "workflows", "public-sync.yml"))).toBe(false);
 });
 
 test("nothing kept links to or imports an excluded file", () => {

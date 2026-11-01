@@ -8,6 +8,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- An assistant's fact that a check sent to you (it reads like an instruction, or its only source is a link the hub can't open) waits for you quietly. Before, the hub tried to file it every minute and logged an error each time (G599).
 - A fact named by a person or page name that fits a page you have as well as a new one waits on Settings for you to say which, and is no longer counted as a question on your home. A fact that already landed on one of those pages (from that same source) is no longer put back in your inbox when the hub restarts (G603).
 - A fact the hub put back in your inbox when it restarted keeps the assistant or source it came from, so it files or waits by that one's rules. Before, it waited as "your own material" (G601).
 - A memory or fact proposed twice with the same value now files or waits the same way as the first one. Before, the second one waited as "your own material" and counted as something to decide (G600).

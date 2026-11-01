@@ -190,6 +190,10 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // the fact (invariant 3, "not_in_your_view"). The hub's yes is weighed as that assistant's write
     // again and hands back the same proposal, so a plan to save it failed every minute (G598).
     if (pr && heldByAccess(pr.reason)) return { never: NOT_IN_VIEW };
+    // A write check sent it to the owner (an instruction-shaped value, a source the hub can't
+    // open, a claimed approval): the hub's yes is weighed as the assistant's write again and the
+    // check hands it back, so a plan to save it failed every minute (G599). It waits for the owner.
+    if (pr) { const c = ownerChecks(root, pr.file); if (c) return { never: c }; }
     // A new page for a name the owner forgot never files itself again: one an older forget left in
     // the inbox, reopened with no writer, read its writer from the request after G601 (slice audit F1).
     if (pr && !pr.request.id && typeof pr.request.title === "string" && forgottenName(pr.request.title, forgottenSlugs(root))) return { never: FORGOTTEN };
@@ -436,6 +440,20 @@ function quietAboutOwner(root: string, pr: { by: string; file: string; request: 
   if ((note?.fm.type ?? r.type) !== "person") return false;
   const self = ownerOf(rules, notes, String(note?.fm.title ?? r.title ?? ""));
   return !!self && (!r.id || self.page === r.id);
+}
+
+// The write checks that send a proposal to the owner (outcome "inbox" in src/checks.ts), as the
+// write path recorded them in the proposal file's checks list, never read from its reason.
+const OWNER_CHECKS: Record<string, string> = {
+  injection_shapes: "It reads like an instruction to an assistant, so only you decide it.",
+  link_only_source: "Its only source is a link the hub can't open, so only you decide it.",
+  approval_needs_message_id: "It claims your approval without your message on record, so only you decide it.",
+};
+function ownerChecks(root: string, file: string): string | undefined {
+  try {
+    const c = (YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { checks?: unknown })?.checks;
+    return Array.isArray(c) ? c.map((x) => OWNER_CHECKS[String(x)]).find(Boolean) : undefined;
+  } catch { return undefined; }
 }
 
 function captured(root: string, file: string): boolean {
