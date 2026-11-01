@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G605: {
+    title: "A list item's key with line breaks wrote trailer lines into an assistant's commit message",
+    severity: "low",
+    finding: "Builder's slice audit of G602 (tree f775a9d8, 2026-11-01): keyOf copied a list item's key, line breaks included, into the commit message (item KEY disputed), so an assistant could still write trailer lines into its own commits; This reverts commit (write-quality stats, the editor's reverted flag), Run: with Kind: auto-fix (undo --run), Kind: (digest counts) and Request-Id: (trace) do not check the author.",
+    fix: "src/write.ts: every commit message the write path builds quotes the request in one line (oneLine on the proposal's subject and reason, the flag commit and the fact commit), so no assistant-made line reaches a commit message; the readers stay as they are. Tests: test/commit-one-line.test.ts, test/contracts/write.contract.test.ts (a request's line breaks never reach the commit message).",
+    closed: "ccfa0e0b",
+  },
   G599: {
     closed: "cf90e25d",
     title: "An assistant's proposal a write check sent to the owner was planned for a save every minute and failed each time",

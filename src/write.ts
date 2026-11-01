@@ -250,7 +250,7 @@ function propose(root: string, req: WriteRequest, reason: string, fails: CheckFa
   if (existsSync(file)) return { outcome: "noop", message: `already proposed: ${rel}`, file: rel };
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, YAML.stringify({ proposed: d, by: req.agent, reason, checks: fails.map((f) => f.check), evidence: evidenceFor(root, req, loadBrain(root, { shared: true })), request: req }, { lineWidth: 0 }));
-  const unsaved = commitPaths(root, [rel], `propose(${req.agent}): ${req.id ?? req.title}#${req.attribute ?? ""}\n\n${reason}`, req.agent);
+  const unsaved = commitPaths(root, [rel], `${oneLine(`propose(${req.agent}): ${req.id ?? req.title}#${req.attribute ?? ""}`)}\n\n${oneLine(reason)}`, req.agent);
   if (unsaved) return notSaved(unsaved);
   return { outcome: "inbox", message: `proposed for review: ${reason}`, file: rel, fails };
 }
@@ -329,6 +329,11 @@ function carvedValues(notes: Note[], rules: Rules, agent: string, res = carve(no
 // every check and the same conflict order.
 const OWNER_AS_WRITER = { tier: "core", slices: ["all"], inside_wall: true, max_sensitivity: "private" } as const;
 const withOwner = (r: Rules): Rules => ({ ...r, policy: { ...r.policy, agents: { ...r.policy.agents, [OWNER]: OWNER_AS_WRITER as never } } });
+
+// What a commit message quotes from a request is one line (G605): a line break in a list item's
+// key or a reason would let an assistant write trailer lines (This reverts commit, Run:, Kind:,
+// Request-Id:) into its own commit, which other readers trust.
+const oneLine = (s: string): string => s.replace(/[\r\n\u0085\u2028\u2029]+/g, " ");
 
 export function write(root: string, req: WriteRequest, opts: { acceptedBy?: string; contest?: boolean; hold?: boolean; owner?: boolean; stranger?: boolean; pulled?: boolean } = {}): WriteResult {
   const asOwner = opts.owner === true && req.agent === OWNER;
@@ -689,7 +694,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     if (tightened && liveRecs.some((r) => compareKey(r.value) === compareKey(value))) {
       note.fm.updated = d;
       saveNote(root, note);
-      const unsaved = commitPaths(root, [note.fm.id + ".md"], `${req.agent}: ${factKey} flagged ${incoming.sensitivity ?? ""}${incoming.share_with ? ` share_with ${incoming.share_with.join(",")}` : ""}`, author);
+      const unsaved = commitPaths(root, [note.fm.id + ".md"], oneLine(`${req.agent}: ${factKey} flagged ${incoming.sensitivity ?? ""}${incoming.share_with ? ` share_with ${incoming.share_with.join(",")}` : ""}`), author);
       if (unsaved) return done(notSaved(unsaved));
       return done({ outcome: "committed", fact_key: factKey, message: `flag tightened: ${incoming.sensitivity ?? note.fm.sensitivity}${incoming.share_with ? `, only ${incoming.share_with.join(", ")}` : ""}` });
     }
@@ -1024,7 +1029,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     : sameValue ? (opts.acceptedBy === "auto-decide" ? "confirmed" : undefined) : isList(facts[attr]) ? "item_added" : "changed";
   const added = kind === "confirmed" ? [...new Set(records(facts[attr]!).flatMap((r) => (r.sources ?? []).map(refString)))].filter((x) => !refsBefore.has(x)) : [];
   if (kind) extraPaths.push(appendDiary(root, { ...diaryRow({ at: clock().toISOString(), factKey, title: String(note.fm.title ?? note.fm.id), kind, from: kind === "confirmed" ? undefined : before, to: kind === "retracted" ? undefined : kind === "item_added" || kind === "conflict" || kind === "kept" ? value : after, incoming, acceptedBy: opts.acceptedBy, rank: rank(incoming), sensitivity: incoming.sensitivity ?? note.fm.sensitivity }), ...(kind === "confirmed" ? { added } : {}) }, d.slice(0, 7)));
-  const unsaved = commitPaths(root, [note.fm.id + ".md", ...(existsSync(join(root, "disputes")) ? ["disputes"] : []), ...extraPaths], `${req.agent}: ${factKey} (${msg})${opts.acceptedBy ? `, accepted by ${opts.acceptedBy}` : ""}`, author);
+  const unsaved = commitPaths(root, [note.fm.id + ".md", ...(existsSync(join(root, "disputes")) ? ["disputes"] : []), ...extraPaths], oneLine(`${req.agent}: ${factKey} (${msg})${opts.acceptedBy ? `, accepted by ${opts.acceptedBy}` : ""}`), author);
   if (unsaved) return done(notSaved(unsaved));
   return done({ outcome: disputed ? "disputed" : "committed", fact_key: factKey, step, message: msg, file: note.fm.id + ".md" });
 }
