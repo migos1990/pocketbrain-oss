@@ -9,6 +9,7 @@
 import { test, expect } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { excludedNames, excludedPaths, isExcluded } from "./excluded.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const text = (f: string) => readFileSync(join(ROOT, f), "utf8");
@@ -61,7 +62,8 @@ test("every repo path named in the docs exists", () => {
       if (p.endsWith(".jsonl")) continue;
       const line = body.slice(body.lastIndexOf("\n", m.index!) + 1, body.indexOf("\n", m.index!) >>> 0);
       if (p.startsWith("site/") && line.includes("claude/pocketbrain-site")) continue;
-      if (!existsSync(join(ROOT, p))) missing.push(`${f}: ${p}`);
+      // A path the public copy leaves out is still a repo path (the public copy keeps the docs).
+      if (!existsSync(join(ROOT, p)) && !isExcluded(p)) missing.push(`${f}: ${p}`);
     }
   }
   expect([...new Set(missing)]).toEqual([]);
@@ -132,7 +134,14 @@ test("every environment variable and key name the code reads is named in the doc
 test("every PB_ variable and key name the docs name is one the code reads", () => {
   const named = new Set<string>();
   for (const m of DOCS.matchAll(/\b(PB_[A-Z0-9_]+|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:API_KEY|AUTH_TOKEN|ACCOUNT_SID|PUSH_KEY|RELAY_KEY))\b/g)) named.add(m[1]);
-  expect([...named].filter((v) => !new RegExp(`\\b${v}\\b`).test(ALL_CODE)).sort()).toEqual([]);
+  expect([...named].filter((v) => !excludedNames.includes(v) && !new RegExp(`\\b${v}\\b`).test(ALL_CODE)).sort()).toEqual([]);
+});
+
+test("each name public-exclude.txt says only a left-out file reads is read by one (in the private repo)", () => {
+  const files = excludedPaths.filter((p) => !p.endsWith("/") && existsSync(join(ROOT, p)));
+  if (!files.length) return; // the public copy: those files are gone
+  const left = files.map(text).join("\n");
+  expect(excludedNames.filter((v) => !new RegExp(`\\b${v}\\b`).test(left))).toEqual([]);
 });
 
 // Version labels: package.json, README's status line and the newest dated CHANGELOG section say

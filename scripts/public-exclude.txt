@@ -9,3 +9,5 @@ test/video-montage.test.ts
 # The workflow that pushes the public copy, and its test, act on this private repo only.
 .github/workflows/public-sync.yml
 test/public-sync-workflow.test.ts
+# Names only the files above read, which the docs may still name (test/excluded.ts):
+# names: PB_OSS_DEPLOY_KEY

@@ -6,6 +6,7 @@
 import { test, expect } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { isExcluded } from "./excluded.ts";
 
 const ROOT = join(import.meta.dir, "..");
 // Design records written before the code live in docs/history/ and are not promises about today's
@@ -39,7 +40,7 @@ for (const f of DOCS) {
         if (r && !scripts.includes(r[1])) problems.push(`no package.json script: bun run ${r[1]}`);
       }
       for (const p of snip.match(/^(?:src|test|scripts|evals|docs|examples)\/[\w./-]+\.(?:ts|md|sh|json|yaml)$/gm) ?? [])
-        if (!existsSync(join(ROOT, p))) problems.push(`missing file: ${p}`);
+        if (!existsSync(join(ROOT, p)) && !isExcluded(p)) problems.push(`missing file: ${p}`);
     }
     expect(problems).toEqual([]);
   });
