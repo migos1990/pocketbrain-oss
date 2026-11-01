@@ -191,9 +191,13 @@ export async function runHandoffEpisode(o: { cli?: string; env?: Record<string, 
   try {
     const a = await seat(cli, o.env ?? {}, origin, tokens[A], "Steward", root, TASK_A);
     if (typeof a !== "string") return a;
+    // What Planner must never receive, taken before its own session: a value Planner saves itself is
+    // held from every agent until Robin sees it (write.ts unseen), and its own words are no leak to
+    // it. Everything Steward saved, held values included, is already here (paid run on c3f4f834).
+    const forbidden = await forbiddenFor(root, B);
     const b = await seat(cli, o.env ?? {}, origin, tokens[B], "Planner", root, TASK_B);
     if (typeof b !== "string") return b;
-    return { calls, answers: { a, b }, handoffs: handoffFiles(root), forbidden: await forbiddenFor(root, B), ms: Date.now() - t0 };
+    return { calls, answers: { a, b }, handoffs: handoffFiles(root), forbidden, ms: Date.now() - t0 };
   } finally { srv.stop(true); }
 }
 

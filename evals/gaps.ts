@@ -26,6 +26,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Builder's slice audit of G598 (tree 19798906, 2026-11-01), on c3f4f834 already: an order-shaped value from a core assistant for a new page (projects/plain-guild) waits in the inbox (injection_shapes). Under file all, hub filing weighed it as the assistant's own fact and planned to accept it each tick; the hub's yes is weighed as the assistant's write again, the check sent it back as the same proposal, and decideOne refused it (\"the owner decides this one; it stays in the inbox\"): an error a minute and a plan that never ran.",
     fix: "src/filing.ts: a proposal whose checks list (written by the write path, never read from its reason) holds a check with outcome inbox (injection_shapes, link_only_source, approval_needs_message_id) waits for the owner with no plan. Tests: test/order-new-page.test.ts.",
   },
+  G604: {
+    closed: "7670934e",
+    title: "Settings was wider than a phone screen",
+    severity: "low",
+    finding: "Owner's Mac use-it check at v0.2.1 (4a290712, 2026-11-01): Settings (/overview) scrolled sideways at 390px and was fine at 1280; other pages fit. The demo brain fit. A word with no break in it (a path or an address in an open alert, capture or upkeep line) kept its full width, since no dashboard style let it break, and pushed the page past the screen.",
+    fix: "src/dashboard/html.ts: main breaks a word that would overflow (overflow-wrap:break-word); nothing that already fits changes. Test: test/ui-quality.test.ts \"on a phone Settings fits the screen even with long unbroken words in what is open\" (a gardener alert naming a path and a clash naming an address, every fold open, plain and mobile contexts).",
+  },
   G603: {
     closed: "9686cc74",
     title: "A by-name fact whose name fits a page and a new one was counted as an ask, and could be reopened after it landed",
@@ -81,6 +88,13 @@ export const GAPS: Record<string, Gap> = {
     severity: "medium",
     finding: "Builder, main's CI on 2026-11-01: test/owner-settle.test.ts went red once the UTC clock rolled into November. undo.ts reopen() looked for the settle's commit only in diary/<row.at's month>.jsonl, but the row is filed under the owner's day's month, so for a few hours at each month boundary (UTC ahead of Toronto) the owner's Undo of a settle said Changed since.",
     fix: "reopen() in src/undo.ts searches every diary month for the settle's token. Test: test/owner-settle.test.ts pins the clock into the next UTC month while the owner's day stays in the last one.",
+  },
+  G597: {
+    title: "The handoff eval counted Planner's own held value as a leak to Planner",
+    severity: "low",
+    finding: "Box thread's paid agents eval on stack c3f4f834, 2026-11-01: agents-handoff-supplies-run failed no_private_leak while the handoff text was clean. Planner remembered a private run_plan, write.ts marked it unseen (held from every agent until the owner sees it), and the oracle list for Planner was taken after Planner's session, so Planner's own answer and remember arguments counted as a leak to Planner. The hub was right (carve.ts hides unseen records from every grant). Found by the scorer, not by a reader.",
+    fix: "runHandoffEpisode takes forbiddenFor(Planner) before Planner's session; everything Steward saved, held values included, is still on the list. The oracle's unseen rule is unchanged for every other use (the carve property relies on it, G563). evals/lib/fake-agent-cli.ts passes arrays in tool arguments as arrays. Tests: test/handoff-eval.test.ts, Planner's own held value in its answer passes, Steward's held value in Planner's answer fails.",
+    closed: "73ed70b9",
   },
   G591: {
     title: "The gardener scorecard test went red on the day Toronto's clocks went back",

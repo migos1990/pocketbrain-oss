@@ -16,7 +16,7 @@ const server = Object.values(cfg.mcpServers as Record<string, { url: string; hea
 const script = JSON.parse(readFileSync(process.env.FAKE_AGENT_SCRIPT ?? "", "utf8"))[persona] ?? { calls: [], answer: "" };
 
 let handoff = "";
-const fill = (v: unknown): unknown => typeof v === "string" ? v.replaceAll("{{handoff}}", handoff) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)])) : v;
+const fill = (v: unknown): unknown => typeof v === "string" ? v.replaceAll("{{handoff}}", handoff) : Array.isArray(v) ? v.map(fill) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)])) : v;
 let n = 0;
 for (const c of script.calls as { tool: string; args?: Record<string, unknown> }[]) {
   const res = await fetch(server.url, { method: "POST", headers: { "content-type": "application/json", ...(server.headers ?? {}) },

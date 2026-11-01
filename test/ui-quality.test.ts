@@ -6,6 +6,7 @@
 // Chromium can't start.
 import { test, expect, afterAll, setSystemTime } from "bun:test";
 import { join } from "node:path";
+import { appendFileSync } from "node:fs";
 import { audit, keyboard, matchScreenshot } from "./ui-audit";
 import { uiRig, DASHBOARD_PAGES, BUSY_PAGES, DOOR_PAGES, ASK_SAYS } from "./ui-rig";
 
@@ -84,5 +85,31 @@ run("on a phone the overview and the door's start page fit the screen without si
     await page.goto(r.loginUrl);
     expect(await wide()).toBeLessThanOrEqual(0);
     await ctx.close();
+  } finally { r.stop(); }
+}, 60_000);
+
+// Settings on a phone with what a lived-in brain holds and the demo doesn't: a gardener alert naming a
+// path, a clash naming an address, long words with no break in them (use-it check on v0.2.1).
+run("on a phone Settings fits the screen even with long unbroken words in what is open", async () => {
+  setSystemTime(CLOCK);
+  const r = await uiRig({ ports: [18969, 18970] });
+  try {
+    const at = "2026-10-08T12:00:00Z";
+    const rows = [
+      { check: "gardener_ant", at, agent: "gardener", detail: "ant failed: run `~/.config/pocketbrain/keys/ANTHROPIC_API_KEY_FILE_FOR_THE_GARDENER` again" },
+      { check: "write_conflict", at, agent: "claude", from: "people/maya-chen#email", detail: "maya.chen.at.her.very.long.workplace.address@example.org" },
+    ];
+    appendFileSync(join(r.root, "log", "alerts.jsonl"), rows.map((x) => JSON.stringify(x)).join("\n") + "\n");
+    let shot = false;
+    for (const ctx of [await browser.newContext({ viewport: { width: 390, height: 844 } }), await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })]) {
+      const page = await ctx.newPage();
+      await page.goto(r.loginUrl);
+      await page.goto(`${r.dash}/overview`);
+      expect(await page.content()).toContain("ANTHROPIC_API_KEY_FILE_FOR_THE_GARDENER");
+      await page.evaluate(() => document.querySelectorAll("details").forEach((d) => ((d as HTMLDetailsElement).open = true)));
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+      if (SHOTS && !shot) { shot = true; const d = await matchScreenshot(page, `${process.platform}/settings-phone-long-words`, { mask: MASK }); if (d) throw new Error(d); }
+      await ctx.close();
+    }
   } finally { r.stop(); }
 }, 60_000);

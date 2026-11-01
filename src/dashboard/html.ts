@@ -75,7 +75,7 @@ b,strong{font-weight:600}
 .top nav{display:flex;flex-wrap:wrap;gap:0 18px;color:var(--text-2);flex-basis:100%}
 .top nav a{color:var(--text-2);font-weight:400;display:inline-block;padding:10px 0;min-height:44px}.top nav a:hover{color:var(--text);text-decoration:none}.top nav a.on{color:var(--text);font-weight:600}
 .page{min-width:0}
-main{width:100%;max-width:680px;margin:0 auto;padding:56px 20px 128px}
+main{width:100%;max-width:680px;margin:0 auto;padding:56px 20px 128px;overflow-wrap:break-word}
 h1{font-size:36px;line-height:44px;font-weight:500;letter-spacing:-0.018em;margin:0 0 32px;text-wrap:balance}
 h2{font-size:22px;line-height:32px;font-weight:500;letter-spacing:-0.01em;margin:72px 0 16px}
 h3,h2.h-day{font-size:17px;line-height:28px;font-weight:600;margin:40px 0 8px;color:var(--text);letter-spacing:0}
