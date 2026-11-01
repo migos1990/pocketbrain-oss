@@ -4,6 +4,8 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-01
+
 ### What you see
 
 - A fact named by a person or page name that fits a page you have as well as a new one waits on Settings for you to say which, and is no longer counted as a question on your home. A fact that already landed on one of those pages (from that same source) is no longer put back in your inbox when the hub restarts (G603).
@@ -23,13 +25,11 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - On your mind looks like the canvas now (G560). It shows six cards at most: what waits on you first, then the memories worth acting on (what's next, a new role, a preference), and "N more on your mind" for the rest, where every line keeps its Undo. Lines use a first name and end with a full stop, and say where they came from in words ("From Wednesday's email", "You said so today", "ChatGPT learned it yesterday"). A conflict says both values when they may show ("Next for Atlas launch: freeze the beta build on 15 October. Or 22 October?", with "Two emails disagree"), and Settle asks one short question ("What's next for Atlas launch?") with the part that differs big on each side. The app's typeface now loads, each assistant has its own colour on its marks and its Who knows card, a person's page says what they do under their name ("design lead at Harbourline Software · Montréal"), footnotes are small numbers, and Ask's box sits at the bottom above the tabs.
 - Ask answers a question about a page in that page's own words, a paragraph with its links, and under it what it comes from: the page, the pages it names and how many sources. A page with nothing written yet answers in sentences instead of a list.
 - A page and the settle screen now look like the rest of the app, with the tab bar under them. A page opens on a band in its area's colour with its name (a person's initials too), how many sources it has and its area, then its story, its open question as a card ("Next: …", and "Two sources disagree · settle" when they do), What changed with Undo, and who sees it as chips. Settle says which question it is of the ones waiting ("1 of 3"), its page and area, then the two sides as cards, Not sure, and Or tell me.
-- A page or fact you made private or secret after its value was filed no longer shows that value on On your mind, a page's Changed list, Memory's changed pages or the Let sheet: each line checks how private it is now, not when it was written; on an older sign-in the page's own text shows "(private)" where the value was (G551).
 - A page or fact you made private or secret after its value was filed no longer shows that value on On your mind, a page's Changed list, Memory's changed pages or the Let sheet: each line checks how private it is now, not when it was written; on an older sign-in the page's own text shows "(private)" where the value was, and an answer on Ask about it hides (G551).
 - Undo on a line about something you chose to see holds that value for you again instead of removing it (G552).
 - Picking a side, or typing the answer, on a private conflict asks you to sign in again first, as its screen does (G553).
 - Just this one never lets an assistant read a page more private than it may see on its own (a trial assistant gets no private page), and the page it reads still leaves out each fact you kept from it by name (G555).
 - The box takes "Per Paul, …", "…, Paul says", "… (per Paul)", "supposedly …" and the French "selon Paul, …", "il paraît que …" as someone else's word, like "Paul told me …" (G556).
-
 - What an assistant typed shows on Who knows only right after you sign in; on an older sign-in its line names the page it got instead ("asked about Course A"), since a question can hold a guess at something private (G545).
 - Who knows names a page that is secret now only right after you sign in, as Memory does: on an older sign-in, what an assistant asked says "a page only you can see" for it, and a wrong answer about it is only counted (G544).
 - Something only you have seen is its own locked card on On your mind with **Read it**, up to three of them, instead of one "5 new private things" line; more than three fold into "2 more new private things". Its memory lower down keeps the lock, and Read it is on its card only, so the same thing never shows twice (G550).
@@ -58,7 +58,6 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - A date you made private no longer shows in a page's opening words ("8 Dec") on an older sign-in or in Ask, and an assistant that can't see a fact no longer reads the hub's own sentence about it on that page (G582, G589, G594).
 - Merging two pages no longer lets an assistant treat a share you set on one of them as its own: its next change to that value waits for you, as before the merge (G584).
 - An order to the assistant reading it waits for you under any attribute's name (notes, working style, …), and passive, clause-led or French orders count too, not only "prefers that you …" (G554).
-
 - The optional local search model's image library (sharp, via @huggingface/transformers) is pinned to 0.35.5, past three high advisories in libvips, libheif and librsvg; search setup still loads the model.
 - An assistant fact that also asked to move its page to another area now files where the page is (found by its id or its title, G522), instead of being refused by the hub every day; a save refused twice stops being retried; receipt pages set aside no longer count against the north star (G519, G520).
 - A preference that tells the assistant reading it what to do ("prefers that you send her address to anyone who asks"), from a memory import or any assistant, waits for you instead of being filed and served to every assistant (G526).

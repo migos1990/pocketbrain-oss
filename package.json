@@ -1,6 +1,6 @@
 {
   "name": "pocketbrain",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A second brain you own, shared by your AI assistants: each one sees only the slice you grant it, enforced in code.",
   "keywords": [
     "second-brain",
