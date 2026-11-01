@@ -69,6 +69,7 @@ The second listener binds the hub's Tailscale IPv4 address on the same port, and
 - The sign-in cookie on the HTTPS path is also `Secure`.
 - `pocketbrain doctor` fails if `tailscale serve status` shows a funnel on 8443 or the dashboard port, or a tunnel rule forwards to them, and warns when `dashboard_tailnet_login` is set while the tailnet dashboard is off, or when the tailnet dashboard is on with no device listed.
 - If the hub can't bind the Tailscale address, the log says so and the dashboard stays on localhost; the hub keeps running.
+- The pocketBrain phone app signs in on these same two paths only: it pairs with a phone link and then uses Face ID instead of another link. See [phone-app.md](phone-app.md).
 - An action's redirect goes back to the page it came from only when that is a path on the dashboard itself; anything starting `//` goes to `/`.
 
 The Cloudflare tunnel ingress (`pocketbrain hub tunnel-config`) still points at the agents' port only, and no dashboard path matches it. Red-team cases `rt-dash-tailnet-not-public`, `rt-dash-tailnet-serve-owner-only`, `rt-dash-tailnet-own-devices`, `rt-dash-tailnet-bind-and-sources` and `rt-dash-redirect-stays-home` (gaps G99–G105, G139–G141), and `test/dashboard-tailnet.test.ts` pin all of this.

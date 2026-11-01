@@ -1,0 +1,43 @@
+# Connect your assistant
+
+pocketBrain is one memory that all your assistants share. Each assistant gets its own name, its own key and its own slice of the brain, so you can cut one off without touching the others.
+
+Pick the app you use. Apps that run on your own computer connect in about two minutes and need nothing else. Assistants that run in the cloud (Claude on the web or phone, ChatGPT) have to reach your brain over the internet, which takes more setup today.
+
+| Your assistant | Where it runs | Time | Page |
+|---|---|---|---|
+| Claude Code | your computer | 1 minute | [claude-code.md](connect/claude-code.md) |
+| Cursor | your computer | 2 minutes | [cursor.md](connect/cursor.md) |
+| VS Code (Copilot chat) | your computer | 2 minutes | [vscode.md](connect/vscode.md) |
+| Codex CLI | your computer | 2 minutes | [codex.md](connect/codex.md) |
+| Gemini CLI | your computer | 2 minutes | [gemini-cli.md](connect/gemini-cli.md) |
+| Claude Desktop | your computer | 3 minutes, needs Node.js | [claude-desktop.md](connect/claude-desktop.md) |
+| Any other app with MCP and a header field | your computer | 2 minutes | [other-mcp.md](connect/other-mcp.md) |
+| Claude on the web or phone | the cloud | an evening, see the page | [claude-web.md](connect/claude-web.md) |
+| ChatGPT | the cloud | not yet, see the page | [chatgpt.md](connect/chatgpt.md) |
+
+Every page has the same four parts: what you need, the command, how to check it worked, and how to undo it.
+
+## The same three steps for every app on your computer
+
+1. Your brain is running: `pocketbrain start` in a terminal window you leave open ([quickstart.md](quickstart.md)).
+2. Give the app its own name and key:
+
+   ```sh
+   pocketbrain add cursor --slices area:work,contacts-basic --door mcp --yes
+   ```
+
+   Use the app's name in place of `cursor`. It starts as a **trial** assistant: it sees your work notes and the names and roles of your contacts, never your money or anything private, and what it saves waits for your OK on the dashboard. The command prints the address (`http://127.0.0.1:8787/mcp`), a key starting `pb_cursor_`, and a short instruction block. The key is shown once, so keep it in your password manager.
+3. Put the address and key into the app, the way its page says, and paste the instruction block into the app's own custom instructions, so it checks the brain without being asked.
+
+Lost the key? `pocketbrain connect cursor` prints a new one (the old one keeps working until you revoke it). Done with an app? `pocketbrain token --revoke cursor` cuts it off at once.
+
+## Try it
+
+Ask the app: *"Remember that I prefer short answers."* It saves that to the brain with its source. Open the dashboard (the link `pocketbrain start` printed): it's on **On your mind**, waiting for your OK because the app is on trial. Approve it, then ask a **second** app *"What do you know about how I like answers?"* It knows. That's the point: what one assistant learns, the others know next time.
+
+## When your computer sleeps
+
+Apps on the same computer don't care: they sleep and wake with it. The nightly tidy pass runs when the computer next wakes. A cloud assistant can't reach a sleeping laptop, which is one more reason the cloud pages say what they need. [hosting.md](hosting.md) covers keeping the brain up somewhere else.
+
+More detail on doors, slices and widening an assistant later: [add-an-agent.md](add-an-agent.md).

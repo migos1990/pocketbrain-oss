@@ -11,6 +11,8 @@ import { pageParam } from "./paging";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { withFileLock } from "../filelock";
+import { readCapped } from "../util";
+import { sessionFile, addAppPhone, useAppPhone, phoneName, endSignIns } from "./phone-app";
 import { join } from "node:path";
 import { loadRules } from "../rules";
 import { loadBrain } from "../brain";
@@ -83,7 +85,6 @@ const rand = () => randomBytes(24).toString("base64url");
 // lasts 30 days; the newest 20 are kept. The login link still changes at every start.
 const SESSION_DAYS = 30;
 type Kept = Record<string, { csrf: string; at: string }>;
-const sessionFile = (root: string) => join(root, ".git", "pb-dashboard-sessions.json");
 const sidHash = (sid: string) => createHash("sha256").update(sid).digest("hex");
 function keptSessions(root: string, now: Date): Kept {
   try {
@@ -94,6 +95,8 @@ function keptSessions(root: string, now: Date): Kept {
 // A sign-in from the last few minutes (phone UI spec §8, the login re-prompt where there is no
 // WebAuthn): a forget from the box, a private or held value on a page, and Show ask for one.
 export const FRESH_MINUTES = 10;
+// Wrong device keys the phone app's fresh door takes in an hour before it waits (docs/phone-app.md).
+const APP_MISSES = 10;
 // The rule for every button (re-audit 2026-10-30, G525: Let it through sent a held message on the
 // 30-day sign-in, and /action/mail-release did the same from any old form). Only what the three owner
 // screens (/home, /p, /settle) offer, and only what keeps a thing back or puts one right, runs on the
@@ -348,12 +351,63 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     return html({ title: "Sent", tab: "", body: `<h1>Sent</h1><p>Open the link in the text on this phone. It works once, for a day.</p>` });
   }
 
+  // The phone app's two doors (docs/phone-app.md), on the tailnet and `tailscale serve` only. The
+  // app's own requests carry no Origin; a page's do, and then it must be this hub. A body is a small
+  // JSON object. Neither key is ever logged, echoed or kept in clear (only its hash, phone-app.ts).
+  const appJson = (body: unknown, status = 200, extra: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...extra } });
+  const appCookie = (sid: string, secure: boolean) => `pb_owner=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86_400}${secure ? "; Secure" : ""}`;
+  async function appBody(req: Request, hosts: Set<string>): Promise<Record<string, unknown> | Response> {
+    const origin = req.headers.get("origin");
+    if (origin && !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
+    const raw = await readCapped(req, 2048);
+    if (raw === undefined) return appJson({ error: "too large" }, 413);
+    try { const b = JSON.parse(raw || "{}"); if (b && typeof b === "object" && !Array.isArray(b)) return b as Record<string, unknown>; } catch { /* below */ }
+    return oops("dash.bad-form");
+  }
+  const signInFor = (sid: string | undefined) => {
+    const id = sid ?? rand();
+    if (!sessions.has(id)) sessions.set(id, rand());
+    keepSession(root, id, sessions.get(id)!, now());
+    return id;
+  };
+  const forget = (hashes: string[]) => { for (const sid of [...sessions.keys()]) if (hashes.includes(sidHash(sid))) sessions.delete(sid); endSignIns(root, hashes); };
+  async function appPair(req: Request, hosts: Set<string>, secure: boolean): Promise<Response> {
+    const b = await appBody(req, hosts);
+    if (b instanceof Response) return b;
+    const key = typeof b.key === "string" ? b.key : "";
+    // The same one-time phone link the Sign in button spends (usePhoneLink): one use, a day.
+    if (!usePhoneLink(root, key, now())) return oops("dash.phone-link-used");
+    const sid = signInFor(undefined), device = randomBytes(32).toString("base64url");
+    try { forget(addAppPhone(root, device, phoneName(b.name), sidHash(sid), now())); } catch { return oops("dash.link-busy"); }
+    return appJson({ device }, 200, { "set-cookie": appCookie(sid, secure) });
+  }
+  // Wrong keys count against the door, not the key: past APP_MISSES an hour every key waits.
+  const misses: number[] = [];
+  async function appFresh(req: Request, hosts: Set<string>, secure: boolean): Promise<Response> {
+    const b = await appBody(req, hosts);
+    if (b instanceof Response) return b;
+    const t0 = now().getTime();
+    while (misses.length && t0 - misses[0]! > 3_600_000) misses.shift();
+    if (misses.length >= APP_MISSES) return oops("dash.app-cap");
+    const device = typeof b.device === "string" ? b.device : "";
+    const sid = session(req) ?? rand();
+    let ok = false;
+    try { ok = useAppPhone(root, device, sidHash(sid), now()); } catch { return oops("dash.link-busy"); }
+    if (!ok) { misses.push(t0); return oops("dash.app-not-paired"); }
+    signInFor(sid);
+    return appJson({ fresh: true }, 200, { "set-cookie": appCookie(sid, secure) });
+  }
+
   function session(req: Request): string | undefined {
     const sid = req.headers.get("cookie")?.match(/(?:^|;\s*)pb_owner=([A-Za-z0-9_-]+)/)?.[1];
     if (!sid) return undefined;
+    // With a .git, the kept file is the truth: a sign-in ended elsewhere (a phone removed from the
+    // CLI, docs/phone-app.md) ends here too, not only at the next restart (slice audit of PR 42).
+    const hasGit = existsSync(join(root, ".git"));
+    if (sessions.has(sid) && !hasGit) return sid;
+    const kept = hasGit ? keptSessions(root, now())[sidHash(sid)] : undefined;
+    if (!kept) { sessions.delete(sid); return undefined; }
     if (sessions.has(sid)) return sid;
-    const kept = keptSessions(root, now())[sidHash(sid)];
-    if (!kept) return undefined;
     sessions.set(sid, kept.csrf);
     return sid;
   }
@@ -382,7 +436,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         // A phone link is spent by the Sign in button, never by opening it: a message preview or a
         // second fetch of the link spends nothing (owner, 2026-10-24). The button posts from this
         // page only.
-        if (req.method !== "POST") return !k || !phoneLinks(root, now())[sidHash(k)] ? usedLink() : html({ title: "Sign in", tab: "", body: `<h1>Sign in on this phone</h1><form method="post" action="/login"><input type="hidden" name="key" value="${esc(k)}"><button class="go">Sign in</button></form><p class="sub">The link works once, for a day.</p>` });
+        if (req.method !== "POST") return !k || !phoneLinks(root, now())[sidHash(k)] ? usedLink() : html({ title: "Sign in", tab: "", body: `<h1>Sign in on this phone</h1><form method="post" action="/login"><input type="hidden" name="key" value="${esc(k)}"><button class="go">Sign in</button></form><p class="sub">The link works once, for a day.</p><p><a href="pocketbrain://pair?hub=${encodeURIComponent(`${secure ? "https" : "http"}://${host}`)}&amp;key=${encodeURIComponent(k)}">Open in the pocketBrain app</a></p>` });
         const origin = req.headers.get("origin");
         if (!origin || !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
         try { k = String((await req.formData()).get("key") ?? ""); } catch { return oops("dash.bad-form"); }
@@ -396,6 +450,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `pb_owner=${sid}; HttpOnly; SameSite=${remote ? "Lax" : "Strict"}; Path=/; Max-Age=${SESSION_DAYS * 86_400}${secure ? "; Secure" : ""}`, "cache-control": "no-store" } });
     }
     if (remote && url.pathname === "/send-link" && req.method === "POST") return sendLink(req, hosts, secure);
+    // The phone app (docs/phone-app.md): pair with a phone link, then Face ID makes a sign-in fresh.
+    if (remote && url.pathname === "/app/pair" && req.method === "POST") return appPair(req, hosts, secure);
+    if (remote && url.pathname === "/app/fresh" && req.method === "POST") return appFresh(req, hosts, secure);
     const sid = session(req);
     if (!sid) return remote ? signedOutPhone() : oops("dash.signed-out");
     const csrf = sessions.get(sid)!;

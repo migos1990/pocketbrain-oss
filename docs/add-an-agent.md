@@ -1,5 +1,7 @@
 # Add an agent
 
+New here? [connect.md](connect.md) has a short page per app (Cursor, VS Code, Codex, Gemini CLI, Claude Desktop, Claude on the web). This page is the full reference.
+
 The checklist for every new assistant, after the first one that `pocketbrain init` set up. Five steps: pick its door, carve its slice, connect it, tell it when to use the brain, test it. Revoking is at the end.
 
 ## One command per kind

@@ -36,6 +36,8 @@ export const OWNER_ERRORS = {
   "dash.link-relayed": { where: "dashboard", status: 409, what: "Your text channel goes through an assistant, so a sign-in link never travels on it", fix: PHONE_LINK },
   "dash.link-busy": { where: "dashboard", status: 409, what: "Another sign-in link was being made or used at that moment", fix: { reload: true, then: "and press the button again" } },
   "dash.link-not-sent": { where: "dashboard", status: 502, what: "The text with your sign-in link didn't go out ({reason})", fix: PHONE_LINK },
+  "dash.app-not-paired": { where: "dashboard", status: 401, what: "This phone isn't paired with your brain any more, or it was removed", fix: { ...PHONE_LINK, then: "and open the link in the pocketBrain app" } },
+  "dash.app-cap": { where: "dashboard", status: 429, what: "Too many phone keys this hub didn't know in the last hour, so the app's Face ID sign-in waits an hour", fix: PHONE_LINK },
   "dash.cross-origin": { where: "dashboard", status: 403, what: "Another site's page tried to press a dashboard button, so nothing was done", fix: { ...SIGN_IN, then: "and press the button there" } },
   "dash.bad-form": { where: "dashboard", status: 400, what: "That wasn't one of the dashboard's own forms, so nothing was done", fix: { reload: true, then: "and press the button again" } },
   "dash.csrf": { where: "dashboard", status: 403, what: "This page is from before your latest sign-in, so nothing was done", fix: { reload: true, then: "and press the button again" } },

@@ -16,7 +16,7 @@ const text = (f: string) => readFileSync(join(ROOT, f), "utf8");
 const md = (dir: string) => readdirSync(join(ROOT, dir)).filter((f) => f.endsWith(".md")).map((f) => `${dir}/${f}`);
 // video-kit.md is the film's private runbook, left out of the public repo (as in docs.test.ts).
 const PRIVATE = new Set(["docs/video-kit.md"]);
-const CURRENT = ["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", ...md("docs"), ...md("docs/spec")].filter((f) => !PRIVATE.has(f));
+const CURRENT = ["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", ...md("docs"), ...md("docs/spec"), ...md("docs/connect")].filter((f) => !PRIVATE.has(f));
 const CHANGELOG = text("CHANGELOG.md");
 const unreleased = CHANGELOG.slice(CHANGELOG.indexOf("## [Unreleased]"), CHANGELOG.search(/^## \[\d/m));
 

@@ -72,15 +72,23 @@ This repo is the **tool**. Your notes live in a **separate, private** git repo t
 
 ## Quick start
 
-Five minutes ([docs/quickstart.md](docs/quickstart.md) walks through it). You need git and [Bun](https://bun.sh) 1.4. The public source is linked from pocketbrain.dev ("Source on GitHub"):
+About five minutes on a Mac, Linux, or Windows with WSL. A laptop is fine. You need git and [Bun](https://bun.sh) 1.4; [docs/quickstart.md](docs/quickstart.md) walks through it, including installing those two.
 
 ```sh
-git clone <public repository> pocketbrain && cd pocketbrain && bun install && bun link
-pocketbrain init               # a few questions (in a real terminal), which assistant first; your brain goes in ~/my-brain
+git clone <this repository's address> pocketbrain && cd pocketbrain && bun install && bun link
+pocketbrain init               # a few questions; your brain goes in ~/my-brain
 pocketbrain start              # leave it running
-                               # Claude Code: init connects it and writes its instruction;
-                               # any other: init prints its pocketbrain connect <name> --kind … line
 ```
+
+Then connect your assistant. [docs/connect.md](docs/connect.md) has a page for each:
+
+| Runs on your computer, about 2 minutes | Runs in the cloud |
+|---|---|
+| Claude Code (init connects it), Cursor, VS Code, Codex CLI, Gemini CLI, Claude Desktop, any MCP app with a header field | Claude on the web or phone: needs a fixed public address and a sign-in service, an evening today ([docs/connect/claude-web.md](docs/connect/claude-web.md)). ChatGPT: not supported yet. |
+
+**Want your assistant to install it?** Point it at [docs/install-with-an-agent.md](docs/install-with-an-agent.md): every command runs without questions, and it stops where only you can answer.
+
+Where the brain runs (a laptop, a home server, a VPS, a container) is up to you; [docs/hosting.md](docs/hosting.md) says what the hub needs from a host.
 
 `bun link` puts the `pocketbrain` command in `~/.bun/bin`; `git pull && bun install` updates it. `install.sh` (Bun if missing, then the newest release tag into `~/.pocketbrain/app`) is meant to be served as `curl -fsSL https://pocketbrain.dev/install.sh | sh`, but the site doesn't serve it yet ([docs/release.md](docs/release.md#the-public-repo-and-the-site)).
 

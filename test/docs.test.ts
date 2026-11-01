@@ -12,7 +12,7 @@ const ROOT = join(import.meta.dir, "..");
 // Design records written before the code live in docs/history/ and are not promises about today's
 // CLI. video-kit.md is the hackathon film's private runbook, left out of the public repo.
 const HISTORY = new Set(["video-kit.md"]);
-const DOCS = ["README.md", "CLAUDE.md", ...readdirSync(join(ROOT, "docs")).filter((f) => f.endsWith(".md") && !HISTORY.has(f)).map((f) => `docs/${f}`)];
+const DOCS = ["README.md", "CLAUDE.md", ...readdirSync(join(ROOT, "docs")).filter((f) => f.endsWith(".md") && !HISTORY.has(f)).map((f) => `docs/${f}`), ...readdirSync(join(ROOT, "docs", "connect")).filter((f) => f.endsWith(".md")).map((f) => `docs/connect/${f}`)];
 const text = (f: string) => readFileSync(join(ROOT, f), "utf8");
 const cli = text("src/cli.ts");
 const usage = Bun.spawnSync(["bun", "src/cli.ts", "help", "--all"], { cwd: ROOT }).stdout.toString();

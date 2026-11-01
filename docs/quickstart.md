@@ -1,6 +1,8 @@
 # Quickstart: pocketBrain in 5 minutes
 
-You'll end up with a brain on your own computer, one memory of you that every assistant you connect will share, and a first assistant connected to it. Each assistant reads only the part you give it. You need a Mac or Linux computer (on Windows, use WSL) and its Terminal app. You don't need an account, an API key or Notion.
+You'll end up with a brain on your own computer, one memory of you that every assistant you connect will share, and a first assistant connected to it. Each assistant reads only the part you give it. You need a Mac, a Linux computer, or Windows with WSL, and a terminal. A laptop is fine: the brain runs while it's awake. You don't need an account, an API key, a server or Notion.
+
+Would you rather your assistant did it? Point it at [install-with-an-agent.md](install-with-an-agent.md).
 
 ## 1. Install (1 minute)
 
@@ -20,7 +22,7 @@ A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is w
 pocketbrain init
 ```
 
-It asks a few questions: your name, which assistant will use the brain first (`claude-code`, `claude-ai`, `town` or `browser`; Enter takes Claude Code when it's installed), a short name for it (Enter names it after that kind, like `claude`), the people, projects and decisions you work with, and where you bank. Press Enter on an empty line to skip a question. Your answers stay on this computer, in a folder called `my-brain` in your home folder.
+It asks a few questions: your name, which assistant will use the brain first (`claude-code`, `claude-ai`, `town` or `browser`; Enter takes Claude Code when it's installed), a short name for it (Enter names it after that kind, like `claude`), the people, projects and decisions you work with, and where you bank. Press Enter on an empty line to skip a question. Using an app that isn't on that list, such as Cursor, VS Code, Codex or Gemini CLI? Run `pocketbrain init --name "Your name" --agent cursor --no-token` instead (with your app's short name), and connect it in step 4 with `pocketbrain connect cursor`. Your answers stay on this computer, in a folder called `my-brain` in your home folder.
 
 When it's done, it shows two things:
 
@@ -37,22 +39,24 @@ Leave this window open while you use your assistant. The brain listens only on y
 
 ## 4. Connect your assistant (1 minute)
 
-**Claude Code:** if you picked it and it's installed, `init` already connected it: it ran `claude mcp add --scope user …` and wrote the standing instruction, and printed nothing left to paste. Otherwise run the `pocketbrain connect <agent> --kind claude-code` line that `init` printed. It runs `claude mcp add --scope user …` for you (`--scope user` makes it work from any folder) and writes the standing instruction into `~/.claude/CLAUDE.md`, so you can skip the paste below. Without Claude Code installed, `init` prints the `claude mcp add` line to paste instead. Then `claude mcp list` should say `pocketbrain … ✔ Connected`.
+**Claude Code:** if you picked it and it's installed, `init` already connected it: it ran `claude mcp add --scope user …` and wrote the standing instruction into `~/.claude/CLAUDE.md`. Then `claude mcp list` should say `pocketbrain … ✔ Connected`. Without Claude Code installed, `init` prints the `claude mcp add` line to run once it is.
 
-**Claude on the web or desktop app, or any other assistant in the cloud:** it can't reach your computer directly, so follow [Connect an assistant in the cloud](#connect-an-assistant-in-the-cloud) below. It takes two more minutes.
+**Cursor, VS Code, Codex, Gemini CLI, Claude Desktop or another app on this computer:** [connect.md](connect.md) has a short page for each. It's one command, `pocketbrain add <app> --slices area:work,contacts-basic --door mcp --yes`, then the address and key go into the app's settings. No tunnel, no account.
 
-Now ask your assistant: *"Use pocketbrain: what are my projects?"* It answers from your work notes. Ask it where you bank, and it tells you that money isn't shared with it.
+**Claude on the web or phone, ChatGPT, or another assistant in the cloud:** it can't reach your computer directly. One that takes a header can use a quick tunnel ([below](#connect-an-assistant-in-the-cloud)). Claude on the web and ChatGPT sign in instead of taking a key, which needs a fixed address and a sign-in service; [connect/claude-web.md](connect/claude-web.md) says honestly what that takes today.
 
-To make it check the brain without being told, paste the short block that `init` printed as step 3 into the assistant's own custom instructions, once. (`pocketbrain connect claude` prints it again, along with a new token; the old one keeps working until you revoke it. That works from the terminal while `claude` is the trial agent `init` made. Once you make it core, a new token needs your yes: press **One-time code** on its dashboard page, then `pocketbrain connect claude --code <code>`. Every token made from a terminal shows in the digest.) Claude Code: add it to `~/.claude/CLAUDE.md`. The blocks are in [agent-instructions.md](agent-instructions.md).
+Now ask your assistant: *"Use pocketbrain: what are my projects?"* It answers from your work notes. Ask it where you bank, and it tells you that money isn't shared with it. Then try the part that matters: tell one assistant something, approve it on the dashboard, and ask another ([connect.md](connect.md#try-it)).
+
+To make it check the brain without being told, paste the short block that `init` or `add` printed into the assistant's own custom instructions, once. (`pocketbrain connect <name>` prints it again, along with a new key; the old one keeps working until you revoke it. That works from the terminal while the assistant is on trial. Once you make it core, a new key needs your yes: press **One-time code** on its dashboard page, then `pocketbrain connect <name> --code <code>`. Every key made from a terminal shows in the digest.) The blocks are in [agent-instructions.md](agent-instructions.md).
 
 ---
 
 ## Connect an assistant in the cloud
 
-Your brain needs a public address for a cloud assistant to reach it. A free Cloudflare quick tunnel gives you one without an account:
+This section is for a cloud assistant whose connector settings take a URL **and** a header. Claude on the web and ChatGPT don't; see [connect/claude-web.md](connect/claude-web.md). Your brain needs a public address for a cloud assistant to reach it, and your computer has to be awake while you use it. A free Cloudflare quick tunnel gives you an address without an account:
 
 ```sh
-brew install cloudflared          # on Linux, see developers.cloudflare.com/cloudflared
+brew install cloudflared          # on a Mac; on Linux or WSL, see developers.cloudflare.com/cloudflared
 cloudflared tunnel --url http://127.0.0.1:8787
 ```
 
@@ -61,9 +65,9 @@ It prints an address like `https://something-random.trycloudflare.com`. In your 
 - **URL:** `https://something-random.trycloudflare.com/mcp`
 - **Header:** `Authorization: Bearer pb_claude_…` (your token)
 
-If there is no field for a header, connect it through the OAuth door instead ([oauth.md](oauth.md)): a token in the URL is refused. A token stops working after 90 days; `pocketbrain doctor` says when to rotate it.
+If there is no field for a header, it needs the sign-in door instead ([connect/claude-web.md](connect/claude-web.md)): a token in the URL is refused. A token stops working after 90 days; `pocketbrain doctor` says when to rotate it.
 
-The address changes each time you restart the tunnel. For a fixed address on your own domain, and to keep everything running after a restart, see [hub.md](hub.md#a-fixed-address-on-your-domain). Keeping the hub running after a restart is built for a Mac (launchd); on Linux, run `pocketbrain start` under your own service manager (a systemd user unit, for example).
+The address changes each time you restart the tunnel. For a fixed address (a named tunnel, Tailscale Funnel, or your own reverse proxy on a VPS or home server) and to keep the hub running after a restart on a Mac, Linux or WSL, see [hosting.md](hosting.md).
 
 ## Start from a file instead of questions
 

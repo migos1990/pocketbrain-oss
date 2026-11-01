@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G620: {
+    closed: "34010320",
+    title: "No dashboard page said which version was running",
+    severity: "low",
+    finding: "Coordinator's use-it check after the PR 33 deploy (2026-11-01): no dashboard page rendered a version (no 0.x.y text, no code sha), so the owner could not see from the phone that a deploy took.",
+    fix: "src/dashboard/html.ts versionLine: Settings ends with \"pocketBrain <package.json version> · code <short sha>\", the sha being codeAtStart(), the one /health answers. test/ui-regression.test.ts masks it. Test: test/dashboard-version.test.ts.",
+  },
   G611: {
     closed: "5ff8f66a",
     title: "One Read it on the card that counts held values let out every value left, across pages",

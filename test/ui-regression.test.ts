@@ -37,12 +37,14 @@ afterAll(() => {
   if (NOW === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = NOW;
 });
 
-// Only what still changes is masked: the port and the wall clock.
+// Only what still changes is masked: the port, the wall clock, and the running version on
+// Settings (it moves with every commit and release).
 export function normalize(s: string): string {
   return s
     .replace(/127\.0\.0\.1:\d+/g, "127.0.0.1:PORT")
     .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?\b/g, "TIMESTAMP")
     // The same, URL-encoded in a link (the browser door's look-back links go by the wall clock).
+    .replace(/pocketBrain \d+\.\d+\.\d+[\w.-]*(?: · code [0-9a-f]{7})?/g, "pocketBrain VERSION")
     .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}(%3A\d{2}(\.\d+)?)?Z?\b/g, "TIMESTAMP")
     .trimEnd() + "\n";
 }
@@ -135,5 +137,6 @@ test("normalize masks only what changes between runs", () => {
   // git gives the time with an offset or with Z depending on the machine (the CI runner, 2026-10-30).
   expect(normalize("- paragraph: \"owner, 2026-10-08T14:00:00+00:00; changed: role\"")).toBe("- paragraph: \"owner, TIMESTAMP; changed: role\"\n");
   expect(normalize("- text: saved 3f9a2c1 at 14:03")).toBe("- text: saved 3f9a2c1 at 14:03\n");
+  expect(normalize("- paragraph: pocketBrain 0.2.1 · code 3f9a2c1")).toBe("- paragraph: pocketBrain VERSION\n");
   expect(normalize("- heading \"Jane Roy\" [level=1]")).toBe("- heading \"Jane Roy\" [level=1]\n");
 });

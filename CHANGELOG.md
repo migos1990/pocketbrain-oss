@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- The hub side of the pocketBrain phone app: a phone link opened in the app pairs the phone once (`POST /app/pair`), and Face ID then makes a sign-in fresh again (`POST /app/fresh`) instead of another texted link. The hub keeps only each phone key's hash. `pocketbrain dashboard phones` lists paired phones and `phones remove` ends one and its sign-ins. The texted link's page has "Open in the pocketBrain app". See docs/phone-app.md.
 - A page's website reads as its site on the home, with the host only ("Harbourline Software's site is harbourline.example."), never a bare web address in a sentence (G566).
 - The box is a modern composer now (G574): pinned at the bottom on On your mind, Ask and every page, it grows line by line as you type instead of sliding text off to the right, its round blue arrow lights up when there is something to send, Enter sends and Shift+Enter starts a new line, and on Ask your words show at once while the answer loads.
 - A page keeps its paragraphs, line breaks and headings, so a heading no longer runs into its first line; a source's own words fold under its reference behind a + that opens them; a project or org is called by its whole name in the box and in Who sees (G577).
@@ -14,8 +15,11 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - Who knows names an assistant with no label as a name (Claude, ChatGPT, Town), never its lowercase id (G586).
 - The card that counts the rest of your held values only opens the full list, where each has its own Read it: one tap no longer lets out values from other pages. Settings' Resume button is readable again (G611).
 - The app has its own look now, Two inks (G561): newsprint paper, black text, a big blue headline and a pink block counting what waits for you, the two values that disagree under a pink highlighter, items split by black rules instead of grey boxes, buttons as bold underlined words, word tabs, a person's surname in blue on their page, footnote numbers as small blue blocks, and Mentioned on as one sentence. Dark mode prints yellow and pink on near-black. The typeface is Schibsted Grotesk, served by the hub.
+- Settings ends with the version that is running and the code it started on ("pocketBrain 0.2.1 · code b8589ec"), so after an update you can see it took (G620).
 - An assistant's fact that a check sent to you (it reads like an instruction, or its only source is a link the hub can't open) waits for you quietly. Before, the hub tried to file it every minute and logged an error each time (G599).
 - Settings fits a phone screen. A long word with no break in it, such as a path or an address in something still open, no longer makes the page wider than the screen (G604).
+- Connecting an assistant has a short page per app: Claude Code, Cursor, VS Code, Codex CLI, Gemini CLI, Claude Desktop and any other MCP app on your computer, each with the one command, where the key goes, how to check it and how to undo it (docs/connect.md). Claude on the web and ChatGPT have pages that say plainly what they need today. The quickstart no longer says a cloud assistant takes two more minutes.
+- docs/install-with-an-agent.md lets an assistant with a shell install pocketBrain for you: commands with no questions, and stops where only you can answer. docs/hosting.md says what the hub needs from wherever it runs (a laptop that sleeps, Linux or WSL with a systemd unit, a home server, a VPS behind your own proxy, a container) and lists the ways to give it a public address.
 
 ### What the hub does
 

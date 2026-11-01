@@ -26,12 +26,13 @@ import { getQuote } from "../quotes";
 import { verifyReadLog, type ReadEntry } from "../readlog";
 import { loadRules, gardeners, type Rules } from "../rules";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { lookedFor } from "./html-lookedfor";
 import { consentCard } from "./html-consent";
 import { FAVICON } from "../favicon";
 import { bar } from "../measure";
 import { ownerLocal, ownerToday } from "../clock";
-import { escapeRe } from "../util";
+import { escapeRe, codeAtStart } from "../util";
 import { paged, pager, withParam } from "./paging";
 
 export const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -597,6 +598,16 @@ function filedItems(s: State, csrf: string): string {
   return rows.map((r) => `<div class="item"><div class="what">${esc(r.question)}<div class="sub">pocketBrain ${esc(r.picked)}: ${esc(r.why)} · ${ago(r.at, s.now)}</div></div><div class="acts">${button(csrf, "owner-undo-auto", { key: r.key }, "Undo")}</div></div>`).join("");
 }
 
+// Which code is running, on the last line of Settings (use-it check 2026-11-01, G620): the release
+// number from package.json and the short sha the hub started on, so after a deploy the owner can see
+// it took. The sha is codeAtStart(), the same one /health answers.
+let release: string | undefined;
+function versionLine(): string {
+  release ??= (() => { try { return String(JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "package.json"), "utf8")).version ?? ""); } catch { return ""; } })();
+  const sha = codeAtStart().slice(0, 7);
+  return release || sha ? `<p class="sub version">pocketBrain ${esc(release)}${sha ? ` · code ${esc(sha)}` : ""}</p>` : "";
+}
+
 export function overview(s: State, csrf: string, q = new URLSearchParams()): Page {
   // Settings (the home's link): the pages behind it, everything still open one by one, what the hub
   // filed on its own with Undo, then the assistants and the weekly numbers folded away. Nothing here
@@ -624,7 +635,7 @@ ${filed ? `<h2>Filed for you this week</h2><div class="card">${filed}</div>` : "
 ${barTile(s)}
 <h2>Activity, last 7 days</h2>${activityChart(s)}
 <h2>Latest reads</h2>${readsTable(s, s.reads.slice(-15).reverse())}<p><a href="/activity">All activity</a></p>
-<h2>Had to explain something again?</h2><div class="card"><form class="inline" method="post" action="/action/reexplain"><input type="hidden" name="csrf" value="${esc(csrf)}"><select name="agent" aria-label="Which assistant">${s.agents.map((a) => `<option value="${esc(a.name)}">${esc(a.label)}</option>`).join("")}</select> <input name="what" required maxlength="300" placeholder="what you told it again" aria-label="What you told it again" style="width:50%"> <button class="go">Log it</button></form> <form class="inline" method="post" action="/action/minutes"><input type="hidden" name="csrf" value="${esc(csrf)}"><input name="minutes" type="number" min="0" max="600" placeholder="min today" aria-label="Minutes you spent on the brain today" style="width:7em"> <button>Log my time</button></form><p class="sub">These two feed your weekly scorecard.</p></div></details>`;
+<h2>Had to explain something again?</h2><div class="card"><form class="inline" method="post" action="/action/reexplain"><input type="hidden" name="csrf" value="${esc(csrf)}"><select name="agent" aria-label="Which assistant">${s.agents.map((a) => `<option value="${esc(a.name)}">${esc(a.label)}</option>`).join("")}</select> <input name="what" required maxlength="300" placeholder="what you told it again" aria-label="What you told it again" style="width:50%"> <button class="go">Log it</button></form> <form class="inline" method="post" action="/action/minutes"><input type="hidden" name="csrf" value="${esc(csrf)}"><input name="minutes" type="number" min="0" max="600" placeholder="min today" aria-label="Minutes you spent on the brain today" style="width:7em"> <button>Log my time</button></form><p class="sub">These two feed your weekly scorecard.</p></div></details>${versionLine()}`;
   return { title: "Settings", tab: "overview", body };
 }
 
