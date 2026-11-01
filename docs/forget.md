@@ -15,7 +15,7 @@ One commit, made as you (`Kind: owner-edit`, `Forgot-Person: <id>`), removes:
 - **Their note.** From the next request no assistant can read, search or be handed it; it answers like a note that never existed. The cells rebuild on the new commit.
 - **Every link to them**, label or anchor included (`[[people/jane-roy|Jane]]`, `[[people/jane-roy#emails]]`), in note bodies and fact values. Each becomes `[[redacted]]`, which is what assistants already see for a note outside their view. A note for someone whose id only starts the same (`people/jane-roy-2`) is left alone.
 - **Their standing** in `rules/standing.yaml`.
-- **Inbox items naming them**: pending and decided proposals under `inbox/`.
+- **Inbox items naming them**: pending and decided proposals under `inbox/`, by id or by a name that resolves to them (a capture that made their page by name, G601). The hub never makes their page again from an older forget's leftovers: at its start it doesn't put back a capture for a new page whose id you forgot, and filing waits for you on a new-page proposal by that name.
 - **Settled disputes about their facts** (`disputes/*` whose fact key is theirs). A fact of theirs still in dispute stops the forget: settle it first.
 
 And, outside git:

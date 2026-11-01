@@ -576,3 +576,30 @@ test("contract write: an id naming an assistant answers the same for a hidden no
   expect(hidden.outcome).toBe(missing.outcome);
   expect(hidden.message!.replace("claude-club", "X")).toBe(missing.message!.replace("claude-guild", "X"));
 });
+
+// G601 slice audit F1: a person the owner forgot never comes back through the hub's start
+// (reopenLostAccepts) and the filing tick, however its decided by-name capture was left.
+test("contract write: a forgotten person never comes back through reopen and filing (G601)", async () => {
+  const { mkdtempSync, readdirSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { makeModel } = await import("../../src/model");
+  const { capture } = await import("../../src/capture");
+  const { runAuto } = await import("../../src/filing");
+  const { reopenLostAccepts } = await import("../../src/write");
+  const { forgetPerson } = await import("../../src/forget");
+  const { weigh } = await import("../asked");
+  process.env.PB_CONFIG_DIR = mkdtempSync(join(tmpdir(), "pb-cfg-"));
+  const later = (d: number) => new Date(Date.now() + d * 86_400_000);
+  const zed = (root: string) => loadBrain(root).filter((n) => n.fm.type === "person" && /zed/i.test(String(n.fm.title)));
+  const root = makeBrain();
+  await capture(root, { kind: "text", text: "Zed Quill is a plumber" }, makeModel({ provider: "fake", model: "fake-1" }, { fake: () => JSON.stringify({ facts: [{ entity: "Zed Quill", type: "person", attribute: "role", value: "Plumber", quote: "Zed Quill is a plumber" }] }) }));
+  weigh(root, new Date());
+  runAuto(root, later(1));
+  forgetPerson(root, zed(root)[0].fm.id);
+  expect(readdirSync(join(root, "inbox", "decided")).filter((f) => f.endsWith(".yaml"))).toEqual([]);
+  reopenLostAccepts(root);
+  weigh(root, later(2));
+  runAuto(root, later(3));
+  expect(zed(root)).toEqual([]);
+  delete process.env.PB_CONFIG_DIR;
+});

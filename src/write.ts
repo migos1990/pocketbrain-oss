@@ -3,7 +3,7 @@
 // resolve entity -> build fact_key -> run checks -> compare with the live value ->
 // no-op, merge, supersede or dispute -> commit (or propose to inbox/).
 import { sensitiveShape } from "./shape";
-import { sha256, alert } from "./util";
+import { sha256, alert, escapeRe } from "./util";
 import { clock } from "./clock";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -1235,12 +1235,39 @@ export function unfreezeHeld(root: string): string[] {
 // goes back to the inbox, where filing now waits for the owner on it; so does a new page that was
 // never made. Not an older max or min the write ignores by design, nor a page named by id that is
 // gone. One hub commit with a why. Run at the hub's start (src/start.ts).
+// The decided copy's `by` is who decided it (auto-decide): the reopened proposal is its writer's
+// again, the agent the server put on the request, or it waits as nobody's (G601).
+function reopened(p: { request?: WriteRequest } & Record<string, unknown>): Record<string, unknown> {
+  const { decided: _d, decision: _x, by: _b, ...open } = p;
+  return { ...open, ...(typeof p.request?.agent === "string" ? { by: p.request.agent } : {}) };
+}
+// The last part of every id the owner forgot (forget.ts commits carry Forgot-Person: <id>); a new
+// page's id is its name's slug, with a short hash when that slug was taken.
+// Would a new page by this name get an id the owner forgot?
+export function forgottenName(title: string, forgot: Set<string>): boolean {
+  const slug = slugify(title);
+  return !!slug && [...forgot].some((x) => x === slug || new RegExp(`^${escapeRe(slug)}-[0-9a-f]{6}$`).test(x));
+}
+export function forgottenSlugs(root: string): Set<string> {
+  // A forget the owner undid (forget --undo: Undid-Forget: <the forget's commit>) doesn't count.
+  const forgets = new Map<string, string>(), undone = new Set<string>();
+  for (const c of git(root, ["log", "--format=%H%n%B%x1e", "--grep=^Forgot-Person: ", "--grep=^Undid-Forget: "]).split("\x1e")) {
+    const [hash, ...body] = c.trim().split("\n");
+    for (const l of body) {
+      const f = l.match(/^Forgot-Person: (\S+)$/), u = l.match(/^Undid-Forget: (\S+)$/);
+      if (f && hash) forgets.set(hash, f[1].split("/").pop()!);
+      if (u) undone.add(u[1]);
+    }
+  }
+  return new Set([...forgets].filter(([h]) => !undone.has(h)).map(([, slug]) => slug));
+}
 export function reopenLostAccepts(root: string): string[] {
   const dir = join(root, "inbox", "decided");
   if (!existsSync(dir)) return [];
   const notes = loadBrain(root);
   const packets = notes.filter((n) => n.fm.type === "dispute");
   const out: string[] = [], paths: string[] = [], keys: string[] = [];
+  let forgot: Set<string> | undefined;
   // Proposals already waiting (a write that filed one again under another name): never a twin card.
   const waiting = readdirSync(join(root, "inbox")).filter((x) => x.endsWith(".yaml")).map((x) => { try { return (YAML.parse(readFileSync(join(root, "inbox", x), "utf8")) ?? {}).request as WriteRequest | undefined; } catch { return undefined; } });
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".yaml")).sort()) {
@@ -1254,8 +1281,9 @@ export function reopenLostAccepts(root: string): string[] {
     // a page named by id that is gone now was merged or forgotten, so it stays decided.
     if (!note) {
       if (req.id || !req.title || !req.type || waiting.some((w) => w && !w.id && w.title === req.title && w.attribute === req.attribute)) continue;
-      const { decided: _d, decision: _x, by: _b, ...open } = p as Record<string, unknown>;
-      writeFileSync(join(root, "inbox", f), YAML.stringify(open, { lineWidth: 0 }));
+      // A page the owner forgot is never made again by a decided copy an older forget left (G601 slice audit F1).
+      if (forgottenName(String(req.title), forgot ??= forgottenSlugs(root))) continue;
+      writeFileSync(join(root, "inbox", f), YAML.stringify(reopened(p), { lineWidth: 0 }));
       rmSync(join(dir, f));
       out.push(f); paths.push(`inbox/${f}`, `inbox/decided/${f}`); keys.push(`${req.type}:${req.title}#${req.attribute}`);
       continue;
@@ -1275,9 +1303,9 @@ export function reopenLostAccepts(root: string): string[] {
       let v: unknown = req.value; try { v = normalizeValue(req.value as never, spec); } catch { /* as written */ }
       if (spec.merge === "max" ? !(String(v) > String(live.value)) : !(String(v) < String(live.value))) continue;
     }
-    if (waiting.some((w) => w && w.attribute === req.attribute && (w.id ?? w.title) === (req.id ?? req.title) && plain(w.value) === key)) continue;
-    const { decided: _d, decision: _x, by: _b, ...open } = p as Record<string, unknown>;
-    writeFileSync(join(root, "inbox", f), YAML.stringify(open, { lineWidth: 0 }));
+    // A by-title capture's write handed back under the page's id (not_in_your_view) waits already (G601).
+    if (waiting.some((w) => w && w.attribute === req.attribute && ((w.id ?? w.title) === (req.id ?? req.title) || w.id === note.fm.id) && plain(w.value) === key)) continue;
+    writeFileSync(join(root, "inbox", f), YAML.stringify(reopened(p), { lineWidth: 0 }));
     rmSync(join(dir, f));
     out.push(f); paths.push(`inbox/${f}`, `inbox/decided/${f}`); keys.push(fk);
   }

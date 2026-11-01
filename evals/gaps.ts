@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G601: {
+    closed: "f834639f",
+    title: "A capture put back in the inbox at the hub's start lost its writer and waited as your own material",
+    severity: "medium",
+    finding: "Owner's Mac after 47781905 (2026-11-01, counts only): 4 imported and 2 source-pulled proposals had no by field and waited as \"It came from your own material\" (and \"It's about a person\" for the 2), counted as asks not about a contradiction. reopenLostAccepts, run at every hub start (G431), puts a capture the hub accepted with nothing saved back in the inbox, and stripped the decided copy's by (auto-decide) without restoring the proposal's own writer. It also reopened a by-title capture whose write had been handed back under the resolved page id (not_in_your_view), since it compared the waiting proposal's id with the capture's title.",
+    fix: "src/write.ts reopenLostAccepts: the reopened proposal's by is its request's agent (set by the server from the token); a waiting proposal on the resolved page with the same attribute and value counts, whether named by id or title. src/dashboard/data.ts proposals(): a file with no by reads its request's agent, so the ones already reopened file on the next tick. Builder slice audit (tree bf9610e6) F1, high: with the writer back, a decided by-name capture of a person the owner forgot (forget matched ids only) was reopened at the hub start and filed, making the page again unasked. Fix: forget also drops by-name proposals that resolve to the person, decided ones included; reopen skips a new page whose would-be id the owner forgot (Forgot-Person trailers); filing waits on a new-page proposal for a forgotten name. A forget the owner undid (Undid-Forget trailer) no longer counts (builder's security review, low). Tests: test/reopen-keeps-writer.test.ts, test/forget-reopen.test.ts, the G601 row in test/contracts/write.contract.test.ts.",
+  },
   G600: {
     closed: "85498df4",
     title: "A second proposal of the same value for one fact waited as your own material",

@@ -22,7 +22,7 @@ import { OWNER } from "./owner";
 import { CoreError } from "./core";
 import { sensitiveShape } from "./shape";
 import type { Rules } from "./rules";
-import { logWrite, inboxCards } from "./write";
+import { logWrite, inboxCards, forgottenName, forgottenSlugs } from "./write";
 import { loadRules, attributeSpec, isOwnerWord, isGardener, tierOf } from "./rules";
 import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide } from "./write";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
@@ -169,6 +169,7 @@ function citesOwner(pr: Proposal): boolean {
 // matched end to end: a reason carrying assistant or sender text (an area name, a quoted value)
 // can't say it (G598 slice audit F1). Ids and attributes are schema-checked, so no space or bracket.
 export const heldByAccess = (reason: unknown) => /^the owner decides [^\s()#]+#[^\s()#]+ \(not_in_your_view\)$/.test(String(reason ?? ""));
+const FORGOTTEN = "You forgot someone by this name, so only you decide it.";
 // Owner-facing only: never shown to the assistant, which got the write path's one fixed reply.
 const NOT_IN_VIEW = "The assistant can't see all of that page, so only you decide it.";
 function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[] }, now: Date): Verdict {
@@ -189,6 +190,9 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // the fact (invariant 3, "not_in_your_view"). The hub's yes is weighed as that assistant's write
     // again and hands back the same proposal, so a plan to save it failed every minute (G598).
     if (pr && heldByAccess(pr.reason)) return { never: NOT_IN_VIEW };
+    // A new page for a name the owner forgot never files itself again: one an older forget left in
+    // the inbox, reopened with no writer, read its writer from the request after G601 (slice audit F1).
+    if (pr && !pr.request.id && typeof pr.request.title === "string" && forgottenName(pr.request.title, forgottenSlugs(root))) return { never: FORGOTTEN };
     if (pr && (pr.by === captureAgent(rulesOf(root)) || isOwnerId(pr.by)) && captured(root, pr.file)) return filed(fileVerdict(root, it, pr, ctx.notes, now));
     // An assistant's proposal that says it is the owner's word waits for the owner, whatever tier
     // the assistant is: once the hold on core assistants' proposals ended (2026-10-30) a forged

@@ -15,7 +15,8 @@ import { commitPaths, git, gitRun } from "./git";
 import { hubRole } from "./hub";
 import { OWNER } from "./owner";
 import { addressesOf, dropPersonStanding, loadStanding, restorePersonTraces, type StandingTraces } from "./standing";
-import { logWrite } from "./write";
+import { logWrite, resolveEntity } from "./write";
+import YAML from "yaml";
 import { buildAll } from "./backup";
 import { edgeEnrolled } from "./edge";
 
@@ -62,7 +63,10 @@ export function planForget(root: string, id: string): ForgetPlan {
   const re = linkRe(id), m = mentions(id);
   const links = notes.filter((n) => n.fm.id !== id && re.test(readFileSync(join(root, `${n.fm.id}.md`), "utf8"))).map((n) => n.fm.id).filter((x) => !x.startsWith("disputes/")).sort();
   const disputes = notes.filter((n) => n.fm.type === "dispute" && [n.fm.fact_key, (n.fm as { other_key?: string }).other_key].some((k) => typeof k === "string" && k.startsWith(`${id}#`))).map((n) => n.fm.id).sort();
-  const inbox = walk(root, "inbox").filter((p) => p.endsWith(".yaml") && m.test(readFileSync(join(root, p), "utf8"))).sort();
+  // A proposal for a new page by name (no id yet, decided ones too) that names this person goes as
+  // well: kept, the hub's start would reopen it and file the page again (G601 slice audit F1).
+  const byName = (p: string) => { try { const r = (YAML.parse(readFileSync(join(root, p), "utf8")) ?? {}).request; return !!r && !r.id && typeof r.title === "string" && typeof r.type === "string" && resolveEntity([note], r.type, r.title).id === id; } catch { return false; } };
+  const inbox = walk(root, "inbox").filter((p) => p.endsWith(".yaml") && (m.test(readFileSync(join(root, p), "utf8")) || byName(p))).sort();
   const title = String(note.fm.title ?? id);
   const needles = namesOf(title, addressesOf(note));
   const named = notes.filter((n) => n.fm.id !== id && !disputes.includes(n.fm.id) && needles.some((x) => readFileSync(join(root, `${n.fm.id}.md`), "utf8").replace(re, "").toLowerCase().includes(x))).map((n) => n.fm.id).sort();
