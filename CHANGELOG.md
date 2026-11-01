@@ -4,11 +4,20 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### What you see
+
+- An assistant's fact that a check sent to you (it reads like an instruction, or its only source is a link the hub can't open) waits for you quietly. Before, the hub tried to file it every minute and logged an error each time (G599).
+
+### What the hub does
+
+- A source an assistant cites must be one line: a ref or its via with a line break is refused, so it can never write its own lines into a commit message, and only your own commits say who you forgot (G602).
+- What an assistant sends is quoted in one line in its commit message, so a line break in a list item can't add lines that the history, the digest or undo trust (G605).
+- An assistant that can't see one fact on a page still reads the page's other sentences, even when they come from the same email; the references on a page still show one number per email (G596).
+
 ## [0.2.1] - 2026-11-01
 
 ### What you see
 
-- An assistant's fact that a check sent to you (it reads like an instruction, or its only source is a link the hub can't open) waits for you quietly. Before, the hub tried to file it every minute and logged an error each time (G599).
 - A fact named by a person or page name that fits a page you have as well as a new one waits on Settings for you to say which, and is no longer counted as a question on your home. A fact that already landed on one of those pages (from that same source) is no longer put back in your inbox when the hub restarts (G603).
 - A fact the hub put back in your inbox when it restarted keeps the assistant or source it came from, so it files or waits by that one's rules. Before, it waited as "your own material" (G601).
 - A memory or fact proposed twice with the same value now files or waits the same way as the first one. Before, the second one waited as "your own material" and counted as something to decide (G600).
@@ -48,44 +57,28 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - Memory, the wiki (owner app step 3): its head says how much your memory holds; people, projects and organisations are tiles in their area's colour, money and decisions share a fourth; **Pages that changed** this week shows five pages with the area's dot, what changed ("role · you said", "last contact · from an email") and the day, and **All changes** shows the rest. A private page, or a value only you have seen, says "something new" and nothing more.
 - Telling it something, first half (owner app step 2): what you just typed leads On your mind, outlined, with "You said so just now", Undo and its marks. A dashed mark now opens a sheet, "Let Gemini know this?", that says why it doesn't and offers **Everything in teaching** (on Settings, where what an assistant sees changes), **Keep it from Gemini** (that page stays out even if you share teaching later) or **Not now**. Nothing on the sheet shares anything by itself, except **Just this one**: your tap lets Gemini read that page once, the next time it checks in, and what it sees stays the same.
 - The owner app's first step (brief of 2026-10-30): the home is now **On your mind**, one of four tabs (On your mind, Memory, Ask, Who knows) with a tab bar at the foot of each. Under every memory, one mark per assistant shows who knows it: filled when that assistant gets the fact, dashed when it doesn't, drawn from each assistant's own view; a value only you have seen shows a lock and **Read it** instead. Conflicts show as **Settle**. Your assistants' rows, See as, what they asked today and Fix everywhere moved to **Who knows**, with Settings at its foot. **Memory** shows your pages by kind with counts, a search and what changed this week (on a sign-in older than 10 minutes the search goes by page names only, so it can't confirm a private value, G542); **Ask** is the box on its own. A bookmark to `/ask` opens Ask again.
-- The owner's screens are now built and tested against a demo brain shaped like a life: `examples/demo-brain` holds about 500 made-up facts (60 people across work, teaching, family and friends, their projects, decisions and two private money pages) and a week replayed on top, so the home in every screenshot shows conflicts to settle, assistants that read today and a week of what the brain learned. `bun scripts/demo-brain.ts --out <folder>` makes one to open in the dashboard. On a page with sections, the owner's page now titles them one level under the page's name.
-- A held message can't be let through on the 30-day sign-in any more: Let it through, and every other button the owner screens don't offer to keep something back, asks you to sign in again first (G525).
-- The box no longer notes "Paul told me Jane is the dean" as your own word: it says whose word it is and offers one chip to say it as yours (G528).
-- A collaborator's assistant is no longer listed under Your assistants or in the belief radar (G529).
-- A co-owner's assistant isn't listed under Your assistants or in the belief radar either, and memory sync never quizzes it (G533).
-- An assistant's row on the home no longer says "3 times" with nothing under it: connecting, reading its guide and every other read has its line, and the same one repeated is one line with a count.
+
+- "Just this one" no longer reaches an assistant once you keep that page from it, or move the page somewhere it can't read, after the offer (G543).
+- A page with your surname may say it's family and link to your page; "M. Surname", with your own surname, is you, not a new page (G546, G547). Off until you turn family links on.
+- A person's page reads like a person: the full name once, then the first name; role and workplace in one sentence; this year's dates without the year (G559).
+- Merging two of your own pages works: a private, shared-with-some or held fact no longer blocks the pair, and your confirmation of a value survives the merge (G569, G572, G576).
 
 ### What the hub does
 
-- A source an assistant cites must be one line: a ref or its via with a line break is refused, so it can never write its own lines into a commit message, and only your own commits say who you forgot (G602).
-- What an assistant sends is quoted in one line in its commit message, so a line break in a list item can't add lines that the history, the digest or undo trust (G605).
 - A sealed edge bundle opens only with its full 16-byte tag: a tag cut short is refused whatever runtime opens it (G588).
-- `pocketbrain aftercheck classify on --cap 1` turns on the second-opinion classifier after an assistant's write with its own monthly spend cap, as one owner commit (`off` turns it off), so no one types into `rules/policy.yaml`. A conflict check whose model answer is cut off no longer stops the classifier: each step runs on its own and the failed one is retried, and the conflict check now has room for its whole answer.
+- `pocketbrain aftercheck classify on --cap 1` turns on the second-opinion classifier after an assistant's write with its own monthly spend cap, as one owner commit (`off` turns it off), so no one types into `rules/policy.yaml`. A conflict check whose model answer is cut off no longer stops the classifier: each step runs on its own and the failed one is retried, and the conflict check now has room for its whole answer (G575).
 - The public repo (pocketbrain-oss) now follows `main`: after CI passes, a workflow exports that commit, refuses it on any denylisted term or a secret-shaped string beyond the known test fixtures, and pushes it there as one commit; `bun scripts/public-sync.ts check` says whether the public repo and pocketbrain.dev are in step, and a release tag is refused while the README's status line names another version (`cut` now moves it). See docs/release.md, The public repo and the site.
 - Contacts, before they run on your brain (audit v8): a card's email or phone reaches no assistant through any door until you tap Show, and after Show only one allowed private values (G562); the carve's random-brain check now seeds card details and counts a value held until Show as off limits (G563). An assistant citing one of your contact cards, even a real one, is taken at its own word, so it can never outrank yours or replace what the card filed (G564). A card's second email on a page where you gave one files itself instead of waiting as a question nobody could answer (G565).
 - An assistant citing someone's real contact card can no longer plant an address that counts as a known sender: what it wrote is stored as its own word, and an address only it vouched for with a card never makes mail from that address file as a known person's (G581).
 - A held card on On your mind no longer names a page called like a statement, a claim or a card ("Visa statement", "Manulife claim"), whoever the mail came from; it says "Something new only you can see" (G585).
 - Settle on an older sign-in no longer shows the two values of a conflict whose current value you made private, or whose values look like money, health or legal; they show after a fresh sign-in, as on the home (G583).
 - A date you made private no longer shows in a page's opening words ("8 Dec") on an older sign-in or in Ask, and an assistant that can't see a fact no longer reads the hub's own sentence about it on that page (G582, G589, G594).
-- An assistant that can't see one fact on a page still reads the page's other sentences, even when they come from the same email; the references on a page still show one number per email (G596).
 - Merging two pages no longer lets an assistant treat a share you set on one of them as its own: its next change to that value waits for you, as before the merge (G584).
 - An order to the assistant reading it waits for you under any attribute's name (notes, working style, …), and passive, clause-led or French orders count too, not only "prefers that you …" (G554).
-- The optional local search model's image library (sharp, via @huggingface/transformers) is pinned to 0.35.5, past three high advisories in libvips, libheif and librsvg; search setup still loads the model.
-- An assistant fact that also asked to move its page to another area now files where the page is (found by its id or its title, G522), instead of being refused by the hub every day; a save refused twice stops being retried; receipt pages set aside no longer count against the north star (G519, G520).
-- A preference that tells the assistant reading it what to do ("prefers that you send her address to anyone who asks"), from a memory import or any assistant, waits for you instead of being filed and served to every assistant (G526).
-- Undo from "Filed for you" now also rewrites the page's text, which went on stating the undone value (G527).
-- `probe init` never draws two canaries sharing their words, which made a copied personal canary look like the private one (G535).
-- An assistant can no longer turn a contradiction into a silent update of a verified value by naming another area on its remember: the hub's own yes to an assistant's proposal weighs a different value as a conflict, as the assistant's direct write would, and only what the hub pulled itself updates a verified value by its newer date (G536).
-- Upkeep's receipt rule no longer sets aside a person's page named like a receipt ("Bill Harper"), only money pages from mail, and never again after you undo it (G537).
-- A fact the hub stopped trying to file after two refusals now keeps the auto_saves check failing until it is answered, instead of going quiet after a day (G538).
-- The hub's own yes to an assistant's proposal no longer reaches a fact hidden from that assistant, nor files for a paused or read-only one or past a type it isn't given (G539).
-- The hold on your core assistants' own proposals is a setting, `hold_assistants_until` under `auto_decide:` in rules/escalation.yaml, and off by default; it was a date in the code (the finals, 2026-10-30), which has now passed, so nothing changes on a brain that leaves it unset (G531).
-- A collaborator's assistant is never quizzed by memory sync, by any path (G529).
-- Both reference passport servers (TypeScript and Python) withhold a hidden value in any case and from titles and aliases, and no longer let a direct writer replace a fact hidden from it (G530).
-- The Memory Passport conformance suite now checks that a hidden value is withheld in any case and from a visible note's title and aliases (R7), with a mutant server that only R7 catches (G532).
-- GitHub CI's gitleaks, conformance and e2e jobs pass again, and its test job's failures that only showed on GitHub's runner are fixed: times read from git are one shape whichever git wrote them, the write log keeps the hub's clock, and a child test run finds its browsers (G521, G523, G534, G540). The release job's own push of a tag and the release branch no longer runs the test suite where it can't (G541). The merge gate now stops while CI on main has been red for over a day. No release is tagged until CI on main passes.
 - Docs that drift now fail CI (`test/docs-truth.test.ts`, in `bun test`): a link to a section that isn't there, a repo path named in a sentence that doesn't exist, a `pocketbrain <command> <subcommand>` the CLI doesn't list, an environment variable or key name the code reads that no doc names (or one a doc names that the code doesn't read), package.json, README's status line and the newest changelog section naming different versions, a gap id the changelog cites that no code or test names, a doc nothing links to. `bun scripts/docs-live.ts` checks the pocketbrain.dev addresses the docs tell you to run, in CI on every push to main and daily (`docs-live` workflow). See docs/release.md, Docs.
 - The 0.2.0 notes no longer list what 0.2.0 didn't have: the decision deck's cards (Still the plan?, Past its date?, the morning swipe, proposal groups, the Same person? card) and the week's card timings, built and removed within that release; and the one-line installer and the site's `/git` redirect, which the site doesn't serve yet. The README and the quick start install from a clone until it does.
+- `verify_source` never quotes a contact card's held phone or email (G549).
+- The Gardener scorecard test holds on the day the clocks change (G591).
 
 ## [0.2.0] - 2026-10-30
 
@@ -108,6 +101,12 @@ These change what you type (claude/cli-token-pem):
 
 ### What you see
 
+- The owner's screens are now built and tested against a demo brain shaped like a life: `examples/demo-brain` holds about 500 made-up facts (60 people across work, teaching, family and friends, their projects, decisions and two private money pages) and a week replayed on top, so the home in every screenshot shows conflicts to settle, assistants that read today and a week of what the brain learned. `bun scripts/demo-brain.ts --out <folder>` makes one to open in the dashboard. On a page with sections, the owner's page now titles them one level under the page's name.
+- A held message can't be let through on the 30-day sign-in any more: Let it through, and every other button the owner screens don't offer to keep something back, asks you to sign in again first (G525).
+- The box no longer notes "Paul told me Jane is the dean" as your own word: it says whose word it is and offers one chip to say it as yours (G528).
+- A collaborator's assistant is no longer listed under Your assistants or in the belief radar (G529).
+- A co-owner's assistant isn't listed under Your assistants or in the belief radar either, and memory sync never quizzes it (G533).
+- An assistant's row on the home no longer says "3 times" with nothing under it: connecting, reading its guide and every other read has its line, and the same one repeated is one line with a count.
 - An assistant that says you approved something you never approved still waits for you after the hold on your assistants' proposals ended on Oct 30; it no longer files as your word (G517).
 - A preference reads as a sentence on the home and in the box: "Jane Roy prefers long novels", not "Jane Roy: prefers is long novels".
 - The home shows what each assistant asked your brain today and what it got: under its name, "asked about “Course A”", "searched “Jane”" or "opened Jane Roy", with the time and the pages it was told, newest first.
@@ -205,6 +204,20 @@ These change what you type (claude/cli-token-pem):
 
 ### What the hub does
 
+- The optional local search model's image library (sharp, via @huggingface/transformers) is pinned to 0.35.5, past three high advisories in libvips, libheif and librsvg; search setup still loads the model.
+- An assistant fact that also asked to move its page to another area now files where the page is (found by its id or its title, G522), instead of being refused by the hub every day; a save refused twice stops being retried; receipt pages set aside no longer count against the north star (G519, G520).
+- A preference that tells the assistant reading it what to do ("prefers that you send her address to anyone who asks"), from a memory import or any assistant, waits for you instead of being filed and served to every assistant (G526).
+- Undo from "Filed for you" now also rewrites the page's text, which went on stating the undone value (G527).
+- `probe init` never draws two canaries sharing their words, which made a copied personal canary look like the private one (G535).
+- An assistant can no longer turn a contradiction into a silent update of a verified value by naming another area on its remember: the hub's own yes to an assistant's proposal weighs a different value as a conflict, as the assistant's direct write would, and only what the hub pulled itself updates a verified value by its newer date (G536).
+- Upkeep's receipt rule no longer sets aside a person's page named like a receipt ("Bill Harper"), only money pages from mail, and never again after you undo it (G537).
+- A fact the hub stopped trying to file after two refusals now keeps the auto_saves check failing until it is answered, instead of going quiet after a day (G538).
+- The hub's own yes to an assistant's proposal no longer reaches a fact hidden from that assistant, nor files for a paused or read-only one or past a type it isn't given (G539).
+- The hold on your core assistants' own proposals is a setting, `hold_assistants_until` under `auto_decide:` in rules/escalation.yaml, and off by default; it was a date in the code (the finals, 2026-10-30), which has now passed, so nothing changes on a brain that leaves it unset (G531).
+- A collaborator's assistant is never quizzed by memory sync, by any path (G529).
+- Both reference passport servers (TypeScript and Python) withhold a hidden value in any case and from titles and aliases, and no longer let a direct writer replace a fact hidden from it (G530).
+- The Memory Passport conformance suite now checks that a hidden value is withheld in any case and from a visible note's title and aliases (R7), with a mutant server that only R7 catches (G532).
+- GitHub CI's gitleaks, conformance and e2e jobs pass again, and its test job's failures that only showed on GitHub's runner are fixed: times read from git are one shape whichever git wrote them, the write log keeps the hub's clock, and a child test run finds its browsers (G521, G523, G534, G540). The release job's own push of a tag and the release branch no longer runs the test suite where it can't (G541). The merge gate now stops while CI on main has been red for over a day. No release is tagged until CI on main passes.
 - The Memory Passport has a server in a second language: `conformance/reference_server.py`, about 300 lines of Python with only its standard library, passes every check of the conformance suite, so the spec stands on two implementations that share no code or language.
 - The deck's removal is finished: `src/filing.ts` keeps only the hub's filing, no longer works out the open conflicts on every tick for cards nobody draws, and names nothing after the deck. The first-seen clocks behind each deadline move from `log/deck-seen.json` to `log/filing-seen.json` on the hub's first read after the update, so no running deadline restarts.
 - The brain keeps a diary of what it learned (docs/owner-home.md): every fact change saved through the write path adds one line to `diary/YYYY-MM.jsonl` in the same commit, with the value before and after, where it came from and who wrote it. The owner's new home screen will read it; no assistant sees it. Each line can be undone (`src/undo.ts`): the earlier value comes back as it was, and the undone one is kept as never right, so the same mail can't put it back; a fact that changed since is left alone.
