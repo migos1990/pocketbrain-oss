@@ -334,3 +334,19 @@ test("an old p- opening still loses the hidden fact's sentence when a section ca
   expect(body).not.toContain("8 Dec");
   expect(body).toContain("Room booked.");
 }, 60_000);
+
+// PR 30 review (Low): a writer's cross-page label (p-at-, p-in-, p-see-) carries only the other
+// page's short name. A visible page of another kind with that short name never keeps the sentence
+// about a page out of the reader's view: the page the sentence links decides.
+test("contract view: a cross-page sentence about a hidden page goes, whatever page shares its short name", () => {
+  const root = makeBrain();
+  mkdirSync(join(root, "orgs"), { recursive: true });
+  const fm = (id: string, type: string, title: string, sens = "personal") => `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: work\nsensitivity: ${sens}\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n`;
+  writeFileSync(join(root, "people", "ana-diaz.md"), fm("people/ana-diaz", "person", "Ana Diaz", "private") + `facts:\n  org: { value: "[[orgs/north-college]]", as_of: 2026-10-05, sources: ["gmail:f0000000000000a2"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }\n---\n`);
+  writeFileSync(join(root, "projects", "ana-diaz.md"), fm("projects/ana-diaz", "project", "Ana Diaz Fund") + "---\n");
+  writeFileSync(join(root, "orgs", "north-college.md"), fm("orgs/north-college", "org", "North College") + "---\n[[people/ana-diaz|Ana Diaz]] works at North College.[^p-at-ana-diaz]\n\n[^p-at-ana-diaz]: Email, 2026-10-05 (gmail:f0000000000000a2)\n");
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: fixture"], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "planner", GIT_AUTHOR_EMAIL: "p@x", GIT_COMMITTER_NAME: "planner", GIT_COMMITTER_EMAIL: "p@x" } });
+  const body = (readNote(root, "helper", "orgs/north-college") as { body: string }).body;
+  expect(body).not.toContain("works at North College");
+  expect(body).not.toContain("gmail:f0000000000000a2");
+});

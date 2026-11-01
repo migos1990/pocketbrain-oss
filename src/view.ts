@@ -99,14 +99,15 @@ function hiddenLabels(v: Visible, attrs: Set<string>, defs: Map<string, string>)
   return out;
 }
 
-function withoutHiddenSentences(text: string, v: Visible, res: CarveResult): string {
+function withoutHiddenSentences(text: string, v: Visible, res: CarveResult, linked = text): string {
   // The whole text, not only the writer's paragraph: a section that cites the hidden fact's label
   // goes the same way, and a value that spells the writer's marker can't move where removal starts.
   const attrs = hiddenAttrs(v, res);
-  if (!attrs.size || !/\[\^[^\]\s]+\]/.test(text)) return text;
+  if (!/\[\^[^\]\s]+\]/.test(text)) return text;
   const defs = new Map<string, string>();
   for (const m of text.matchAll(/^\[\^([^\]\s]+)\]:\s*(.*)$/gm)) defs.set(m[1]!, m[2]!);
-  const hid = hiddenLabels(v, attrs, defs);
+  const hid = new Set([...(attrs.size ? hiddenLabels(v, attrs, defs) : []), ...otherPagesHidden(v, res, defs, linked)]);
+  if (!hid.size) return text;
   const cites = (s: string) => [...s.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!);
   let out = text.split("\n").map((line) => /^\[\^[^\]\s]+\]:/.test(line) ? line :
     line.replace(/[^\n]*?(?:\[\^[^\]\s]+\])+(?: A different value is waiting to be checked\.)?[ \t]*/g, (s) => cites(s).some((l) => hid.has(l)) ? "" : s).replace(/[ \t]+$/, "")).join("\n");
@@ -119,7 +120,77 @@ function withoutHiddenSentences(text: string, v: Visible, res: CarveResult): str
 // A visible page's own text (body, summary) as this agent gets it: links and carved values as for
 // any text (redactLinks), then the writer's sentences about its hidden facts left out.
 export function scrubPage(text: string, v: Visible, res: CarveResult): string {
-  return withoutHiddenSentences(redactLinks(text, res), v, res);
+  // The links as written, for the sentences about another page's fact (G607): redactLinks turns a
+  // link to a page out of view into [[redacted]], which no longer says which page it was.
+  return withoutHiddenSentences(redactLinks(text, res), v, res, text);
+}
+
+// The writer's sentences that state ANOTHER page's fact (audit v10, G607): an org's "Ana Diaz
+// works at North College" (label p-at-<person>), "… also comes up in the sources of Ana Diaz"
+// (p-in-<page>) and "See also Ana Diaz" (p-see-<page>), each cited by that page's facts' sources.
+// hiddenAttrs covers only this page's own facts, so a fact hidden from the reader after the writer
+// last ran kept showing through such a sentence. A label of theirs is hidden when no page it may
+// name is in the reader's view, when the person's org fact is hidden (p-at-), or when
+// a fact of that page hidden from the reader has a reference its definition carries. An older lead
+// reused a label of this page's for such a sentence when the references matched: a sentence with a
+// writer's cross-page shape that links a page is checked against that page the same way.
+const CROSS_LABEL = /^p-(at|in|see)-(.+)$/;
+const CROSS_SHAPE = /\bworks? at\b|\balso comes up in the sources of\b|(?:^|\s)See also\b/;
+const slugCache = new WeakMap<CarveResult, Map<string, Visible[]>>();
+function bySlug(res: CarveResult): Map<string, Visible[]> {
+  let m = slugCache.get(res);
+  if (!m) {
+    m = new Map();
+    for (const x of res.visible.values()) { const k = x.note.fm.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase(); (m.get(k) ?? m.set(k, []).get(k)!).push(x); }
+    slugCache.set(res, m);
+  }
+  return m;
+}
+// A fact of `x` hidden from this reader whose records' reference `def` carries (or any, without one).
+// A page shown by its title and facts only (no body grant) still has its facts carved (carve.ts), so
+// a fact of it the reader is shown is said about it, as the writer said it.
+function hiddenThere(x: Visible, res: CarveResult, def: string | undefined, attr?: string): boolean {
+  const attrs = hiddenAttrs(x, res);
+  if (attr) return attrs.has(attr);
+  for (const a of attrs) {
+    const f = x.note.fm.facts?.[a];
+    const recs: FactRecord[] = [...(f ? (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]) : []), ...((x.note.fm.history?.[a] ?? []) as FactRecord[])];
+    if (def === undefined || recs.some((r) => def.includes(reference(r)))) return true;
+  }
+  return false;
+}
+function otherPagesHidden(v: Visible, res: CarveResult, defs: Map<string, string>, linked: string): Set<string> {
+  const out = new Set<string>();
+  for (const [label, def] of defs) {
+    const m = label.match(CROSS_LABEL);
+    if (!m) continue;
+    // The page the sentence links decides, never a namesake: the label carries only its short name,
+    // so a visible page of another kind with that name must not stand in for a hidden one (PR 30 review).
+    const cite = `[^${label}]`;
+    const linkedIds = linked.split("\n").filter((l) => l.includes(cite) && !l.startsWith(`${cite}:`))
+      .flatMap((l) => [...l.matchAll(/\[\[([^\]|#]+)/g)].map((x) => x[1]!.trim()))
+      .filter((id) => id !== v.note.fm.id && id.split("/").at(-1) === m[2]);
+    if (linkedIds.some((id) => linkFor(id, res) === undefined)) { out.add(label); continue; }
+    const there = linkedIds.length ? linkedIds.map((id) => res.visible.get(linkFor(id, res)!)).filter((x): x is Visible => !!x)
+      : (bySlug(res).get(m[2]!) ?? []).filter((x) => x.note.fm.id !== v.note.fm.id);
+    if (!there.length || there.some((x) => m[1] === "at" ? hiddenThere(x, res, def, "org") : hiddenThere(x, res, def))) out.add(label);
+  }
+  // Older leads: a cross-page sentence citing a reused label, checked against the pages it links.
+  for (const line of linked.split("\n")) {
+    if (/^\[\^[^\]\s]+\]:/.test(line)) continue;
+    for (const s of line.match(/[^\n]*?(?:\[\^[^\]\s]+\])+/g) ?? []) {
+      if (!CROSS_SHAPE.test(s)) continue;
+      const labels = [...s.matchAll(/\[\^([^\]\s]+)\]/g)].map((x) => x[1]!).filter((l) => !CROSS_LABEL.test(l));
+      if (!labels.length) continue;
+      const ids = [...s.matchAll(/\[\[([^\]|#]+)/g)].map((x) => x[1]!.trim()).filter((id) => id !== v.note.fm.id);
+      const gone = ids.some((id) => {
+        const to = linkFor(id, res), x = to ? res.visible.get(to) : undefined;
+        return !x || labels.some((l) => hiddenThere(x, res, defs.get(l) ?? "", /\bworks? at\b/.test(s) && x.note.fm.type === "person" ? "org" : undefined));
+      });
+      if (gone) for (const l of labels) out.add(l);
+    }
+  }
+  return out;
 }
 
 // Links to hidden notes go first: scrubbing a carved name inside one (an alias that is also part of
@@ -193,7 +264,19 @@ export function statusBanner(v: Visible, res: CarveResult): string[] {
 // with the body grant, and scrubbed of links and carved values the same way.
 export function pageSummary(v: Visible, res: CarveResult): string | undefined {
   const sum = summaryOf(v.note);
-  return v.body && sum ? scrubPage(sum, v, res) : undefined;
+  return v.body && sum && summaryShown(v, res) ? scrubPage(sum, v, res) : undefined;
+}
+// A summary is plain words with no reference, so the sentence scrub can't find a fact in it
+// (audit v10, G608): written while a fact was shown to every reader, it kept saying that fact after
+// the fact was hidden. It goes to a reader only while none of the facts it was written from
+// (summary_facts, set by wiki_sync) is hidden from them; one with no such list, only to a reader
+// from whom no fact of the page is hidden. The Gardener's wiki_missing lists the page until a new
+// summary is written (core.ts gardenerLast).
+export function summaryShown(v: Visible, res: CarveResult): boolean {
+  const hidden = hiddenAttrs(v, res);
+  if (!hidden.size) return true;
+  const from = v.note.fm.summary_facts;
+  return Array.isArray(from) && !from.some((a) => hidden.has(String(a)));
 }
 
 // `body` replaces the note's text (one section, from read's section); it must already be redacted.

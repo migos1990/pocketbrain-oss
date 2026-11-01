@@ -51,8 +51,12 @@ const cardOnly = (r: FactRecord, rules: Rules) => {
   return refs.some((x) => x.startsWith("contacts:")) && refs.every((x) => x.startsWith("contacts:") || x.startsWith("agent:"))
     && r.by !== captureAgentName(rules.policy) && !(r.by && rules.policy.agents[r.by]?.inside_wall);
 };
-const trusted = (r: FactRecord, rules: Rules, checked?: Map<string, boolean>) => !r.valid_to && !r.retired
-  && (ownerVouched(r) || (r.verification === "verified-by-source" && !cardOnly(r, rules) && !r.sources.some((x) => checked?.get(refString(x)) === false)));
+// For a sender (`found`), only once a ref it cites was checked and found too (audit v10, G615): an
+// assistant's own verified-by-source label on a mail id nobody read vouched for any address it
+// planted. A pull marks the items it read, the nightly recheck the rest (src/louis.ts
+// recordCheckedRefs). A same-person proposal still waits for the owner's click either way.
+const trusted = (r: FactRecord, rules: Rules, checked?: Map<string, boolean>, found = false) => !r.valid_to && !r.retired
+  && (ownerVouched(r) || (r.verification === "verified-by-source" && !cardOnly(r, rules) && !r.sources.some((x) => checked?.get(refString(x)) === false) && (!found || r.sources.some((x) => checked?.get(refString(x)) === true))));
 
 function kindOf(rules: Rules, type: string, attr: string): AddressKind | undefined {
   const n = attributeSpec(rules, type, attr).normalize;
@@ -70,13 +74,13 @@ export function normalizeAddress(kind: AddressKind, raw: string): string | undef
 }
 
 // Every trusted address on a person note, with the refs that vouch for it.
-export function trustedAddresses(note: Note, rules: Rules, checked?: Map<string, boolean>): Map<string, { kind: AddressKind; refs: string[]; by: string[] }> {
+export function trustedAddresses(note: Note, rules: Rules, checked?: Map<string, boolean>, o: { found?: boolean } = {}): Map<string, { kind: AddressKind; refs: string[]; by: string[] }> {
   const out = new Map<string, { kind: AddressKind; refs: string[]; by: string[] }>();
   for (const [attr, f] of Object.entries(note.fm.facts ?? {})) {
     const kind = kindOf(rules, note.fm.type, attr);
     if (!kind || isDisputed(f)) continue;
     for (const r of records(f)) {
-      if (typeof r.value !== "string" || !trusted(r, rules, checked)) continue;
+      if (typeof r.value !== "string" || !trusted(r, rules, checked, o.found)) continue;
       const a = normalizeAddress(kind, r.value);
       if (!a) continue;
       const key = `${kind}:${a}`;

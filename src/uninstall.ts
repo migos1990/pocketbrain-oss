@@ -39,7 +39,7 @@ export function uninstallPlan(o: { home: string; config: string; brain?: string;
   const plists = ours(la, /\.plist$/);
   for (const f of plists) { const label = f.replace(/\.plist$/, ""); steps.push({ kind: "stop", label, cmd: ["launchctl", "bootout", `gui/${o.uid}/${label}`] }); }
   for (const f of plists) steps.push({ kind: "remove", path: join(la, f), what: "launchd job" });
-  // The hub's log holds the dashboard's login link.
+  // The hub's logs (an older hub printed the dashboard's login link there).
   const logs = join(o.home, "Library", "Logs");
   for (const f of ours(logs, /\.(log|err|out)$/)) steps.push({ kind: "remove", path: join(logs, f), what: "log" });
 

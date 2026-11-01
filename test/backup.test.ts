@@ -310,3 +310,21 @@ test("pocketbrain drill --demo: the sample brain, a throwaway key, one pass line
   expect(out).toMatch(/^drill PASSED in [\d.]+s \(demo brain, throwaway key\): \d+ notes, \d+ facts, fsck clean, hub booted$/);
   expect(existsSync(join(cfg, "nowhere"))).toBe(false);
 });
+
+// PR 30 security review (Low): the dashboard's login links now live in .git/pb-dashboard-login
+// (G609). A backup holds the git bundle and untracked files outside .git, so the reusable login key
+// never rides along to the backup folder or a restored machine.
+test("a backup never carries the dashboard's login links", async () => {
+  const { keepLoginLinks, loginLinkFile } = await import("../src/dashboard/login-link");
+  const dest = tmp("pb-bk-dest-");
+  const root = brainWithBackups(dest);
+  const key = `k${"7".repeat(40)}`;
+  keepLoginLinks(root, { local: `http://127.0.0.1:8788/login?key=${key}` });
+  expect(existsSync(loginLinkFile(root))).toBe(true);
+  const r = bk.backup(root);
+  const to = join(tmp("pb-bk-new-"), "brain");
+  await bk.restore(r.file, { to, identity });
+  expect(existsSync(loginLinkFile(to))).toBe(false);
+  const all = Bun.spawnSync(["grep", "-rl", key, to]).stdout.toString();
+  expect(all).toBe("");
+});

@@ -3613,4 +3613,46 @@ export const GAPS: Record<string, Gap> = {
     finding: "Audit v10 2026-11-01 (finding 2d): resolveEntity (src/write.ts) matched a name against every page of its type and never looked at status, so after a same-person merge the dropped page (status merged, merged_into) and the kept page both fit the name; hub filing (fileVerdict) and capture resolution weigh every note, so each fact by that name waited on Settings as \"Its name fits more than one note\" and was counted as held_by_ambiguity.",
     fix: "src/write.ts: resolveEntity maps a merged page to the page it was merged into (mergedTarget, following chains) before counting matches, and skips merged pages among near matches; a pointer whose kept page isn't among the notes given matches nothing, like a missing page. Tests: test/merged-page-match.test.ts, test/contracts/write.contract.test.ts.",
   },
-};
+  G607: {
+    closed: "cbe6452",
+    title: "A fact hidden from an assistant after the writer ran still showed through another page's members, sources or See also sentence",
+    severity: "high",
+    finding: "Audit v10 (2026-11-01, finding 4a), on the demo brain: scrubPage dropped only the sentences of the page's own hidden facts (view.ts hiddenAttrs); an org's \"Ana Diaz works at North College\" (p-at-) kept stating Ana's org fact after it was hidden from the reader, and the writer reused the page's own label when the references matched.",
+    fix: "src/view.ts otherPagesHidden: a p-at-/p-in-/p-see- label is dropped when the page it names is out of view, the person's org fact is hidden (p-at-), or a hidden fact there carries its reference; an older cross-page sentence citing a reused label is checked against the pages it links. src/wiki.ts gives those sentences their own labels. test/audit10-cross-page-hidden.test.ts",
+  },  G608: {
+    closed: "6755ed9",
+    title: "A page summary written before one of its facts was hidden kept going to the assistants that can no longer see that fact",
+    severity: "high",
+    finding: "Audit v10 (2026-11-01, finding 4b): a summary carries no reference labels, so the read's sentence scrub never touched it, and wiki_missing listed only pages with no summary, so nothing rewrote it (core.ts wikiMissing).",
+    fix: "wiki_sync records summary_facts; src/view.ts summaryShown serves a summary only while none of those facts is hidden from the reader (an unlisted summary only to a reader with no hidden fact on the page); core.ts wikiMissing lists a page some reader no longer gets the summary of. test/audit10-summary-hidden.test.ts",
+  },  G609: {
+    closed: "7cfb7a3",
+    title: "start printed the reusable dashboard login key into the launchd log",
+    severity: "high",
+    finding: "Audit v10 (2026-11-01, finding 4c): cli.ts start printed the local, tailnet and https login links (one reusable key until restart) to stdout, which launchd writes to ~/Library/Logs/com.pocketbrain.start.log (0644) and rotation keeps; the menu bar read the key back from that log.",
+    fix: "src/dashboard/login-link.ts keeps the links in .git/pb-dashboard-login (0600); start prints the address and that path only; menubar open-dashboard and the film scripts read the file. test/audit10-login-key-log.test.ts, test/menubar.test.ts",
+  },  G610: {
+    closed: "128bb8a",
+    title: "The home box settled a conflict with a private side on the 30-day sign-in, which the settle buttons refuse",
+    severity: "medium",
+    finding: "Audit v10 (2026-11-01, finding 4d; second report: 'claimed fixed, not fixed'): owner-say.ts tell() called ownerDecide for any open conflict on the fact, with no fresh sign-in check, while STALE_OK settle-pick refuses a private conflict's buttons (G553).",
+    fix: "tell() returns say.settle-signin for a conflict ownerConflicts marks private unless the sign-in is fresh; a sentence that noted something else says so beside it. test/audit10-box-settle-fresh.test.ts",
+  },  G612: {
+    closed: "6755ed9",
+    title: "links_to, mentioned_in and the Connected line named the page a hidden fact links to",
+    severity: "medium",
+    finding: "Audit v10 second report (2026-11-01, Medium): src/links.ts read links from the body via redactLinks only, so the link inside a hidden fact's sentence (which scrubPage drops from the text) still counted.",
+    fix: "src/links.ts reads the body through scrubPage. test/audit10-cross-page-hidden.test.ts",
+  },  G613: {
+    closed: "6755ed9",
+    title: "check-public.sh said clean for an empty or Windows-line-ending denylist",
+    severity: "medium",
+    finding: "Audit v10 second report (2026-11-01, Medium): grep -f with no patterns, or with every term ending in \\r, matched nothing, so the publish check passed over nothing.",
+    fix: "scripts/check-public.sh strips CR and blank lines and refuses a list with no term. test/audit10-check-public-list.test.ts",
+  },  G615: {
+    closed: "6755ed9",
+    title: "An address an assistant planted with an unchecked mail ref became a known sender",
+    severity: "high",
+    finding: "Audit v10 second report (2026-11-01, High): sameperson.ts trusted() took a verified-by-source address unless a ref had been checked and failed, so a core assistant's write of email: <x> citing any mail id nobody read made x a known sender (G581 closed the card-ref spelling only).",
+    fix: "For the sender check (trustedAddresses found: true) a source-verified address needs a ref checked and found in log/refs-checked.jsonl. test/audit10-planted-sender.test.ts",
+  },};

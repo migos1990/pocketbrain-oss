@@ -23,13 +23,13 @@ Run it again with another `--device` to add a device. `pocketbrain dashboard tai
 
 Or start it by hand with `pocketbrain start --dashboard-tailnet` or `pocketbrain dashboard --tailnet`.
 
-Restart the hub. Its log prints a second login link, for example:
+Restart the hub. It keeps a second login link, for the tailnet, beside the local one in `.git/pb-dashboard-login` in the brain folder (owner-only, never committed, a new one at each restart; `cat` it on the Mac). The hub's log names the address and that file, never the link: launchd keeps the log (audit v10, G609). The simplest way onto the phone is `pocketbrain dashboard phone-link` (below), a link that works once. The tailnet link looks like:
 
 ```
-owner dashboard on your tailnet (your devices only): http://mini.tail1234.ts.net:8788/login?key=…
+http://mini.tail1234.ts.net:8788/login?key=…
 ```
 
-Open that link once on the phone, in Safari, while Tailscale is connected. Use the link as printed: the full name (`<machine>.<tailnet>.ts.net`) or the Tailscale address work, but the short machine name (`http://mini:8788`) gets "only answers on this computer's own address". The phone stays signed in for 30 days, across hub restarts and closing Safari; the login link itself changes at each hub restart. The link holds the login key, so treat it like a password. Sending it to yourself (a message to your own number) is fine; don't paste it anywhere shared.
+Open a link once on the phone, in Safari, while Tailscale is connected. Use the link as printed: the full name (`<machine>.<tailnet>.ts.net`) or the Tailscale address work, but the short machine name (`http://mini:8788`) gets "only answers on this computer's own address". The phone stays signed in for 30 days, across hub restarts and closing Safari; the login link itself changes at each hub restart. The link holds the login key, so treat it like a password. Sending it to yourself (a message to your own number) is fine; don't paste it anywhere shared.
 
 **Signed out on the phone later?** The page there has *Text me a sign-in link*. It texts a fresh link to your own phone over your text channel (`transport` in `rules/escalation.yaml`), but only a channel that reaches your phone directly (iMessage or Twilio from this Mac); a channel an assistant relays, such as Instinct, never carries one, and the page says so. Opening a phone link shows a *Sign in* button and spends nothing, so a message preview can't use it up; the button spends it. Opening a link again while signed in goes to the home page. A phone link works once, lasts a day, survives hub restarts, and opens only from your listed devices on the tailnet, never on localhost. At most 3 are sent an hour. On the Mac, `pocketbrain dashboard phone-link` prints one instead. Unused links are kept in `.git/pb-phone-links.json` (by hash, owner-only), the newest 5.
 
@@ -52,7 +52,7 @@ and run this once on the hub:
 tailscale serve --bg --https=8443 http://127.0.0.1:8788
 ```
 
-The port is 8443, not 443, because a `tailscale funnel` (the public door some setups use for agents) may already hold 443, and serve and funnel share a port's settings. The log prints a third login link, `https://<machine>.<tailnet>.ts.net:8443/login?key=…`. Without `dashboard_tailnet_login` the HTTPS path stays off.
+The port is 8443, not 443, because a `tailscale funnel` (the public door some setups use for agents) may already hold 443, and serve and funnel share a port's settings. The same file keeps a third login link, `https://<machine>.<tailnet>.ts.net:8443/login?key=…`. Without `dashboard_tailnet_login` the HTTPS path stays off.
 
 Never use `tailscale funnel` for the dashboard: that publishes it on the internet. The dashboard refuses funnel traffic anyway (see below).
 

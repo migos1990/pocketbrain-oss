@@ -1013,9 +1013,10 @@ ${p.text}`);
     bk.startBackupTimers(root, { backup: () => serial(() => bk.backupApart(root), { name: "backup", limitMs: 30 * 60_000 }).then((p) => p) });
     if (cmd === "start" || args.includes("--dashboard")) {
       const d = serveDashboard(root, { port: Number(arg(args, "--dashboard-port") ?? 8788), tailnet: args.includes("--dashboard-tailnet") || !!tailnetSettings(root).dashboard_tailnet, tailnetLogin: tailnetSettings(root).dashboard_tailnet_login, tailnetDevices: tailnetSettings(root).dashboard_tailnet_devices });
-      console.log(`owner dashboard (this machine only): ${d.loginUrl}`);
-      if ("tailnetLoginUrl" in d) console.log(`owner dashboard on your tailnet (your devices only): ${d.tailnetLoginUrl}`);
-      if ("serveLoginUrl" in d) console.log(`  or over https, after tailscale serve --bg --https=${d.servePort} http://127.0.0.1:${d.server.port} (never funnel): ${d.serveLoginUrl}`);
+      // Never a login key here: launchd keeps this output in a log (G609). The links are in an
+      // owner-only file in the brain's .git folder (src/dashboard/server.ts loginLinkFile).
+      console.log(d.loginSay);
+      if ("servePort" in d) console.log(`  (after tailscale serve --bg --https=${d.servePort} http://127.0.0.1:${d.server.port}; never funnel)`);
       if ("tailnetProblem" in d) console.error(d.tailnetProblem);
     }
     // A stop (launchd, Ctrl-C) keeps what this hub parsed for the next start (src/brain.ts); start
@@ -1047,7 +1048,7 @@ ${p.text}`);
     const devices = args.flatMap((a, i) => (args[i - 1] === "--device" ? [a] : []));
     try { console.log(setDashboardTailnet(root, on, devices)); }
     catch (e) { console.error((e as Error).message); return e instanceof OwnerSetError && !/on the hub|couldn't commit/.test((e as Error).message) ? 2 : 1; }
-    console.log(`restart the hub to apply it (${on ? "its log then prints the link to open on the device" : "the dashboard goes back to this machine only"})`);
+    console.log(`restart the hub to apply it (${on ? "then pocketbrain dashboard phone-link gives a link to open on the device" : "the dashboard goes back to this machine only"})`);
     return 0;
   }
   // The phone app's paired phones (docs/phone-app.md): names and dates only, never a key.
@@ -2354,7 +2355,7 @@ function menubarCli(args: string[], fallback: string): number {
       return 0;
     }
     if (sub === "restart") { console.log(restartHub({ home, uid, run, before: () => recordFix(root, "restarted the hub from the menu", "auto:menubar") })); return 0; }
-    if (sub === "open-dashboard") { console.log(openDashboard({ home, run })); return 0; }
+    if (sub === "open-dashboard") { console.log(openDashboard({ home, run, root })); return 0; }
     if (sub === "setup") {
       // The first-run window: init + install in one step, the result as JSON for the window.
       const name = arg(args, "--name");

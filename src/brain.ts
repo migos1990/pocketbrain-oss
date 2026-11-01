@@ -60,6 +60,7 @@ export interface Frontmatter {
   type: string;
   title: string;
   summary?: string; // one line under the title (src/wiki.ts)
+  summary_facts?: string[]; // the facts wiki_sync wrote the summary from (view.ts summaryShown, G608)
   aliases?: string[];
   parent?: string; // the page above this one in the wiki tree (src/wiki.ts)
   area: string;

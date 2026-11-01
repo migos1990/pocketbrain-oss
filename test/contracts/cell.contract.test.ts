@@ -348,3 +348,22 @@ test("a sealed edge cell never opens with a tag cut short, and opens with its fu
     }
   } finally { if (was === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = was; }
 });
+
+// PR 30 slice audit (G607 through cells): a note's cell file states another page's fact (the
+// writer's members, sources and See also sentences). When that fact turns hidden, the incremental
+// update rebuilt only the page that holds it, so the org's cell kept the sentence. A note linking a
+// note whose hidden facts changed is rebuilt too.
+test("contract cell: another page's fact turning hidden reaches every cell file that states it", () => {
+  useCells(true);
+  const root = makeBrain();
+  note(root, "people/ana-diaz", "type: person\narea: work\nsensitivity: personal", `  org: { value: "[[orgs/north-college]]", as_of: 2026-10-05, ${SRC} }`);
+  note(root, "orgs/north-college", "type: org\narea: work\nsensitivity: personal", "", "[[people/ana-diaz|Ana Diaz]] works at North College.[^p-at-ana-diaz]\n\n[^p-at-ana-diaz]: Email, 2026-10-05 (gmail:f000000000000009)");
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "louis: fixture"]);
+  const body = () => (core.readNote(root, "helper", "orgs/north-college") as { body?: string }).body ?? "";
+  expect(body()).toContain("works at North College");
+  const p = join(root, "people/ana-diaz.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("as_of: 2026-10-05,", "as_of: 2026-10-05, share_with: [steward],"));
+  git(root, ["commit", "-qam", "louis: keep ana's org to the steward"]);
+  expect(body()).not.toContain("works at North College");
+  expect(body()).not.toContain("gmail:f000000000000009");
+});

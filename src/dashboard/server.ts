@@ -8,6 +8,7 @@ import { markSeen } from "../seen";
 import { displayName } from "../diary";
 import { plain } from "./home";
 import { pageParam } from "./paging";
+import { keepLoginLinks, loginWords } from "./login-link";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { withFileLock } from "../filelock";
@@ -870,19 +871,21 @@ export function serveDashboard(root: string, opts: DashboardOptions = {}) {
   const server = Bun.serve({ port, hostname, fetch: h.handle });
   h.setPort(server.port!);
   const loginUrl = `http://${hostname === "::1" ? "[::1]" : hostname}:${server.port}/login?key=${h.loginKey}`;
-  if (!opts.tailnet) return { server, loginUrl };
+  const kept = (tailnet?: string, serve?: string) => { const f = keepLoginLinks(root, { local: loginUrl, ...(tailnet ? { tailnet } : {}), ...(serve ? { serve } : {}) }); return loginWords(f, loginUrl, tailnet, serve); };
+  if (!opts.tailnet) return { server, loginUrl, loginSay: kept() };
   // Opt-in: the same dashboard on this machine's Tailscale address, same port.
   const t: Tailnet = { ...(opts.tailnet === true ? (tailnetSelf() ?? {}) : opts.tailnet), ...(opts.tailnetLogin ? { login: opts.tailnetLogin } : {}), ...(opts.tailnetDevices ? { devices: opts.tailnetDevices } : {}) };
-  if (!isTailnetIp(t.address)) return { server, loginUrl, tailnetProblem: "dashboard_tailnet is on, but this machine has no Tailscale address (is Tailscale up?); the dashboard stays on localhost" };
+  if (!isTailnetIp(t.address)) return { server, loginUrl, loginSay: kept(), tailnetProblem: "dashboard_tailnet is on, but this machine has no Tailscale address (is Tailscale up?); the dashboard stays on localhost" };
   let tailnetServer: ReturnType<typeof Bun.serve>;
   try { tailnetServer = Bun.serve({ port: server.port!, hostname: t.address, fetch: (req, srv) => h.handleTailnet(req, srv.requestIP(req)?.address) }); }
-  catch (e) { return { server, loginUrl, tailnetProblem: `couldn't listen on ${t.address}:${server.port} (${e instanceof Error ? e.message : String(e)}); the dashboard stays on localhost` }; }
+  catch (e) { return { server, loginUrl, loginSay: kept(), tailnetProblem: `couldn't listen on ${t.address}:${server.port} (${e instanceof Error ? e.message : String(e)}); the dashboard stays on localhost` }; }
   h.setTailnet(t, server.port!);
+  const tailnetLoginUrl = `http://${t.name ?? t.address}:${server.port}/login?key=${h.loginKey}`;
+  // With `tailscale serve --bg --https=SERVE_PORT http://127.0.0.1:<port>` on this machine,
+  // and the owner's Tailscale login set (dashboard_tailnet_login in rules/hub.yaml).
+  const serveLoginUrl = t.name && t.login ? `https://${t.name}:${SERVE_PORT}/login?key=${h.loginKey}` : undefined;
   return {
-    server, loginUrl, tailnetServer,
-    tailnetLoginUrl: `http://${t.name ?? t.address}:${server.port}/login?key=${h.loginKey}`,
-    // With `tailscale serve --bg --https=SERVE_PORT http://127.0.0.1:<port>` on this machine,
-    // and the owner's Tailscale login set (dashboard_tailnet_login in rules/hub.yaml).
-    ...(t.name && t.login ? { serveLoginUrl: `https://${t.name}:${SERVE_PORT}/login?key=${h.loginKey}`, servePort: SERVE_PORT } : {}),
+    server, loginUrl, tailnetServer, tailnetLoginUrl, loginSay: kept(tailnetLoginUrl, serveLoginUrl),
+    ...(serveLoginUrl ? { serveLoginUrl, servePort: SERVE_PORT } : {}),
   };
 }

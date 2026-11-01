@@ -504,7 +504,7 @@ export function ownerSay(root: string, text: string, o: SayOptions = {}): SayRep
     const now = replies.length ? loadBrain(root) : notes;
     const known = x.id ? now.find((n) => n.fm.id === x.id) : undefined;
     const who: Who = known ? { page: known } : whoIs(x.name, now, page);
-    if ("page" in who) { replies.push(tell(root, rules, who.page, x, ch)); continue; }
+    if ("page" in who) { replies.push(tell(root, rules, who.page, x, ch, o.fresh)); continue; }
     if (who.near.length) return unknownName(who, sentence);
     // Not a name ("the meeting", "it", a pronoun with no page to mean): no page is started.
     if (!nameShaped(who.unknown)) { replies.push({ kind: "say.didnt-catch", text: say("say.didnt-catch") }); continue; }
@@ -512,7 +512,7 @@ export function ownerSay(root: string, text: string, o: SayOptions = {}): SayRep
     // No personal area and no page to take one from: ask where the page lives, one chip per area.
     if (!area) return newPage(rules, who.unknown, sentence);
     const type = x.attribute === "next_step" ? "project" : "person";
-    const reply = tell(root, rules, { fm: { id: "", title: who.unknown, type, area, sensitivity: "personal" }, body: "", path: "" } as unknown as Note, x, ch);
+    const reply = tell(root, rules, { fm: { id: "", title: who.unknown, type, area, sensitivity: "personal" }, body: "", path: "" } as unknown as Note, x, ch, o.fresh);
     if (reply.kind === "say.noted") made.push({ name: who.unknown, area });
     replies.push(reply);
   }
@@ -520,14 +520,16 @@ export function ownerSay(root: string, text: string, o: SayOptions = {}): SayRep
   // A part of the sentence nothing was kept from is named, never dropped in silence (G495).
   const kept = read.filter((_, i) => replies[i] && replies[i]!.kind !== "say.didnt-catch");
   const left = leftOut(sentence, kept).map((what) => ` ${say("say.left-out", { what })}`).join("");
-  const started = (made.length ? ` ${made.map((m) => say("say.new-page-made", { name: m.name, area: m.area })).join(" ")}` : "") + left;
-  if (noted.length <= 1) { const one = noted[0] ?? replies.find((x) => x.kind !== "say.already") ?? replies[0]!; return one.kind === "say.noted" ? { ...one, text: `${one.text}${started}` } : one; }
+  // A part that waits for a fresh sign-in (G610) is said beside what the rest noted, never dropped.
+  const gate = noted.length ? replies.find((x) => x.signin) : undefined;
+  const started = (made.length ? ` ${made.map((m) => say("say.new-page-made", { name: m.name, area: m.area })).join(" ")}` : "") + left + (gate ? ` ${gate.text}` : "");
+  if (noted.length <= 1) { const one = noted[0] ?? replies.find((x) => x.kind !== "say.already") ?? replies[0]!; return one.kind === "say.noted" ? { ...one, text: `${one.text}${started}`, ...(gate ? { signin: true } : {}) } : one; }
   const last = noted.at(-1)!;
   // One Undo takes back everything the sentence noted, newest first (so a page it started goes too).
   // Mixed: assistants see most of it, and the ones only the owner sees say so.
   const mixed = noted.some((x) => x.audience === "only you") && noted.some((x) => x.audience !== "only you");
   const what = noted.map((x) => mixed && x.audience === "only you" ? `${x.label!} (${say("say.only-you")})` : x.label!).join("; ");
-  return { ...last, undo_token: noted.map((x) => x.undo_token).filter(Boolean).join(","), text: `${say("say.noted", { what, audience: noted.every((x) => x.audience === "only you") ? "only you" : "your assistants" })}${started}` };
+  return { ...last, undo_token: noted.map((x) => x.undo_token).filter(Boolean).join(","), text: `${say("say.noted", { what, audience: noted.every((x) => x.audience === "only you") ? "only you" : "your assistants" })}${started}`, ...(gate ? { signin: true } : {}) };
 }
 
 // The parts of a sentence (split as parseTells splits it) that share no word with any fact kept
@@ -569,7 +571,7 @@ function unknownName(who: { unknown: string; near: Note[] }, sentence: string): 
 // looks like (the write path's shape check can't know "hunter2" is a password).
 const SECRET_ATTRIBUTE = /(^|_)(pass(word|code|phrase)?|pin|secret|security_code|cvv|card(_number)?|account_number|routing|iban|sin|ssn|social_insurance|login|api_key|token)(_|$)/;
 
-function tell(root: string, rules: Rules, page: Note, told: Told, channel: string): SayReply {
+function tell(root: string, rules: Rules, page: Note, told: Told, channel: string, fresh?: boolean): SayReply {
   const d = today();
   // "the dean" is kept as dean; a next step said for tomorrow keeps the day it means.
   told = { ...told, value: told.attribute === "role" || told.attribute === "org" ? told.value.replace(/^(an?|the)\s+/i, "") : told.attribute === "next_step" ? told.value.replace(/\b(?:(on|by) )?(tomorrow|today)\b/i, (_w, by: string | undefined, day: string) => `${by?.toLowerCase() === "by" ? "by" : "on"} ${sayDay(shift(d, day.toLowerCase() === "tomorrow" ? 1 : 0))}`) : told.value };
@@ -585,6 +587,9 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   // (Mac use-it 2026-10-27: a plain write replaced the live value and left the conflict asking).
   const open = page.fm.id ? ownerConflicts(root, clock(), { held: true }).find((c) => c.fact_key === `${page.fm.id}#${told.attribute}`) : undefined;
   if (open) {
+    // A conflict whose sides the settle screen hides past a fresh sign-in (a private one) settles from
+    // the box only on a fresh sign-in too, as its buttons do (STALE_OK settle-pick; audit v10, G610).
+    if (open.private && !fresh) return { kind: "say.settle-signin", page: page.fm.id, signin: true, text: say("say.settle-signin") };
     ownerDecide(root, open.id, told.value as string, channel, { typed: true });
     const row = readDiary(root).length > before ? readDiary(root).at(-1) : undefined;
     try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }

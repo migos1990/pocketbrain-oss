@@ -616,7 +616,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     const labs: string[] = [];
     for (const m of members) {
       const text = [...new Set(m.recs.map(reference))].join("; ");
-      const lab = refs.find((x) => x.text === text)?.label ?? `p-at-${m.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+      const lab = `p-at-${m.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
       if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
       if (!labs.includes(lab)) labs.push(lab);
     }
@@ -642,7 +642,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     const labs: string[] = [];
     for (const id of ids) {
       const text = [...new Set(by.get(id)!.map(reference))].join("; ");
-      const lab = refs.find((x) => x.text === text)?.label ?? `p-in-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+      const lab = `p-in-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
       if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
       if (!labs.includes(lab)) labs.push(lab);
     }
@@ -660,7 +660,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     const labs: string[] = [];
     for (const id of ids) {
       const text = [...new Set(also.get(id)!.map(reference))].join("; ");
-      const lab = refs.find((x) => x.text === text)?.label ?? `p-see-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+      const lab = `p-see-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
       if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
       if (!labs.includes(lab)) labs.push(lab);
     }

@@ -18,6 +18,7 @@
 // Keys for the video hub: ~/pocketbrain-video/config/keys/<NAME> (folder 700, files 600).
 // Ports: $PB_VIDEO_PORT (8797) for assistants, $PB_VIDEO_DASHBOARD_PORT (8798) for the dashboard.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync, openSync } from "node:fs";
+import { readLoginLink } from "../src/dashboard/login-link";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import YAML from "yaml";
@@ -273,9 +274,10 @@ async function serve() {
     await Bun.sleep(250);
   }
   await Bun.sleep(300);
-  const link = readFileSync(LOG, "utf8").match(/http:\/\/127\.0\.0\.1:\d+\/\S*/g)?.find((u) => u.includes(String(DASH)));
+  // The hub keeps its sign-in link in the brain's .git folder, never in its log (G609).
+  const link = readLoginLink(BRAIN) ?? undefined;
   say(`\nvideo hub on http://127.0.0.1:${PORT} (pid ${p.pid}), log ${LOG}`);
-  say(`dashboard: ${link ?? `see ${LOG}`}`);
+  say(`dashboard: ${link ?? `no sign-in link kept yet; see ${LOG}`}`);
 }
 
 // Alice's account at Auth0 right now: a take that blocked her leaves her blocked for the next one.

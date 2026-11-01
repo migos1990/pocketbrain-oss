@@ -2,11 +2,11 @@
 // Links both ways, as one agent sees them (docs/wiki.md "What assistants see"). The dashboard's
 // "Mentioned in" (src/dashboard/browse.ts connections) for agents: computed per carve, never
 // stored. A link counts only where the agent itself can see it: in a body it has the grant for, or
-// in a fact it is shown, after the same redaction it gets (redactLinks, agentFact), and only to a note in its
+// in a fact it is shown, after the same scrub it gets (scrubPage, agentFact), and only to a note in its
 // view. So a hidden note is never named, and no link the agent couldn't read is revealed.
 import { linksIn } from "./brain";
 import { visibleFacts, type CarveResult } from "./carve";
-import { redactLinks, agentFact } from "./view";
+import { scrubPage, agentFact } from "./view";
 
 export interface Linked { id: string; title: string }
 export interface Neighbours { linksTo: Linked[]; mentionedIn: Linked[] }
@@ -26,7 +26,9 @@ function graphOf(res: CarveResult): Map<string, Neighbours> {
   const out = new Map<string, Set<string>>(), back = new Map<string, Set<string>>();
   for (const [id, v] of res.visible) {
     const seen = [
-      ...(v.body ? linksIn(redactLinks(v.note.body, res)) : []),
+      // The body as the agent reads it (scrubPage): a hidden fact's sentence, and the link in it, gone
+      // (audit v10, G612; redactLinks alone kept that link).
+      ...(v.body ? linksIn(scrubPage(v.note.body, v, res)) : []),
       // Facts as the agent reads them (agentFact): no writer fields, scrubbed like read's.
       ...linksIn(JSON.stringify(visibleFacts(v, res).map(([, f]) => agentFact(f, res.grant.agent, res)))),
     ];

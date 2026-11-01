@@ -33,6 +33,12 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - A source an assistant cites must be one line: a ref or its via with a line break is refused, so it can never write its own lines into a commit message, and only your own commits say who you forgot (G602).
 - What an assistant sends is quoted in one line in its commit message, so a line break in a list item can't add lines that the history, the digest or undo trust (G605).
 - An assistant that can't see one fact on a page still reads the page's other sentences, even when they come from the same email; the references on a page still show one number per email (G596).
+- Typing an answer in the box for a conflict with a private side asks you to sign in again first, as the settle screen's buttons do; on an older sign-in it settles nothing (G610).
+- An assistant no longer reads, on another page, a fact you hid from it since the page's text was written: an org's "Ana works at North College", "comes up in the sources of" and "See also" go from its read too, and so does the link in links_to, mentioned_in and Connected (G607, G612).
+- A page's one-line summary no longer reaches an assistant once a fact it was written from is hidden from that assistant; the Gardener writes a new one from what every reader sees (G608).
+- A mail from an address an assistant wrote on a person page, citing a mail the hub never read, no longer counts as from someone you know (G615).
+- `scripts/check-public.sh` refuses a denylist with no term in it, and reads one saved with Windows line endings correctly; before, both said clean (G613).
+- The hub's log no longer holds the dashboard's sign-in link. The hub keeps it in a file only you can read (`.git/pb-dashboard-login` in the brain folder), and the menu bar's Open dashboard uses it; on a phone, `pocketbrain dashboard phone-link` gives a link that works once (G609).
 
 ## [0.2.1] - 2026-11-01
 

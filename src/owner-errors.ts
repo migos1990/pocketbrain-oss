@@ -251,6 +251,7 @@ export const OWNER_SAY = {
   "say.hearsay-chip": "I know it's so",
   "say.negated": "Here's what I have: nothing new. Tell me what it is, not what it isn't.",
   "say.forget-signin": "To forget {name}, sign in again first, so a borrowed phone can't.",
+  "say.settle-signin": "To settle that, sign in again first: its answers show only right after you sign in, so a borrowed phone can't.",
   "say.forgotten": "Forgotten: {name}. Your assistants no longer see it.",
   "say.new-page": "I don't know {name} yet. Start a page? Pick where it lives; that decides which assistants see it.",
   "say.act": "Here's what I have: I don't send or book things myself; ask one of your assistants.",

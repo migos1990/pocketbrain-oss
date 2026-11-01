@@ -7,7 +7,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
-import { menuState, menuTitle, dashboardLink, openDashboard, installedBrain, installHub, restartHub, setupBrain, type Run } from "../src/menubar";
+import { keepLoginLinks, readLoginLink } from "../src/dashboard/login-link";
+import { menuState, menuTitle, openDashboard, installedBrain, installHub, restartHub, setupBrain, type Run } from "../src/menubar";
 import { loadRules } from "../src/rules";
 import { main } from "../src/cli";
 
@@ -28,15 +29,15 @@ test("the menu shows the hub, the day of the real-use bar and every outside agen
   expect(menuTitle({ hubUp: true, barDays: 14, barTarget: 14, barMet: true })).toBe("● bar met");
 });
 
-test("the dashboard link is the newest one the hub printed, and only for this machine", async () => {
-  const log = "owner dashboard (this machine only): http://127.0.0.1:8788/login?key=old1\nhub tick\nowner dashboard (this machine only): http://127.0.0.1:8788/login?key=new_2-x\n";
-  expect(dashboardLink(log)).toBe("http://127.0.0.1:8788/login?key=new_2-x");
-  expect(dashboardLink("owner dashboard (this machine only): http://evil.example:8788/login?key=abc")).toBeNull();
-  expect(dashboardLink("")).toBeNull();
+test("the dashboard link is the one the hub kept for this run, only for this machine, and never read from its log", async () => {
   const root = makeBrain();
   const h = home();
+  // A log from before G609 still holding a key: never read (audit v10).
   mkdirSync(join(h, "Library", "Logs"), { recursive: true });
-  writeFileSync(join(h, "Library", "Logs", "com.pocketbrain.start.log"), log);
+  writeFileSync(join(h, "Library", "Logs", "com.pocketbrain.start.log"), "owner dashboard (this machine only): http://127.0.0.1:8788/login?key=old1\n");
+  expect((await menuState(root, { home: h, fetch: up })).dashboard).toBe(false);
+  // The hub keeps its link in an owner-only file in the brain's .git folder (src/dashboard/login-link.ts).
+  keepLoginLinks(root, { local: "http://127.0.0.1:8788/login?key=new_2-x" });
   // The app learns only that the dashboard can be opened; the login key never leaves the CLI (rt-menubar-loginkey).
   const st = await menuState(root, { home: h, fetch: up });
   expect(st.dashboard).toBe(true);
@@ -45,10 +46,13 @@ test("the dashboard link is the newest one the hub printed, and only for this ma
   expect((await menuState(root, { home: h, fetch: down })).dashboard).toBe(false);
   // Opening hands the link to the system's opener and prints nothing of it.
   const calls: string[][] = [];
-  const said = openDashboard({ home: h, run: (cmd) => { calls.push(cmd); return { code: 0, out: "" }; } });
+  const said = openDashboard({ home: h, root, run: (cmd) => { calls.push(cmd); return { code: 0, out: "" }; } });
   expect(calls).toEqual([["open", "http://127.0.0.1:8788/login?key=new_2-x"]]);
   expect(said).not.toContain("key=");
-  expect(() => openDashboard({ home: home(), run: () => ({ code: 0, out: "" }) })).toThrow(/no dashboard link/);
+  // Only a link to this machine is ever opened.
+  keepLoginLinks(root, { local: "http://evil.example:8788/login?key=abc" });
+  expect(readLoginLink(root)).toBeNull();
+  expect(() => openDashboard({ home: home(), root: makeBrain(), run: () => ({ code: 0, out: "" }) })).toThrow(/no dashboard link/);
 });
 
 test("install writes the launchd file and loads it, finds the brain from it later, and never overwrites a running hub", async () => {

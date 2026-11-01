@@ -10,6 +10,7 @@ import { hubPlists } from "./start";
 import { initBrain } from "./init";
 import { standingInstruction } from "./orientation";
 import { watchdogState } from "./watchdog";
+import { readLoginLink } from "./dashboard/login-link";
 
 export const START_LABEL = "com.pocketbrain.start";
 export const TUNNEL_LABEL = "com.pocketbrain.tunnel";
@@ -48,23 +49,19 @@ export function installedBrain(home: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-// The owner dashboard prints a fresh login link each time the hub starts; launchd sends it to the
-// hub's log, which only the owner can read. The latest one is the live one.
-export function dashboardLink(log: string): string | null {
-  const all = [...log.matchAll(/owner dashboard \(this machine only\): (http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+\/login\?key=[A-Za-z0-9_-]+)/g)];
-  return all.at(-1)?.[1] ?? null;
-}
-
-const latestDashboardLink = (home: string) => {
-  const log = join(home, "Library", "Logs", `${START_LABEL}.log`);
-  return existsSync(log) ? dashboardLink(readFileSync(log, "utf8")) : null;
+// The owner dashboard keeps a fresh login link each time the hub starts, in a file in the brain's
+// .git folder only the owner can read (src/dashboard/server.ts loginLinkFile; never the hub's log,
+// audit v10 G609). The brain is the one the installed hub serves, else the one asked about.
+const latestDashboardLink = (home: string, root?: string) => {
+  const brain = installedBrain(home) ?? root;
+  return brain ? readLoginLink(brain) : null;
 };
 
 // Opens the dashboard signed in, by handing the login link straight to the system's opener; the
 // link (it holds the owner's login key) is never printed, so no other program reads it from us.
-export function openDashboard(o: { home: string; run: Run }): string {
-  const link = latestDashboardLink(o.home);
-  if (!link) throw new Error("no dashboard link in the hub's log yet: is the hub running? (Restart hub prints a new one)");
+export function openDashboard(o: { home: string; run: Run; root?: string }): string {
+  const link = latestDashboardLink(o.home, o.root);
+  if (!link) throw new Error("no dashboard link kept yet: is the hub running? (Restart hub makes a new one)");
   const r = o.run(["open", link]);
   if (r.code !== 0) throw new Error("couldn't open the browser");
   return "dashboard opened";
@@ -93,7 +90,7 @@ export async function menuState(root: string, o: { home: string; port?: number; 
     barMet: b.met,
     barLine: b.text,
     agents,
-    dashboard: hubUp && !!latestDashboardLink(o.home),
+    dashboard: hubUp && !!latestDashboardLink(o.home, root),
     problems: brainReady ? watchdogProblems(root, o.home) : [],
   };
 }

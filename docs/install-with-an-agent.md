@@ -49,7 +49,7 @@ Use the app's kind as its name: `claude-code`, `cursor`, `vscode`, `codex`, `gem
 sleep 3 && curl -s http://127.0.0.1:8787/health
 ```
 
-`"ok": true` means it's up. It stops when the person logs out or restarts; [hosting.md](hosting.md) says how to keep it running. The log's second line is the dashboard's login link, which is why the log is created readable only by the person (`umask 077`). Give the link to the person, don't open it yourself, and don't copy the log anywhere.
+`"ok": true` means it's up. It stops when the person logs out or restarts; [hosting.md](hosting.md) says how to keep it running. The log names the dashboard's address and the file that holds its login link: `.git/pb-dashboard-login` in the brain, created readable only by the person, and replaced at every start. The log itself never holds the link. Tell the person where the file is (`cat` it, or the Mac menu bar's Open dashboard reads it); don't open the link yourself, and don't copy the file anywhere.
 
 ## 5. Connect yourself
 
@@ -67,7 +67,7 @@ After the restart, call the `orientation` tool on the `pocketbrain` server. It w
 
 Then tell the person, in this order:
 
-1. The dashboard link from the log. It works only on this computer.
+1. The dashboard link from `.git/pb-dashboard-login` in the brain (the log says where). It works only on this computer.
 2. To try it: *"Remember that I prefer short answers."* What you save waits for their OK on the dashboard's **On your mind** while you're on trial.
 3. To add their other apps: [connect.md](connect.md). Cloud assistants (Claude on the web, ChatGPT) need more: [connect/claude-web.md](connect/claude-web.md).
 

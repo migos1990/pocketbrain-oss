@@ -133,8 +133,12 @@ function affectedBy(last: Deps, next: Deps, res: CarveResult, seen?: WeakMap<Not
   const ids = new Set<string>();
   for (const [id, body] of next.visible) if (last.visible.get(id) !== body) ids.add(id);
   for (const id of last.visible.keys()) if (!next.visible.has(id)) ids.add(id);
-  for (const id of new Set([...last.hidden.keys(), ...next.hidden.keys()])) if (last.hidden.get(id) !== next.hidden.get(id)) ids.add(id);
-  const linked = [...ids].filter((id) => !res.visible.has(id) || !last.visible.has(id));
+  const hiddenMoved: string[] = [];
+  for (const id of new Set([...last.hidden.keys(), ...next.hidden.keys()])) if (last.hidden.get(id) !== next.hidden.get(id)) { ids.add(id); hiddenMoved.push(id); }
+  // Another page's sentence stating one of this note's facts (the writer's members, sources and
+  // See also sentences, G607) is dropped when that fact is hidden: a note linking a note whose
+  // hidden facts changed is reached too (PR 30 slice audit).
+  const linked = [...new Set([...[...ids].filter((id) => !res.visible.has(id) || !last.visible.has(id)), ...hiddenMoved])];
   // A link to a merged note shows the note it became while that one is in view (linkFor): a note
   // naming a merged note is reached when its target changed or came into or left the slice.
   for (const p of new Set([...last.mergedTo.keys(), ...next.mergedTo.keys()])) {

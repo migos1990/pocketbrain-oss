@@ -3,7 +3,7 @@
 // stranger's mail could file a private or money fact, or replace a value the brain held. A pull
 // records on its capture only `sender: known | unknown`, never the address (tracked files never
 // hold addresses). Known: an address a person page (the owner's own included) holds on the owner's
-// word or a checked source. Standing and the contacts log never count (CLAUDE.md invariant 14:
+// word or a source checked and found (G615). Standing and the contacts log never count (CLAUDE.md invariant 14:
 // standing sets priority, never trust), so whom the owner wrote to doesn't vouch for a sender.
 // Filing asks unknownSenderWait before a pulled fact files itself (src/filing.ts fileVerdict), and the
 // save path refuses the hub's own accept of one that should have waited (src/write.ts decideOne,
@@ -30,7 +30,7 @@ export function senderStanding(root: string, from: string | undefined): SenderSt
   const rules = loadRules(root), checked = checkedRefs(root);
   for (const n of loadBrain(root)) {
     if (n.fm.type !== "person" || n.fm.status === "archived") continue;
-    for (const key of trustedAddresses(n, rules, checked).keys()) if (keys.has(key)) return "known";
+    for (const key of trustedAddresses(n, rules, checked, { found: true }).keys()) if (keys.has(key)) return "known";
   }
   return "unknown";
 }

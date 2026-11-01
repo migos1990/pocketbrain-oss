@@ -10,9 +10,9 @@ import type { Note, Fact, FactRecord, SourceRef } from "./brain";
 import { neighbours, neighbourLines, connectedLine, NEIGHBOURS_SHOWN } from "./links";
 import { loadBrain, reloadNotes, parseNote, saveNote, today, isList, isDisputed, sensitivityRank, linksIn } from "./brain";
 import { loadRules, attributeSpec, ownerName, isOwnerWord, type Rules } from "./rules";
-import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, type CarveResult } from "./carve";
+import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, type CarveResult, type Visible } from "./carve";
 import { sensitiveShape } from "./shape";
-import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage } from "./view";
+import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage, summaryShown } from "./view";
 import { contextBudget, tokensOf, fitBlocks, cutLine } from "./context";
 import { write, logWrite, gardenerProposals, REJECT_DAYS, type WriteResult } from "./write";
 import { runChecks, redactSecrets, findInjection, findSecret, refShapeOk, approvalClaim, type WriteRequest } from "./checks";
@@ -1132,6 +1132,9 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
   const newer = Object.entries(shown).filter(([k, f]) => !hiddenToSome.has(`${id}#${k}`) && records(f as Fact).some((r) => !r.valid_to && String(r.recorded ?? r.as_of ?? "") > lastText)).map(([k]) => k.replace(/[_-]+/g, " "));
   const because = newer.length ? `${newer.slice(0, 6).join(", ")} ${newer.length === 1 ? "is" : "are"} newer than the page's text${lastText ? ` (last written ${lastText})` : ""}` : "the text said less than the page's facts";
   after.fm.updated = today();
+  // The facts a new summary may come from: those it and every reader of the page see (G608). A
+  // read stops serving it once one of them is hidden from that reader (view.ts summaryShown).
+  if (summary !== undefined) after.fm.summary_facts = Object.keys(shown).filter((k) => !hiddenToSome.has(`${id}#${k}`)).sort();
   saveNote(root, after);
   const failed = commitPaths(root, [note.path], `reflect:auto wiki: ${id}\n\nWhy: ${would.slice(0, 4).join("; ")}, because ${because}; facts unchanged.\nAgent: ${agent}\nKind: wiki-sync\nFact-Keys: ${id}`, agent);
   if (failed) throw new CoreError(500, `couldn't save: ${failed}`);
@@ -1431,7 +1434,7 @@ export function gardenerLast(root: string, agent: string) {
   const conflicts_to_weigh = gardenerPackets(root, agent, res).filter((p) => (p.note.fm.suggestion as { by?: string } | undefined)?.by !== agent).length;
   // Pages it may read that have facts and no summary yet, people and projects first: the wiki
   // backfill's work list (backlog 377).
-  const wiki = wikiMissing(res);
+  const wiki = wikiMissing(root, res);
   const wiki_missing = wiki.slice(0, WIKI_MISSING_MAX), wiki_missing_total = wiki.length;
   if (!last) return { at: null, run: null, proposals: [], decided, waiting, conflicts_to_weigh, wiki_missing, wiki_missing_total };
   const proposals = readJsonl<{ at: string; agent: string; outcome: string; key?: string }>(join(root, "log", "writes.jsonl"))
@@ -1441,9 +1444,17 @@ export function gardenerLast(root: string, agent: string) {
 
 const WIKI_MISSING_MAX = 15;
 const WIKI_FIRST: Record<string, number> = { person: 0, project: 1 };
-function wikiMissing(res: CarveResult): string[] {
+// A page whose summary some reader of it no longer gets (a fact it was written from was hidden
+// since, G608) is listed too: a new summary from the facts every reader sees takes its place.
+function wikiMissing(root: string, res: CarveResult): string[] {
+  const rules = loadRules(root);
+  let readers: CarveResult[] | undefined;
+  const stale = (v: Visible) => {
+    readers ??= (() => { const notes = loadBrain(root); return Object.keys(rules.policy.agents).flatMap((a) => { try { return [carve(notes, rules, grantFor(rules, a), { flags: false })]; } catch { return []; } }); })();
+    return readers.some((r) => { const x = r.visible.get(v.note.fm.id); return !!x?.body && !summaryShown(x, r); });
+  };
   return [...res.visible.values()]
-    .filter((v) => v.body && !summaryOf(v.note) && !["dispute", "hub"].includes(v.note.fm.type) && visibleFacts(v, res).length > 0)
+    .filter((v) => v.body && !["dispute", "hub"].includes(v.note.fm.type) && visibleFacts(v, res).length > 0 && (!summaryOf(v.note) || stale(v)))
     .sort((a, b) => (WIKI_FIRST[a.note.fm.type] ?? 2) - (WIKI_FIRST[b.note.fm.type] ?? 2) || a.note.fm.id.localeCompare(b.note.fm.id))
     .map((v) => v.note.fm.id);
 }
