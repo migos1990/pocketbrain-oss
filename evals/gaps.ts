@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G611: {
+    closed: "5ff8f66a",
+    title: "One Read it on the card that counts held values let out every value left, across pages",
+    severity: "medium",
+    finding: "PR-flow review of PR #6 (2026-11-01): past HELD_EACH, the home's last held card counts every value left, named or not, and carried all their fact keys, so one Read it marked them all seen and served them to the assistants, where each held value needed its own tap. The same review: Settings lost its screenshot baseline when the overview shot became the home; with one put back, the audit found Settings' Resume button at contrast 1.00 (.who .acts button outranked button.go).",
+    fix: "src/dashboard/home.ts: the counting card has no seen keys and links to /home?all=1, where each value has its own Read it. src/dashboard/html.ts: .who .acts button:not(.go). test/ui-rig.ts: the overview and overview-busy shots open Settings (/overview), not the home. Tests: test/home-held-grouped.test.ts (the counting card, rendered, has no diary-seen form), test/ui-quality.test.ts accessibility (settings-busy contrast).",
+  },
   G605: {
     title: "A list item's key with line breaks wrote trailer lines into an assistant's commit message",
     severity: "low",
@@ -3055,6 +3062,55 @@ export const GAPS: Record<string, Gap> = {
     severity: "medium",
     finding: "Owner's phone on live 1e475d81, 2026-10-31: On your mind showed two identical \"Something new about Apple Services payment\" cards (two receipt pages with one title) and \"Something new about Louis Manulife group benefits claim\", all from addresses the pages don't hold, while money, health and legal stay behind Show.",
     fix: "heldName in src/dashboard/home.ts: a held card or line names its page only when the name didn't come from a stranger's mail, the page isn't money and the name isn't shaped like money, health or legal; else \"Something new only you can see\". Cards that read the same are one card counting them, whose Read it marks each key seen (diary-seen takes one key per line). Tests: test/home-held-names.test.ts, test/home-held-grouped.test.ts.",
+  },
+  G566: {
+    closed: "2045e048",
+    title: "A website read as a bare address in a home sentence",
+    severity: "low",
+    finding: "Coordinator's use-it check of live 1e475d81, 2026-10-31: a home memory for an org page's website fact read as the page's website \"is https://...\", a bare web address inside a sentence.",
+    fix: "A website, site, url or homepage fact has its own sentence with the host only (siteNew/siteChanged/siteSettled in LINE_COPY, siteHost in src/dashboard/home.ts). Test: test/home-sentences.test.ts.",
+  },
+  G561: {
+    closed: "a3576818",
+    title: "The owner app looked generated",
+    severity: "medium",
+    finding: "Louis, 2026-10-31: UI made by coding agents has clear tells, the same font, form and style. The owner app had them: one geometric sans, an indigo accent, the same grey rounded card for every item, outline pill buttons, icon tabs and monogram circles.",
+    fix: "Two inks, the owner's pick of three directions: newsprint paper, black text, a headline ink (large text, footnote numbers, Send) and a marker ink (never text: the count of what waits, the highlighter under values that disagree, the current tab), two tokens per theme (INKS, DARK_INKS in src/dashboard/html-app.ts); items split by rules, buttons as underlined words, word tabs, the surname in the headline ink, Mentioned on as a sentence; Schibsted Grotesk served by the hub. Test: test/owner-two-inks.test.ts (AA contrast for every text colour, each ink written only as a token).",
+  },
+  G577: {
+    closed: "bf8d27aa",
+    title: "A page ran a heading into its text, showed empty-looking quote folds and cut long titles",
+    severity: "low",
+    finding: "Mac use-it check of 197c3864, 2026-10-31: a page's title-like heading ran into its first line, its References showed \"What the source said\" rows with nothing visible under them, and the box and Who sees cut a multi-word title to its first word.",
+    fix: "wikiBody(..., paras) in src/dashboard/html-brain.ts keeps paragraphs, line breaks and # headings on the owner's page; blank quotes are dropped and the fold has a +/- mark; callName in src/dashboard/html-page.ts calls only a person by first name. Test: test/owner-page-words.test.ts.",
+  },
+  G578: {
+    closed: "bf8d27aa",
+    title: "The home said two counts for held private things, and a three-digit count of the rest",
+    severity: "low",
+    finding: "Mac use-it check of 197c3864, 2026-10-31: a card \"N new things only you can see\", two single cards, then \"N more new private things\"; and \"N more on your mind\" over 200.",
+    fix: "Past HELD_EACH cards, the last one counts every held value left, named cards first (conflicts() in src/dashboard/home.ts); moreWords in src/dashboard/html-app.ts says a number up to MORE_COUNTED. Tests: test/home-held-grouped.test.ts, test/owner-canvas.test.ts.",
+  },
+  G579: {
+    closed: "bf8d27aa",
+    title: "The home said You settled of settles the owner never made",
+    severity: "medium",
+    finding: "Mac use-it check of 197c3864, 2026-10-31: two lines both said \"You settled what's next for ...\" with different values; settled rows carried no settler, so every one read as the owner's.",
+    fix: "settle() in src/core.ts records settled_by on the diary row (the resolution's by); the home says You only for the owner, the assistant's name for a resolver, and Settled for a row without one. Test: test/home-settled-by.test.ts.",
+  },
+  G586: {
+    closed: "bf8d27aa",
+    title: "Who knows named assistants by lowercase id",
+    severity: "low",
+    finding: "Mac use-it check of 197c3864, 2026-10-31: Who knows said claude, instinct, muse, town: the owner's policy has no label lines.",
+    fix: "agentTitle in src/dashboard/labels.ts: the label, else the id as a name (ChatGPT for chatgpt), used by Who knows and the marks. Test: test/owner-page-words.test.ts.",
+  },
+  G574: {
+    closed: "e54e0abc",
+    title: "The owner app's box did not look or behave like a modern app's",
+    severity: "medium",
+    finding: "Louis, 2026-10-31, on the clip: the box didn't look like a modern app, the experience in the app should feel premium, and a long message slid off to the right instead of the box growing as the text wraps.",
+    fix: "One composer (composer() in src/dashboard/html-app.ts) pinned above the tabs on On your mind, Ask, a page and Settle: a raised rounded bar with a soft shadow, a textarea that grows with its lines up to COMPOSER_MAX then scrolls, a round send arrow lit once there is text, Enter sends and Shift+Enter breaks a line, what you typed appears in the conversation while it sends; its focus ring is the bar's outline. Test: test/owner-composer.test.ts.",
   },
   G560: {
     closed: "02e6e84f",

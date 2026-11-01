@@ -8,13 +8,14 @@ import { carve, grantFor, records, type CarveResult } from "../carve";
 import { scrubLeaves } from "../view";
 import type { Rules } from "../rules";
 import { ownAssistant } from "../rules";
+import { agentTitle } from "./labels";
 
 export interface Mark { agent: string; name: string; short: string; holds: boolean; colour?: string }
 
 // The assistants a mark is drawn for: the owner's own, not paused (the same as the home's rows).
 export function markAgents(rules: Rules): { agent: string; name: string }[] {
   return Object.entries(rules.policy.agents).filter(([k, a]) => ownAssistant(rules, k) && a.status !== "paused")
-    .map(([agent, a]) => ({ agent, name: a.label ?? agent })).sort((a, b) => a.name.localeCompare(b.name));
+    .map(([agent, a]) => ({ agent, name: agentTitle(rules, agent) })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Each assistant's own colour (canvas: Claude ink, ChatGPT teal, Gemini indigo), on its marks and

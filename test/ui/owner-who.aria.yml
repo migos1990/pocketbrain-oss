@@ -1,8 +1,9 @@
 - main:
-  - paragraph: Thu 8 Oct
+  - paragraph:
+    - text: Thu 8 Oct
+    - link "Settings":
+      - /url: /overview
   - heading "Who knows" [level=1]
-  - link "Settings":
-    - /url: /overview
   - region "Your memory":
     - heading "Your memory" [level=2]
     - paragraph: 99 pages

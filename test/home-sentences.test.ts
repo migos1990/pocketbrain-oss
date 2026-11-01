@@ -10,6 +10,7 @@ import { DEMO_NOW } from "../scripts/demo-brain";
 import { homeView, LINE_COPY, lineWords } from "../src/dashboard/home";
 import { loadRules } from "../src/rules";
 import { loadBrain } from "../src/brain";
+import { write } from "../src/write";
 
 test("every memory on the home is a sentence, never a page name, a colon and an attribute", async () => {
   process.env.PB_NOW = DEMO_NOW;
@@ -38,4 +39,25 @@ test("a name ending in s takes its apostrophe alone, and every line comes from t
   expect(lineWords("changed", { title: "Thomas", attr: "city", value: "Laval" })).toBe("Thomas' city is now Laval.");
   expect(lineWords("changed", { title: "Jane Roy", attr: "city", value: "Laval" })).toBe("Jane Roy's city is now Laval.");
   for (const s of Object.values(LINE_COPY)) expect(s).not.toMatch(/^\{title\}: /);
+});
+
+test("an org's website reads as its site with the host only, never a bare address in a sentence", async () => {
+  process.env.PB_NOW = DEMO_NOW;
+  try {
+    const { root } = await makeDemoBrain();
+    const r = write(root, { agent: "owner", id: "orgs/harbourline", attribute: "website", value: "https://www.harbourline.example/about?ref=x", as_of: "2026-10-08", sources: ["owner:2026-10-08/home"], verification: "confirmed-by-owner" } as never, { owner: true });
+    expect(r.outcome).toMatch(/^(committed|written|ok|applied)/);
+    const v = homeView(root, loadRules(root), loadBrain(root), new Date(DEMO_NOW), { all: true });
+    const lines = [...v.since, ...v.earlier.flatMap((d) => d.lines)].map((l) => l.what);
+    expect(lines).toContain("Harbourline Software's site is harbourline.example.");
+    expect(lines.join("\n")).not.toMatch(/https?:\/\//);
+  } finally { delete process.env.PB_NOW; }
+}, 60_000);
+
+test("a web address is its host; anything else stays", async () => {
+  const { siteHost } = await import("../src/dashboard/home");
+  expect(siteHost("https://www.Harbourline.example/about?x=1")).toBe("harbourline.example");
+  expect(siteHost("harbourline.example")).toBe("harbourline.example");
+  expect(siteHost("http://localhost:8080/")).toBe("http://localhost:8080/");
+  expect(siteHost("ask Maya")).toBe("ask Maya");
 });

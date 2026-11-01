@@ -44,7 +44,7 @@ test("a conflict the Gardener is still weighing doesn't wait on the owner; once 
   expect(homeView(root, loadRules(root), loadBrain(root), new Date()).waiting).toHaveLength(0);
   lean(root, id);
   const w = homeView(root, loadRules(root), loadBrain(root), new Date()).waiting;
-  expect(w).toEqual([{ what: "Course C's room is B-201. Or C-305?", verb: "tap to settle", href: `/settle/${id}`, meta: "Two sources disagree" }]);
+  expect(w).toEqual([{ what: "Course C's room is B-201. Or C-305?", verb: "tap to settle", href: `/settle/${id}`, meta: "Two sources disagree", parts: ["B-201", "C-305"] }]);
 });
 
 test("the screen asks one plain question, the Gardener's side first with its reason, then keep both", () => {
@@ -124,7 +124,7 @@ test("a conflict the Gardener hasn't weighed yet opens, says so, and can be answ
   expect(settlePage(c, "x", loadRules(root))).toContain(esc(SETTLE_COPY.held));
   const v = homeView(root, loadRules(root), loadBrain(root), new Date());
   expect(v.waiting).toHaveLength(0);
-  expect(v.gardener).toEqual([{ what: "Course C's room is B-201. Or C-305?", verb: "the Gardener looks tonight", href: `/settle/${id}`, meta: "Two sources disagree" }]);
+  expect(v.gardener).toEqual([{ what: "Course C's room is B-201. Or C-305?", verb: "the Gardener looks tonight", href: `/settle/${id}`, meta: "Two sources disagree", parts: ["B-201", "C-305"] }]);
   ownerDecide(root, id, 2, `settle-${id}`);
   expect(room(root).value).toBe("C-305");
 });

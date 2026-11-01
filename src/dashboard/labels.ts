@@ -133,6 +133,13 @@ export function withNames(notes: Note[], text: string): string {
 
 // An agent by its label from policy.yaml (`label: claude.ai`), else its id.
 export const agentLabel = (rules: Rules, id: unknown) => { const k = String(id ?? ""); return rules.policy.agents[k]?.label ?? k; };
+// An assistant as the owner app names it: its label, else its id as a name ("chatgpt" is
+// ChatGPT, "town" is Town), never a lowercase id (Mac, 2026-10-31: Who knows said "claude").
+const BRANDS: Record<string, string> = { chatgpt: "ChatGPT", openai: "OpenAI" };
+export function agentTitle(rules: Rules, id: unknown): string {
+  const k = String(id ?? ""), l = rules.policy.agents[k]?.label;
+  return l ?? BRANDS[k.toLowerCase()] ?? k.charAt(0).toUpperCase() + k.slice(1);
+}
 // src/write.ts's reason for a write outside the agent's own area, in words (plain text, unescaped).
 export function ownAreaWords(rules: Rules, reason: string): string | undefined {
   const m = reason.match(/^area (.+) is owned by (\S+) \(own_area\)$/);

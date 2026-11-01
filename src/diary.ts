@@ -29,6 +29,9 @@ export interface DiaryRow {
   source_word: string;
   by: string;
   accepted_by?: string;
+  // Who settled a conflict (kind settled): the owner, or the assistant that resolved it. A row
+  // from before 2026-10-31 has none, and the home says neither.
+  settled_by?: string;
   confidence: "stated" | "inferred";
   rank: number; // the source's rank in the conflict order; the home orders lines by it, lowest first
   sources: number;
@@ -69,7 +72,7 @@ export function shownValue(f: unknown): unknown {
   return o.value;
 }
 
-export function diaryRow(p: { at: string; factKey: string; title: string; kind: DiaryKind; from: unknown; to: unknown; incoming: FactRecord; acceptedBy?: string; rank: number; sensitivity: Sensitivity; settles?: string }): DiaryRow {
+export function diaryRow(p: { settledBy?: string; at: string; factKey: string; title: string; kind: DiaryKind; from: unknown; to: unknown; incoming: FactRecord; acceptedBy?: string; rank: number; sensitivity: Sensitivity; settles?: string }): DiaryRow {
   const secret = sensitivityRank(p.sensitivity) >= sensitivityRank("secret");
   return {
     at: p.at,
@@ -86,6 +89,7 @@ export function diaryRow(p: { at: string; factKey: string; title: string; kind: 
     sources: p.incoming.sources.length,
     sensitivity: p.sensitivity,
     ...(p.settles ? { settles: p.settles } : {}),
+    ...(p.settledBy ? { settled_by: p.settledBy } : {}),
     undo_token: sha256(`${p.factKey}\n${p.at}\n${JSON.stringify(p.to ?? null)}\n${p.kind}`).slice(0, 16),
   };
 }

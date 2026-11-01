@@ -1,9 +1,9 @@
 - main:
-  - paragraph: 99 pages · 61 people
+  - paragraph:
+    - text: 99 pages · 61 people
+    - link "Robin":
+      - /url: /who
   - heading "Memory" [level=1]
-  - link "You and your assistants":
-    - /url: /who
-    - text: R
   - text: Search your memory
   - textbox "Search your memory":
     - /placeholder: Search people, projects, decisions…

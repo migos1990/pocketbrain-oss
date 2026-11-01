@@ -6,67 +6,70 @@
     - text: Edit
   - heading "Maya Chen" [level=1]
   - paragraph: design lead at Harbourline Software · Montréal
-  - text: Work Maya Chen is the design lead at
-  - link "Harbourline Software":
-    - /url: /p/orgs/harbourline
-  - text: .
-  - superscript:
-    - link "1":
-      - /url: "#fn-1"
-  - text: Maya works with you on Atlas.
-  - superscript:
-    - link "2":
-      - /url: "#fn-2"
-  - text: Maya's city is Montréal.
-  - superscript:
-    - link "1":
-      - /url: "#fn-1"
-  - text: You were last in touch with Maya on 7 Oct.
-  - superscript:
-    - link "3":
-      - /url: "#fn-3"
-  - text: Its sources also name
-  - link "Robin Lefebvre":
-    - /url: /p/people/robin-lefebvre
-  - text: .
-  - superscript:
-    - link "3":
-      - /url: "#fn-3"
-  - text: See also
-  - link "Atlas launch":
-    - /url: /p/projects/atlas-launch
-  - text: and
-  - link "Senior designer hire":
-    - /url: /p/projects/designer-hire
-  - text: .
-  - superscript:
-    - link "4":
-      - /url: "#fn-4"
-  - superscript:
-    - link "5":
-      - /url: "#fn-5"
-  - text: (Written by the hub from this page's facts.)
+  - text: Work
+  - paragraph:
+    - text: Maya Chen is the design lead at
+    - link "Harbourline Software":
+      - /url: /p/orgs/harbourline
+    - text: .
+    - superscript:
+      - link "1":
+        - /url: "#fn-1"
+    - text: Maya works with you on Atlas.
+    - superscript:
+      - link "2":
+        - /url: "#fn-2"
+    - text: Maya's city is Montréal.
+    - superscript:
+      - link "1":
+        - /url: "#fn-1"
+    - text: You were last in touch with Maya on 7 Oct.
+    - superscript:
+      - link "3":
+        - /url: "#fn-3"
+    - text: Its sources also name
+    - link "Robin Lefebvre":
+      - /url: /p/people/robin-lefebvre
+    - text: .
+    - superscript:
+      - link "3":
+        - /url: "#fn-3"
+    - text: See also
+    - link "Atlas launch":
+      - /url: /p/projects/atlas-launch
+    - text: and
+    - link "Senior designer hire":
+      - /url: /p/projects/designer-hire
+    - text: .
+    - superscript:
+      - link "4":
+        - /url: "#fn-4"
+    - superscript:
+      - link "5":
+        - /url: "#fn-5"
+  - paragraph: (Written by the hub from this page's facts.)
   - heading "Earlier notes" [level=2]
-  - text: Maya leads design for the
-  - link "Atlas launch":
-    - /url: /p/projects/atlas-launch
-  - text: and ran the September usability sessions with
-  - link "Kenji Watanabe":
-    - /url: /p/people/kenji-watanabe
-  - text: . She is the one to ask before anything ships with a new screen. Also on
-  - link "Senior designer hire":
-    - /url: /p/projects/designer-hire
-  - text: .
-  - superscript:
-    - link "1":
-      - /url: "#fn-1"
+  - paragraph:
+    - text: Maya leads design for the
+    - link "Atlas launch":
+      - /url: /p/projects/atlas-launch
+    - text: and ran the September usability sessions with
+    - link "Kenji Watanabe":
+      - /url: /p/people/kenji-watanabe
+    - text: . She is the one to ask before anything ships with a new screen. Also on
+    - link "Senior designer hire":
+      - /url: /p/projects/designer-hire
+    - text: .
+    - superscript:
+      - link "1":
+        - /url: "#fn-1"
   - heading "References" [level=2]
   - list:
     - listitem: Email, 10 Aug 2026
     - listitem: Your note, 10 Aug 2026
     - listitem:
       - text: Email, 7 Oct 2026
-      - group: What the source said
+      - group: + What the source said
     - listitem: Email, 12 Sep 2026
     - listitem: Email, 18 Sep 2026
   - heading "What changed" [level=2]
@@ -77,25 +80,25 @@
       - text: "from an email, Wed · was: 25 Aug 2026"
       - 'button "Undo: You were last in touch with Maya on 7 Oct 2026."': Undo
   - heading "Mentioned on" [level=2]
-  - list:
-    - listitem:
-      - link "Hire a senior designer, not two juniors":
-        - /url: /p/decisions/2026-09-15-hire-senior-designer
-    - listitem:
-      - link "Weekly Atlas review on Wednesdays":
-        - /url: /p/decisions/2026-10-01-weekly-team-review
-    - listitem:
-      - link "Harbourline Software":
-        - /url: /p/orgs/harbourline
-    - listitem:
-      - link "Lucas Fontaine":
-        - /url: /p/people/lucas-fontaine
-    - listitem:
-      - link "Atlas launch":
-        - /url: /p/projects/atlas-launch
-    - listitem:
-      - link "Senior designer hire":
-        - /url: /p/projects/designer-hire
+  - paragraph:
+    - link "Hire a senior designer, not two juniors":
+      - /url: /p/decisions/2026-09-15-hire-senior-designer
+    - text: ","
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: ","
+    - link "Harbourline Software":
+      - /url: /p/orgs/harbourline
+    - text: ","
+    - link "Lucas Fontaine":
+      - /url: /p/people/lucas-fontaine
+    - text: ","
+    - link "Atlas launch":
+      - /url: /p/projects/atlas-launch
+    - text: ","
+    - link "Senior designer hire":
+      - /url: /p/projects/designer-hire
+    - text: .
   - group: Details
   - text: Who sees Maya Claude ChatGPT Gemini gardener
   - group: Change who sees it

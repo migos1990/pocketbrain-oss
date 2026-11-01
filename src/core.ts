@@ -700,7 +700,7 @@ function settle(root: string, p: Packet, chosen: FactRecord, by: string, step: n
   saveNote(root, p.note);
   // The owner's diary has the answer as one line; its Undo opens the conflict again (src/undo.ts).
   const at = clock().toISOString();
-  const diary = appendDiary(root, diaryRow({ at, factKey: String(p.note.fm.fact_key), title: String(p.target.fm.title ?? p.target.fm.id), kind: "settled", from: before, to: shownValue(facts[p.attr]), incoming: chosen, rank: sourceRank(chosen), sensitivity: chosen.sensitivity ?? p.target.fm.sensitivity, settles: id }), d.slice(0, 7));
+  const diary = appendDiary(root, diaryRow({ at, factKey: String(p.note.fm.fact_key), title: String(p.target.fm.title ?? p.target.fm.id), kind: "settled", from: before, to: shownValue(facts[p.attr]), incoming: chosen, rank: sourceRank(chosen), sensitivity: chosen.sensitivity ?? p.target.fm.sensitivity, settles: id, settledBy: String((packetPatch.resolution as { by?: unknown } | undefined)?.by ?? by) }), d.slice(0, 7));
   git(root, ["add", "-A", p.target.fm.id + ".md", p.note.fm.id + ".md", diary]);
   git(root, ["commit", "-q", "-m", `${by}: settle ${id} on ${p.note.fm.fact_key}\n\nKind: ${kind}\nFact-Keys: ${p.note.fm.fact_key}`], by);
   logWrite(root, { at: clock().toISOString(), agent: by, key: p.note.fm.fact_key, outcome: "committed", step, dispute: id, kind });

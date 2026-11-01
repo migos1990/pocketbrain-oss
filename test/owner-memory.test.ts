@@ -27,7 +27,7 @@ test("Memory: how much it holds, kinds as tiles in the areas' tints, and five ch
   try {
     const { get } = await setup();
     const m = await get("/memory");
-    expect(m).toMatch(/<p class="day">\d+ pages · \d+ people<\/p>/);
+    expect(m).toMatch(/<p class="day"><span>\d+ pages · \d+ people<\/span><a class="me" href="\/who">[^<]+<\/a><\/p>/);
     expect(m).toContain(`placeholder="${APP_COPY.searchHint}"`);
     expect(m).toMatch(/<a class="tile t-work" href="\/memory\?kind=people">/);
     expect(m).toMatch(/<a class="tile t-personal" href="\/memory\?kind=projects">/);

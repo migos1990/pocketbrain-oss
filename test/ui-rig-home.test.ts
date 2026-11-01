@@ -39,7 +39,7 @@ test("the rig's home is a full day: conflicts and a private value waiting, a wee
     // The face is six cards (G560); the full list is the week's memories, each with its Undo and
     // its day inside the line.
     expect(html).toContain(APP_COPY.justSaid);
-    expect(html).toMatch(/\d+ more on your mind/);
+    expect(html).toMatch(new RegExp(`\\d+ more on your mind|${APP_COPY.moreAll}`));
     const all = await homeOf(r, "/home?all=1");
     expect(count(all, `>${HOME_COPY.undo}</button>`)).toBeGreaterThanOrEqual(12);
     expect(all).toContain("You said so on Tuesday");

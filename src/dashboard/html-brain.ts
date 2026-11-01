@@ -218,7 +218,7 @@ function referenceText(s: State, text: string): string {
   return refs.length ? `<span title="${esc(refs.join(", "))}">${html}</span>` : html;
 }
 
-const quotesOf = (text: string, quote?: (ref: string) => string[]) => !quote ? "" : [...new Set([...new Set([...text.matchAll(REF_IN)].flatMap((m) => m[1].split(/,\s*/)))].flatMap((r) => quote(r)))].map((q) => `<details class="quote"><summary>What the source said</summary><blockquote>${esc(q)}</blockquote></details>`).join("");
+const quotesOf = (text: string, quote?: (ref: string) => string[]) => !quote ? "" : [...new Set([...new Set([...text.matchAll(REF_IN)].flatMap((m) => m[1].split(/,\s*/)))].flatMap((r) => quote(r)))].filter((q) => q.trim()).map((q) => `<details class="quote"><summary>What the source said</summary><blockquote>${esc(q)}</blockquote></details>`).join("");
 
 // The notes text as wiki sections: `## ` headings, footnote refs as numbers, the references
 // listed under the text (src/wiki.ts). A body with neither reads exactly as before.
@@ -226,7 +226,9 @@ const quotesOf = (text: string, quote?: (ref: string) => string[]) => !quote ? "
 // shown folded under the reference so they open on a tap.
 // `level`: the heading level of its sections, one under the page's own (the owner's page has no
 // h2 above its text, so its sections are h2: a jump from h1 to h3 fails the UI audit).
-export function wikiBody(s: State, body: string, quote?: (ref: string) => string[], level = 3) {
+// `paras` (the owner's page): its text in paragraphs, a blank line between them and a line break
+// kept as one, a "# " line as a heading (Mac, 2026-10-31: a heading ran into its first line).
+export function wikiBody(s: State, body: string, quote?: (ref: string) => string[], level = 3, paras = false) {
   const h = `h${level}`;
   const f = footnotes(body);
   const num = new Map(f.notes.map((x) => [x.label, x.n]));
@@ -242,7 +244,21 @@ export function wikiBody(s: State, body: string, quote?: (ref: string) => string
       return sup(n);
     }).join("");
   });
-  const parts = sections(f.text).map((x) => `${x.heading !== undefined ? `<${h}>${esc(x.heading)}</${h}>` : ""}${refs(wikiLinks(s, idsAsWords(x.text)))}`);
+  const text = (t: string) => {
+    if (!paras) return refs(wikiLinks(s, idsAsWords(t)));
+    const out: string[] = [];
+    for (const p of t.split(/\n\s*\n/)) {
+      let lines: string[] = [];
+      const flush = () => { if (lines.length) out.push(`<p>${lines.map((l) => refs(wikiLinks(s, idsAsWords(l)))).join("<br>")}</p>`); lines = []; };
+      for (const l of p.split("\n").map((x) => x.trim()).filter(Boolean)) {
+        const m = l.match(/^#{1,6} +(.+)$/);
+        if (m) { flush(); out.push(`<${h}>${esc(m[1]!)}</${h}>`); } else lines.push(l);
+      }
+      flush();
+    }
+    return out.join("");
+  };
+  const parts = sections(f.text).map((x) => `${x.heading !== undefined ? `<${h}>${esc(x.heading)}</${h}>` : ""}${text(x.text)}`);
   const list = f.notes.length ? `<${h}>References</${h}><ol class="b-refs">${f.notes.filter((x, i) => f.notes.findIndex((y) => y.n === x.n) === i).map((x) => `<li id="fn-${x.n}">${referenceText(s, x.text)}${quotesOf(x.text, quote)}</li>`).join("")}</ol>` : "";
   return parts.join("") + list;
 }

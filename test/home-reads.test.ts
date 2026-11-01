@@ -20,12 +20,12 @@ test("each assistant's reads today, and not yet for one that hasn't", () => {
   appendChained(join(root, "log", "reads.jsonl"), { at: new Date(Date.now() - 2 * 86_400_000).toISOString(), agent: "steward", op: "context_pack", ids: ["*"] });
   const v = homeView(root, loadRules(root), loadBrain(root), new Date());
   expect(v.reads.map(({ agent, name, today }) => ({ agent, name, today }))).toEqual([
-    { agent: "helper", name: "helper", today: 0 },
-    { agent: "planner", name: "planner", today: 2 },
-    { agent: "steward", name: "steward", today: 0 },
+    { agent: "helper", name: "Helper", today: 0 },
+    { agent: "planner", name: "Planner", today: 2 },
+    { agent: "steward", name: "Steward", today: 0 },
   ]);
   const html = whoPage(v, "x");
-  expect(html).toContain("<b>planner</b><small>Read your brain 2 times today</small>");
-  expect(html).toContain("<b>steward</b><small>Hasn&#39;t read your brain today</small>");
+  expect(html).toContain("<b>Planner</b><small>Read your brain 2 times today</small>");
+  expect(html).toContain("<b>Steward</b><small>Hasn&#39;t read your brain today</small>");
   expect(html).not.toContain("gardener");
 });

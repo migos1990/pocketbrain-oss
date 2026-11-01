@@ -28,6 +28,9 @@ export const APP_COPY = {
   askHint: "Ask about anyone or anything in your memory, or tell it what changed. It answers here.",
   me: "You and your assistants",
   more: "{n} more on your mind",
+  moreAll: "Everything else on your mind",
+  waitOne: "thing waits for you",
+  waitMany: "things wait for you",
   quiet: "Nothing new on your mind since yesterday.",
   onlyYou: "Only you know this",
   stranger: "From an address your pages don't hold",
@@ -87,134 +90,159 @@ export const APP_COPY = {
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
 const and = (names: string[]) => names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
-// The look (brief 2026-10-30): white ground, one accent, soft rounded blocks, a four-item tab bar.
-// The typeface is the hub's own copy of Plus Jakarta Sans (SIL OFL, src/dashboard/fonts/), served
-// at FONT_PATH; the page policy allows fonts from the hub only (font-src 'self').
-const LIGHT = "--t-work:#e0e3ff;--t-work-text:#2e2a9e;--t-teaching:#ffe8c2;--t-teaching-text:#6b3f00;--t-personal:#d5f2ec;--t-personal-text:#0b5b52;--bg:#ffffff;--soft:#f6f6f9;--line:#ececf1;--text:#111318;--text-2:#4f5361;--muted:#5f6370;--accent:#4338ca;--accent-text:#4338ca;--on-accent:#ffffff;--ink:#111318;--on-ink:#ffffff;--warn:#7a3e00;--warn-bg:#fff4e6;--dash:#9ea2ae;";
-const DARK = "--t-work:#26264d;--t-work-text:#c7cbff;--t-teaching:#3a2a10;--t-teaching-text:#f5c77e;--t-personal:#0f2f2a;--t-personal-text:#8fe0cf;--bg:#15161a;--soft:#202128;--line:#2c2e36;--text:#ecedf1;--text-2:#b9bcc8;--muted:#a3a7b3;--accent:#a5b4fc;--accent-text:#a5b4fc;--on-accent:#15161a;--ink:#ecedf1;--on-ink:#15161a;--warn:#f5c77e;--warn-bg:#33270f;--dash:#6b6f7b;";
-const FONT = '"Plus Jakarta Sans",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Helvetica,sans-serif';
-export const FONT_PATH = "/font/plus-jakarta-sans.woff2";
-const MARK_COLOURS = ".c0{background:var(--ink);color:var(--on-ink)}.c1{background:#0f766e;color:#fff}.c2{background:#4338ca;color:#fff}.c3{background:#b45309;color:#fff}.c4{background:#be185d;color:#fff}.c5{background:#475569;color:#fff}";
+// The look (Two inks, the owner's pick 2026-10-31): newsprint paper, black text, and two spot inks
+// printed over it the way a risograph does (multiply on paper; the dark look prints its own pair flat). The
+// headline ink is only ever large text, the fill behind white footnote numbers and Send; the
+// marker ink is never text: the count block, the highlighter under values that disagree, the
+// current tab. Items are split by 2px rules, never boxed; buttons are bold words underlined in the
+// headline ink. The pair is two tokens (INKS), so another pair is a one-line change. The typeface
+// is the hub's own copy of Schibsted Grotesk (SIL OFL, src/dashboard/fonts/), served at FONT_PATH;
+// the page policy allows fonts from the hub only (font-src 'self').
+export const INKS = { headline: "#0078BF", marker: "#FF48B0" } as const;
+// The dark look (the owner's pick, variant E): a yellow headline ink on near-black, no blending,
+// and dark text on both inks.
+export const DARK_INKS = { headline: "#FFE800", marker: "#FF48B0" } as const;
+export const TWO_INKS_LIGHT = { paper: "#EEEDE8", raised: "#FAF9F6", text: "#141414", muted: "#4E4E4E", onHeadline: "#FFFFFF", onMarker: "#141414", onOverprint: "#FFFFFF" } as const;
+export const TWO_INKS_DARK = { paper: "#121212", raised: "#1F1F1D", text: "#F2F0EA", muted: "#B5B2AA", onHeadline: "#121212", onMarker: "#121212", onOverprint: "#121212" } as const;
+const tokens = (t: typeof TWO_INKS_LIGHT | typeof TWO_INKS_DARK, inks: { headline: string; marker: string }, blend: string) => `--headline-ink:${inks.headline};--marker-ink:${inks.marker};--paper:${t.paper};--raised:${t.raised};--text:${t.text};--muted:${t.muted};--on-headline:${t.onHeadline};--on-marker:${t.onMarker};--on-overprint:${t.onOverprint};--blend:${blend};`;
+const LIGHT = tokens(TWO_INKS_LIGHT, INKS, "multiply"), DARK = tokens(TWO_INKS_DARK, DARK_INKS, "normal");
+const FONT = '"Schibsted Grotesk",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Helvetica,sans-serif';
+export const FONT_PATH = "/font/schibsted-grotesk.woff2";
+// The composer grows with its text up to this height (five lines), then scrolls inside.
+export const COMPOSER_MAX = 132;
+// Six assistants, six prints of the two inks: each ink alone, both overprinted, black, an outline
+// and a grey, each with its own text colour.
+const OVERPRINT = "background-color:transparent;background-image:linear-gradient(var(--headline-ink),var(--headline-ink)),linear-gradient(var(--marker-ink),var(--marker-ink));background-blend-mode:multiply";
+const MARK_COLOURS = `.c0{background:var(--headline-ink);color:var(--on-headline)}.c1{background:var(--marker-ink);color:var(--on-marker)}.c2{${OVERPRINT};color:var(--on-overprint)}.c3{background:var(--text);color:var(--paper)}.c4{background:transparent;color:var(--text);box-shadow:inset 0 0 0 2px var(--text)}.c5{background:var(--muted);color:var(--paper)}`;
 export const APP_CSS = `
-@font-face{font-family:"Plus Jakarta Sans";font-style:normal;font-weight:500 800;font-display:swap;src:url(${FONT_PATH}) format("woff2")}
+@font-face{font-family:"Schibsted Grotesk";font-style:normal;font-weight:400 900;font-display:swap;src:url(${FONT_PATH}) format("woff2")}
 :root{color-scheme:light;${LIGHT}}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;${DARK}}}
 :root[data-theme="dark"]{color-scheme:dark;${DARK}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--text);font:500 15px/22px ${FONT};-webkit-font-smoothing:antialiased;overflow-x:clip}
-a{color:var(--accent-text);text-decoration:none}
-:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
-.wrap{max-width:640px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(112px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
-.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:0 0 14px}
-.top .day{margin:0;font-size:13px;line-height:18px;font-weight:600;color:var(--muted)}
-h1{margin:0;font-size:30px;line-height:36px;font-weight:800;letter-spacing:-.02em}
-h2{font-size:13px;line-height:20px;font-weight:700;color:var(--muted);margin:22px 0 8px}
-.me{width:44px;height:44px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex:none}
-form.box{display:flex;align-items:center;gap:8px;min-height:52px;padding:0 4px 0 18px;background:var(--soft);border-radius:999px;margin:0 0 16px}
-form.box input[type=text]{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:16px;color:var(--text);padding:12px 0}
+body{margin:0;background:var(--paper);color:var(--text);font:400 17px/24px ${FONT};-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:var(--text);text-decoration:none}
+:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+.ink{color:var(--headline-ink);mix-blend-mode:var(--blend)}
+.wrap{max-width:640px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) calc(112px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+.top{margin:0 0 14px}
+.top .day{margin:0;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;line-height:20px;font-weight:500}
+.top .day a{font-weight:700;min-height:44px;display:inline-flex;align-items:center}
+h1{margin:10px 0 0;font-size:60px;line-height:.88;font-weight:900;letter-spacing:-.04em;color:var(--headline-ink);mix-blend-mode:var(--blend);overflow-wrap:anywhere;max-width:6.2em}
+h2{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:26px 0 6px}
+.count{display:flex;align-items:center;gap:12px;margin:16px 0 4px}
+.count b{font-size:54px;line-height:1;font-weight:900;background:var(--marker-ink);color:var(--on-marker);padding:0 10px;mix-blend-mode:var(--blend)}
+.count span{font-size:16px;line-height:19px;font-weight:500;max-width:6.5em}
+mark{background:linear-gradient(transparent 45%,color-mix(in srgb,var(--marker-ink) 55%,transparent) 45%);color:inherit;padding:0 2px}
+.go,.pill,.chips button,.chips .open,.line button,.see,.top-link,.more,.answer .cites a,.agent summary{font:inherit;font-size:15px;line-height:20px;font-weight:800;color:var(--text);background:none;border:0;border-radius:0;padding:0;min-height:44px;display:inline-flex;align-items:center;cursor:pointer;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}
+form.box{display:flex;align-items:center;gap:8px;min-height:52px;padding:0 4px 0 12px;background:var(--paper);border:2px solid var(--text);margin:14px 0 18px}
+form.box input[type=text]{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:17px;font-weight:500;color:var(--text);padding:12px 0}
 form.box input[type=text]::placeholder{color:var(--muted)}
-form.box button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:0 16px;min-height:44px;background:var(--accent);color:var(--on-accent);cursor:pointer}
-.bubble{background:var(--soft);border-radius:20px 20px 20px 6px;padding:11px 15px;margin:0 0 10px;max-width:94%}
-.you{background:var(--accent);color:var(--on-accent);border-radius:20px 20px 6px 20px;margin-left:auto;max-width:86%}
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
-.talk{list-style:none;margin:0;padding:0}.answer p{margin:0}.answer .cites{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}.answer .cites a{font-size:13px;line-height:18px;font-weight:700;background:var(--bg);color:var(--text);border-radius:999px;padding:5px 11px}.talk .bubble{width:fit-content}.chips form{margin:0}
-.chips .open{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;background:var(--soft);color:var(--text);font-weight:700}
-.chips button{font:inherit;font-weight:700;color:var(--accent-text);background:none;border:1.5px solid var(--accent);border-radius:999px;padding:0 14px;min-height:44px;cursor:pointer}
+form.box button{font:inherit;font-size:16px;font-weight:800;border:0;border-radius:0;padding:0 14px;min-height:44px;background:var(--headline-ink);color:var(--on-headline);cursor:pointer}
+.bubble{border-top:2px solid var(--text);padding:10px 0 12px;margin:0;font-size:17px;line-height:24px}
+.you{border-top:0;margin:14px 0 0;padding:0 0 6px;font-weight:800;font-size:19px;line-height:25px}
+.you::before{content:"— "}
+.chips{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 14px}
+.talk{list-style:none;margin:0;padding:0}.answer p{margin:0}.answer .cites{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0}.chips form{margin:0}
 ul{list-style:none;margin:0;padding:0}
-.mind{display:flex;flex-direction:column;gap:10px}
-.card{background:var(--soft);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
-.card.warn{background:var(--warn-bg)}
-.card .what{font-size:16px;line-height:23px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.mind{display:flex;flex-direction:column}
+.card{border-top:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px}
+.card:last-child{border-bottom:2px solid var(--text)}
+.card .what{font-size:19px;line-height:25px;font-weight:500;color:var(--text);overflow-wrap:anywhere}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.foot small{font-size:13px;line-height:18px;color:var(--muted);flex:1;min-width:0}
-.foot .acts{display:flex;align-items:center;gap:8px;margin-left:auto}
+.foot small,.card .said,.card .meta{font-size:13px;line-height:18px;color:var(--muted);font-weight:500}
+.foot small{flex:1;min-width:0}
+.foot .acts{display:flex;align-items:center;gap:14px;margin-left:auto}
 .foot form{margin:0}
 .foot>.pill,.foot>form{margin-left:auto}
-.warn .note{font-size:13px;line-height:18px;font-weight:700;color:var(--warn);display:inline-flex;align-items:center;gap:6px}
-.pill{font:inherit;font-size:13px;line-height:18px;font-weight:700;border-radius:999px;padding:0 14px;min-height:44px;display:inline-flex;align-items:center;cursor:pointer;color:var(--accent-text);background:none;border:1.5px solid var(--accent)}
-.pill.solid{color:var(--on-ink);background:var(--ink);border-color:var(--ink)}
-.marks{display:inline-flex;align-items:center;gap:4px}
-.mark{min-width:24px;height:24px;padding:0 4px;border-radius:7px;background:var(--ink);color:var(--on-ink);font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.note{font-size:13px;line-height:18px;font-weight:700;color:var(--text);display:inline-flex;align-items:center;gap:6px}
+.marks{display:inline-flex;align-items:center;gap:3px}
+.mark{min-width:24px;height:24px;padding:0 4px;background:var(--text);color:var(--paper);font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;mix-blend-mode:var(--blend)}
 ${MARK_COLOURS.replace(/\.c(\d)/g, ".mark.c$1,.av.c$1")}
-.card .said{font-size:13px;line-height:18px;color:var(--muted)}
-.card .meta{font-size:13px;line-height:18px;font-weight:700;color:var(--warn)}
-.mark.not{background:var(--bg);border:1.5px dashed var(--dash);color:var(--muted)}
-a.mark.not{position:relative;border-color:var(--accent);color:var(--accent-text)}
+.mark.not{background:transparent;box-shadow:inset 0 0 0 1.5px var(--muted);color:var(--muted);mix-blend-mode:normal}
+a.mark.not{position:relative;box-shadow:inset 0 0 0 2px var(--text);color:var(--text)}
 a.mark.not::after{content:"";position:absolute;inset:-10px}
-.card.told{background:var(--bg);border:2px solid var(--accent)}
-.sheet{display:flex;flex-direction:column;gap:16px}
-.sheet .head{display:flex;gap:14px;align-items:center}
-.sheet .big{flex:none;width:48px;height:48px;border-radius:14px;background:var(--accent);color:var(--on-accent);font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center}
-.sheet h1{font-size:24px;line-height:30px}
-.sheet .sub{margin:2px 0 0;font-size:14px;line-height:20px;color:var(--muted)}
-.sheet .said{background:var(--soft);border-radius:16px;padding:12px 14px;font-weight:600}
-.choice{display:flex;flex-direction:column;gap:2px;background:var(--soft);border-radius:16px;padding:14px 16px;min-height:56px;color:var(--text);font:inherit;text-align:left;border:0;width:100%;cursor:pointer}
-.choice.done{cursor:default;margin:0}.choice b{font-weight:700}.choice small{font-size:13px;line-height:18px;color:var(--muted)}
+.card.told .what{font-weight:800}
+.card.told{animation:register .6s ease-out 1}
+@keyframes register{0%{text-shadow:2px 1px 0 var(--marker-ink),-2px -1px 0 var(--headline-ink)}100%{text-shadow:none}}
+.sheet{display:flex;flex-direction:column;gap:0}
+.sheet .head{display:flex;gap:14px;align-items:flex-end;margin:0 0 14px}
+.sheet .big{flex:none;min-width:56px;height:56px;padding:0 8px;background:var(--marker-ink);color:var(--on-marker);font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;mix-blend-mode:var(--blend)}
+.sheet h1{font-size:34px;line-height:.95;margin:0;max-width:none}
+.sheet .sub{margin:6px 0 0;font-size:15px;line-height:20px;color:var(--muted)}
+.sheet .said{border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0;margin:0 0 6px;font-size:19px;line-height:25px;font-weight:500}
+.choice{display:flex;flex-direction:column;gap:2px;background:none;border:0;border-bottom:2px solid var(--text);padding:12px 0;min-height:56px;color:var(--text);font:inherit;text-align:left;width:100%;cursor:pointer}
+.choice b{font-weight:800;font-size:19px;line-height:25px;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px;align-self:flex-start}
+.choice.done{cursor:default;margin:0}.choice small{font-size:13px;line-height:18px;color:var(--muted)}
 .sheet form{margin:0}
-.plain{display:flex;justify-content:center;align-items:center;min-height:48px;color:var(--muted);font-weight:600}
+.plain{display:flex;justify-content:center;align-items:center;min-height:48px;color:var(--text);font-weight:700}
 .foot-note{font-size:12px;line-height:16px;color:var(--muted);text-align:center;margin:0}
 .state{font-size:13px;color:var(--muted)}
-.more{display:flex;justify-content:center;align-items:center;min-height:44px;margin:6px 0 0;font-size:14px;font-weight:700}
+.more{margin:14px 0 0}
 .quiet{color:var(--muted)}
-.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.tile{background:var(--soft);border-radius:18px;padding:14px 16px;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;gap:12px;color:var(--text)}
-.tile b{display:block;font-size:22px;line-height:26px;font-weight:800}.tile span{font-size:13px;line-height:18px;font-weight:600}
-.tile.t-work{background:var(--t-work);color:var(--t-work-text)}.tile.t-teaching{background:var(--t-teaching);color:var(--t-teaching-text)}.tile.t-personal{background:var(--t-personal);color:var(--t-personal-text)}
-.tile.rest{justify-content:flex-start;gap:0;padding:6px 16px}.tile.rest a{display:flex;justify-content:space-between;align-items:center;min-height:44px;color:var(--text);font-weight:600}.tile.rest a b{font-size:17px;line-height:22px}
-.week-head{display:flex;justify-content:space-between;align-items:baseline}.week-head span{font-size:13px;font-weight:600;color:var(--muted)}
-.rows li.changed a{gap:12px;font-weight:400}.rows .dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--dash)}
-.dot.a-work{background:var(--accent)}.dot.a-teaching{background:var(--t-teaching-text)}.dot.a-personal{background:var(--t-personal-text)}
-.rows .page{flex:1;min-width:0;display:flex;flex-direction:column}.rows .page b{font-weight:700}.rows .page small{font-size:13px;line-height:18px;color:var(--muted)}.rows .when{flex:none;font-size:12px;font-weight:600;color:var(--muted)}
-.rows a{display:flex;align-items:center;min-height:44px;padding:10px 0;border-bottom:1px solid var(--line);color:var(--text);font-weight:600}
-.rows li:last-child a{border-bottom:0}
-.line{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);min-height:44px}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;margin:0 0 4px}
+.tile{border-top:2px solid var(--text);padding:8px 0 14px;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;color:var(--text)}
+.tile b{display:block;font-size:54px;line-height:1;font-weight:900;letter-spacing:-.04em}.tile span{font-size:15px;line-height:20px;font-weight:700}
+.tile.t-work b{color:var(--headline-ink);mix-blend-mode:var(--blend)}.tile.t-teaching b{align-self:flex-start;background:var(--marker-ink);color:var(--on-marker);padding:0 8px;mix-blend-mode:var(--blend)}
+.tile.rest{justify-content:flex-start;gap:0;padding:2px 0 6px}.tile.rest a{display:flex;justify-content:space-between;align-items:center;min-height:44px;color:var(--text);font-weight:700}.tile.rest a b{font-size:19px;line-height:24px;letter-spacing:0}
+.week-head{display:flex;justify-content:space-between;align-items:baseline}.week-head span{font-size:13px;font-weight:500;color:var(--muted)}
+.rows li.changed a{gap:12px;font-weight:400}.rows .dot{flex:none;width:12px;height:12px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
+.dot.a-work{background:var(--headline-ink);box-shadow:none}.dot.a-teaching{background:var(--marker-ink);box-shadow:none}.dot.a-personal{background:var(--text);box-shadow:none}
+.rows .page{flex:1;min-width:0;display:flex;flex-direction:column}.rows .page b{font-weight:700}.rows .page small{font-size:13px;line-height:18px;color:var(--muted)}.rows .when{flex:none;font-size:13px;font-weight:500;color:var(--muted)}
+.rows a{display:flex;align-items:center;min-height:44px;padding:10px 0;border-top:2px solid var(--text);color:var(--text);font-weight:600}
+.rows li:last-child a{border-bottom:2px solid var(--text)}
+.line{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 0;border-top:2px solid var(--text);min-height:44px}
 .line .t{min-width:0;flex:1;overflow-wrap:anywhere}
-.line .t a{color:var(--text)}
-.line small{display:block;color:var(--text-2);font-size:13px;line-height:18px}
-.line button{font:inherit;font-size:13px;font-weight:700;color:var(--accent-text);background:none;border:1.5px solid var(--accent);border-radius:999px;padding:0 14px;min-height:44px;cursor:pointer}
-.line.ask,.line.wrong{padding-left:12px}.line.ask{min-height:0;padding-top:6px;padding-bottom:6px}.line.who b{font-weight:700}
-.reads{color:var(--text-2);font-size:13px;margin:0}
-.who-block{background:var(--soft);border-radius:18px;padding:4px 16px;margin:0 0 10px}
-.who-block .line:last-child{border-bottom:0}
-.top-link{font-weight:700;min-height:44px;display:inline-flex;align-items:center}
-.numbers{background:var(--ink);color:var(--on-ink);border-radius:20px;padding:16px 18px;margin:0 0 6px}
-.numbers h2{margin:0 0 10px;color:inherit;opacity:.75}.numbers .nums{display:flex;gap:22px}.numbers .nums p{margin:0;display:flex;flex-direction:column}
-.numbers b{font-size:26px;line-height:30px;font-weight:800}.numbers span{font-size:12px;line-height:16px;opacity:.8}.numbers .backup{margin:12px 0 0;font-size:13px;font-weight:600;opacity:.8}
-.agents{display:flex;flex-direction:column;gap:10px}.agent{background:var(--soft);border-radius:20px;padding:14px 16px}
-.who-head{display:flex;align-items:center;gap:12px}.who-head .t{flex:1;min-width:0}.who-head b{font-weight:700}.who-head small{display:block;font-size:13px;line-height:18px;color:var(--muted)}
-.av{flex:none;width:36px;height:36px;border-radius:10px;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
-.badge{margin-left:6px;font-size:11px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:6px;padding:2px 6px}
-.see{font-weight:700;min-height:44px;display:inline-flex;align-items:center}.sees{margin:8px 0 0;font-size:13px;line-height:18px;color:var(--text-2)}
-.wrongs{margin:8px 0 0;background:var(--bg);border-radius:14px;padding:0 12px}.wrongs .line:last-child{border-bottom:0}
-.agent details{margin:8px 0 0}.agent summary{min-height:44px;display:flex;align-items:center;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer}
-.settings{display:flex;flex-direction:column;justify-content:center;min-height:56px;background:var(--soft);border-radius:18px;padding:10px 16px;margin:16px 0 0;color:var(--text);font-weight:700}
-.settings small{font-weight:500;color:var(--muted);font-size:13px}
-.pinned{position:fixed;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom));background:var(--bg);padding:10px max(16px,env(safe-area-inset-left)) 8px}
-.pinned>*{max-width:608px;margin-left:auto;margin-right:auto}.pinned form.box{margin:0 auto}
-.wrap.chat{padding-bottom:calc(180px + env(safe-area-inset-bottom))}
-nav.tabbar{position:fixed;left:0;right:0;bottom:0;height:calc(84px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-start;padding:8px 8px env(safe-area-inset-bottom)}
-nav.tabbar a{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:64px;min-height:56px;padding-top:4px;color:var(--muted);font-size:11px;line-height:14px;font-weight:600}
-nav.tabbar a[aria-current]{color:var(--accent-text);font-weight:700}
+.line small{display:block;color:var(--muted);font-size:13px;line-height:18px}
+.line.ask,.line.wrong{border-top-width:1px}.line.ask{min-height:0;padding-top:6px;padding-bottom:6px}.line.who b{font-weight:700}
+.reads{color:var(--muted);font-size:13px;margin:0}
+.numbers{border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;margin:0 0 6px}
+.numbers h2{margin:0 0 6px;font-size:15px;line-height:20px;font-weight:700;letter-spacing:0}.numbers .nums{display:flex;gap:22px}.numbers .nums p{margin:0;display:flex;flex-direction:column}
+.numbers b{font-size:44px;line-height:1;font-weight:900;letter-spacing:-.03em}.numbers .nums p:first-child b{color:var(--headline-ink);mix-blend-mode:var(--blend)}.numbers span{font-size:13px;line-height:18px;color:var(--muted)}.numbers .backup{margin:10px 0 0;font-size:13px;font-weight:500;color:var(--muted)}
+.agents{display:flex;flex-direction:column}.agent{border-top:2px solid var(--text);padding:12px 0}
+.agent:last-child{border-bottom:2px solid var(--text)}
+.who-head{display:flex;align-items:center;gap:12px}.who-head .t{flex:1;min-width:0}.who-head b{font-weight:900;font-size:22px;line-height:26px;letter-spacing:-.02em}.who-head small{display:block;font-size:13px;line-height:18px;color:var(--muted)}
+.av{flex:none;width:36px;height:36px;background:var(--text);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;mix-blend-mode:var(--blend)}
+.badge{margin-left:8px;font-size:12px;font-weight:800;color:var(--on-marker);background:var(--marker-ink);padding:1px 6px;vertical-align:3px;mix-blend-mode:var(--blend)}
+.sees{margin:6px 0 0;font-size:13px;line-height:18px;color:var(--muted)}
+.wrongs{margin:8px 0 0}
+.agent details{margin:4px 0 0}.agent summary{font-size:14px}
+.settings{display:flex;flex-direction:column;justify-content:center;min-height:56px;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0;margin:22px 0 0;color:var(--text);font-weight:900;font-size:22px;letter-spacing:-.02em}
+.settings small{font-weight:500;color:var(--muted);font-size:13px;letter-spacing:0}
+.pinned{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));background:linear-gradient(to bottom,transparent,var(--paper) 18px);padding:18px max(14px,env(safe-area-inset-left)) 10px}
+form.composer{display:flex;align-items:flex-end;gap:8px;min-height:56px;padding:6px 6px 6px 18px;background:var(--raised);border:0;border-radius:28px;box-shadow:0 1px 2px rgba(20,20,20,.08),0 8px 24px rgba(20,20,20,.12);margin:0;transition:box-shadow .15s}
+form.composer:focus-within{outline:2px solid var(--headline-ink);outline-offset:0;box-shadow:0 8px 24px rgba(20,20,20,.12)}
+form.composer textarea{flex:1;min-width:0;align-self:center;border:0;outline:0;background:transparent;font:inherit;font-size:17px;line-height:24px;font-weight:500;color:var(--text);padding:10px 0;margin:0;resize:none;height:44px;max-height:${COMPOSER_MAX}px;overflow-y:auto;overflow-wrap:anywhere}
+form.composer textarea::placeholder{color:var(--muted)}
+form.composer button.send{flex:none;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:var(--headline-ink);color:var(--on-headline);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.4;transition:opacity .15s,transform .15s}
+form.composer.ready button.send{opacity:1}
+form.composer.sending button.send{transform:scale(.88)}
+.bubble.echo{opacity:.6}
+.pinned>*{max-width:604px;margin-left:auto;margin-right:auto}.pinned form.box{margin:0 auto}
+.wrap.chat{padding-bottom:calc(160px + env(safe-area-inset-bottom))}
+nav.tabbar{position:fixed;left:0;right:0;bottom:0;height:calc(64px + env(safe-area-inset-bottom));background:var(--paper);border-top:2px solid var(--text);display:flex;justify-content:space-between;align-items:center;gap:4px;padding:0 max(14px,env(safe-area-inset-left)) env(safe-area-inset-bottom)}
+nav.tabbar a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 4px;color:var(--text);font-size:14px;line-height:18px;font-weight:700;white-space:nowrap}
+nav.tabbar a[aria-current]{background:linear-gradient(transparent 24%,var(--marker-ink) 24% 76%,transparent 76%);color:var(--on-marker);mix-blend-mode:var(--blend)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 `;
 
-const ICON = (d: string) => `<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const LOCK = '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>';
 export type Tab = "mind" | "memory" | "ask" | "who";
-const TABS: [Tab, string, string, string][] = [
-  ["mind", "/home", APP_COPY.tabMind, '<path d="M9 3a4 4 0 0 0-4 4v1a3 3 0 0 0-1 5.5V15a4 4 0 0 0 4 4h1V3z"></path><path d="M15 3a4 4 0 0 1 4 4v1a3 3 0 0 1 1 5.5V15a4 4 0 0 1-4 4h-1V3z"></path>'],
-  ["memory", "/memory", APP_COPY.tabMemory, '<path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path><path d="M8 7h8M8 11h8M8 15h5"></path>'],
-  ["ask", "/ask", APP_COPY.tabAsk, '<path d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H9l-5 4z"></path>'],
-  ["who", "/who", APP_COPY.tabWho, '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"></path><path d="M9 12l2 2 4-4"></path>'],
+const TABS: [Tab, string, string][] = [
+  ["mind", "/home", APP_COPY.tabMind],
+  ["memory", "/memory", APP_COPY.tabMemory],
+  ["ask", "/ask", APP_COPY.tabAsk],
+  ["who", "/who", APP_COPY.tabWho],
 ];
-export const tabBar = (on: Tab) => `<nav class="tabbar" aria-label="${APP_COPY.tabs}">${TABS.map(([t, path, name, d]) => `<a href="${path}"${t === on ? ' aria-current="page"' : ""}>${ICON(d)}${esc(name)}</a>`).join("")}</nav>`;
+// The tabs are words, no icons; the current one is printed in the marker ink.
+export const tabBar = (on: Tab) => `<nav class="tabbar" aria-label="${APP_COPY.tabs}">${TABS.map(([t, path, name]) => `<a href="${path}"${t === on ? ' aria-current="page"' : ""}>${esc(name)}</a>`).join("")}</nav>`;
 
 export function appPage(title: string, on: Tab, body: string, o: { css?: string; wrap?: string } = {}): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title)}</title><style>${APP_CSS}${o.css ?? ""}</style></head><body><main class="wrap${o.wrap ? ` ${o.wrap}` : ""}">
 ${body}
-</main>${tabBar(on)}</body></html>`;
+</main>${tabBar(on)}${body.includes('class="box composer"') ? COMPOSER_JS : ""}</body></html>`;
 }
 
 // One mark per assistant: filled when it gets the line, dashed when it doesn't. The group says it
@@ -247,6 +275,18 @@ export function memoryCard(l: HomeLine, csrf: string, face = false): string {
   return `<li class="card${l.held ? " warn" : l.just ? " told" : ""}"><a class="what" href="${href(l.page)}">${esc(l.what)}</a><div class="foot">${fromLine}<span class="acts">${undo}${who}</span></div></li>`;
 }
 
+// The values that disagree, under the marker ink's highlighter: each part found after the last.
+export function marked(what: string, parts: string[] = []): string {
+  let out = "", at = 0;
+  for (const p of parts) {
+    const i = p ? what.indexOf(p, at) : -1;
+    if (i < 0) continue;
+    out += `${esc(what.slice(at, i))}<mark>${esc(p)}</mark>`;
+    at = i + p.length;
+  }
+  return out + esc(what.slice(at));
+}
+
 // What waits on the owner, as the first things on their mind.
 function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.readIt}: ${w.what}`)}">${APP_COPY.readIt}</button></form></div></li>`;
@@ -254,11 +294,29 @@ function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${w.meta ? `${esc(w.meta)} · ` : ""}${APP_COPY.gardener}</small></div></li>`;
   const verb = w.href.startsWith("/settle/m-") ? APP_COPY.decide : APP_COPY.settle;
   // One link per block: the question opens from its Settle (or Decide), never twice.
-  return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot">${w.meta ? `<span class="meta">${esc(w.meta)}</span>` : ""}<a class="pill" href="${esc(w.href)}" aria-label="${esc(`${verb}: ${w.what}`)}">${verb}</a></div></li>`;
+  return `<li class="card"><span class="what">${marked(w.what, w.parts)}</span><div class="foot">${w.meta ? `<span class="meta">${esc(w.meta)}</span>` : ""}<a class="pill" href="${esc(w.href)}" aria-label="${esc(`${verb}: ${w.what}`)}">${verb}</a></div></li>`;
 }
 
-const header = (day: string, title: string, initial: string) => `<header class="top"><div><p class="day">${esc(day)}</p><h1>${esc(title)}</h1></div><a class="me" href="/who" aria-label="${APP_COPY.me}">${esc(initial)}</a></header>`;
-const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<form class="box" method="post" action="/say">${hidden(csrf, f)}<label class="sr" for="q">${APP_COPY.boxLabel}</label><input type="text" id="q" name="q" placeholder="${esc(placeholder)}" autocomplete="off" enterkeyhint="send" maxlength="500"><button>${HOME_COPY.send}</button></form>`;
+// The link to the rest of On your mind: a count while it is small, words once it isn't (Mac,
+// 2026-10-31: "214 more on your mind" is a number nobody reads).
+export const MORE_COUNTED = 20;
+export const moreWords = (n: number) => n <= MORE_COUNTED ? fill(APP_COPY.more, { n }) : APP_COPY.moreAll;
+
+// The day and the owner's name over a headline in the headline ink.
+const header = (day: string, title: string, name: string) => `<header class="top"><p class="day"><span>${esc(day)}</span><a class="me" href="/who">${esc(name)}</a></p><h1>${esc(title)}</h1></header>`;
+// How many things wait, big, in the marker ink.
+const count = (n: number) => n ? `<p class="count"><b>${n}</b><span>${n === 1 ? APP_COPY.waitOne : APP_COPY.waitMany}</span></p>` : "";
+// The composer (owner, 2026-10-31: a modern app's box): a text area that grows with its text, a
+// round send arrow, Enter sends and Shift+Enter breaks the line. Without its script it is a plain
+// form that still posts.
+const ARROW = '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>';
+export function composer(csrf: string, f: Record<string, string>, placeholder: string, o: { label?: string; action?: string; name?: string; send?: string } = {}): string {
+  return `<form class="box composer" data-focus-ring method="post" action="${esc(o.action ?? "/say")}">${hidden(csrf, f)}<label class="sr" for="q">${esc(o.label ?? APP_COPY.boxLabel)}</label><textarea id="q" name="${esc(o.name ?? "q")}" rows="1" placeholder="${esc(placeholder)}" autocomplete="off" enterkeyhint="send" maxlength="500"></textarea><button class="send" aria-label="${esc(o.send ?? HOME_COPY.send)}">${ARROW}</button></form>`;
+}
+// Grows the text area as it wraps, lights the arrow, sends on Enter, and on Ask shows what was said
+// at once while the page loads.
+const COMPOSER_JS = "<script>for(const f of document.querySelectorAll('form.composer')){const t=f.querySelector('textarea');const fit=()=>{t.style.height='auto';t.style.height=Math.min(t.scrollHeight," + COMPOSER_MAX + ")+'px';f.classList.toggle('ready',t.value.trim()!=='')};t.addEventListener('input',fit);t.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(t.value.trim())f.requestSubmit()}});f.addEventListener('submit',e=>{if(!t.value.trim()){e.preventDefault();return}f.classList.add('sending');const pin=f.closest('.pinned');if(pin&&f.closest('.chat')){const p=document.createElement('p');p.className='bubble you echo';p.textContent=t.value.replace(/\\s+/g,' ').trim();pin.before(p);scrollTo(0,document.body.scrollHeight)}});fit()}</script>";
+const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<div class="pinned">${composer(csrf, f, placeholder)}</div>`;
 
 // On your mind (/home): the box, then what waits on the owner, then the memories, least certain and
 // newest first (homeView's order), the day inside each line, never a heading.
@@ -269,9 +327,10 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const lines = v.all ? all : faceLines(all, faceRoom(v.waiting.length + v.gardener.length));
   const more = v.all ? 0 : all.length - lines.length + v.folded + v.earlierFolded;
   const cards = [...v.waiting.map((w) => waitingCard(w, csrf)), ...v.gardener.map((w) => waitingCard(w, csrf, true)), ...lines.map((l) => memoryCard(l, csrf, !v.all))];
-  return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name.slice(0, 1))}
-${box(csrf, {}, APP_COPY.box)}${replyHtml(csrf, o)}
-${cards.length ? `<ul class="mind">${cards.join("")}</ul>` : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(fill(APP_COPY.more, { n: more }))}</a>` : ""}`);
+  return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(v.waiting.length)}
+${replyHtml(csrf, o)}
+${cards.length ? `<ul class="mind">${cards.join("")}</ul>` : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
+${box(csrf, {}, APP_COPY.box)}`, { wrap: "chat" });
 }
 
 // Ask (/ask): the box on its own, its answer above it. The same gate as the home's box.
@@ -295,9 +354,9 @@ export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { t
   const talk = turns.length ? `<ol class="talk">${turns.map((t, i) => turn(t, i === turns.length - 1)).join("")}</ol>` : older ? "" : `<p class="bubble">${APP_COPY.askHint}</p>`;
   // The box sits at the bottom, above the tabs, as in any chat (Louis, 2026-10-31), and the page
   // opens on the newest answer.
-  return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.ask, v.name.slice(0, 1))}
+  return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.ask, v.name)}
 ${older}${talk}${o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : ""}
-<div class="pinned">${box(csrf, { from: "ask" }, APP_COPY.askBox)}</div>${turns.length ? "<script>scrollTo(0,document.body.scrollHeight)</script>" : ""}`, { wrap: "chat" });
+${box(csrf, { from: "ask" }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo(0,document.body.scrollHeight)</script>" : ""}`, { wrap: "chat" });
 }
 
 // Memory (/memory): the kinds with their counts, a kind's pages, a search, and this week's pages.
@@ -324,7 +383,7 @@ export function memoryPage(m: MemoryView): string {
     : m.kind ? `<h2>${esc(m.kind.label)}</h2>${rows(m.kind.pages)}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : m.allWeek ? `${weekHead}${week}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : `${tiles}${weekHead}${week}${m.week.length > WEEK_ROWS ? `<a class="more" href="/memory?changes=week">${APP_COPY.allChanges}</a>` : ""}`;
-  return appPage(APP_COPY.memory, "memory", `${header(fill(APP_COPY.holds, { pages: m.pages, people: m.people }), APP_COPY.memory, m.name.slice(0, 1))}
+  return appPage(APP_COPY.memory, "memory", `${header(fill(APP_COPY.holds, { pages: m.pages, people: m.people }), APP_COPY.memory, m.name)}
 ${search}${below}`);
 }
 
@@ -346,7 +405,7 @@ export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
   const m = o.memory;
   const numbers = m ? `<section class="numbers" aria-labelledby="mem"><h2 id="mem">${APP_COPY.yourMemory}</h2><div class="nums"><p><b>${m.pages}</b><span>pages</span></p><p><b>${m.people}</b><span>people</span></p><p><b>${m.learned}</b><span>learned this week</span></p></div><p class="backup">${esc(m.backup ?? APP_COPY.backupNone)}</p></section>` : "";
   const flash = o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : "";
-  return appPage(APP_COPY.who, "who", `<header class="top"><div><p class="day">${esc(v.date)}</p><h1>${APP_COPY.who}</h1></div><a class="top-link" href="/overview">${APP_COPY.settings}</a></header>
+  return appPage(APP_COPY.who, "who", `<header class="top"><p class="day"><span>${esc(v.date)}</span><a class="top-link" href="/overview">${APP_COPY.settings}</a></p><h1>${APP_COPY.who}</h1></header>
 ${flash}${numbers}${v.reads.length ? `<h2>${APP_COPY.assistants}</h2><ul class="agents">${v.reads.map(card).join("")}</ul>` : ""}
 <a class="settings" href="/overview">${APP_COPY.settings}<small>${APP_COPY.settingsWhy}</small></a>`);
 }

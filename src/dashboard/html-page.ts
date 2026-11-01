@@ -16,7 +16,7 @@ import { refString } from "../sources";
 import { keptQuotes, itemRef } from "../quotes";
 import { sensitiveShape } from "../shape";
 import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
-import { appPage } from "./html-app";
+import { appPage, composer } from "./html-app";
 import { plain, shutBody } from "./home";
 import { ownerConflicts } from "../core";
 import { inboxConflicts } from "../settle-inbox";
@@ -58,33 +58,38 @@ export const PAGE_COPY = {
 } as const;
 
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
-const PAGE_CSS = `
-.band{margin:calc(-20px - env(safe-area-inset-top)) max(-16px,calc(-1 * env(safe-area-inset-left))) 20px;padding:calc(20px + env(safe-area-inset-top)) 20px 22px;border-radius:0 0 28px 28px;background:var(--soft);display:flex;flex-direction:column;gap:14px}
-.band.t-work{background:var(--t-work);--band-text:var(--t-work-text)}.band.t-teaching{background:var(--t-teaching);--band-text:var(--t-teaching-text)}.band.t-personal{background:var(--t-personal);--band-text:var(--t-personal-text)}
-.band .bar{display:flex;justify-content:space-between;align-items:center}
-.band .bar a{color:var(--band-text,var(--text));font-weight:700;display:inline-flex;align-items:center;min-height:44px}
-.band .head{display:flex;gap:16px;align-items:center}.band .head>div{min-width:0}
-.band .face{flex:none;width:68px;height:68px;border-radius:50%;background:var(--bg);color:var(--band-text,var(--text));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800}
-.band h1{font-size:26px;line-height:32px;overflow-wrap:anywhere}
-.band .kind{margin:2px 0 0;font-size:14px;line-height:20px;color:var(--band-text,var(--muted));font-weight:600}
-.band .chips{margin:0}.band .chip{font-size:13px;line-height:18px;font-weight:700;color:var(--band-text,var(--text));background:var(--bg);border-radius:999px;padding:6px 12px}
-.prose{font-size:17px;line-height:26px}
-.prose h2,.prose h3{font-size:17px;color:var(--text);margin:20px 0 4px}
-.prose sup a{font-size:12px;display:inline-block;min-width:24px;padding-left:2px;text-align:left}
-.prose ol{padding-left:24px;color:var(--muted);font-size:13px;line-height:18px;list-style:decimal}
-.prose ol li{margin:0 0 8px}
-.prose details.quote{border:0}.prose details.quote summary{min-height:44px;font-weight:500;color:var(--muted)}
-.prose blockquote{margin:0 0 8px;padding-left:12px;border-left:2px solid var(--line);color:var(--text)}
-a.project{margin:18px 0 0;background:var(--soft);border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;color:var(--text)}
-.project .nm{font-weight:700}.project .flag{align-self:flex-start;font-size:13px;line-height:18px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:8px;padding:4px 10px}
-h2.sec{font-size:17px;line-height:24px;font-weight:700;color:var(--text);margin:22px 0 4px}
-details{border-top:1px solid var(--line);margin:8px 0 0}
-details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:700}
+// Two inks on a page: the name big, the surname in the headline ink; the role line between two
+// rules; footnote numbers as small headline-ink blocks; what links here as one sentence.
+export const PAGE_CSS = `
+.band{display:flex;flex-direction:column;gap:0;margin:0 0 14px}
+.band .bar{display:flex;justify-content:space-between;align-items:center;font-size:14px;line-height:20px;font-weight:500}
+.band .bar a{font-weight:700;display:inline-flex;align-items:center;min-height:44px}
+.band h1{font-size:56px;line-height:.9;margin:12px 0 10px;color:var(--text);mix-blend-mode:normal;max-width:none}
+.band h1 span{display:block;color:var(--headline-ink);mix-blend-mode:var(--blend)}
+.band .kind{margin:0;font-size:15px;line-height:20px;font-weight:500;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:7px 0}
+.band .chips{margin:0}.band .chip{font-size:14px;line-height:20px;font-weight:500;color:var(--muted)}
+.band .head{display:block}
+.prose{font-size:17px;line-height:25px}
+.prose a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
+.prose h2,.prose h3{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:22px 0 4px}
+.prose sup{line-height:0}
+.prose sup a{font-size:10px;line-height:14px;font-weight:800;display:inline-block;min-width:14px;padding:0 3px;margin-left:2px;text-align:center;background:var(--headline-ink);color:var(--on-headline);vertical-align:2px}
+.prose ol{padding-left:30px;color:var(--muted);font-size:13px;line-height:18px;list-style:decimal}
+.prose ol li{margin:0 0 6px}
+.prose details.quote{border:0;margin:0 0 4px}.prose details.quote summary{display:flex;align-items:center;gap:8px;min-height:44px;font-weight:600;color:var(--text);cursor:pointer;list-style:none}.prose details.quote summary::-webkit-details-marker{display:none}.prose details.quote summary::before{content:"+";display:inline-grid;place-items:center;width:18px;height:18px;border:1.5px solid currentColor;font-weight:800;line-height:1}.prose details.quote[open] summary::before{content:"−"}
+.prose blockquote{margin:0 0 8px;padding-left:12px;border-left:3px solid var(--marker-ink);color:var(--text)}
+a.project{margin:18px 0 0;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px;color:var(--text)}
+.project .nm{font-weight:900;font-size:22px;letter-spacing:-.02em}.project .flag{align-self:flex-start;font-size:13px;line-height:18px;font-weight:800;background:var(--marker-ink);color:var(--on-marker);padding:1px 6px;mix-blend-mode:var(--blend)}
+h2.sec{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:24px 0 6px}
+p.links{margin:0;font-size:16px;line-height:24px}
+p.links a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
+details{border-top:2px solid var(--text);margin:18px 0 0}
+details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:800}
 dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:15px;line-height:22px}
 dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
-.seen{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 0;font-size:13px;line-height:18px;color:var(--muted)}
-.seen b{font-weight:700}.seen span{background:var(--soft);border-radius:999px;padding:3px 10px;font-weight:600;color:var(--text)}
-.wrap.page{padding-bottom:calc(190px + env(safe-area-inset-bottom))}
+.seen{display:flex;gap:6px 14px;align-items:center;flex-wrap:wrap;margin:16px 0 0;padding:10px 0 0;border-top:2px solid var(--text);font-size:13px;line-height:18px;color:var(--muted)}
+.seen b{font-weight:800;color:var(--text)}.seen span{font-weight:500;color:var(--text)}
+.wrap.page{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
 `;
 
 // A value as text with its [[links]] kept, for wikiLinks to turn into links to their pages.
@@ -144,7 +149,7 @@ function whoSees(s: State, csrf: string, n: Note, closed: boolean): string {
   const id = n.fm.id;
   const seen = audience(s, id).seen;
   const names = seen.map((a) => agentLabel(s.rules, a));
-  const first = displayName(id, n.fm.title).split(/\s+/)[0]!;
+  const first = callName(id, displayName(id, n.fm.title));
   const chips = `<div class="seen"><b>${esc(fill(PAGE_COPY.whoName, { name: first }))}</b>${names.length ? names.map((x) => `<span>${esc(x)}</span>`).join("") : esc(PAGE_COPY.nobody)}</div>`;
   if (closed) return chips;
   const act = (action: string, f: Record<string, string>, label: string) => `<form method="post" action="/action/${action}">${hidden(csrf, f)}<button>${esc(label)}</button></form>`;
@@ -188,12 +193,15 @@ function personLine(s: State, n: Note, fresh: boolean, closed: boolean): string 
 }
 
 const AREAS = new Set(["work", "teaching", "personal"]);
-const initials = (name: string) => name.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+// What the box and Who sees call a page: a person by their first name, anything else by its whole
+// title (Mac, 2026-10-31: "What changed about Atlas?" on Atlas launch).
+const callName = (id: string, name: string) => folderOf(id) === "people" ? name.split(/\s+/)[0]! : name;
 
 export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; fresh?: boolean } = {}): string {
   const fresh = !!o.fresh, closed = !fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
   const name = displayName(n.fm.id, n.fm.title);
-  const first = name.split(/\s+/)[0]!;
+  const first = callName(n.fm.id, name);
   const count = sourceCount(n);
   const held = fresh ? new Set<string>() : shutItems(s, n);
   let withheld = false;
@@ -203,9 +211,10 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
     return [];
-  }, 2).replace(/href="\/note\//g, 'href="/p/').replace(/(class="b-ref">)\[(\d+)\]/g, "$1$2").replace(/\s+(<sup>)/g, "$1");
+  }, 2, true).replace(/href="\/note\//g, 'href="/p/').replace(/(class="b-ref">)\[(\d+)\]/g, "$1$2").replace(/\s+(<sup>)/g, "$1");
   const c = connections(s, n);
-  const mentioned = c.mentionedIn.length ? `<h2>${PAGE_COPY.mentioned}</h2><ul>${c.mentionedIn.map((x) => `<li class="line"><div class="t"><a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a></div></li>`).join("")}</ul>` : "";
+  // What links here, as one sentence of links.
+  const mentioned = c.mentionedIn.length ? `<h2>${PAGE_COPY.mentioned}</h2><p class="links">${c.mentionedIn.map((x) => `<a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a>`).join(", ")}.</p>` : "";
   const who = whoSees(s, csrf, n, closed);
   const details = closed ? "" : facts(s, n, fresh);
   const open = fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private") ? `<p class="kind">${PAGE_COPY.openPrivate}</p>` : "";
@@ -213,13 +222,15 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   function proseOrEmpty() { return prose.trim() ? `<div class="prose">${prose}</div>` : `<p class="quiet">${esc(fill(PAGE_COPY.empty, { name: first }))}</p>`; }
   const area = String(n.fm.area ?? "");
   const kind = String(n.fm.type ?? kindLabel(folderOf(n.fm.id)));
-  const face = folderOf(n.fm.id) === "people" && initials(name) ? `<span class="face" aria-hidden="true">${esc(initials(name))}</span>` : "";
+  // A person's name in two lines, the surname in the headline ink; anything else in one.
+  const words = name.split(/\s+/);
+  const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
   const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
-<div class="head">${face}<div><h1>${esc(name)}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p></div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p></div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
-  const pinned = `<div class="pinned">${replyHtml(csrf, { ...o, page: n.fm.id })}<form class="box" method="post" action="/say">${hidden(csrf, { page: n.fm.id })}<label class="sr" for="q">${esc(fill(PAGE_COPY.box, { name: first }))}</label><input type="text" id="q" name="q" placeholder="${esc(fill(PAGE_COPY.box, { name: first }))}" autocomplete="off" enterkeyhint="send" maxlength="500"><button>${PAGE_COPY.send}</button></form></div>`;
+  const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
   return appPage(name, "memory", `${band}
 ${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${mentionedList}
 ${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}

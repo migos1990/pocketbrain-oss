@@ -42,7 +42,7 @@ import type { Note } from "../brain";
 import { ownerPage, askProse } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY, FONT_PATH } from "./html-app";
-const FONT_FILE = new URL("./fonts/plus-jakarta-sans-latin.woff2", import.meta.url).pathname;
+const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
 import { readDiary } from "../diary";
@@ -457,7 +457,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       }
       // The owner's text box (src/owner-say.ts): the answer is the home page with it under the box.
       if (url.pathname === "/say") {
-        const said = (form.q ?? "").slice(0, 500);
+        // The composer lets a line break with Shift+Enter; the hub reads what was said as one line.
+        const said = (form.q ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
         let reply;
         const fresh = freshSignIn(root, sid, now());
         try { // A chip counts as a tap only when the box offered that exact sentence to this sign-in;
@@ -488,7 +489,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         } catch (e) { return go("/home", { err: fail(e) }); }
       }
       if (action === "settle-pick" || action === "settle-both") {
-        const id = form.id ?? "", value = (form.value ?? "").trim();
+        const id = form.id ?? "", value = (form.value ?? "").replace(/\s+/g, " ").trim();
         const c = id.startsWith("p-") ? inboxConflict(root, id) : ownerConflict(root, id);
         if (!c) return go("/home", { err: "Nothing to settle there any more." });
         const back = `/settle/${encodeURIComponent(id)}`;

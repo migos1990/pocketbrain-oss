@@ -15,7 +15,7 @@ import { dashboardHandler } from "../src/dashboard/server";
 import { homeView, MIND_CAP } from "../src/dashboard/home";
 import { loadRules } from "../src/rules";
 import { loadBrain } from "../src/brain";
-import { APP_COPY } from "../src/dashboard/html-app";
+import { APP_COPY, moreWords } from "../src/dashboard/html-app";
 
 const H = "127.0.0.1:8797";
 async function setup(root?: string) {
@@ -35,7 +35,7 @@ test("On your mind shows six cards at most, none of them a routine last-contact 
   const face = cards(home);
   expect(MIND_CAP).toBe(6);
   expect(face.length).toBe(MIND_CAP);
-  expect(home).toMatch(new RegExp(`<a class="more" href="/home\\?all=1">\\d+ more on your mind</a>`));
+  expect(home).toMatch(new RegExp(`<a class="more" href="/home\\?all=1">(\\d+ more on your mind|${APP_COPY.moreAll})</a>`));
   expect(home).not.toContain("last in touch");
   for (const c of face) if (!/class="card told"/.test(c)) expect(c).not.toContain("/action/diary-undo");
   for (const c of face) expect(c).not.toContain("was:");
@@ -112,8 +112,8 @@ test("the typeface is the hub's own file, allowed by the page's policy", () => p
   const { res, get } = await setup();
   const home = await res("/home");
   expect(home.headers.get("content-security-policy")).toContain("font-src 'self'");
-  expect(await home.text()).toContain("url(/font/plus-jakarta-sans.woff2)");
-  const f = await res("/font/plus-jakarta-sans.woff2");
+  expect(await home.text()).toContain("url(/font/schibsted-grotesk.woff2)");
+  const f = await res("/font/schibsted-grotesk.woff2");
   expect(f.status).toBe(200);
   expect(f.headers.get("content-type")).toBe("font/woff2");
   expect(new Uint8Array(await f.arrayBuffer()).slice(0, 4)).toEqual(new TextEncoder().encode("wOF2"));
@@ -124,5 +124,12 @@ test("Ask's box sits at the bottom above the tabs, as in any chat, not under the
   const { get } = await setup();
   const ask = await get("/ask");
   expect(ask).toContain('<main class="wrap chat">');
-  expect(ask).toMatch(/<div class="pinned"><form class="box" method="post" action="\/say">/);
+  expect(ask).toMatch(/<div class="pinned"><form class="box composer" data-focus-ring method="post" action="\/say">/);
 }), 60_000);
+
+test("the link to the rest counts only a small rest: over 20 is a number nobody reads (Mac, 2026-10-31)", () => {
+  expect(moreWords(1)).toBe("1 more on your mind");
+  expect(moreWords(20)).toBe("20 more on your mind");
+  expect(moreWords(214)).toBe(APP_COPY.moreAll);
+  expect(APP_COPY.moreAll).not.toMatch(/\d/);
+});

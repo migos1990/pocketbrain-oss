@@ -1,26 +1,35 @@
 - main:
-  - paragraph: Thu 8 Oct
+  - paragraph:
+    - text: Thu 8 Oct
+    - link "Robin":
+      - /url: /who
   - heading "On your mind" [level=1]
-  - link "You and your assistants":
-    - /url: /who
-    - text: R
-  - text: Tell your memory something
-  - textbox "Tell your memory something":
-    - /placeholder: What's on your mind?
-  - button "Send"
+  - paragraph: 4 things wait for you
   - list:
     - listitem:
-      - text: "Next for Atlas launch: freeze the beta build on 15 October. Or 22 October? Two emails disagree"
+      - text: "Next for Atlas launch: freeze the beta build on"
+      - mark: 15 October
+      - text: . Or
+      - mark: 22 October
+      - text: "? Two emails disagree"
       - 'link "Settle: Next for Atlas launch: freeze the beta build on 15 October. Or 22 October?"':
         - /url: /settle/c-0001
         - text: Settle
     - listitem:
-      - text: Grace is customer success director. Or head of customer experience? Two emails disagree
+      - text: Grace is
+      - mark: customer success director
+      - text: . Or
+      - mark: head of customer experience
+      - text: "? Two emails disagree"
       - 'link "Settle: Grace is customer success director. Or head of customer experience?"':
         - /url: /settle/c-0002
         - text: Settle
     - listitem:
-      - text: "Next for Kitchen renovation: take the tile delivery on 12 October. Or 19 October? Two emails disagree"
+      - text: "Next for Kitchen renovation: take the tile delivery on"
+      - mark: 12 October
+      - text: . Or
+      - mark: 19 October
+      - text: "? Two emails disagree"
       - 'link "Settle: Next for Kitchen renovation: take the tile delivery on 12 October. Or 19 October?"':
         - /url: /settle/c-0003
         - text: Settle
@@ -40,8 +49,12 @@
       - link "Let Gemini know this?":
         - /url: /let?key=projects%2Fkitchen-renovation%23next_step&agent=gemini
         - text: G
-  - link "29 more on your mind":
+  - link "Everything else on your mind":
     - /url: /home?all=1
+  - text: Tell your memory something
+  - textbox "Tell your memory something":
+    - /placeholder: What's on your mind?
+  - button "Send"
 - navigation "Tabs":
   - link "On your mind":
     - /url: /home

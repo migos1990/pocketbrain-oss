@@ -116,13 +116,13 @@ test("G491: Who knows has one row per assistant: what it read today, what it get
   const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
   const html = await (await d.handle(new Request(`http://${H}/who`, { headers: { host: H, cookie } }))).text();
   expect(html).toContain("<h2>Your assistants</h2>");
-  expect(html).toMatch(/<b>helper<\/b>(<span class="badge">trial<\/span>)?<small>Hasn&#39;t read your brain today<\/small>/);
+  expect(html).toMatch(/<b>Helper<\/b>(<span class="badge">trial<\/span>)?<small>Hasn&#39;t read your brain today<\/small>/);
   expect(html).toContain('href="/map?as=helper"');
   expect(html).toMatch(/Sees (\d+ pages|all your pages)/);
-  expect(html).toContain("helper remembers “She&#39;s a Teaching assistant” · your brain says Course coordinator");
+  expect(html).toContain("Helper remembers “She&#39;s a Teaching assistant” · your brain says Course coordinator");
   expect(html).toContain('action="/action/fix-everywhere"');
   expect(html).toContain(`name="key" value="${JANE}"`);
   // A private fact: the row names the page only.
-  expect(html).toContain("steward has this wrong");
+  expect(html).toContain("Steward has this wrong");
   expect(html).not.toContain("Harbour");
 });

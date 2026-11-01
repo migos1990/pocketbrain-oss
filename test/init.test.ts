@@ -359,7 +359,7 @@ test("the npm package ships the tool and nothing else: no tests, evals, sample b
   expect(readFileSync(join(REPO, "src", "cli.ts"), "utf8").startsWith("#!/usr/bin/env bun")).toBe(true);
   // The owner app's typeface is the one file under its own licence (SIL OFL), shipped with it.
   for (const f of files.filter((x) => x.startsWith("src/") && !x.startsWith("src/dashboard/fonts/"))) expect(readFileSync(join(REPO, f), "utf8")).toMatch(/SPDX-License-Identifier: AGPL-3\.0-only/);
-  expect(files.filter((x) => x.startsWith("src/dashboard/fonts/")).sort()).toEqual(["src/dashboard/fonts/OFL.txt", "src/dashboard/fonts/plus-jakarta-sans-latin.woff2"]);
+  expect(files.filter((x) => x.startsWith("src/dashboard/fonts/")).sort()).toEqual(["src/dashboard/fonts/OFL.txt", "src/dashboard/fonts/schibsted-grotesk-latin.woff2"]);
   expect(readFileSync(join(REPO, "src/dashboard/fonts/OFL.txt"), "utf8")).toContain("SIL Open Font License, Version 1.1");
 });
 

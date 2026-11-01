@@ -45,7 +45,8 @@ export async function uiRig(o: { busy?: boolean; ports?: [number, number] } = {}
 
 // Dashboard pages by path. Names become screenshot file names.
 export const DASHBOARD_PAGES: [string, string][] = [
-  ["overview", "/"],
+  // Settings ("/" is the owner's home since the owner app, which has its own shots; PR #6 review).
+  ["overview", "/overview"],
   ["brain", "/brain"],
   ["brain-search", "/brain?q=Maya"],
   ["note", "/note/people/maya-chen"],
@@ -77,7 +78,7 @@ export const DASHBOARD_PAGES: [string, string][] = [
 
 // The same rig with o.busy: lists with items in them.
 export const BUSY_PAGES: [string, string][] = [
-  ["overview-busy", "/"],
+  ["overview-busy", "/overview"],
   ["agents-busy", "/agents"],
   ["agent-busy", "/agent/claude"],
   ["activity-busy", "/activity"],

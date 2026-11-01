@@ -109,7 +109,11 @@ export async function keyboard(page: any, stops = 40): Promise<string[]> {
       const el = document.activeElement as HTMLElement | null;
       if (!el || el === document.body) return { done: true };
       const cs = getComputedStyle(el);
-      const ring = (cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== "none";
+      // A field inside a box that draws the ring for it (data-focus-ring, e.g. the owner app's composer)
+      // counts when that box shows an outline while the field has focus.
+      const host = el.parentElement?.closest("[data-focus-ring]") as HTMLElement | null;
+      const hs = host && host.matches(":focus-within") ? getComputedStyle(host) : undefined;
+      const ring = (cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== "none" || (!!hs && hs.outlineStyle !== "none" && parseFloat(hs.outlineWidth) > 0);
       const b = el.getBoundingClientRect();
       return { done: false, ring, shown: b.width > 0 && b.height > 0, what: `<${el.tagName.toLowerCase()}> "${(el.textContent || el.getAttribute("aria-label") || (el as HTMLInputElement).name || "").trim().slice(0, 30)}"` };
     });

@@ -1,9 +1,9 @@
 - main:
-  - paragraph: Thu 8 Oct
+  - paragraph:
+    - text: Thu 8 Oct
+    - link "Robin":
+      - /url: /who
   - heading "Ask" [level=1]
-  - link "You and your assistants":
-    - /url: /who
-    - text: R
   - paragraph: Ask about anyone or anything in your memory, or tell it what changed. It answers here.
   - text: Tell your memory something
   - textbox "Tell your memory something":

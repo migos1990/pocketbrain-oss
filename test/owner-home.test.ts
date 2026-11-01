@@ -92,11 +92,11 @@ test("a page opens on its prose; the box there knows the page; Undo there comes 
   await login();
   const pg = await req("GET", "/p/people/jane-roy");
   expect(pg.status).toBe(200);
-  expect(pg.text).toContain("<h1>Jane Roy</h1>");
+  expect(pg.text).toContain("<h1>Jane <span>Roy</span></h1>");
   expect(pg.text).toContain("Coordinates");
   expect(pg.text).not.toContain('class="tabs"');
   const said = await req("POST", "/say", { csrf: await csrf(), q: "her role is program director", page: "people/jane-roy" });
-  expect(said.text).toContain("<h1>Jane Roy</h1>");
+  expect(said.text).toContain("<h1>Jane <span>Roy</span></h1>");
   expect(said.text).toContain("Noted: Jane Roy is program director now.");
   const token = said.text.match(/name="token" value="([0-9a-f]{16})"/)![1]!;
   const undone = await req("POST", "/action/diary-undo", { csrf: await csrf(), token, page: "people/jane-roy" });

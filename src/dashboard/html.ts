@@ -119,7 +119,7 @@ h1 .status{vertical-align:middle;margin-left:12px;font-size:17px;letter-spacing:
 .empty{color:var(--muted)}td.empty{padding:8px 0}
 .legend{display:flex;gap:4px 20px;flex-wrap:wrap;font-size:15px;line-height:24px;color:var(--text-2);margin:4px 0 12px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:1px}
 .card.chart{padding:0}.chart svg{display:block;width:100%;height:auto}.chart svg{overflow:visible}.chart text{fill:var(--muted);font-size:18px}
-.who .item{padding-bottom:28px}.who .acts{gap:4px 24px}.who .acts button{color:var(--accent);font-weight:400}.who .acts button.danger{color:var(--bad)}.who .acts button.go{font-weight:600}
+.who .item{padding-bottom:28px}.who .acts{gap:4px 24px}.who .acts button:not(.go){color:var(--accent);font-weight:400}.who .acts button.danger{color:var(--bad)}.who .acts button.go{font-weight:600}
 .who .item b{font-weight:600}.who .item.paused b{color:var(--bad)}
 details.more{margin-top:72px}details.more>summary{font-size:17px}
 summary{cursor:pointer;color:var(--text-2);font-size:15px;line-height:24px;margin:8px 0;list-style:none;display:inline-block}summary::-webkit-details-marker{display:none}summary::before{content:"";display:inline-block;width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 10px 2px 2px;transition:transform .12s}details[open]>summary::before{transform:rotate(45deg)}summary:hover{color:var(--text)}

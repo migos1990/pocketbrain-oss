@@ -12,7 +12,7 @@ import { agentLabel, cap, factName, withNames } from "./labels";
 import { fromWords, plain, differ } from "./home";
 import { displayName } from "../diary";
 import { esc, hidden, signInAgain } from "./html-home";
-import { appPage } from "./html-app";
+import { appPage, composer } from "./html-app";
 
 export const SETTLE_COPY = {
   back: "On your mind",
@@ -47,25 +47,27 @@ const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const day = (iso?: string) => iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${Number(iso.slice(8, 10))} ${MONTH[Number(iso.slice(5, 7)) - 1]}` : "";
 
+// Two inks on Settle: the question as a headline, each side between rules, the part that differs
+// under the marker ink's highlighter; the Gardener's side carries a headline-ink bar.
 const SETTLE_CSS = `
-.bar{display:flex;justify-content:space-between;align-items:center}
-.bar a{color:var(--muted);font-weight:700;display:inline-flex;align-items:center;min-height:44px}
-.bar span{font-size:13px;font-weight:600;color:var(--muted)}
-.where{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:13px;line-height:18px;font-weight:700;color:var(--accent-text)}
-.where .dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--dash)}
-.where .dot.a-work{background:var(--accent)}.where .dot.a-teaching{background:var(--t-teaching-text)}.where .dot.a-personal{background:var(--t-personal-text)}
-.ask h1{font-size:28px;line-height:34px;margin:10px 0 8px;overflow-wrap:anywhere}
-.ask .sub{margin:0 0 22px;color:var(--muted);font-size:14px;line-height:20px}
-form.pick{margin:0 0 12px}
-form.pick button{width:100%;text-align:left;font:inherit;color:var(--text);background:var(--soft);border:2px solid var(--soft);border-radius:20px;padding:16px 18px;min-height:56px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
-form.pick button b{font-size:22px;line-height:28px;font-weight:800;overflow-wrap:anywhere}
-form.pick button small{font-size:14px;line-height:20px;color:var(--muted)}
-form.pick button .whole{font-size:14px;line-height:20px;color:var(--text);background:var(--bg);border-radius:12px;padding:8px 12px;overflow-wrap:anywhere}
-form.pick button .lean{color:var(--accent-text);font-weight:600}
-form.pick.first button{background:var(--t-work);border-color:var(--accent)}form.pick.first button b{color:var(--t-work-text)}
-form.pick.both button{background:var(--bg);border:1.5px solid var(--line);flex-direction:row;justify-content:space-between;align-items:center;border-radius:16px;padding:14px 18px}
-form.pick.both button b{font-size:15px;line-height:22px;font-weight:700;color:var(--muted)}form.pick.both button small{font-size:13px}
-.tell{margin:8px 0 6px;font-size:13px;line-height:18px;font-weight:700;color:var(--muted)}
+.bar{display:flex;justify-content:space-between;align-items:center;font-size:14px;line-height:20px}
+.bar a{font-weight:700;display:inline-flex;align-items:center;min-height:44px}
+.bar span{font-size:14px;font-weight:500;color:var(--muted)}
+.where{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:14px;line-height:20px;font-weight:700}
+.where .dot{flex:none;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
+.where .dot.a-work{background:var(--headline-ink);box-shadow:none}.where .dot.a-teaching{background:var(--marker-ink);box-shadow:none}.where .dot.a-personal{background:var(--text);box-shadow:none}
+.ask h1{font-size:44px;line-height:.92;margin:10px 0 10px;max-width:none}
+.ask .sub{margin:0 0 18px;color:var(--muted);font-size:15px;line-height:20px}
+form.pick{margin:0}
+form.pick button{width:100%;text-align:left;font:inherit;color:var(--text);background:none;border:0;border-top:2px solid var(--text);border-radius:0;padding:12px 0 14px;min-height:56px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+form.pick button b{align-self:flex-start;font-size:30px;line-height:34px;font-weight:900;letter-spacing:-.03em;overflow-wrap:anywhere;background:linear-gradient(transparent 45%,color-mix(in srgb,var(--marker-ink) 55%,transparent) 45%);padding:0 2px}
+form.pick button small{font-size:13px;line-height:18px;color:var(--muted)}
+form.pick button .whole{font-size:15px;line-height:21px;color:var(--text);overflow-wrap:anywhere}
+form.pick button .lean{color:var(--text);font-weight:700}
+form.pick.first button{box-shadow:inset 6px 0 0 var(--headline-ink);padding-left:16px}
+form.pick.both button{border-bottom:2px solid var(--text);flex-direction:row;justify-content:space-between;align-items:center;gap:12px}
+form.pick.both button b{font-size:16px;line-height:22px;font-weight:800;letter-spacing:0;background:none;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}form.pick.both button small{font-size:13px;text-align:right}
+.tell{margin:14px 0 6px;font-size:13px;line-height:18px;font-weight:700;color:var(--muted)}
 `;
 
 // One short question (canvas Settle board: "When does the beta freeze?"); the sides say the values.
@@ -98,7 +100,7 @@ export function settlePage(c: SettleCase | undefined, csrf: string, rules: Rules
   const body = !c ? `<p class="quiet">${SETTLE_COPY.gone}</p>` : c.private && !o.fresh ? `${where(c, o.area)}<h1>${esc(fill(SETTLE_COPY.many, { name: displayName(c.page, c.title), attr: c.attr.replace(/_/g, " ") }))}</h1><p class="quiet">${SETTLE_COPY.shut}</p>${signInAgain(csrf)}` : `${where(c, o.area)}<h1>${esc(question(c))}</h1><p class="sub">${esc(c.held ? SETTLE_COPY.held : c.sides.length > 2 ? SETTLE_COPY.subMany : SETTLE_COPY.sub)}</p>
 ${ordered(c).map((s, i) => row(c, s, csrf, rules, i === 0 && !!s.lean)).join("")}
 <form class="pick both" method="post" action="/action/settle-both">${hidden(csrf, { id: c.id })}<button><b>${c.sides.length > 2 ? SETTLE_COPY.all : SETTLE_COPY.both}</b><small>${SETTLE_COPY.bothSmall}</small></button></form>
-<p class="tell">${SETTLE_COPY.orTell}</p><form class="box" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id })}<label class="sr" for="q">${SETTLE_COPY.box}</label><input type="text" id="q" name="value" placeholder="${SETTLE_COPY.box}" autocomplete="off" enterkeyhint="send" maxlength="500"><button>${SETTLE_COPY.send}</button></form>`;
+<p class="tell">${SETTLE_COPY.orTell}</p>${composer(csrf, { id: c.id }, SETTLE_COPY.box, { label: SETTLE_COPY.box, action: "/action/settle-pick", name: "value", send: SETTLE_COPY.send })}`;
   return appPage(SETTLE_COPY.title, "mind", `${top(o)}
 ${flash ? `<p class="bubble" role="status">${esc(flash)}</p>` : ""}<div class="ask">${body}</div>`, { css: SETTLE_CSS });
 }
