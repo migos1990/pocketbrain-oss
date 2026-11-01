@@ -40,7 +40,7 @@ test("the real script prints counts only, no page names, with --json", () => {
   const root = makeBrain();
   const r = Bun.spawnSync(["bun", "scripts/north-star.ts", "--brain", root, "--json"], { stdout: "pipe", stderr: "pipe" });
   const c = JSON.parse(r.stdout.toString().trim());
-  expect(Object.keys(c).sort()).toEqual(["asks", "asks_by_kind", "assistant_expiring", "assistant_held", "home_asks", "not_conflict", "pages", "pages_beyond_hub", "pages_ok", "pages_quoted", "pass", "share"]);
+  expect(Object.keys(c).sort()).toEqual(["asks", "asks_by_kind", "assistant_expiring", "assistant_held", "held_by_access", "home_asks", "not_conflict", "pages", "pages_beyond_hub", "pages_ok", "pages_quoted", "pass", "share"]);
   expect(r.stdout.toString()).not.toMatch(/people\/|projects\//);
   expect(codeVersion()).toMatch(/^[0-9a-f]{40}$/);
 });

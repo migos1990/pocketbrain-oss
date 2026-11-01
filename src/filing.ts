@@ -154,6 +154,12 @@ function citesOwner(pr: Proposal): boolean {
   return /owner_message_registered/.test(pr.reason) || isOwnerConfirmed(r.verification) || refs.some((x) => isExactLouisRef(x) || SCHEMES[schemeOf(x) ?? ""] === "louis");
 }
 
+// The write path's whole reason for a write its assistant can't see all of (write.ts, invariant 3),
+// matched end to end: a reason carrying assistant or sender text (an area name, a quoted value)
+// can't say it (G598 slice audit F1). Ids and attributes are schema-checked, so no space or bracket.
+export const heldByAccess = (reason: unknown) => /^the owner decides [^\s()#]+#[^\s()#]+ \(not_in_your_view\)$/.test(String(reason ?? ""));
+// Owner-facing only: never shown to the assistant, which got the write path's one fixed reply.
+const NOT_IN_VIEW = "The assistant can't see all of that page, so only you decide it.";
 function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[] }, now: Date): Verdict {
   const a = p.auto_decide;
   if (NEVER[it.kind]) return { never: NEVER[it.kind] };
@@ -168,6 +174,10 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // (outside review v5, midday: 4 of the Gardener's sat as asks with no way out). Set aside at
     // once, with a diary line and Undo; the assistant can raise it again.
     if (pr && !isOwnerId(pr.by) && !captured(root, pr.file) && (pr.request.attribute === "open_question" || pr.request.retract)) return filed(setAside(root, it, pr, now));
+    // The write handed this one to the owner because the assistant can't see all of the page or
+    // the fact (invariant 3, "not_in_your_view"). The hub's yes is weighed as that assistant's write
+    // again and hands back the same proposal, so a plan to save it failed every minute (G598).
+    if (pr && heldByAccess(pr.reason)) return { never: NOT_IN_VIEW };
     if (pr && (pr.by === captureAgent(rulesOf(root)) || isOwnerId(pr.by)) && captured(root, pr.file)) return filed(fileVerdict(root, it, pr, ctx.notes, now));
     // An assistant's proposal that says it is the owner's word waits for the owner, whatever tier
     // the assistant is: once the hold on core assistants' proposals ended (2026-10-30) a forged

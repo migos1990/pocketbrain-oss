@@ -19,6 +19,11 @@
 //   assistant_held a core assistant's own proposals held until a day (src/filing.ts
 //                  the owner's hold_assistants_until), when they file; and assistant_expiring, an outside
 //                  assistant's that expire unconfirmed. Queues with a day, not asks: printed apart
+//   held_by_access an assistant's write the write path held for the owner because that assistant
+//                  can't see all of the page (invariant 3, "not_in_your_view") and that contradicts
+//                  nothing the page holds (no differing live value): the access rule working, not a
+//                  filing failure. Waits on Settings, never the home; not an ask (G598). One whose
+//                  value differs is a conflict the home lists, so it counts as an ask about one.
 //   bun scripts/north-star.ts                  replay a fixed week on the shipped default rules
 //   bun scripts/north-star.ts --file-all       the same week with auto_decide file: all on, to compare
 //   bun scripts/north-star.ts --brain <path>   the same two numbers for a real brain (read-only, counts only;
@@ -42,12 +47,13 @@ import { loadBrain, linksIn, slugify, isDisputed, isList, CONTENT_DIRS, type Not
 import { footnotes, refsIn, MADE } from "../src/wiki";
 import { makeModel, type ModelRequest } from "../src/model";
 import { pullSource } from "../src/pull";
-import { autoSaves, runAuto, newQueues } from "../src/filing";
+import { autoSaves, runAuto, newQueues, heldByAccess } from "../src/filing";
 import { openItems } from "../src/textline/items";
 import { heldCount } from "../src/capture";
 import { loadRules, isGardener } from "../src/rules";
 import { ownerSay } from "../src/owner-say";
 import { ownerConflicts } from "../src/core";
+import { inboxConflicts } from "../src/settle-inbox";
 import { loadState, type State } from "../src/dashboard/data";
 import { ownerPage } from "../src/dashboard/html-page";
 import YAML from "yaml";
@@ -58,7 +64,7 @@ const DECISIONS = new Set(["dispute", "proposal", "held-answer"]);
 const OTHER_ASKS = new Set(["mail", "capture", "upkeep", "rules", "usage"]);
 
 export interface WhyCounts { commits: number; with_why: number; gardener: number; gardener_why: number }
-export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean }
+export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean }
 export const BAR = { share: 0.8 };
 
 // ---------- the two numbers, from any brain ----------
@@ -111,6 +117,10 @@ function askedKey(root: string, i: { kind: string; ref: string }): string {
   return i.ref;
 }
 
+function notInView(root: string, file: string): boolean {
+  try { return heldByAccess((YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { reason?: unknown }).reason); } catch { return false; }
+}
+
 function changesHeld(root: string, file: string): boolean {
   try { return /\bchanges \S+ from\b/.test(String((YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { reason?: unknown }).reason ?? "")); } catch { return false; }
 }
@@ -151,13 +161,21 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   const items = openItems(root, later);
   const queues = newQueues();
   const saves = autoSaves(root, now, undefined, queues); // at the end of the week: a save that keeps failing is an ask, not a plan
-  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref))));
+  // A proposal the home lists as a conflict (its value differs from the fact's live value) is one
+  // too, whatever its reason says: the write's hidden-fact handback reads "(not_in_your_view)" (G598).
+  const homeConflicts = new Set(inboxConflicts(root).map((c) => c.file));
+  // A handback the write held because its assistant can't see all of the page (invariant 3) that
+  // contradicts nothing: the access rule working, not a filing failure. It waits on Settings, never
+  // on the home; counted on its own line, never an ask (coordinator, 2026-11-01; G598).
+  const byAccess = new Set(items.filter((i) => i.kind === "proposal" && !homeConflicts.has(i.ref) && !changesHeld(root, i.ref) && notInView(root, i.ref)).map((i) => i.ref));
+  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref) || byAccess.has(i.ref))));
   const by: Record<string, number> = {};
   for (const i of waiting) by[i.kind] = (by[i.kind] ?? 0) + 1;
   const asked = waiting.map((i) => askedKey(root, i));
   // Asks that aren't about a contradiction: a proposal counts as one only when it changes a value
-  // the brain holds (its reason says "changes <attribute> from"); every other card kind doesn't.
-  const changes = waiting.filter((i) => i.kind === "dispute" || (i.kind === "proposal" && changesHeld(root, i.ref))).length;
+  // the brain holds (its reason says "changes <attribute> from", or the home lists it as a
+  // conflict); every other card kind doesn't.
+  const changes = waiting.filter((i) => i.kind === "dispute" || (i.kind === "proposal" && (changesHeld(root, i.ref) || homeConflicts.has(i.ref)))).length;
   for (const i of items) if (OTHER_ASKS.has(i.kind)) by[i.kind] = (by[i.kind] ?? 0) + 1;
   // An assistant's own proposals: held until their day, or left to expire (outside review v5,
   // midday: a label with no date left 6 as asks forever). Queues, so never in asks; their own line.
@@ -172,7 +190,7 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   const home_asked = ownerConflicts(root, later, { held: true }).map((c) => `${c.page}#${c.attr}`);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
-  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, home_asks: home_asked.length, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
+  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: byAccess.size, home_asks: home_asked.length, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
 }
 
 // ---------- the fixed week ----------
@@ -313,7 +331,7 @@ export async function replay(o: { fileAll?: boolean } = {}): Promise<NorthStar> 
   }
 }
 
-export const counts = (m: NorthStar) => ({ pass: m.pass, asks: m.asks, asks_by_kind: m.asks_by_kind, not_conflict: m.not_conflict, assistant_held: m.assistant_held, assistant_expiring: m.assistant_expiring, home_asks: m.home_asks, pages: m.pages, pages_ok: m.pages_ok, share: Math.round(m.share * 100) / 100, pages_beyond_hub: m.pages_beyond_hub, pages_quoted: m.pages_quoted });
+export const counts = (m: NorthStar) => ({ pass: m.pass, asks: m.asks, asks_by_kind: m.asks_by_kind, not_conflict: m.not_conflict, assistant_held: m.assistant_held, assistant_expiring: m.assistant_expiring, held_by_access: m.held_by_access, home_asks: m.home_asks, pages: m.pages, pages_ok: m.pages_ok, share: Math.round(m.share * 100) / 100, pages_beyond_hub: m.pages_beyond_hub, pages_quoted: m.pages_quoted });
 
 export function report(m: NorthStar, label: string): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -323,6 +341,7 @@ export function report(m: NorthStar, label: string): string {
     `  asks: ${m.asks}${m.planted ? ` (want exactly ${m.planted}, the planted contradictions)` : ""}${kinds ? `: ${kinds}` : ""}`,
     `  asks the home screen lists: ${m.home_asks}${m.asks > m.home_asks ? ` (${m.asks - m.home_asks} wait on Settings)` : ""}`,
     `  held until your hold on assistants' proposals ends: ${m.assistant_held} assistant proposal(s); ${m.assistant_expiring} more expire unconfirmed (not asks)`,
+    `  held by access: ${m.held_by_access} assistant proposal(s) on a page that assistant can't fully see, contradicting nothing; they wait on Settings (not asks)`,
     `  pages touched: ${m.pages}; with cited prose, an inbound link and more than the hub's own text: ${m.pages_ok} (${pct(m.share)}, want >= ${pct(BAR.share)}); cited prose ${m.prose}, inbound link ${m.inbound}`,
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,
     ...(m.why ? [`  commits: ${m.why.commits}, ${m.why.with_why} saying why; the Gardener's: ${m.why.gardener}, ${m.why.gardener_why} saying why (reported, not in pass)`] : []),

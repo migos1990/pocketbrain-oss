@@ -159,7 +159,7 @@ and turn changes and new facts into proposals naming the old value. With `auto_d
 (the default, docs/filing.md) a core assistant's or the owner's new facts then file themselves on
 the hub's tick, each with Undo, and a value that differs from one the brain holds opens as a
 conflict on the settle screen; a trial assistant's are proposals that expire after `proposal_days`
-unanswered, and the import says so. When the hub files one, it saves the fact as that assistant's own write: its carve applies, and its ref is kept as `agent:<agent>/capture/<id>`, so it ranks as the assistant's word and never as a document (G587). With no key for the capture step every file is still stored,
+unanswered, and the import says so. When the hub files one, it saves the fact as that assistant's own write: its carve applies, and its ref is kept as `agent:<agent>/capture/<id>`, so it ranks as the assistant's word and never as a document (G587). A page whose id names an assistant (an org page you made) takes an import like any page that assistant can see; only a new id naming one is refused (G598). With no key for the capture step every file is still stored,
 and the hub's capture pass reads them once it has one.
 
 Most of what a vendor remembers is prose: how the owner likes answers, what to avoid, when to reach

@@ -378,7 +378,13 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // any attribute's name (audit v7, G554: the same order under notes or working_style was served).
   if (!isOwnerId(opts.acceptedBy) && !req.retract && speaksToReader(req.attribute, req.value))
     fails.push({ check: "injection_shapes", outcome: "inbox", reason: `the ${isPreference(req.attribute) ? "preference" : "value"} tells the assistant reading it what to do`, fix: "a fact says how things are; the owner reviews this one" });
-  const refusals = fails.filter((f) => f.outcome === "refuse");
+  // An id naming an assistant is refused for a new note only (G598): a note the writer sees by that
+  // id (an org page the owner made) takes the write. Weighed once the notes are loaded below, before
+  // any inbox return, and a hidden one counts as missing, so it answers exactly like a new id
+  // (invariant 3; G598 slice audit F2: a new one tripping an inbox check became an ask the owner
+  // could only reject, which the hub retried every minute).
+  const agentInId = fails.find((f) => f.check === "no_agent_in_ids");
+  const refusals = fails.filter((f) => f.outcome === "refuse" && f !== agentInId);
   const editor = rules.policy.owner_editor === req.agent;
   const done = (r: WriteResult) => {
     // A relayed owner id whose registry commit didn't go through is taken out again unless this
@@ -414,6 +420,11 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     return records(f).some((r) => !r.valid_to && compareKey(r.value) === compareKey(req.value));
   };
   const rest = () => !findInjection(`${req.text ?? ""}\n${req.title ?? ""}\n${(req.sources ?? []).map(refString).join("\n")}`);
+  if (agentInId) {
+    const n = notes.find((x) => x.fm.id === req.id);
+    const sees = !!n && ((!!opts.acceptedBy && !hubYes) || !!rules.policy.agents[req.agent]?.inside_wall || carve(notes, rules, grantFor(rules, req.agent), { flags: false }).visible.has(n.fm.id));
+    if (!sees) return done({ outcome: "refused", message: `${agentInId.check}: ${agentInId.reason}. Fix: ${agentInId.fix}`, fails: [agentInId] });
+  }
   const toInbox = fails.filter((f) => f.outcome === "inbox" && !(f.check === "injection_shapes" && rest() && stored()));
   if (toInbox.length) return done(propose(root, req, toInbox.map((f) => `${f.check}: ${f.reason}`).join("; "), toInbox));
 

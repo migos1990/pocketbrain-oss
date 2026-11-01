@@ -561,3 +561,18 @@ test("contract write: an assistant's imported newer version never replaces an ex
   runAuto(root, new Date(Date.now() + 40 * 86_400_000));
   expect(JSON.stringify(fact(root, "projects/course-a", "version"))).toMatch(/"contested":"c-|"candidates"/);
 });
+
+// G598: no_agent_in_ids is weighed once the note is resolved, so a note the writer sees by an id
+// naming an assistant takes the write, and one hidden from it answers exactly like a new id.
+test("contract write: an id naming an assistant answers the same for a hidden note and a missing one (G598)", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { git } = await import("../../src/git");
+  const root = makeBrain();
+  mkdirSync(join(root, "projects"), { recursive: true });
+  writeFileSync(join(root, "projects/claude-club.md"), "---\nid: projects/claude-club\ntype: project\ntitle: Claude Club\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: owner\nfacts: {}\n---\nx\n");
+  git(root, ["add", "projects/claude-club.md"]); git(root, ["commit", "-q", "-m", "owner: a page"]);
+  const req = (id: string) => ({ agent: "planner", kind: "fact", id, attribute: "next_step", value: "Book a room", as_of: "2026-10-05", sources: ["agent:planner"] }) as WriteRequest;
+  const hidden = write(root, req("projects/claude-club")), missing = write(root, req("projects/claude-guild"));
+  expect(hidden.outcome).toBe(missing.outcome);
+  expect(hidden.message!.replace("claude-club", "X")).toBe(missing.message!.replace("claude-guild", "X"));
+});
