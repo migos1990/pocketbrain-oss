@@ -9,12 +9,22 @@ pocketBrain is one process, `pocketbrain start`, next to a folder of Markdown fi
 | **A process that stays up** while your assistants use the brain | It answers them and runs the nightly tidy pass | Apps on the same computer still work whenever it's awake. A missed nightly pass runs at the next start or wake. |
 | **The brain folder and its git history** on a disk you trust | That's the brain | Back it up: `pocketbrain backup --init` |
 | **A private keys folder**, `~/.config/pocketbrain/keys/` (moved with `PB_CONFIG_DIR`) | Model and source keys, one file each, never in the brain | Only needed once you add a model or a source |
+| **A private agent-keys folder**, `~/.config/pocketbrain/agent-keys/` | The key of each app on this computer, for its bridge ([below](#keys-at-rest)) | Only for apps connected with `--kind` |
 | **Loopback only** for the dashboard, port 8788 | It's yours alone; it refuses to answer on anything but 127.0.0.1 | Open it on the same machine, or see [dashboard-tailnet.md](dashboard-tailnet.md) |
 | **A fixed public https address** for the agent port, 8787 | Only for assistants in the cloud | Apps on the same computer use `http://127.0.0.1:8787` |
 
 The public address must forward only the agent paths and nothing else. `pocketbrain hub tunnel-config` prints the exact list; today it is `/mcp`, `/mcp/oauth`, `/v1/…`, `/b`, `/health`, `/openapi.json` and `/.well-known/oauth-protected-resource/mcp/oauth`. Anything else should answer 404. Never forward the dashboard's port.
 
 Once the address works, record it so `connect` and `add` print it: `pocketbrain hub url https://<your address>`, then `pocketbrain doctor` checks it from outside.
+
+## Keys at rest
+
+pocketBrain keeps only a hash of each assistant's key in the brain (`rules/tokens.yaml`), with one exception. An app on this computer connected with `pocketbrain add <app> --kind <app>` gets its key saved in `~/.config/pocketbrain/agent-keys/<app>`, so the app's own config holds only the command `pocketbrain mcp --agent <app>` and never the key. That file is a real key, stored in plain text:
+
+- the folder is created readable by you alone (0700) and the file too (0600). The bridge refuses a file anyone else can read;
+- any program running as you can read it, the same as a key pasted into the app's config. Don't sync or back up `~/.config/pocketbrain/agent-keys/` to a shared place;
+- the bridge sends it only to the hub on this computer (`127.0.0.1`, `::1` or `localhost`), and refuses any other address, so editing an app's config can't send the key elsewhere;
+- `pocketbrain token --revoke <app>`, or **Revoke** on the dashboard, cuts the app off and deletes the file. `pocketbrain uninstall --yes` removes the whole folder.
 
 ## A laptop that sleeps
 

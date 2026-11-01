@@ -657,3 +657,13 @@ test("contract write: a request's line breaks never reach the commit message", a
   expect(bodies.length).toBeGreaterThan(0);
   for (const m of bodies) expect(m).not.toMatch(/^(This reverts commit|Run:|Kind:)/m);
 });
+
+// G617: a merged page stands for its kept page when resolving a name, and a pointer whose kept
+// page isn't among the notes given (hidden from the writer) matches nothing, like a missing page.
+test("contract write: a merged page's name never resolves to a page outside the notes given (G617)", async () => {
+  const { resolveEntity } = await import("../../src/write");
+  const pointer = { path: "people/sam-ortiz.md", body: "", fm: { id: "people/sam-ortiz", type: "person", title: "Sam Ortiz", status: "merged", merged_into: "people/samuel-ortiz" } } as never;
+  expect(resolveEntity([pointer], "person", "Sam Ortiz")).toEqual({});
+  const kept = { path: "people/samuel-ortiz.md", body: "", fm: { id: "people/samuel-ortiz", type: "person", title: "Samuel Ortiz" } } as never;
+  expect(resolveEntity([pointer, kept], "person", "Sam Ortiz")).toEqual({ id: "people/samuel-ortiz" });
+});

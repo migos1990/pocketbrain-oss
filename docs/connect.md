@@ -11,26 +11,32 @@ Pick the app you use. Apps that run on your own computer connect in about two mi
 | VS Code (Copilot chat) | your computer | 2 minutes | [vscode.md](connect/vscode.md) |
 | Codex CLI | your computer | 2 minutes | [codex.md](connect/codex.md) |
 | Gemini CLI | your computer | 2 minutes | [gemini-cli.md](connect/gemini-cli.md) |
-| Claude Desktop | your computer | 3 minutes, needs Node.js | [claude-desktop.md](connect/claude-desktop.md) |
-| Any other app with MCP and a header field | your computer | 2 minutes | [other-mcp.md](connect/other-mcp.md) |
+| Claude Desktop | your computer | 2 minutes | [claude-desktop.md](connect/claude-desktop.md) |
+| Any other MCP app | your computer | 2 minutes | [other-mcp.md](connect/other-mcp.md) |
 | Claude on the web or phone | the cloud | an evening, see the page | [claude-web.md](connect/claude-web.md) |
 | ChatGPT | the cloud | not yet, see the page | [chatgpt.md](connect/chatgpt.md) |
 
 Every page has the same four parts: what you need, the command, how to check it worked, and how to undo it.
 
-## The same three steps for every app on your computer
+## One command for every app on your computer
 
 1. Your brain is running: `pocketbrain start` in a terminal window you leave open ([quickstart.md](quickstart.md)).
-2. Give the app its own name and key:
+2. Connect the app:
 
    ```sh
-   pocketbrain add cursor --slices area:work,contacts-basic --door mcp --yes
+   pocketbrain add cursor --kind cursor --write --yes
    ```
 
-   Use the app's name in place of `cursor`. It starts as a **trial** assistant: it sees your work notes and the names and roles of your contacts, never your money or anything private, and what it saves waits for your OK on the dashboard. The command prints the address (`http://127.0.0.1:8787/mcp`), a key starting `pb_cursor_`, and a short instruction block. The key is shown once, so keep it in your password manager.
-3. Put the address and key into the app, the way its page says, and paste the instruction block into the app's own custom instructions, so it checks the brain without being asked.
+   Use your app's kind in place of `cursor`: `cursor`, `vscode`, `codex`, `gemini`, `claude-desktop`, `claude-code`, or `mcp` for any other. The app starts as a **trial** assistant: it sees your work notes and the names and roles of your contacts, never your money or anything private, and what it saves waits for your OK on the dashboard. `--write` puts a `pocketbrain` entry into the app's own config file, after a backup of that file, changing nothing else in it; without `--write` it prints the entry for you to paste.
+3. Restart the app, and paste the instruction block the command printed where its page says, so it checks the brain without being asked.
 
-Lost the key? `pocketbrain connect cursor` prints a new one (the old one keeps working until you revoke it). Done with an app? `pocketbrain token --revoke cursor` cuts it off at once.
+The app's config holds a command, `pocketbrain mcp --agent cursor`, and never a key. The key stays in a file of its own, readable only by you ([hosting.md](hosting.md#keys-at-rest)).
+
+Done with an app, or think its key leaked? One command cuts it off at once and deletes its key file:
+
+```sh
+pocketbrain token --revoke cursor
+```
 
 ## Try it
 

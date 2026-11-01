@@ -21,6 +21,7 @@ const init = has("init.ts") ? await import(join(SRC, "init.ts")) : undefined;
 const invite = has("invite.ts") ? await import(join(SRC, "invite.ts")) : undefined;
 const auth = add ? await import(join(SRC, "auth.ts")) : undefined;
 const core = add ? await import(join(SRC, "core.ts")) : undefined;
+const apps = has("local-apps.ts") ? await import(join(SRC, "local-apps.ts")) : undefined;
 const fake = add && existsSync(join(SRC, "..", "test", "fake-as.ts")) ? await import(join(SRC, "..", "test", "fake-as.ts")) : undefined;
 
 const steps = (xs: [string, boolean][]): Result => {
@@ -53,6 +54,39 @@ export async function door(run: (d: { root: string; as: any; signIn: () => Promi
 }
 
 export const onboardingCases: Case[] = [
+  // The stdio bridge for apps on the owner's computer (src/local-apps.ts, docs/hosting.md#keys-at-rest).
+  { id: "rt-onboard-bridge-loopback-only", dimension: "e2e", kind: "attack", title: "the app bridge never sends an agent's key to an address off this machine, however the app's config spells it", source: "synthetic", run: async () => {
+    if (!apps || !auth) return na("no local-app bridge at this commit");
+    const root = sandbox();
+    add.addAgent(root, { agent: "newbot", slices: ["area:work"] });
+    const keyDir = mkdtempSync(join(tmpdir(), "pb-eval-keys-"));
+    const was = process.env.PB_CONFIG_DIR; process.env.PB_CONFIG_DIR = keyDir;
+    try {
+      apps.saveAgentKey("newbot", auth.issueToken(root, "newbot"));
+      const out: [string, boolean][] = [];
+      for (const url of ["https://evil.example", "http://127.0.0.1.evil.example", "http://localhost@evil.example", "http://[::ffff:7f00:1]:8787", "http://0.0.0.0:8787", "file:///etc/passwd"]) {
+        let sent = 0;
+        const code = await apps.bridge({ agent: "newbot", url, lines: (async function* () { yield JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }); })(), write: () => {}, err: () => {}, fetch: (async () => { sent++; return new Response("{}"); }) as unknown as typeof fetch });
+        out.push([`${url} refused, nothing sent`, code === 2 && sent === 0]);
+      }
+      return steps(out);
+    } finally { if (was === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = was; }
+  } },
+  { id: "rt-onboard-bridge-key-revoked", dimension: "e2e", kind: "attack", title: "revoking an app deletes the key the bridge kept, and a copy of it opens nothing", source: "synthetic", run: async () => {
+    if (!apps || !auth) return na("no local-app bridge at this commit");
+    const root = sandbox();
+    add.addAgent(root, { agent: "newbot", slices: ["area:work"] });
+    const keyDir = mkdtempSync(join(tmpdir(), "pb-eval-keys-"));
+    const was = process.env.PB_CONFIG_DIR; process.env.PB_CONFIG_DIR = keyDir;
+    try {
+      const tok = auth.issueToken(root, "newbot");
+      const file = apps.saveAgentKey("newbot", tok);
+      auth.revokeTokens(root, "newbot");
+      const dropped = apps.dropAgentKey("newbot");
+      const r = await server.handle(root, new Request(BASE + "/mcp", { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
+      return steps([["file deleted", dropped && !existsSync(file)], [`old key refused (${r.status})`, r.status === 401 || r.status === 403]]);
+    } finally { if (was === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = was; }
+  } },
   { id: "rt-onboard-no-everything", dimension: "carving", kind: "attack", title: "a new agent can't be given the all slice, an unknown slice or no slice", source: "synthetic", run: async () => {
     if (!add) return na("no add-agent at this commit");
     const root = sandbox();

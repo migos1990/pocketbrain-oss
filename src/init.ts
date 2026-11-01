@@ -28,9 +28,16 @@ import { OWNER, OWNER_CONFIRMED, ownerRef as ownerRefOf } from "./owner";
 export const DEFAULT_AGENT = "assistant";
 // The assistant kinds init can set up (row 388), each with the name its first agent gets; the doors
 // are `add --kind`'s (src/cli.ts KINDS, docs/add-an-agent.md#one-command-per-kind).
-export const AGENT_KINDS = ["claude-code", "claude-ai", "town", "browser"] as const;
+// The apps on this computer come first (docs/connect.md): they need no public address.
+export const AGENT_KINDS = ["claude-code", "cursor", "vscode", "codex", "gemini", "claude-desktop", "mcp", "claude-ai", "town", "browser"] as const;
 export type AgentKind = typeof AGENT_KINDS[number];
-export const KIND_NAME: Record<AgentKind, string> = { "claude-code": "claude", "claude-ai": "claude", town: "town", browser: "browser" };
+export const KIND_NAME: Record<AgentKind, string> = { "claude-code": "claude", cursor: "cursor", vscode: "vscode", codex: "codex", gemini: "gemini", "claude-desktop": "claude-desktop", mcp: "assistant", "claude-ai": "claude", town: "town", browser: "browser" };
+const KIND_MENU: Record<AgentKind, string> = {
+  "claude-code": "Claude Code", cursor: "Cursor", vscode: "VS Code (Copilot chat)", codex: "Codex CLI", gemini: "Gemini CLI",
+  "claude-desktop": "Claude Desktop", mcp: "another MCP app on this computer",
+  "claude-ai": "Claude on the web or phone (needs a public address and a sign-in service)",
+  town: "a cloud assistant with an MCP header field (needs a public address)", browser: "an assistant that only browses (needs a public address)",
+};
 export const DEFAULT_AREAS = ["work", "personal"];
 const MONEY_WORDS = ["bank", "salary", "credit card", "mortgage", "loan", "investment", "pension", "RRSP", "TFSA", "401k", "IRA", "brokerage", "tax return"];
 const FREE_MAIL = /^(gmail|googlemail|outlook|hotmail|live|msn|yahoo|ymail|icloud|me|mac|aol|gmx|proton|protonmail|pm|zoho|fastmail|hey|mail|yandex|qq|163|videotron|sympatico|bell|rogers|shaw|telus|comcast|verizon|att|orange|free|wanadoo|laposte|sfr|web|t-online)\./i;
@@ -742,12 +749,16 @@ export function interview(ask: (q: string) => string | null | undefined, say: (s
   let owner = "";
   for (let i = 0; i < 3 && !owner; i++) owner = a("Your first name (how your assistants will refer to you):");
   if (!owner) throw new InitError("the interview needs your name");
-  const fallback: AgentKind = o.claudeCode ? "claude-code" : "claude-ai";
+  // Without Claude Code here, Enter takes "another MCP app on this computer": it works with no
+  // public address, where a cloud kind would stop at the address (docs/connect.md).
+  const fallback: AgentKind = o.claudeCode ? "claude-code" : "mcp";
   let kind: AgentKind | undefined;
+  say(`Which assistant will use your brain first?\n${AGENT_KINDS.map((k, i) => `  ${String(i + 1).padStart(2)}  ${k.padEnd(15)}${KIND_MENU[k]}`).join("\n")}`);
   for (let i = 0; i < 3 && !kind; i++) {
-    const k = a(`Which assistant will use your brain first? ${AGENT_KINDS.slice(0, -1).join(", ")} or ${AGENT_KINDS.at(-1)} [${fallback}]:`).toLowerCase() || fallback;
-    if ((AGENT_KINDS as readonly string[]).includes(k)) kind = k as AgentKind;
-    else say(`pocketBrain sets up ${AGENT_KINDS.join(", ")}. Another assistant: pick the closest, and add it later with pocketbrain add <name>.`);
+    const k = a(`Its number or name [${fallback}]:`).toLowerCase() || fallback;
+    const n = /^\d+$/.test(k) ? AGENT_KINDS[Number(k) - 1] : k;
+    if (n && (AGENT_KINDS as readonly string[]).includes(n)) kind = n as AgentKind;
+    else say(`Type a number from 1 to ${AGENT_KINDS.length}, or a name from the list. Not listed? Pick ${AGENT_KINDS.indexOf("mcp") + 1} (another MCP app), or add it later with pocketbrain add <name>.`);
   }
   kind ??= fallback;
   const agent = a(`A short name for it [${KIND_NAME[kind]}]:`).toLowerCase() || KIND_NAME[kind];

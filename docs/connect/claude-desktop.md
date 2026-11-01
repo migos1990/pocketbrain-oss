@@ -1,41 +1,35 @@
 # Connect Claude Desktop
 
-**You need:** the Claude Desktop app, [Node.js](https://nodejs.org) (for `npx`), and your brain running (`pocketbrain start`).
+**You need:** Claude Desktop, and your brain running (`pocketbrain start`).
 
-Claude Desktop's **Connectors** settings reach servers on the internet with a sign-in, like Claude on the web ([claude-web.md](claude-web.md)). To reach the brain on your own computer instead, its config file starts a small bridge, `mcp-remote`, that forwards to the local address with your key.
+Claude Desktop's **Connectors** settings reach servers on the internet with a sign-in, like Claude on the web ([claude-web.md](claude-web.md)). The config file used here is the other way in: it starts a program on your computer, and that program is pocketBrain's bridge to your brain.
 
-_Config format checked against the mcp-remote documentation on 2026-11-01. The pocketBrain side is tested; the Claude Desktop side hasn't been run end to end here yet._
+_The config format was checked against Claude Desktop's own documentation on 2026-11-01, and pocketBrain's side is tested. Claude Desktop itself hasn't been run against it end to end yet._
 
 ## The command
 
 ```sh
-pocketbrain add claude-desktop --slices area:work,contacts-basic --door mcp --yes
+pocketbrain add claude-desktop --kind claude-desktop --write --yes
 ```
 
-It prints a key starting `pb_claude-desktop_` and an instruction block.
+It makes `claude-desktop` a **trial** assistant: it sees your work notes and the names and roles of your contacts, never your money or anything private, and what it saves waits for your OK. Then it puts a `pocketbrain` entry into `claude_desktop_config.json` (on a Mac in `~/Library/Application Support/Claude/`; **Settings → Developer → Edit Config** opens it), after a copy of the file as it was (`….pocketbrain-backup-<time>` beside it). Only that entry changes, and a file it can't read is left alone.
 
-## Put it into Claude Desktop
+The entry starts `pocketbrain mcp --agent claude-desktop`, a small bridge to the brain on this computer. The entry holds no key. The key stays in its own file, `~/.config/pocketbrain/agent-keys/claude-desktop`, readable only by you, and the bridge only ever talks to this computer ([hosting.md](../hosting.md#keys-at-rest)).
 
-**Settings → Developer → Edit Config** opens `claude_desktop_config.json`. Add:
+Rather edit the file yourself? Leave out `--write`: it prints the entry to paste instead.
 
-```json
-{
-  "mcpServers": {
-    "pocketbrain": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "http://127.0.0.1:8787/mcp", "--allow-http", "--header", "Authorization:${POCKETBRAIN_AUTH}"],
-      "env": { "POCKETBRAIN_AUTH": "Bearer pb_claude-desktop_…" }
-    }
-  }
-}
-```
+If Claude Desktop was your first assistant, `pocketbrain init --kind claude-desktop --write` does the same when it creates your brain.
 
-Write `Authorization:${POCKETBRAIN_AUTH}` with no space after the colon (some versions of the app break arguments at spaces), and keep the space inside `POCKETBRAIN_AUTH`. `--allow-http` is fine here because the address never leaves your computer. Quit and reopen the app. Paste the instruction block into **Settings → Profile**, in the box for personal preferences.
+Quit Claude Desktop and open it again. Then paste the instruction block the command printed into **Settings → Profile**, the box for personal preferences, so it checks the brain without being asked.
 
 ## Check it worked
 
-The tools menu in a new chat lists `pocketbrain`. Ask: *"Use pocketbrain: what are my projects?"*
+The tools menu in a new chat lists `pocketbrain`. Ask it: *"Use pocketbrain: what are my projects?"*
 
 ## Undo
 
-Remove the `pocketbrain` entry from the config and the pasted preferences, then `pocketbrain token --revoke claude-desktop`.
+```sh
+pocketbrain token --revoke claude-desktop
+```
+
+That cuts claude-desktop off at once and deletes its key file. Then remove the `pocketbrain` entry from `claude_desktop_config.json` and the preferences you pasted.

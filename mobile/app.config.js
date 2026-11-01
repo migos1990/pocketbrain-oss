@@ -16,6 +16,9 @@ module.exports = {
     orientation: "portrait",
     userInterfaceStyle: "light",
     backgroundColor: "#EEEDE8",
+    // The logo with the film's eyes on Night (docs/phone-app.md, The icon); made by scripts/phone-icons.ts.
+    icon: "./assets/icon.png",
+    splash: { image: "./assets/splash-icon.png", resizeMode: "contain", backgroundColor: "#121212" },
     ios: {
       bundleIdentifier: ENV.id,
       supportsTablet: false,
@@ -24,7 +27,7 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
       },
     },
-    android: { package: ENV.id, allowBackup: false },
+    android: { package: ENV.id, allowBackup: false, adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", backgroundColor: "#121212" } },
     plugins: ["expo-secure-store", ["expo-local-authentication", { faceIDPermission: "Face ID unlocks the key that signs you in to your brain." }]],
     extra: { appEnv: APP_ENV },
   },

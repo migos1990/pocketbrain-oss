@@ -278,7 +278,7 @@ test("text format: area and private tags, next steps, dated decisions", () => {
 test("interview answers turn into the plain text format", () => {
   const answers = ["Ana", "", "Helper", "Nurse", "Bo Li: charge nurse at City Hospital", "", "", "", "", "", "", "", "", "", ""];
   const iv = interview(() => answers.shift() ?? null);
-  expect(iv).toMatchObject({ owner: "Ana", kind: "claude-ai", agent: "helper", mbox: [], ics: [] });
+  expect(iv).toMatchObject({ owner: "Ana", kind: "mcp", agent: "helper", mbox: [], ics: [] });
   expect(iv.text).toContain("# About my work (work)\nNurse");
   expect(iv.text).toContain("# People (work)\n- Bo Li: charge nurse at City Hospital");
 });
@@ -478,14 +478,17 @@ test("with Claude Code installed, init's connect step is one command that also w
 test("the interview asks which assistant first and names it after that kind; Enter takes Claude Code when it's installed", () => {
   const ask = (answers: string[], o?: { claudeCode?: boolean }) => { const q: string[] = []; const iv = interview((x) => { q.push(x); return answers.shift() ?? null; }, () => {}, o); return { iv, q }; };
   const a = ask(["Ana", "", "", ""], { claudeCode: true });
-  expect(a.q[1]).toBe("Which assistant will use your brain first? claude-code, claude-ai, town or browser [claude-code]:");
+  expect(a.q[1]).toBe("Its number or name [claude-code]:");
   expect(a.q[2]).toBe("A short name for it [claude]:");
   expect(a.iv).toMatchObject({ kind: "claude-code", agent: "claude" });
-  expect(ask(["Ana", "", ""], { claudeCode: false }).iv).toMatchObject({ kind: "claude-ai", agent: "claude" });
+  // Without Claude Code, Enter takes an MCP app on this computer: no public address needed.
+  expect(ask(["Ana", "", ""], { claudeCode: false }).iv).toMatchObject({ kind: "mcp", agent: "assistant" });
+  // The menu's number works as well as the name.
+  expect(ask(["Ana", "2", ""]).iv).toMatchObject({ kind: "cursor", agent: "cursor" });
   expect(ask(["Ana", "browser", ""]).iv).toMatchObject({ kind: "browser", agent: "browser" });
   // A word it doesn't know is asked again, never guessed.
   const b = ask(["Ana", "chatgpt", "Town", ""]);
-  expect(b.q.filter((x) => x.startsWith("Which assistant"))).toHaveLength(2);
+  expect(b.q.filter((x) => x.startsWith("Its number or name"))).toHaveLength(2);
   expect(b.iv).toMatchObject({ kind: "town", agent: "town" });
 });
 

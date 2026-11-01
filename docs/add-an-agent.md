@@ -9,7 +9,7 @@ The checklist for every new assistant, after the first one that `pocketbrain ini
 For the assistants pocketBrain knows, name the kind and answer one question:
 
 ```sh
-pocketbrain add <name> --kind claude-ai|claude-code|town|browser --url https://brain.<your domain>
+pocketbrain add <name> --kind claude-ai|claude-code|cursor|vscode|codex|gemini|claude-desktop|mcp|town|browser --url https://brain.<your domain>
 ```
 
 It shows what the assistant would see, asks "Grant it?", and on yes grants it (`--yes` skips the question). The kind picks the door. Without `--slices` it is a trial agent (up to personal, money left out, its writes wait for you) with `contacts-basic` and one area (`work` if there is one) for a kind whose token the terminal makes, or every area for `claude-ai`, whose door is your own sign-in. A terminal alone mints only for an agent that narrow (G184, G241); widen it on the dashboard, or give a wider agent its token with the one-time code from its page: `pocketbrain connect <agent> --kind <kind> --code <code>`. Then it prints only what is left for you, numbered:
@@ -17,6 +17,7 @@ It shows what the assistant would see, asks "Grant it?", and on yes grants it (`
 | Kind | What `add --kind` does | What is left for you | Owner actions, before → after |
 |---|---|---|---|
 | `claude-code` | issues a token, runs `claude mcp add` for you, writes the standing instruction into `~/.claude/CLAUDE.md` between `<!-- pocketbrain -->` lines (replaced, never duplicated) | nothing; if the `claude` command isn't installed, one line to run | 4 → 1 |
+| `cursor`, `vscode`, `codex`, `gemini`, `claude-desktop`, `mcp` (an app on this computer) | issues a token kept for the stdio bridge in `~/.config/pocketbrain/agent-keys/<name>` (0600, deleted by revoke); with `--write`, puts the `pocketbrain mcp --agent <name>` entry into the app's config after a backup ([connect.md](connect.md)) | restart the app, paste the standing instruction | 4 → 2 |
 | `town` (any MCP connector with a header field) | issues a token | 1. add the connector (URL and header), 2. paste the standing instruction | 4 → 3 |
 | `claude-ai` (sign-in connector) | opens the 10-minute window for your own next sign-in | 1. add the connector and sign in, 2. paste the standing instruction into your preferences | 4 → 3 |
 | `browser` (only fills web forms, like Instinct) | turns the browser door on, issues a reader key | 1. save the sign-in in its vault, 2. paste the browser instruction | 5 → 3 |

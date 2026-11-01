@@ -40,7 +40,7 @@ pocketbrain help
 pocketbrain init ~/my-brain --name "<their first name>" --agent <app> --no-token
 ```
 
-Use a short name for the app: `claude-code`, `cursor`, `vscode`, `codex`, `gemini`. If the person gave you a notes file to start from, add `--from-text <file>`; the format is in [quickstart.md](quickstart.md#start-from-a-file-instead-of-questions). Nothing is sent anywhere and no model is called.
+Use the app's kind as its name: `claude-code`, `cursor`, `vscode`, `codex`, `gemini`, `claude-desktop`, or `mcp-app` for another app. If the person gave you a notes file to start from, add `--from-text <file>`; the format is in [quickstart.md](quickstart.md#start-from-a-file-instead-of-questions). Nothing is sent anywhere and no model is called.
 
 ## 4. Start it
 
@@ -53,15 +53,11 @@ sleep 3 && curl -s http://127.0.0.1:8787/health
 
 ## 5. Connect yourself
 
-If you are Claude Code:
-
 ```sh
-pocketbrain connect <app> --kind claude-code
+pocketbrain connect <app> --kind <kind> --write
 ```
 
-It runs `claude mcp add --scope user …` and writes your standing instruction into `~/.claude/CLAUDE.md`, so nothing passes through the chat.
-
-Any other app: run `pocketbrain connect <app>`, then follow that app's page in [connect.md](connect.md), writing the key into the config file it names. Put the instruction block it printed into the app's own instructions file (the page says where).
+with `<kind>` one of `claude-code`, `cursor`, `vscode`, `codex`, `gemini`, `claude-desktop`, `mcp`. For Claude Code it runs `claude mcp add --scope user …` and writes your standing instruction into `~/.claude/CLAUDE.md`. For the others it puts a `pocketbrain` entry into the app's config file, after a backup, and keeps the key in `~/.config/pocketbrain/agent-keys/<app>`, so the key never passes through the chat. For `mcp` there is no known config file: leave out `--write` and put the printed command where the app takes MCP servers. Put the instruction block it printed into the app's own instructions file ([connect.md](connect.md) says where for each app).
 
 Most apps load a new MCP server only when they restart. Tell the person to restart you, or this session, before step 6.
 

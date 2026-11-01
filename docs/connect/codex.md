@@ -1,42 +1,33 @@
 # Connect Codex CLI
 
-**You need:** the Codex CLI (`codex`), and your brain running (`pocketbrain start`).
+**You need:** Codex CLI, and your brain running (`pocketbrain start`).
 
-_Config format checked against Codex's MCP documentation on 2026-11-01. The pocketBrain side is tested; the Codex side hasn't been run end to end here yet._
+_The config format was checked against Codex CLI's own documentation on 2026-11-01, and pocketBrain's side is tested. Codex CLI itself hasn't been run against it end to end yet._
 
 ## The command
 
 ```sh
-pocketbrain add codex --slices area:work,contacts-basic --door mcp --yes
+pocketbrain add codex --kind codex --write --yes
 ```
 
-It prints a key starting `pb_codex_` and an instruction block.
+It makes `codex` a **trial** assistant: it sees your work notes and the names and roles of your contacts, never your money or anything private, and what it saves waits for your OK. Then it puts a `pocketbrain` entry into `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`), as one `[mcp_servers.pocketbrain]` table, after a copy of the file as it was (`….pocketbrain-backup-<time>` beside it). Only that entry changes, and a file it can't read is left alone.
 
-## Put it into Codex
+The entry starts `pocketbrain mcp --agent codex`, a small bridge to the brain on this computer. The entry holds no key. The key stays in its own file, `~/.config/pocketbrain/agent-keys/codex`, readable only by you, and the bridge only ever talks to this computer ([hosting.md](../hosting.md#keys-at-rest)).
 
-Codex reads the key from an environment variable, so the key isn't written in its config. Keep it in a file of its own, readable only by you, and load that file from your shell's startup file (`~/.zshrc` on a Mac, `~/.bashrc` on Linux and WSL). Startup files often end up in a dotfiles repo; the key file never should.
+Rather edit the file yourself? Leave out `--write`: it prints the entry to paste instead.
 
-```sh
-(umask 077 && printf 'export POCKETBRAIN_KEY="%s"\n' "pb_codex_…" > ~/.pocketbrain-codex-key)
-echo '[ -f ~/.pocketbrain-codex-key ] && . ~/.pocketbrain-codex-key' >> ~/.zshrc
-```
+If Codex CLI was your first assistant, `pocketbrain init --kind codex --write` does the same when it creates your brain.
 
-Use `~/.bashrc` in the second line on Linux and WSL.
-
-Open a new terminal window. Then add to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.pocketbrain]
-url = "http://127.0.0.1:8787/mcp"
-bearer_token_env_var = "POCKETBRAIN_KEY"
-```
-
-Paste the instruction block into `~/.codex/AGENTS.md`, which Codex reads in every folder.
+Quit Codex CLI and open it again. Then paste the instruction block the command printed into `~/.codex/AGENTS.md`, which Codex reads in every folder, so it checks the brain without being asked.
 
 ## Check it worked
 
-In Codex, `/mcp` lists `pocketbrain` and its tools. Ask: *"Use pocketbrain: what are my projects?"*
+In Codex, `/mcp` lists `pocketbrain` and its tools. Ask it: *"Use pocketbrain: what are my projects?"*
 
 ## Undo
 
-Remove the `[mcp_servers.pocketbrain]` lines, the line in your startup file, `~/.pocketbrain-codex-key` and the block in `AGENTS.md`, then `pocketbrain token --revoke codex`.
+```sh
+pocketbrain token --revoke codex
+```
+
+That cuts codex off at once and deletes its key file. Then remove the `[mcp_servers.pocketbrain]` table from `~/.codex/config.toml` and the instruction you pasted.

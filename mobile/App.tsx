@@ -2,7 +2,7 @@
 // The pocketBrain phone app (docs/phone-app.md): the hub's own owner pages, full screen, plus
 // pairing and Face ID. One web UI for browser and app; the app adds only what a browser can't.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Linking from "expo-linking";
 import * as SecureStore from "expo-secure-store";
@@ -11,6 +11,8 @@ import * as Device from "expo-device";
 import { parsePairLink } from "./src/pair";
 import { pair, fresh } from "./src/hub";
 import { inject } from "./src/inject";
+import { Mark } from "./src/Mark";
+import { MARK } from "./src/logo";
 
 const HUB = "pb.hub";       // the hub's https address, not secret
 const KEY = "pb.device";    // the device key, readable only after Face ID
@@ -67,13 +69,14 @@ export default function App() {
     else setMsg(r === "wait" ? "Too many tries this hour. Try again later." : "Couldn't reach your hub. Is Tailscale on?");
   }, [hub]);
 
-  if (hub === undefined) return <View style={s.fill}><ActivityIndicator color={INK.blue} /></View>;
+  const opening = <View style={s.opening}><StatusBar barStyle="light-content" /><Mark size={160} /></View>;
+  if (hub === undefined) return opening;
   if (hub) return (
     <SafeAreaView style={s.page}>
       <StatusBar barStyle="dark-content" />
       <WebView ref={web} source={{ uri: `${hub}/` }} key={faceId ? "faceid" : "plain"} injectedJavaScript={inject(faceId)} onMessage={(e) => { if (e.nativeEvent.data === "fresh") onFresh(); }}
         sharedCookiesEnabled thirdPartyCookiesEnabled={false} allowsBackForwardNavigationGestures pullToRefreshEnabled
-        originWhitelist={[hub]} setSupportMultipleWindows={false} style={s.page} />
+        originWhitelist={[hub]} setSupportMultipleWindows={false} startInLoadingState renderLoading={() => opening} style={s.page} />
       {msg ? <Text style={s.note}>{msg}</Text> : null}
     </SafeAreaView>
   );
@@ -89,7 +92,7 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  fill: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: INK.paper },
+  opening: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: MARK.night },
   page: { flex: 1, backgroundColor: INK.paper },
   pad: { padding: 24, gap: 16 },
   h1: { fontSize: 28, fontWeight: "700", color: INK.ink },

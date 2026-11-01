@@ -22,7 +22,7 @@ A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is w
 pocketbrain init
 ```
 
-It asks a few questions: your name, which assistant will use the brain first (`claude-code`, `claude-ai`, `town` or `browser`; Enter takes Claude Code when it's installed), a short name for it (Enter names it after that kind, like `claude`), the people, projects and decisions you work with, and where you bank. Press Enter on an empty line to skip a question. Using an app that isn't on that list, such as Cursor, VS Code, Codex or Gemini CLI? Run `pocketbrain init --name "Your name" --agent cursor --no-token` instead (with your app's short name), and connect it in step 4 with `pocketbrain connect cursor`. Your answers stay on this computer, in a folder called `my-brain` in your home folder.
+It asks a few questions: your name, which assistant will use the brain first (a numbered list; Enter takes Claude Code when it's installed, otherwise any MCP app on this computer), a short name for it (Enter names it after that kind, like `claude`), the people, projects and decisions you work with, and where you bank. Press Enter on an empty line to skip a question. The list starts with the apps on your computer (Claude Code, Cursor, VS Code, Codex CLI, Gemini CLI, Claude Desktop, any other MCP app); type its number. Add `--write` to the command (`pocketbrain init --write`) and init also puts pocketBrain into that app's config, after a backup. Your answers stay on this computer, in a folder called `my-brain` in your home folder.
 
 When it's done, it shows two things:
 
@@ -41,7 +41,7 @@ Leave this window open while you use your assistant. The brain listens only on y
 
 **Claude Code:** if you picked it and it's installed, `init` already connected it: it ran `claude mcp add --scope user …` and wrote the standing instruction into `~/.claude/CLAUDE.md`. Then `claude mcp list` should say `pocketbrain … ✔ Connected`. Without Claude Code installed, `init` prints the `claude mcp add` line to run once it is.
 
-**Cursor, VS Code, Codex, Gemini CLI, Claude Desktop or another app on this computer:** [connect.md](connect.md) has a short page for each. It's one command, `pocketbrain add <app> --slices area:work,contacts-basic --door mcp --yes`, then the address and key go into the app's settings. No tunnel, no account.
+**Cursor, VS Code, Codex, Gemini CLI, Claude Desktop or another app on this computer:** if you picked it in `init`, it's set up the same way. Otherwise it's one command, `pocketbrain add cursor --kind cursor --write --yes` (with your app's kind), which puts the entry into the app's config after a backup; restart the app. [connect.md](connect.md) has a short page for each. No tunnel, no account.
 
 **Claude on the web or phone, ChatGPT, or another assistant in the cloud:** it can't reach your computer directly. One that takes a header can use a quick tunnel ([below](#connect-an-assistant-in-the-cloud)). Claude on the web and ChatGPT sign in instead of taking a key, which needs a fixed address and a sign-in service; [connect/claude-web.md](connect/claude-web.md) says honestly what that takes today.
 

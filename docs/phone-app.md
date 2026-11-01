@@ -40,6 +40,10 @@ The app is in `mobile/` (Expo, React Native). It is the hub's own owner pages in
 
 `mobile/src/pair.ts` and `mobile/src/hub.ts` hold the logic and are tested in the hub's own run (`test/phone-app-client.test.ts`). The screens are not tested here yet.
 
+### The icon
+
+The icon is the logo on Night (near-black): the pink cloud, the light bar, and the two eyes from the launch film. `mobile/src/logo.ts` holds the shapes; `bun scripts/phone-icons.ts` makes `mobile/assets/icon.png` (the iPhone icon, edge to edge with no transparency, since the phone rounds the corners), `adaptive-icon.png` (Android's see-through foreground on a Night background) and `splash-icon.png` (the opening screen). Run it again after changing the shapes. While the hub's page loads, the app draws the logo live (`mobile/src/Mark.tsx`) and the eyes look left and right; they stay still when the phone is set to reduce motion.
+
 ### Building it
 
 `mobile/eas.json` has three builds that sit side by side on a phone: `development` (with Expo's dev client), `preview` (internal testing) and `production`. `mobile/app.config.js` names each and gives it its own bundle id. Builds run on Expo's cloud (EAS), so no Xcode is needed:

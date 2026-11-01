@@ -84,7 +84,7 @@ Then connect your assistant. [docs/connect.md](docs/connect.md) has a page for e
 
 | Runs on your computer, about 2 minutes | Runs in the cloud |
 |---|---|
-| Claude Code (init connects it), Cursor, VS Code, Codex CLI, Gemini CLI, Claude Desktop, any MCP app with a header field | Claude on the web or phone: needs a fixed public address and a sign-in service, an evening today ([docs/connect/claude-web.md](docs/connect/claude-web.md)). ChatGPT: not supported yet. |
+| Claude Code, Cursor, VS Code, Codex CLI, Gemini CLI, Claude Desktop, any MCP app: `pocketbrain add <app> --kind <app> --write --yes`, or pick it in `init` | Claude on the web or phone: needs a fixed public address and a sign-in service, an evening today ([docs/connect/claude-web.md](docs/connect/claude-web.md)). ChatGPT: not supported yet. |
 
 **Want your assistant to install it?** Point it at [docs/install-with-an-agent.md](docs/install-with-an-agent.md): every command runs without questions, and it stops where only you can answer.
 

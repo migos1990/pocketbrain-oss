@@ -41,3 +41,22 @@ test("in a page, Sign in again and a signed-out page ask the app for Face ID, an
   // Face ID cancelled or a sign-in that didn't stick: the page's own buttons work, nothing asks again.
   expect(inject(false)).not.toContain("postMessage");
 });
+
+test("the app icon is the logo with the film's eyes: Night tile, full bleed, and the checked-in images match", async () => {
+  const { iconSvg, MARK } = await import("../mobile/src/logo");
+  const { readFileSync } = await import("node:fs");
+  const tile = iconSvg("icon");
+  expect(tile).toContain(`fill="${MARK.night}"`); // the tile is Night
+  expect(tile).not.toContain("rx=\"22"); // the phone rounds the corners, never the image
+  expect(MARK.eyes.length).toBe(2);
+  for (const e of MARK.eyes) expect(Math.abs(e.cy - (MARK.bar.y + MARK.bar.h / 2))).toBeLessThan(1.5); // the eyes sit on the bar
+  expect(iconSvg("adaptive")).not.toContain(`<rect width="100"`); expect(tile).toContain(`<rect width="100" height="100" fill="${MARK.night}"/>`); // Android's foreground is see-through
+  const png = (f: string) => { const b = readFileSync(`mobile/assets/${f}`); return { w: b.readUInt32BE(16), h: b.readUInt32BE(20), colorType: b[25] }; };
+  expect(png("icon.png")).toEqual({ w: 1024, h: 1024, colorType: 2 }); // RGB: the App Store refuses an icon with alpha
+  expect(png("adaptive-icon.png")).toMatchObject({ w: 1024, h: 1024, colorType: 6 });
+  expect(png("splash-icon.png")).toMatchObject({ w: 1024, h: 1024, colorType: 6 });
+  const config = (require("../mobile/app.config.js") as { expo: Record<string, any> }).expo;
+  expect(config.icon).toBe("./assets/icon.png");
+  expect(config.android.adaptiveIcon).toEqual({ foregroundImage: "./assets/adaptive-icon.png", backgroundColor: MARK.night });
+  expect(config.splash).toMatchObject({ image: "./assets/splash-icon.png", backgroundColor: MARK.night });
+});

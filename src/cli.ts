@@ -66,6 +66,7 @@ import { comingBack, comingBackText } from "./access-request";
 import * as share from "./share";
 import { createInvite, mintFromShell, shellMintRefusal, reachRefusal } from "./invite";
 import { initBrain, interview, InitError, AGENT_KINDS, KIND_NAME, type AgentKind, type InitOptions } from "./init";
+import { APP_LABEL, INSTRUCTION_PLACE, bridge, configPath, dropAgentKey, isLocalApp, isLoopback, mergeConfig, saveAgentKey, snippet, stdinLines, writeAppConfig } from "./local-apps";
 import { tick, watch, watchdog, loadTextState } from "./textline/poll";
 import { ESCALATION_TEMPLATE, loadEscalation, useTransport, TRANSPORTS } from "./textline/policy";
 import { makeTransport, fakeReply } from "./textline/transport";
@@ -112,9 +113,10 @@ const SHORT_USAGE = `pocketbrain <command>
   start [--port 8787]                the hub in one process: agents' server, dashboard, text channel,
                                      relay, nightly upkeep and sleep, morning digest
   start --launchd [--tunnel <name>] [--write]   launchd files to keep it running on a Mac
-  add <agent> --kind claude-ai|claude-code|town|browser [--url https://brain.example] [--yes]
+  add <agent> --kind <kind> [--write] [--url https://brain.example] [--yes]
                                      connect one assistant in one command: its door, a preset slice, then at most
-                                     two pastes (docs/add-an-agent.md#one-command-per-kind)
+                                     two pastes; kinds: claude-ai, claude-code, cursor, vscode, codex, gemini, claude-desktop, mcp, town, browser
+                                     (--write puts an app's entry into its config, after a backup; docs/connect.md)
   add <agent> --slices a,b [--door mcp|oauth|api|local|invite] [--url https://brain.example] [--yes]
                                      a new trial agent in one go: preview, grant, then its token or sign-in
                                      and what to paste where (docs/add-an-agent.md)
@@ -326,10 +328,15 @@ const USAGE = `pocketbrain <command>
                                      the gardener's Managed Agents files for your own Anthropic account; with --apply,
                                      run them through ant: vault, token on stdin, deployments created paused
                                      (--revoke also cuts the agent's OAuth connections)
-  add <agent> --kind claude-ai|claude-code|town|browser [--slices a,b] [--url <public url>] [--yes]
+  add <agent> --kind claude-ai|claude-code|cursor|vscode|codex|gemini|claude-desktop|mcp|town|browser [--slices a,b] [--url <public url>] [--write] [--yes]
                                      the door that kind uses, every area plus contacts-basic unless --slices,
                                      trial, money out; then only what is left for you, numbered (at most two
-                                     steps). claude-code runs claude mcp add and writes ~/.claude/CLAUDE.md itself
+                                     steps). claude-code runs claude mcp add and writes ~/.claude/CLAUDE.md itself;
+                                     an app on this computer (cursor … mcp) gets the stdio bridge, its key in
+                                     agent-keys/<agent> (0600), and with --write its config entry, after a backup
+  mcp --agent <agent> [--url http://127.0.0.1:8787]
+                                     the stdio bridge an app on this computer starts: MCP over stdin and stdout to
+                                     the hub here, with the agent's key from agent-keys/; refuses any other address
   add <agent> --slices a,b [--door mcp|oauth|api|local|invite] [--url <public url>] [--name <label>]
       [--exclude-types money] [--yes]  a new trial agent: preview its slice; with --yes grant it, then print its
                                      token (or, --door oauth, approve your next sign-in for 10 minutes) and what to paste
@@ -483,7 +490,7 @@ function runInit(args: string[]): number {
     }
     if (kind) opts.agent ??= KIND_NAME[kind];
     // The token comes from that kind's connect (below, or once there is a public address): not two.
-    const connectsItself = kind === "claude-code" && hasClaude, inCloud = !!kind && kind !== "claude-code";
+    const connectsItself = (kind === "claude-code" && hasClaude) || isLocalApp(kind), inCloud = !!kind && kind !== "claude-code" && !isLocalApp(kind);
     if (connectsItself || inCloud) opts.token = false;
     const r = initBrain(resolve(dir), { ...opts, seedText: seedText ? [{ name: "interview", text: seedText }] : undefined });
     // A second brain (a demo, a test) never takes over the remembered one: commands without
@@ -496,9 +503,10 @@ function runInit(args: string[]): number {
     console.log(`\nWhat init removed, kept private or guessed: ${r.report}`);
     console.log(`\n1. Start it, and leave that window open:\n\n     pocketbrain start\n`);
     if (connectsItself) {
-      console.log("2. Claude Code, connected now:\n");
+      const k = isLocalApp(kind) ? kind : "claude-code";
+      console.log(`2. ${isLocalApp(k) ? APP_LABEL[k] : "Claude Code"}, connected now:\n`);
       // init's first agent is narrow (one area and contacts-basic, trial), so the G184 gate lets it through.
-      try { return connectKind(r.root, r.agent, "claude-code", "http://127.0.0.1:8787"); } catch (e) { console.error(`init: ${(e as Error).message}`); return 1; }
+      try { return connectKind(r.root, r.agent, k, "http://127.0.0.1:8787", undefined, undefined, args.includes("--write")); } catch (e) { console.error(`init: ${(e as Error).message}`); return 1; }
     }
     if (inCloud) {
       // In the cloud: the brain needs a public address first (quickstart, "Connect an assistant in the cloud").
@@ -523,7 +531,7 @@ function runInit(args: string[]): number {
 }
 
 // `add --kind` (docs/add-an-agent.md#one-command-per-kind): the door each kind of assistant uses.
-const KINDS = { "claude-ai": "oauth", "claude-code": "local", town: "mcp", browser: "browser" } as const;
+const KINDS = { "claude-ai": "oauth", "claude-code": "local", cursor: "local", vscode: "local", codex: "local", gemini: "local", "claude-desktop": "local", mcp: "local", town: "mcp", browser: "browser" } as const;
 type Kind = keyof typeof KINDS;
 
 // A trial agent's preset, so up to personal, money out, writes wait, plus names and roles. claude-ai
@@ -540,7 +548,7 @@ function slicePreset(rules: Rules, kind: Kind): string[] {
 // G184: every token made here goes through the terminal gate (mintFromShell), as `connect` does: a
 // narrow trial agent alone, a wider one with the owner's one-time code (--code). The gate runs before
 // anything changes, so a refused kind leaves policy.yaml, Claude Code and ~/.claude/CLAUDE.md as they were.
-function connectKind(root: string, agent: string, kind: Kind, url: string, name?: string, code?: string): number {
+function connectKind(root: string, agent: string, kind: Kind, url: string, name?: string, code?: string, write = false): number {
   const rules = loadRules(root);
   const via = `connect ${agent} --kind ${kind}${url === "http://127.0.0.1:8787" ? "" : ` --url ${url}`}`;
   const say = (steps: string[], after = "") => {
@@ -572,6 +580,39 @@ function connectKind(root: string, agent: string, kind: Kind, url: string, name?
       `Paste this once into ${agent}'s custom instructions:\n\n${browserInstruction(loadRules(root), url)}`,
     ]);
     console.error(`key printed once; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
+    return 0;
+  }
+  if (isLocalApp(kind)) {
+    // An app on this computer (src/local-apps.ts): its config starts the stdio bridge, and the key
+    // waits in a 0600 file for it, never printed. --write puts the entry in the app's own config,
+    // after a backup; a config it can't read stops here, before any key is made.
+    const label = APP_LABEL[kind], path = configPath(kind);
+    if (write) {
+      if (!path) { console.error(`${label}'s config file isn't known, so --write can't put it there; leave --write out and paste the command`); return 2; }
+      mergeConfig(kind, existsSync(path) ? readFileSync(path, "utf8") : undefined, agent);
+    }
+    const tok = mintFromShell(root, agent, { via: `${via}${write ? " --write" : ""}`, code });
+    const keyFile = saveAgentKey(agent, tok);
+    const steps: string[] = [];
+    if (write) {
+      let w: { path: string; backup?: string };
+      try { w = writeAppConfig(kind, agent); } catch (e) {
+        // Nothing points at the new key, so it is taken back: no live key is left behind.
+        revokeTokens(root, agent);
+        dropAgentKey(agent);
+        console.error(`Couldn't write ${label}'s config (${(e as Error).message}), so its new key was revoked and nothing was changed there. Fix: run pocketbrain connect ${agent} --kind ${kind} without --write, and paste what it prints.`);
+        return 1;
+      }
+      console.log(`Added pocketbrain to ${label}'s config, ${w.path}${w.backup ? ` (the file as it was is in ${w.backup})` : ""}.`);
+      steps.push(`Quit ${label} and open it again, so it loads pocketbrain.`);
+    } else if (path) {
+      steps.push(`Add this to ${path}, beside anything already there, then restart ${label}. Or run the same command again with --write, and it does this for you after a backup of the file:\n\n${snippet(kind, agent)}`);
+    } else {
+      steps.push(`In ${label}'s settings, add an MCP server that starts this command (stdio), then restart it:\n\n${snippet(kind, agent)}`);
+    }
+    steps.push(`Paste this once into ${INSTRUCTION_PLACE[kind]}, so ${agent} checks the brain without being asked:\n\n${standingInstruction(rules, "mcp", "http://127.0.0.1:8787").trimEnd()}`);
+    say(steps, `Then ask it something about you: it answers "from your brain". Keep pocketbrain start running.`);
+    console.error(`key kept for ${label} in ${keyFile}, readable only by you, never printed; only its hash is in rules/tokens.yaml. Revoke (deletes that file too): pocketbrain token --revoke ${agent}`);
     return 0;
   }
   if (kind === "claude-code") {
@@ -702,6 +743,15 @@ export function main(argv: string[]): number {
   }
 
   if (cmd === "uninstall") return uninstallCli(args);
+  // The stdio bridge an app on this computer starts (src/local-apps.ts, docs/connect.md): no brain
+  // needed, only the agent's key file. Stdout carries MCP only; everything else goes to stderr.
+  if (cmd === "mcp") {
+    const agent = arg(args, "--agent"), url = arg(args, "--url") ?? "http://127.0.0.1:8787";
+    if (!agent) { console.error("mcp --agent <name> [--url http://127.0.0.1:8787]"); return 2; }
+    if (!isLoopback(url)) { console.error(`pocketbrain mcp: ${url} isn't this computer. The bridge only talks to the hub on this machine, so a key never leaves it.`); return 2; }
+    bridge({ agent, url, lines: stdinLines(), write: (t) => { process.stdout.write(t); } }).then((c) => process.exit(c), (e) => { console.error(`pocketbrain mcp: ${(e as Error).message}`); process.exit(1); });
+    return -1;
+  }
   // The model is this user's, not the brain's: no brain needed.
   if (cmd === "search") return searchCli(args);
 
@@ -1046,7 +1096,7 @@ ${p.text}`);
       const kind = arg(args, "--kind");
       if (kind !== undefined) {
         if (!(kind in KINDS)) { console.error(`connect --kind takes ${Object.keys(KINDS).join(", ")}`); return 2; }
-        return connectKind(root, agent, kind as Kind, url, undefined, code);
+        return connectKind(root, agent, kind as Kind, url, undefined, code, args.includes("--write"));
       }
       printConnect(root, agent, a.transport === "api" ? "api" : "mcp", url, `connect ${agent}`, code);
     } catch (e) { console.error((e as Error).message); return 1; }
@@ -1093,12 +1143,12 @@ ${p.text}`);
         if (why) { console.error(`${agent}: ${why}, so a terminal alone can't make it a ${door === "invite" ? "code" : "token"}. Nothing granted. Narrow it (one area, money left out), or use --door oauth (your own sign-in), or add it on the dashboard and make its key with a one-time code from its page.`); return 1; }
       }
       console.log(head + addAgent(root, req).text);
-    } catch (e) { console.error(`add <agent> --kind claude-ai|claude-code|town|browser | --slices a,b | --like <agent> [--door mcp|oauth|api|local|invite] [--url https://brain.example] [--name Label] [--yes]\n${(e as Error).message}`); return agent && (req.slices.length || like) ? 1 : 2; }
+    } catch (e) { console.error(`add <agent> --kind claude-ai|claude-code|cursor|vscode|codex|gemini|claude-desktop|mcp|town|browser | --slices a,b | --like <agent> [--door mcp|oauth|api|local|invite] [--url https://brain.example] [--name Label] [--yes]\n${(e as Error).message}`); return agent && (req.slices.length || like) ? 1 : 2; }
     const fresh = loadRules(root);
     const url = (arg(args, "--url") ?? "http://127.0.0.1:8787").replace(/\/$/, "");
     console.log(`\n${agent} added as a trial agent: it sees the slice above, and everything it writes waits for you.\n`);
     // G184: add grants the agent; its token still passes the terminal gate (a wider preset needs the code).
-    if (kind) { try { return connectKind(root, agent, kind as Kind, url, name); } catch (e) { console.error((e as Error).message); return 1; } }
+    if (kind) { try { return connectKind(root, agent, kind as Kind, url, name, undefined, args.includes("--write")); } catch (e) { console.error((e as Error).message); return 1; } }
     if (door === "oauth") {
       const e = oauth.expectClient(root, agent, { name });
       const mins = Math.round((Date.parse(e.until) - Date.parse(e.opened)) / 60_000);
@@ -1206,7 +1256,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     if (rev) {
       // G336: a revoke that can't take the invites lock throws before any key goes; asks and actions are cancelled either way.
       let code = 0;
-      try { console.log(`revoked ${revokeTokens(root, rev)} token(s) for ${rev}`); } catch (e) { console.error((e as Error).message); code = 1; }
+      try { console.log(`revoked ${revokeTokens(root, rev)} token(s) for ${rev}`); if (dropAgentKey(rev)) console.log(`deleted ${rev}'s key file on this computer`); } catch (e) { console.error((e as Error).message); code = 1; }
       asks.cancelAsks(root, rev); cancelActions(root, rev, "access revoked");
       return code;
     }

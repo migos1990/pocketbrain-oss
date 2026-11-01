@@ -3606,4 +3606,11 @@ export const GAPS: Record<string, Gap> = {
     finding: "Audit v3 2026-10-26 item 5: write() ran the source_exists step only when no acceptedBy was given, so the hub's own accept of a capture (auto-decide) skipped it; a gmail: id the hub never read still ranked as an exact source and could replace a live value; and imessage:, mail:, granola: and the other readable refs were never checked at all.",
     fix: "The check runs on every path but the owner's own accept, for every ref kind the hub reads (HUB_READS in src/write.ts). When a write is weighed against a held value, a ref the hub never read (hubReadRefs in src/pull.ts: refs checked true plus every item a source pass has seen) ranks as the writer's own word, so a made-up mail id outranks nothing. Test: test/source-check-hub-path.test.ts.",
   },
+  G617: {
+    closed: "29b765f",
+    title: "A merged page's old name still counted as a second page, so every fact by that name waited as ambiguous",
+    severity: "medium",
+    finding: "Audit v10 2026-11-01 (finding 2d): resolveEntity (src/write.ts) matched a name against every page of its type and never looked at status, so after a same-person merge the dropped page (status merged, merged_into) and the kept page both fit the name; hub filing (fileVerdict) and capture resolution weigh every note, so each fact by that name waited on Settings as \"Its name fits more than one note\" and was counted as held_by_ambiguity.",
+    fix: "src/write.ts: resolveEntity maps a merged page to the page it was merged into (mergedTarget, following chains) before counting matches, and skips merged pages among near matches; a pointer whose kept page isn't among the notes given matches nothing, like a missing page. Tests: test/merged-page-match.test.ts, test/contracts/write.contract.test.ts.",
+  },
 };

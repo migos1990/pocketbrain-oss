@@ -17,7 +17,7 @@ import { normalizeValue, compareKey } from "./normalize";
 import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath } from "./louis";
 import { tokenRole } from "./tokenrole";
-import { carve, grantFor, records, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
+import { carve, grantFor, mergedTarget, records, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
 import { needleFor, findCarried, unhide, distinctive, squash, type Needle } from "./match";
 import { git, commitPaths } from "./git";
 import { appendChained } from "./readlog";
@@ -122,10 +122,16 @@ export function resolveEntity(notes: Note[], type: string, title: string): { id?
   const exact = same.filter((n) => [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => (k(t) === key && !(kind && titleKind(t) && titleKind(t) !== kind))
     || (!!kind && sameTitled(title, t) && (!lone || kin.every((x) => x === n)))
     || (!!kind && !lone && !titleKind(t) && k(t) === untitledKey(title))));
-  if (exact.length === 1) return { id: exact[0].fm.id };
-  if (exact.length > 1) return { ambiguous: exact.map((n) => n.fm.id) };
+  // A merged page stands for the page it was merged into (audit v10, 2d): its title still matches,
+  // and counting it beside the kept page made every write by that name wait as ambiguous. One whose
+  // kept page isn't among the notes given (the writer can't see it) matches nothing.
+  const byId = new Map(same.map((n) => [n.fm.id, n]));
+  const live = [...new Set(exact.map((n) => n.fm.status === "merged" ? mergedTarget(n, byId) : n.fm.id).filter((x): x is string => !!x))];
+  if (live.length === 1) return { id: live[0] };
+  if (live.length > 1) return { ambiguous: live };
   const tokens = key.split(" ");
   const near = same.filter((n) => {
+    if (n.fm.status === "merged") return false;
     const t = k(n.fm.title).split(" ");
     if (type !== "person" || t.length < 2 || tokens.length < 2) return false;
     const lastSame = t[t.length - 1] === tokens[tokens.length - 1];

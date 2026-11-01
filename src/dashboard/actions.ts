@@ -10,6 +10,7 @@ import { decideProposal } from "../write";
 import { decideHeld, fileTransport, type MailTransport } from "../relay";
 import { confirmHeldAnswer, ownerDecide, CoreError } from "../core";
 import { revokeTokens } from "../auth";
+import { dropAgentKey } from "../local-apps";
 import { undoRun } from "../upkeep";
 import { digest } from "../digest";
 import { OWNER } from "../owner";
@@ -121,7 +122,7 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       const was = !pa || pa.inside_wall ? "paused" : pa.status ?? "active"; // only an outside agent has a status to set
       if (was !== "paused") setAgentStatus(root, agent, "paused");
       let n: number;
-      try { n = revokeTokens(root, agent); } catch (e) { cancelAsks(root, agent); throw new CoreError(409, `${(e as Error).message} ${agent} is paused meanwhile.`); }
+      try { n = revokeTokens(root, agent); dropAgentKey(agent); } catch (e) { cancelAsks(root, agent); throw new CoreError(409, `${(e as Error).message} ${agent} is paused meanwhile.`); }
       if (was !== "paused") setAgentStatus(root, agent, was as AgentStatus);
       cancelAsks(root, agent);
       cancelActions(root, agent, "access revoked");
