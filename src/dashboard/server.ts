@@ -41,7 +41,7 @@ import { usagePage } from "./usage";
 import { peoplePage } from "./people";
 import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
-import { ownerPage, askProse } from "./html-page";
+import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY, FONT_PATH } from "./html-app";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
@@ -321,16 +321,26 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     return new Response(ownerPage(s, csrf, n, pageLines(root, s.rules, s.notes, id), o), { headers: PAGE_HEADERS });
   };
   const text = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
-  // Owner-facing errors, as plain text (before sign-in, and for fetches) or as a page; the words
-  // and the fix come from src/owner-errors.ts, never typed here.
-  const oops = (id: OwnerErrorId, vars: Vars = {}) => text(ownerError(id, vars), ownerStatus(id));
+  // Owner-facing errors are pages in the owner app's look, before sign-in too (G621: they were bare
+  // text); a fetch reads only the status. The words and the fix come from src/owner-errors.ts,
+  // never typed here.
   const page = (id: OwnerErrorId, tab: string, vars: Vars = {}, status = ownerStatus(id)) =>
-    html({ title: status === 404 ? "Not found" : status >= 500 ? "Something broke" : "Can't do that", tab, body: ownerErrorHtml(id, vars, esc) }, status);
+    html({ title: status === 404 ? "Not found" : status >= 500 ? "Something broke" : "Can't do that", tab, body: `<div class="oops">${ownerErrorHtml(id, vars, esc)}</div>` }, status);
+  // The phone app reads its routes' errors as text (/app/pair, /app/fresh): unchanged by G621.
+  const oopsText = (id: OwnerErrorId, vars: Vars = {}) => text(ownerError(id, vars), ownerStatus(id));
+  const oops = (id: OwnerErrorId, vars: Vars = {}) => {
+    const status = ownerStatus(id);
+    return html({ title: status === 404 ? "Not found" : status >= 500 ? "Something broke" : "Can't do that", tab: "", bare: true, body: `<div class="oops">${ownerErrorHtml(id, vars, esc)}</div>` }, status);
+  };
 
+  // On the tailnet's plain http address Safari says "Not Secure" (the owner's phone, G621): say why,
+  // and name the https address `tailscale serve` gives when the owner's Tailscale login is set.
+  const plainHttpNote = (secure: boolean) => !secure && tn?.name && tn.login
+    ? `<p class="sub">Safari says Not Secure because this address is plain http. Your tailnet still encrypts it end to end. The https address is <a href="https://${esc(tn.name)}:${SERVE_PORT}/">https://${esc(tn.name)}:${SERVE_PORT}</a>.</p>` : "";
   // Signed out on the phone: one button texts a fresh link to the owner's own phone.
-  const signedOutPhone = () => html({ title: "Sign in", tab: "", body: `<h1>Sign in on this phone</h1><p>You're not signed in here. A sign-in lasts 30 days on this browser.</p><form method="post" action="/send-link"><button class="go">Text me a sign-in link</button></form><p class="sub">The link goes to your own phone by text, works once, and lasts a day.</p>` }, 401);
+  const signedOutPhone = (secure: boolean) => html({ title: "Sign in", tab: "", bare: true, body: `<h1>Sign in on this phone</h1><p>You're not signed in here. A sign-in lasts 30 days on this browser.</p><form method="post" action="/send-link"><button class="go">Text me a sign-in link</button></form><p class="sub">The link goes to your own phone by text, works once, and lasts a day.</p>${plainHttpNote(secure)}` }, 401);
   // A phone link that's spent or old: plain words and the same button, never a Mac command.
-  const usedLink = () => html({ title: "Sign in", tab: "", body: `${ownerErrorHtml("dash.phone-link-used", {}, esc)}<form method="post" action="/send-link"><button class="go">Text me a sign-in link</button></form>` }, ownerStatus("dash.phone-link-used"));
+  const usedLink = () => html({ title: "Sign in", tab: "", bare: true, body: `${ownerErrorHtml("dash.phone-link-used", {}, esc)}<form method="post" action="/send-link"><button class="go">Text me a sign-in link</button></form>` }, ownerStatus("dash.phone-link-used"));
   const sends: number[] = [];
   async function sendLink(req: Request, hosts: Set<string>, secure: boolean): Promise<Response> {
     const origin = req.headers.get("origin");
@@ -348,7 +358,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     try { link = `${secure ? "https" : "http"}://${req.headers.get("host")}/login?key=${mintPhoneLink(root, now())}`; } catch { return oops("dash.link-busy"); }
     const r = await tr.send({ id: `signin-${t0}`, text: `pocketBrain sign-in link for your phone (works once, for a day): ${link}`, at: now().toISOString() });
     if (!r.ok) return oops("dash.link-not-sent", { reason: r.detail ?? "no reason given" });
-    return html({ title: "Sent", tab: "", body: `<h1>Sent</h1><p>Open the link in the text on this phone. It works once, for a day.</p>` });
+    return html({ title: "Sent", tab: "", bare: true, body: `<h1>Check your texts</h1><p>A sign-in link is on its way to this phone. Open Messages and tap the link in the text from pocketBrain. It works once, for a day.</p>${plainHttpNote(secure)}<form method="post" action="/send-link"><button>Text me another link</button></form>` });
   }
 
   // The phone app's two doors (docs/phone-app.md), on the tailnet and `tailscale serve` only. The
@@ -358,11 +368,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   const appCookie = (sid: string, secure: boolean) => `pb_owner=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86_400}${secure ? "; Secure" : ""}`;
   async function appBody(req: Request, hosts: Set<string>): Promise<Record<string, unknown> | Response> {
     const origin = req.headers.get("origin");
-    if (origin && !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
+    if (origin && !hosts.has(origin.replace(/^https?:\/\//, ""))) return oopsText("dash.cross-origin");
     const raw = await readCapped(req, 2048);
     if (raw === undefined) return appJson({ error: "too large" }, 413);
     try { const b = JSON.parse(raw || "{}"); if (b && typeof b === "object" && !Array.isArray(b)) return b as Record<string, unknown>; } catch { /* below */ }
-    return oops("dash.bad-form");
+    return oopsText("dash.bad-form");
   }
   const signInFor = (sid: string | undefined) => {
     const id = sid ?? rand();
@@ -376,9 +386,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (b instanceof Response) return b;
     const key = typeof b.key === "string" ? b.key : "";
     // The same one-time phone link the Sign in button spends (usePhoneLink): one use, a day.
-    if (!usePhoneLink(root, key, now())) return oops("dash.phone-link-used");
+    if (!usePhoneLink(root, key, now())) return oopsText("dash.phone-link-used");
     const sid = signInFor(undefined), device = randomBytes(32).toString("base64url");
-    try { forget(addAppPhone(root, device, phoneName(b.name), sidHash(sid), now())); } catch { return oops("dash.link-busy"); }
+    try { forget(addAppPhone(root, device, phoneName(b.name), sidHash(sid), now())); } catch { return oopsText("dash.link-busy"); }
     return appJson({ device }, 200, { "set-cookie": appCookie(sid, secure) });
   }
   // Wrong keys count against the door, not the key: past APP_MISSES an hour every key waits.
@@ -388,12 +398,12 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (b instanceof Response) return b;
     const t0 = now().getTime();
     while (misses.length && t0 - misses[0]! > 3_600_000) misses.shift();
-    if (misses.length >= APP_MISSES) return oops("dash.app-cap");
+    if (misses.length >= APP_MISSES) return oopsText("dash.app-cap");
     const device = typeof b.device === "string" ? b.device : "";
     const sid = session(req) ?? rand();
     let ok = false;
-    try { ok = useAppPhone(root, device, sidHash(sid), now()); } catch { return oops("dash.link-busy"); }
-    if (!ok) { misses.push(t0); return oops("dash.app-not-paired"); }
+    try { ok = useAppPhone(root, device, sidHash(sid), now()); } catch { return oopsText("dash.link-busy"); }
+    if (!ok) { misses.push(t0); return oopsText("dash.app-not-paired"); }
     signInFor(sid);
     return appJson({ fresh: true }, 200, { "set-cookie": appCookie(sid, secure) });
   }
@@ -436,7 +446,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         // A phone link is spent by the Sign in button, never by opening it: a message preview or a
         // second fetch of the link spends nothing (owner, 2026-10-24). The button posts from this
         // page only.
-        if (req.method !== "POST") return !k || !phoneLinks(root, now())[sidHash(k)] ? usedLink() : html({ title: "Sign in", tab: "", body: `<h1>Sign in on this phone</h1><form method="post" action="/login"><input type="hidden" name="key" value="${esc(k)}"><button class="go">Sign in</button></form><p class="sub">The link works once, for a day.</p><p><a href="pocketbrain://pair?hub=${encodeURIComponent(`${secure ? "https" : "http"}://${host}`)}&amp;key=${encodeURIComponent(k)}">Open in the pocketBrain app</a></p>` });
+        if (req.method !== "POST") return !k || !phoneLinks(root, now())[sidHash(k)] ? usedLink() : html({ title: "Sign in", tab: "", bare: true, body: `<h1>Sign in on this phone</h1><form method="post" action="/login"><input type="hidden" name="key" value="${esc(k)}"><button class="go">Sign in</button></form><p class="sub">The link works once, for a day.</p><p><a href="pocketbrain://pair?hub=${encodeURIComponent(`${secure ? "https" : "http"}://${host}`)}&amp;key=${encodeURIComponent(k)}">Open in the pocketBrain app</a></p>` });
         const origin = req.headers.get("origin");
         if (!origin || !hosts.has(origin.replace(/^https?:\/\//, ""))) return oops("dash.cross-origin");
         try { k = String((await req.formData()).get("key") ?? ""); } catch { return oops("dash.bad-form"); }
@@ -454,7 +464,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (remote && url.pathname === "/app/pair" && req.method === "POST") return appPair(req, hosts, secure);
     if (remote && url.pathname === "/app/fresh" && req.method === "POST") return appFresh(req, hosts, secure);
     const sid = session(req);
-    if (!sid) return remote ? signedOutPhone() : oops("dash.signed-out");
+    if (!sid) return remote ? signedOutPhone(secure) : oops("dash.signed-out");
     const csrf = sessions.get(sid)!;
     // ?ok= and ?err= name a message kept for this sign-in (keepFlash); plain text is still read, so
     // an old link shows its words, but the hub itself never puts a message in an address.
@@ -714,8 +724,12 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const c = settleId.startsWith("p-") ? inboxConflict(root, settleId) : ownerConflict(root, settleId);
       // Where this question sits among the ones waiting on the home ("1 of 3"), and its page's area.
       const ids = [...ownerConflicts(root, now()).filter((x) => !x.held).map((x) => x.id), ...inboxConflicts(root).map((x) => x.id)];
-      const area = c ? loadBrain(root, { shared: true }).find((n) => n.fm.id === c.page)?.fm.area : undefined;
-      return new Response(settlePage(c, csrf, loadRules(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()), ...(area ? { area: String(area) } : {}), ...(c && ids.includes(c.id) ? { pos: ids.indexOf(c.id) + 1, of: ids.length } : {}) }), { headers: PAGE_HEADERS });
+      const pageNote = c ? loadBrain(root, { shared: true }).find((n) => n.fm.id === c.page) : undefined;
+      const area = pageNote?.fm.area;
+      const fresh = freshSignIn(root, sid, now()), rules = loadRules(root);
+      // Each side's source words (G619), under the page's own rule for kept words.
+      const words = Object.fromEntries((c?.sides ?? []).map((x) => [x.n, sideWords(root, rules, pageNote, x.refs, x.value, fresh)] as const).filter((e): e is [number, string] => !!e[1]));
+      return new Response(settlePage(c, csrf, rules, url.searchParams.get("err") ?? undefined, { fresh, words, ...(area ? { area: String(area) } : {}), ...(c && ids.includes(c.id) ? { pos: ids.indexOf(c.id) + 1, of: ids.length } : {}) }), { headers: PAGE_HEADERS });
     }
     if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1");
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;

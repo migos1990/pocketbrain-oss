@@ -831,7 +831,8 @@ export function ownerDecide(root: string, id: string, choice: number | string, v
 // What waits on the owner: open conflicts the Gardener is not still weighing (gardener-hold.ts).
 // Each side carries its value, date and where it came from; the Gardener's lean, when it has one,
 // is its side's `lean`. The owner sees every value: this is the owner's own screen.
-export interface SettleSide { n: number; value: unknown; as_of?: string; source_word: string; by: string; lean?: string; sources: number }
+// refs: the side's source refs, for the settle screen to show a source's own kept words (G619).
+export interface SettleSide { n: number; value: unknown; as_of?: string; source_word: string; by: string; lean?: string; sources: number; refs?: string[] }
 // private: a side's value is private or above; the screen shows it only after a fresh sign-in.
 export interface SettleCase { id: string; fact_key: string; page: string; title: string; attr: string; sides: SettleSide[]; held?: boolean; private?: boolean }
 
@@ -857,8 +858,8 @@ function settleCase(p: Packet, held = false, rules?: Rules): SettleCase {
     sides: cands.reduce<SettleSide[]>((out, c, i) => {
       const lean = sug?.choice === i + 1 && typeof sug.why === "string" ? sug.why : undefined;
       const same = out.find((x) => compareKey(x.value) === compareKey(c.value));
-      if (same) { same.sources += Math.max(1, (c.sources ?? []).length); if (lean) same.lean = lean; if (String(c.as_of ?? "") > String(same.as_of ?? "")) same.as_of = c.as_of; return out; }
-      out.push({ n: i + 1, value: c.value, as_of: c.as_of, source_word: sourceKind(c), by: String(c.by ?? ""), sources: Math.max(1, (c.sources ?? []).length), ...(lean ? { lean } : {}) });
+      if (same) { same.sources += Math.max(1, (c.sources ?? []).length); same.refs = [...(same.refs ?? []), ...(c.sources ?? []).map(refString)]; if (lean) same.lean = lean; if (String(c.as_of ?? "") > String(same.as_of ?? "")) same.as_of = c.as_of; return out; }
+      out.push({ n: i + 1, value: c.value, as_of: c.as_of, source_word: sourceKind(c), by: String(c.by ?? ""), sources: Math.max(1, (c.sources ?? []).length), refs: (c.sources ?? []).map(refString), ...(lean ? { lean } : {}) });
       return out;
     }, []),
     ...(held ? { held: true } : {}),

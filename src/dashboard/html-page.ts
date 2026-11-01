@@ -111,6 +111,23 @@ function shutItems(s: State, n: Note): Set<string> {
   return out;
 }
 
+// A settle side's evidence (audit v8 UX list, G619): the words its source gave that hold the side's
+// value, short enough for a phone, under the page's rule: on the 30-day sign-in an item that a
+// private, held, money, health or legal fact on the page also cites stays shut (shutItems).
+const squashed = (t: string) => t.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, "");
+export const SIDE_WORDS_MAX = 160;
+export function sideWords(root: string, rules: State["rules"], n: Note | undefined, refs: string[] | undefined, value: unknown, fresh: boolean): string | undefined {
+  const want = squashed(plain(value));
+  if (!n || !refs?.length || want.length < 2) return undefined;
+  const shutHere = fresh ? new Set<string>() : shutItems({ rules } as State, n);
+  for (const ref of refs) {
+    if (shutHere.has(itemRef(ref))) continue;
+    const q = keptQuotes(root, ref).find((x) => squashed(x).includes(want));
+    if (q) return q.length <= SIDE_WORDS_MAX ? q : `${q.slice(0, SIDE_WORDS_MAX - 1).trimEnd()}…`;
+  }
+  return undefined;
+}
+
 // The page's text with every live value that is shut now taken out, as a whole word (carve.ts
 // scrubExact), shown as PAGE_COPY.inProse.
 function shutInProse(n: Note): string {

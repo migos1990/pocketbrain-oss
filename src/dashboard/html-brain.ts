@@ -189,6 +189,7 @@ function factRow(s: State, csrf: string, n: Note, attr: string, f: Fact, editAtt
   return `<div class="b-fact${open ? " editing" : ""}" id="f-${esc(attr)}">${name}<div class="b-v">${settle}<div class="b-show"${open ? " hidden" : ""}><a class="b-val" href="${noteHref(n.fm.id)}?edit=${encodeURIComponent(attr)}#f-${esc(attr)}" data-edit="${esc(attr)}" title="Click to change">${esc(plainValue(r.value, s))}</a>${recTags(s, n, attr, r)}</div>${open ? "" : recMeta(s, n, attr, r, csrf)}${editForm(s, csrf, n, attr, val(r.value), open, `new value for ${attr}`)}</div>${["stale", "due"].includes(freshnessOf(s, n, attr, r)) && !open ? `<div class="b-side">${button(csrf, "fact-confirm", { id: n.fm.id, attribute: attr }, "Still true")}</div>` : '<div class="b-hint-edit" aria-hidden="true">Click to change</div>'}</div>`;
 }
 
+const unescaped = (t: string) => t.replace(/&(amp|lt|gt|quot|#39);/g, (_m, e: string) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" })[e]!);
 // [[id]] and [[id|label]] links in a note's text, shown by title (the id on hover).
 // A link by a title or alias that fits one note goes there too; one that fits none reads as its
 // words, without the brackets.
@@ -198,7 +199,8 @@ export function wikiLinks(s: State, text: string) {
   for (const n of s.notes) for (const t of new Set([n.fm.title, ...(n.fm.aliases ?? [])].map((x) => String(x ?? "").toLowerCase()).filter(Boolean))) named.set(t, named.has(t) ? null : n.fm.id);
   return esc(text).replace(/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g, (_m, to: string, label?: string) => {
     const id = titles.has(to) ? to : named.get(to.toLowerCase()) ?? undefined;
-    return id ? noteLink(id, label ?? titles.get(id)!) : (label ?? to);
+    // The label was escaped with the text around it; noteLink escapes its words again (G616).
+    return id ? noteLink(id, label !== undefined ? unescaped(label) : titles.get(id)!) : (label ?? to);
   });
 }
 // A fact's value as plain words: a [[link]] in it shows its words, and a page's id ("orgs/town",

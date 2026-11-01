@@ -29,3 +29,25 @@ A removed phone's key stops working at once, and so does every sign-in it made, 
 ## Where the hub can run
 
 The app needs an https address the phone can reach. That is `tailscale serve` on whatever machine runs the hub: a Mac at home, a Linux box, or a small rented server (see [dashboard-tailnet.md](dashboard-tailnet.md)). The owner pages are never on the Cloudflare tunnel.
+
+## The app
+
+The app is in `mobile/` (Expo, React Native). It is the hub's own owner pages in a full-screen web view, plus three things a browser can't do:
+
+- **Pair.** The link page's "Open in the pocketBrain app" button opens it with the hub's address and key; or paste the texted link on its first screen. It refuses a plain http address: use the hub's `tailscale serve` https one. The app needs Face ID or a fingerprint set up, since the device key is kept behind it (`expo-secure-store` with `requireAuthentication`, this device only).
+- **Face ID instead of Sign in again.** A script in each page (`mobile/src/inject.ts`) turns the "Sign in again" button and a signed-out page into a Face ID prompt, then `POST /app/fresh` and a reload. A phone the hub no longer knows goes back to the pairing screen.
+- **One cookie store.** The pairing answer's cookie lands in the phone's shared cookie store, which the web view uses (`sharedCookiesEnabled`).
+
+`mobile/src/pair.ts` and `mobile/src/hub.ts` hold the logic and are tested in the hub's own run (`test/phone-app-client.test.ts`). The screens are not tested here yet.
+
+### Building it
+
+`mobile/eas.json` has three builds that sit side by side on a phone: `development` (with Expo's dev client), `preview` (internal testing) and `production`. `mobile/app.config.js` names each and gives it its own bundle id. Builds run on Expo's cloud (EAS), so no Xcode is needed:
+
+```
+cd mobile && npm install
+npx eas-cli build --profile preview --platform ios      # TestFlight or an internal install
+npx eas-cli build --profile preview --platform android  # an APK to install directly
+```
+
+These need the owner's Expo account, and for iOS an Apple Developer account; nothing is published to a store from this repo.

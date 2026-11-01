@@ -5,6 +5,34 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G619: {
+    closed: "92f8565e",
+    title: "The settle screen said where each side came from, never what the source said",
+    severity: "low",
+    finding: "Audit v8 UX list, unchanged through audit v10 (2026-11-01): each side on /settle/<id> showed its value and \"From an email, 7 Oct\", so the owner picked without the evidence, though the hub keeps the source's words beside the fact.",
+    fix: "src/core.ts and src/settle-inbox.ts: a SettleSide carries its refs. src/dashboard/html-page.ts sideWords: the kept words (src/quotes.ts) that hold the side's value, at most 160 characters; on the 30-day sign-in an item a private, held, money, health or legal fact on the page cites stays shut (shutItems). src/dashboard/html-settle.ts shows them in quotes. Test: test/settle-source-words.test.ts.",
+  },
+  G621: {
+    closed: "48dcbfae",
+    title: "Settings, sign-in and error pages kept the old look; Sent gave no next step",
+    severity: "low",
+    finding: "Owner's phone screenshot after the PR 33 deploy (2026-11-01, \"certain web uis are still the old one\"): the Sent page after Text me a sign-in link was bare, with no next step and Safari's Not Secure on the tailnet's http address; every page behind Settings kept the pre-Two-inks look, and the loopback sign-in and every error came back as plain text.",
+    fix: "src/dashboard/html.ts inksLayer: layout() pages take the owner app's paper, inks and typeface (APP_TOKENS in html-app.ts). src/dashboard/server.ts: oops renders a catalog page, Sent says Check your texts with Messages, plainHttpNote names the https door; a page served before sign-in is bare (no owner name, no folder: security review of this change). Test: test/old-look-pages.test.ts.",
+  },
+  G616: {
+    closed: "6bd77b50",
+    title: "A linked page's name with an apostrophe showed as Mom&#39;s move",
+    severity: "low",
+    finding: "Audit v8 UX list, unchanged through audit v10 (2026-11-01): on the owner's page the hub's See also line named a linked page \"Mom&#39;s move\". The page writer links by [[id|label]]; html-brain.ts wikiLinks escaped the label with the text around it, then noteLink escaped it again.",
+    fix: "src/dashboard/html-brain.ts wikiLinks: the label is unescaped before noteLink, which escapes it once. Test: test/owner-link-label-escape.test.ts.",
+  },
+  G614: {
+    closed: "8bacbf99",
+    title: "A private value spelled another way still showed on a page on the 30-day sign-in",
+    severity: "medium",
+    finding: "Audit v10, second report (2026-11-01): the page prose scrub on the 30-day sign-in (home.ts shutBody, carve.ts scrubExact) matched a private value's exact words only, so the value spelled with spaces, without its hyphen or with look-alike letters still showed on /p and in Ask.",
+    fix: "src/dashboard/home.ts shutBody: after the exact pass, the view's disguise matcher (match.ts needleFor and findCarried, whole values only as in carve.ts needlesWith) withholds each line that still carries a shut value. Test: test/owner-shut-disguise.test.ts.",
+  },
   G620: {
     closed: "34010320",
     title: "No dashboard page said which version was running",

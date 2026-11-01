@@ -29,6 +29,7 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { lookedFor } from "./html-lookedfor";
 import { consentCard } from "./html-consent";
+import { APP_TOKENS, FONT_PATH } from "./html-app";
 import { FAVICON } from "../favicon";
 import { bar } from "../measure";
 import { ownerLocal, ownerToday } from "../clock";
@@ -220,7 +221,9 @@ main{padding:8px 16px 48px}h1{font-size:24px;line-height:32px;margin-bottom:16px
 .b-fact{grid-template-columns:minmax(0,1fr)}.b-hint-edit{display:none}.b-pair,.b-change{grid-template-columns:minmax(0,1fr)}.b-tell{flex-wrap:wrap;gap:8px}.b-tell input,.b-tell button{flex-basis:100%}.b-search{flex-wrap:wrap;gap:8px}.b-search input{font-size:22px;line-height:32px}.b-row{flex-wrap:wrap}.b-row .acts{flex-basis:100%}.b-row{gap:16px}.b-when{min-width:0}.props{grid-template-columns:minmax(0,1fr);gap:0}.props dt{padding-top:12px}.props dd{padding-top:0}.a-filter{flex-wrap:wrap}.a-filter select{max-width:100%}.wrap{overflow-x:auto}.chart text{font-size:36px}}
 `;
 
-export interface Page { title: string; tab: string; body: string; flash?: { msg: string; err?: boolean; extra?: string } }
+// bare: served before sign-in (an error, a sign-in page), so the top row names neither the owner nor the
+// brain's folder, and links nowhere a signed-out browser can't open (G621's security review).
+export interface Page { title: string; tab: string; body: string; flash?: { msg: string; err?: boolean; extra?: string }; bare?: boolean }
 
 // "Robin's brain" in the top row; the folder stays on hover, off screen.
 function brainName(rules: Rules | undefined): string {
@@ -228,15 +231,54 @@ function brainName(rules: Rules | undefined): string {
   return name ? `${name}'s brain` : "Your brain";
 }
 
+// Two inks for every page behind Settings and the sign-in pages (the owner's phone, 2026-11-01:
+// "certain web uis are still the old one", G621). The owner app's own paper, text, inks and
+// typeface (html-app.ts) under this sheet's names: links and buttons are bold words underlined in
+// the headline ink, titles are heavy in it, rules are 2px of text. Built on first use: html-app.ts
+// is read when a page is drawn, never while modules load.
+let inks: string | undefined;
+function inksLayer(): string {
+  const map = "--bg:var(--paper);--side:var(--raised);--well:var(--raised);--hover:var(--raised);--text-2:var(--muted);--line:color-mix(in srgb,var(--text) 22%,transparent);--line-strong:var(--text);--ink:var(--text);--on-ink:var(--paper);--accent:var(--text);--accent-text:var(--text);--accent-soft:var(--raised);--surface:var(--paper);--chip:var(--raised);--text2:var(--muted)";
+  return inks ??= `
+@font-face{font-family:"Schibsted Grotesk";font-style:normal;font-weight:400 900;font-display:swap;src:url(${FONT_PATH}) format("woff2")}
+:root{${APP_TOKENS.light}${map}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${APP_TOKENS.dark}${map}}}
+:root[data-theme="dark"]{${APP_TOKENS.dark}${map}}
+body{background:var(--paper);font-family:${APP_TOKENS.font}}
+a{color:var(--text);font-weight:600;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:2px;text-underline-offset:4px}
+a:hover{text-decoration-thickness:3px}
+:focus-visible{outline:3px solid var(--text);outline-offset:3px;border-radius:0}
+b,strong{font-weight:700}
+.top nav a,.top nav a.on{color:var(--text);font-weight:700;text-decoration:none}
+h1{font-size:40px;line-height:42px;font-weight:900;letter-spacing:-.03em;color:var(--headline-ink);mix-blend-mode:var(--blend)}
+h2{font-size:22px;line-height:28px;font-weight:900;letter-spacing:-.02em;border-top:2px solid var(--text);padding-top:10px}
+h3,h2.h-day{font-weight:800}
+button,.btn{color:var(--text);font-weight:800;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:2px;text-underline-offset:4px}
+button.go,main button.go{background:var(--headline-ink);color:var(--on-headline);text-decoration:none;border-radius:0;padding:0 16px}
+.glance .btns button,.glance .btns .btn,.glance .others>summary{border:2px solid var(--text);border-radius:0}
+.oops h1{font-size:28px;line-height:32px;max-width:none}
+main button:not(.b-row):not(.b-kind):not(.go),main .btn{color:var(--text);border:0;border-radius:0;padding:0;margin:4px 0}
+button.danger,.who .acts button.danger{color:var(--bad)}
+.who .acts button:not(.go){color:var(--text);font-weight:800}
+.who .acts button.go{font-weight:800}
+a.kind{color:var(--text)}
+th,td{border-bottom-color:var(--line)}
+select,input[type=text],input[type=number],input[type=search],input:not([type]),textarea{border-bottom:2px solid var(--text);background:transparent;color:var(--text)}
+select:focus,input:focus,textarea:focus{border-bottom-color:var(--headline-ink);box-shadow:0 2px 0 var(--headline-ink)}
+mark{background:linear-gradient(transparent 45%,color-mix(in srgb,var(--marker-ink) 55%,transparent) 45%);color:inherit;font-weight:inherit;text-decoration:none;padding:0 2px}
+.flash{border-bottom:2px solid var(--text)}
+`;
+}
+
 export function layout(s: { root: string }, p: Page): string {
   let rules: Rules | undefined;
-  try { rules = loadRules(s.root); } catch { /* rules mid-edit */ }
+  if (!p.bare) try { rules = loadRules(s.root); } catch { /* rules mid-edit */ }
   const name = brainName(rules);
   // One row, as on the home: back to Home, whose brain this is, Settings. No tab bar (outside review
   // v5): the home is the front door, and every other page is listed under Settings (/overview).
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(p.title)} · pocketBrain</title><meta name="referrer" content="same-origin"><link rel="icon" href="${FAVICON}"><style>${CSS}</style></head><body><div class="app">
-<header class="top"><nav aria-label="Pages"><a href="/">Home</a><span class="ws" title="${esc(s.root)}">${esc(name)}</span><a href="/overview"${p.tab === "overview" ? ' class="on" aria-current="page"' : ""}>Settings</a></nav></header>
+<title>${esc(p.title)} · pocketBrain</title><meta name="referrer" content="same-origin"><link rel="icon" href="${FAVICON}"><style>${CSS}${inksLayer()}</style></head><body><div class="app">
+${p.bare ? '<header class="top"><nav aria-label="Pages"><span class="ws">pocketBrain</span></nav></header>' : `<header class="top"><nav aria-label="Pages"><a href="/">Home</a><span class="ws" title="${esc(s.root)}">${esc(name)}</span><a href="/overview"${p.tab === "overview" ? ' class="on" aria-current="page"' : ""}>Settings</a></nav></header>`}
 <div class="page"><main>${p.flash ? `<div class="flash${p.flash.err ? " err" : ""}" role="status"><span class="flash-msg">${esc(p.flash.msg)}</span>${p.flash.extra ? `<span class="flash-acts">${p.flash.extra}</span>` : ""}</div>` : ""}${p.body}</main></div></div>
 <div id="tip"></div><script>
 const tip=document.getElementById("tip");

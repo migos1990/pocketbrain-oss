@@ -108,6 +108,8 @@ const tokens = (t: typeof TWO_INKS_LIGHT | typeof TWO_INKS_DARK, inks: { headlin
 const LIGHT = tokens(TWO_INKS_LIGHT, INKS, "multiply"), DARK = tokens(TWO_INKS_DARK, DARK_INKS, "normal");
 const FONT = '"Schibsted Grotesk",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Helvetica,sans-serif';
 export const FONT_PATH = "/font/schibsted-grotesk.woff2";
+// The same paper, inks and typeface for every page behind Settings (layout() in html.ts, G621).
+export const APP_TOKENS = { light: LIGHT, dark: DARK, font: FONT } as const;
 // The composer grows with its text up to this height (five lines), then scrolls inside.
 export const COMPOSER_MAX = 132;
 // Six assistants, six prints of the two inks: each ink alone, both overprinted, black, an outline

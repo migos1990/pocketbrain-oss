@@ -10,6 +10,7 @@ import { records } from "./carve";
 import { sensitiveShape } from "./shape";
 import { loadRules } from "./rules";
 import { compareKey } from "./normalize";
+import { refString } from "./sources";
 import { sourceKind } from "./diary";
 import { inboxCards, decideProposal, write } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
@@ -38,8 +39,8 @@ export function inboxConflicts(root: string): InboxConflict[] {
       ...([note.fm.sensitivity, live.sensitivity, req.sensitivity].some((x) => !!x && sensitivityRank(x) >= sensitivityRank("private")) || records(f).some((r) => !r.valid_to && (r.unseen || (!!r.sensitivity && sensitivityRank(r.sensitivity) >= sensitivityRank("private")))) || !!sensitiveShape(rules, req.attribute, live.value, req.value) ? { private: true } : {}),
       id: idOf(card.file), file: card.file, fact_key: `${note.fm.id}#${req.attribute}`, page: note.fm.id, title: String(note.fm.title ?? note.fm.id), attr: req.attribute,
       sides: [
-        { n: 1, value: live.value, as_of: live.as_of, source_word: sourceKind(live), by: String(live.by ?? ""), sources: Math.max(1, (live.sources ?? []).length) },
-        { n: 2, value: req.value, as_of: req.as_of, source_word: sourceKind(incoming), by: String(req.agent ?? card.doc.by ?? ""), sources: Math.max(1, (req.sources ?? []).length) },
+        { n: 1, value: live.value, as_of: live.as_of, source_word: sourceKind(live), by: String(live.by ?? ""), sources: Math.max(1, (live.sources ?? []).length), refs: (live.sources ?? []).map(refString) },
+        { n: 2, value: req.value, as_of: req.as_of, source_word: sourceKind(incoming), by: String(req.agent ?? card.doc.by ?? ""), sources: Math.max(1, (req.sources ?? []).length), refs: (req.sources ?? []).map(refString) },
       ],
     });
   }

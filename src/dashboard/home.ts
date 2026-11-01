@@ -7,6 +7,7 @@ import { dateWordForms } from "../util";
 import type { Note } from "../brain";
 import { isDisputed, sensitivityRank, loadBrain, type Sensitivity } from "../brain";
 import { records, scrubExact } from "../carve";
+import { needleFor, findCarried, type Needle } from "../match";
 import type { Rules } from "../rules";
 import { ownerName, ownAssistant } from "../rules";
 import { isOwnerId } from "../owner";
@@ -272,7 +273,15 @@ export function shutBody(n: Note, mark = "(private)"): string {
   const shut = (r: { unseen?: boolean; sensitivity?: Sensitivity }) => !!r.unseen || sensitivityRank(r.sensitivity ?? n.fm.sensitivity) >= P || sensitivityRank(n.fm.sensitivity) >= P;
   const values = Object.values(n.fm.facts ?? {}).flatMap((f) => records(f).filter((r) => !r.valid_to && shut(r)))
     .map((r) => valueText(r.value).trim()).flatMap((v) => [v, ...dateWordForms(v)]).filter((v) => v.length >= 2).sort((a, b) => b.length - a.length);
-  return values.length ? scrubExact(n.body ?? "", values).replace(/\[withheld\]/g, mark) : (n.body ?? "");
+  if (!values.length) return n.body ?? "";
+  // Then the disguised spellings (spaced out, hyphen dropped, look-alike letters), with the same
+  // matcher as an assistant's view (view.ts scrubCarved): a line that still carries a value goes
+  // whole (audit v10, G614). Whole values only, as in carve.ts needlesWith: a two-word fragment would
+  // hide innocent lines.
+  const needles = values.filter((v) => !/^\p{L}+$/u.test(v)).map((v) => needleFor(v, v)).filter((x): x is Needle => !!x).map((x) => ({ ...x, parts: [] }));
+  const exact = scrubExact(n.body ?? "", values);
+  const out = needles.length && findCarried(exact, needles) ? exact.split("\n").map((line) => findCarried(line, needles) ? line.replace(/^(\s*(?:[-*] )?).*$/, "$1[withheld]") : line).join("\n") : exact;
+  return out.replace(/\[withheld\]/g, mark);
 }
 
 // A filing that confirmed a held value, by the kind of source it added (G524).

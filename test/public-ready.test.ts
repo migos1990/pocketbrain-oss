@@ -39,7 +39,7 @@ test("every code file carries the license header", () => {
 test("addresses use reserved example domains", () => {
   const ok = /@([\w-]+\.)*(example|test|local|invalid|localhost)$|@example\.(com|org|net)$|^noreply@anthropic\.com$|@resource\.calendar\.google\.com$|@users\.noreply\.github\.com$|@x$/i;
   const bad: string[] = [];
-  for (const f of files.filter((f) => !f.startsWith("docs/history/") && f !== "CLA.md" && !/\.(lock|png|jpg|mp4|mov|wav)$/.test(f)))
+  for (const f of files.filter((f) => !f.startsWith("docs/history/") && f !== "CLA.md" && !/(\.lock|-lock\.json|\.png|\.jpg|\.mp4|\.mov|\.wav)$/.test(f)))
     for (const m of text(f).matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g))
       if (!ok.test(m[0]) && !/[{}<>$]/.test(m[0])) bad.push(`${f}: ${m[0]}`);
   expect(bad).toEqual([]);

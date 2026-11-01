@@ -63,6 +63,7 @@ form.pick button{width:100%;text-align:left;font:inherit;color:var(--text);backg
 form.pick button b{align-self:flex-start;font-size:30px;line-height:34px;font-weight:900;letter-spacing:-.03em;overflow-wrap:anywhere;background:linear-gradient(transparent 45%,color-mix(in srgb,var(--marker-ink) 55%,transparent) 45%);padding:0 2px}
 form.pick button small{font-size:13px;line-height:18px;color:var(--muted)}
 form.pick button .whole{font-size:15px;line-height:21px;color:var(--text);overflow-wrap:anywhere}
+form.pick button q.said{font-size:14px;line-height:20px;color:var(--text);font-style:italic;overflow-wrap:anywhere}
 form.pick button .lean{color:var(--text);font-weight:700}
 form.pick.first button{box-shadow:inset 6px 0 0 var(--headline-ink);padding-left:16px}
 form.pick.both button{border-bottom:2px solid var(--text);flex-direction:row;justify-content:space-between;align-items:center;gap:12px}
@@ -82,12 +83,12 @@ export const ordered = (c: SettleCase): SettleSide[] => [...c.sides.filter((s) =
 
 // A side shows big only the part that differs from the others ("15 October"), its whole value under
 // it when that is more, then where it came from.
-function row(c: SettleCase, s: SettleSide, csrf: string, rules: Rules, first = false): string {
+function row(c: SettleCase, s: SettleSide, csrf: string, rules: Rules, first = false, said?: string): string {
   const from = cap([fromWords(s, rules), day(s.as_of)].filter(Boolean).join(", ") + (s.sources > 1 ? ` · ${fill(SETTLE_COPY.count, { n: s.sources })}` : ""));
   const lean = s.lean ? `<small class="lean">${esc(fill(SETTLE_COPY.lean, { why: s.lean }))}</small>` : "";
   const d = differ(c.sides.map((x) => plain(x.value)));
   const whole = plain(s.value), big = d.rest[c.sides.indexOf(s)] ?? whole;
-  return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(big)}</b>${big !== whole ? `<span class="whole">${esc(whole)}</span>` : ""}<small>${esc(from)}</small>${lean}</button></form>`;
+  return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(big)}</b>${said ? `<q class="said">${esc(said)}</q>` : big !== whole ? `<span class="whole">${esc(whole)}</span>` : ""}<small>${esc(from)}</small>${lean}</button></form>`;
 }
 
 export interface SettleWhere { area?: string; pos?: number; of?: number }
@@ -95,10 +96,10 @@ const AREAS = new Set(["work", "teaching", "personal"]);
 const top = (o: SettleWhere) => `<div class="bar"><a href="/home">‹ ${SETTLE_COPY.back}</a>${o.pos && o.of && o.of > 1 ? `<span>${esc(fill(SETTLE_COPY.of, { n: o.pos, of: o.of }))}</span>` : ""}</div>`;
 const where = (c: SettleCase, area?: string) => `<p class="where"><span class="dot a-${area && AREAS.has(area) ? area : "none"}" aria-hidden="true"></span>${esc(displayName(c.page, c.title))}${area ? ` · ${esc(cap(area))}` : ""}</p>`;
 
-export function settlePage(c: SettleCase | undefined, csrf: string, rules: Rules, flash?: string, o: { fresh?: boolean } & SettleWhere = {}): string {
+export function settlePage(c: SettleCase | undefined, csrf: string, rules: Rules, flash?: string, o: { fresh?: boolean; words?: Record<number, string> } & SettleWhere = {}): string {
   // A private value shows only right after a sign-in (spec §8); before that, the question without it.
   const body = !c ? `<p class="quiet">${SETTLE_COPY.gone}</p>` : c.private && !o.fresh ? `${where(c, o.area)}<h1>${esc(fill(SETTLE_COPY.many, { name: displayName(c.page, c.title), attr: c.attr.replace(/_/g, " ") }))}</h1><p class="quiet">${SETTLE_COPY.shut}</p>${signInAgain(csrf)}` : `${where(c, o.area)}<h1>${esc(question(c))}</h1><p class="sub">${esc(c.held ? SETTLE_COPY.held : c.sides.length > 2 ? SETTLE_COPY.subMany : SETTLE_COPY.sub)}</p>
-${ordered(c).map((s, i) => row(c, s, csrf, rules, i === 0 && !!s.lean)).join("")}
+${ordered(c).map((s, i) => row(c, s, csrf, rules, i === 0 && !!s.lean, o.words?.[s.n])).join("")}
 <form class="pick both" method="post" action="/action/settle-both">${hidden(csrf, { id: c.id })}<button><b>${c.sides.length > 2 ? SETTLE_COPY.all : SETTLE_COPY.both}</b><small>${SETTLE_COPY.bothSmall}</small></button></form>
 <p class="tell">${SETTLE_COPY.orTell}</p>${composer(csrf, { id: c.id }, SETTLE_COPY.box, { label: SETTLE_COPY.box, action: "/action/settle-pick", name: "value", send: SETTLE_COPY.send })}`;
   return appPage(SETTLE_COPY.title, "mind", `${top(o)}

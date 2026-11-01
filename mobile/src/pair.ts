@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// What the app does with a phone link (docs/phone-app.md): the link page's
+// `pocketbrain://pair?hub=…&key=…` button, or the texted `https://<hub>/login?key=…` link pasted
+// in. Pure, so the hub's test run checks it (test/phone-app-client.test.ts).
+
+export type PairLink = { hub: string; key: string } | { error: string };
+
+const KEY = /^[A-Za-z0-9_-]{16,128}$/;
+
+/** The hub's address and the link's key, or one sentence saying what's wrong with it. */
+export function parsePairLink(raw: string): PairLink {
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { return { error: "That isn't a sign-in link. Paste the whole link from the text." }; }
+  let hub: string, key: string;
+  if (u.protocol === "pocketbrain:") {
+    hub = u.searchParams.get("hub") ?? "";
+    key = u.searchParams.get("key") ?? "";
+    try { const h = new URL(hub); hub = h.origin; if (h.protocol !== "https:" && h.protocol !== "http:") return { error: "That link doesn't name your hub." }; }
+    catch { return { error: "That link doesn't name your hub." }; }
+  } else if ((u.protocol === "https:" || u.protocol === "http:") && u.pathname === "/login") {
+    hub = u.origin;
+    key = u.searchParams.get("key") ?? "";
+  } else return { error: "That isn't a sign-in link. Paste the whole link from the text." };
+  if (!KEY.test(key)) return { error: "That link is cut short. Paste the whole link from the text." };
+  // Phones refuse plain http to a named host, and the app does too: the hub's https address is
+  // `tailscale serve` (docs/dashboard-tailnet.md).
+  if (!hub.startsWith("https://")) return { error: "This link is for your hub's plain address. Use its https one: run `tailscale serve` on the hub, then get a new link there." };
+  return { hub, key };
+}

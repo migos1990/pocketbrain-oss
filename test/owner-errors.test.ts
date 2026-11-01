@@ -7,8 +7,9 @@ import { existsSync, readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { makeBrain } from "./fixture";
-import { OWNER_ERRORS, ownerError, renderCatalog, type OwnerError, type OwnerErrorId } from "../src/owner-errors";
+import { OWNER_ERRORS, ownerError, ownerErrorHtml, renderCatalog, type OwnerError, type OwnerErrorId } from "../src/owner-errors";
 import { dashboardHandler } from "../src/dashboard/server";
+import { esc as escHtml } from "../src/dashboard/html";
 import { doctor } from "../src/doctor";
 import { propose } from "../src/consent";
 
@@ -49,16 +50,25 @@ test("the dashboard's error pages come from the catalog", async () => {
   const H = "127.0.0.1:8793";
   const d = dashboardHandler(root, { port: 8793, loginKey: "k".repeat(32) });
   const get = async (path: string, headers: Record<string, string> = {}) => { const r = await d.handle(new Request(`http://${H}${path}`, { headers: { host: H, ...headers } })); return { status: r.status, text: await r.text() }; };
-  expect(await get("/", { host: "evil.example" })).toEqual({ status: 421, text: ownerError("dash.host") });
-  expect(await get("/login?key=nope")).toEqual({ status: 403, text: ownerError("dash.login-key") });
-  expect(await get("/overview")).toEqual({ status: 401, text: ownerError("dash.signed-out") });
+  // Each is a page in the owner app's look, its words from the catalog (G621: they were bare text).
+  const asPage = (id: Parameters<typeof ownerErrorHtml>[0]) => ownerErrorHtml(id, {}, escHtml);
+  const host = await get("/", { host: "evil.example" });
+  expect(host.status).toBe(421);
+  expect(host.text).toContain(asPage("dash.host"));
+  const key = await get("/login?key=nope");
+  expect(key.status).toBe(403);
+  expect(key.text).toContain(asPage("dash.login-key"));
+  const out = await get("/overview");
+  expect(out.status).toBe(401);
+  expect(out.text).toContain(asPage("dash.signed-out"));
   const cookie = (await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }))).headers.get("set-cookie")!.split(";")[0];
   const missing = await get("/no/such/page", { cookie });
   expect(missing.status).toBe(404);
   expect(missing.text).toContain(`<h1>There&#39;s no page at this address</h1><p>Open the dashboard's <a href="/">Home</a> page.</p>`);
   expect((await get("/agent/nobody", { cookie })).text).toContain("No assistant called nobody");
   const post = await d.handle(new Request(`http://${H}/x`, { method: "POST", body: new URLSearchParams({ csrf: "wrong" }), headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded" } }));
-  expect([post.status, await post.text()]).toEqual([403, ownerError("dash.csrf")]);
+  expect(post.status).toBe(403);
+  expect(await post.text()).toContain(asPage("dash.csrf"));
   // No error words typed straight into a response: each goes through the catalog.
   const src = read("src/dashboard/server.ts");
   expect(src.match(/\btext\(\s*["'`]/g) ?? []).toEqual([]);
