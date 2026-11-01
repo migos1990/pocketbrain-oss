@@ -122,7 +122,7 @@ test("north star: a page that passes on the hub's own text alone is counted apar
   keepQuote(root, "q.yaml", ["gmail:f000000000000001"]);
   p = page();
   expect(quotesSource(p.s, p.n)).toBe(true);
-  const text = report({ asks: 3, asks_by_kind: { dispute: 3 }, asked: [], not_conflict: 0, assistant_held: 1, assistant_expiring: 2, held_by_access: 0, held_by_capture: 0, home_asks: 2, home_asked: [], planted: 3, pages: 10, pages_ok: 10, prose: 10, inbound: 10, share: 1, pages_beyond_hub: 0, pages_quoted: 0, pass: true, notes: [] }, "x");
+  const text = report({ asks: 3, asks_by_kind: { dispute: 3 }, asked: [], not_conflict: 0, assistant_held: 1, assistant_expiring: 2, held_by_access: 0, held_by_capture: 0, held_by_ambiguity: 0, home_asks: 2, home_asked: [], planted: 3, pages: 10, pages_ok: 10, prose: 10, inbound: 10, share: 1, pages_beyond_hub: 0, pages_quoted: 0, pass: true, notes: [] }, "x");
   expect(text).toContain("0 with prose beyond the hub's own written-from-facts text, 0 showing the owner a source's own words");
   expect(text).toContain("asks the home screen lists: 2 (1 wait on Settings)");
   expect(text).toContain("held until your hold on assistants' proposals ends: 1 assistant proposal(s); 2 more expire unconfirmed (not asks)");

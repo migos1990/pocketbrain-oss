@@ -28,6 +28,9 @@
 //                  a source and is about a person: the source-save rule waits for the owner
 //                  ("It's about a person"), kept under the scope freeze. Waits on Settings, never the
 //                  home; not an ask (G600).
+//   held_by_ambiguity a proposal by a name that fits a page the brain has as well as a new one
+//                  ("new or same as …?"): the hub never guesses which. Waits on Settings, never the
+//                  home; not an ask (G603).
 //   bun scripts/north-star.ts                  replay a fixed week on the shipped default rules
 //   bun scripts/north-star.ts --file-all       the same week with auto_decide file: all on, to compare
 //   bun scripts/north-star.ts --brain <path>   the same two numbers for a real brain (read-only, counts only;
@@ -68,7 +71,7 @@ const DECISIONS = new Set(["dispute", "proposal", "held-answer"]);
 const OTHER_ASKS = new Set(["mail", "capture", "upkeep", "rules", "usage"]);
 
 export interface WhyCounts { commits: number; with_why: number; gardener: number; gardener_why: number }
-export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean }
+export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; held_by_ambiguity: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean }
 export const BAR = { share: 0.8 };
 
 // ---------- the two numbers, from any brain ----------
@@ -172,7 +175,7 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   // contradicts nothing: the access rule working, not a filing failure. It waits on Settings, never
   // on the home; counted on its own line, never an ask (coordinator, 2026-11-01; G598).
   const byAccess = new Set(items.filter((i) => i.kind === "proposal" && !homeConflicts.has(i.ref) && !changesHeld(root, i.ref) && notInView(root, i.ref)).map((i) => i.ref));
-  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref) || byAccess.has(i.ref) || queues.byCapture.has(i.ref))));
+  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref) || byAccess.has(i.ref) || queues.byCapture.has(i.ref) || queues.byAmbiguity.has(i.ref))));
   const by: Record<string, number> = {};
   for (const i of waiting) by[i.kind] = (by[i.kind] ?? 0) + 1;
   const asked = waiting.map((i) => askedKey(root, i));
@@ -194,7 +197,7 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   const home_asked = ownerConflicts(root, later, { held: true }).map((c) => `${c.page}#${c.attr}`);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
-  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: byAccess.size, held_by_capture: queues.byCapture.size, home_asks: home_asked.length, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
+  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: byAccess.size, held_by_capture: queues.byCapture.size, held_by_ambiguity: queues.byAmbiguity.size, home_asks: home_asked.length, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
 }
 
 // ---------- the fixed week ----------
@@ -335,7 +338,7 @@ export async function replay(o: { fileAll?: boolean } = {}): Promise<NorthStar> 
   }
 }
 
-export const counts = (m: NorthStar) => ({ pass: m.pass, asks: m.asks, asks_by_kind: m.asks_by_kind, not_conflict: m.not_conflict, assistant_held: m.assistant_held, assistant_expiring: m.assistant_expiring, held_by_access: m.held_by_access, held_by_capture: m.held_by_capture, home_asks: m.home_asks, pages: m.pages, pages_ok: m.pages_ok, share: Math.round(m.share * 100) / 100, pages_beyond_hub: m.pages_beyond_hub, pages_quoted: m.pages_quoted });
+export const counts = (m: NorthStar) => ({ pass: m.pass, asks: m.asks, asks_by_kind: m.asks_by_kind, not_conflict: m.not_conflict, assistant_held: m.assistant_held, assistant_expiring: m.assistant_expiring, held_by_access: m.held_by_access, held_by_capture: m.held_by_capture, held_by_ambiguity: m.held_by_ambiguity, home_asks: m.home_asks, pages: m.pages, pages_ok: m.pages_ok, share: Math.round(m.share * 100) / 100, pages_beyond_hub: m.pages_beyond_hub, pages_quoted: m.pages_quoted });
 
 export function report(m: NorthStar, label: string): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -347,6 +350,7 @@ export function report(m: NorthStar, label: string): string {
     `  held until your hold on assistants' proposals ends: ${m.assistant_held} assistant proposal(s); ${m.assistant_expiring} more expire unconfirmed (not asks)`,
     `  held by access: ${m.held_by_access} assistant proposal(s) on a page that assistant can't fully see, contradicting nothing; they wait on Settings (not asks)`,
     `  held by capture: ${m.held_by_capture} assistant capture(s) about a person, citing a source, that wait for you by rule; they wait on Settings (not asks)`,
+    `  held by ambiguity: ${m.held_by_ambiguity} proposal(s) by a name that fits a page you have as well as a new one; the hub never guesses, so they wait on Settings (not asks)`,
     `  pages touched: ${m.pages}; with cited prose, an inbound link and more than the hub's own text: ${m.pages_ok} (${pct(m.share)}, want >= ${pct(BAR.share)}); cited prose ${m.prose}, inbound link ${m.inbound}`,
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,
     ...(m.why ? [`  commits: ${m.why.commits}, ${m.why.with_why} saying why; the Gardener's: ${m.why.gardener}, ${m.why.gardener_why} saying why (reported, not in pass)`] : []),

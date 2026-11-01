@@ -256,11 +256,13 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
 // never a date in code (re-audit 2026-10-30, G531). From that day they file by the usual rules.
 export const SET_ASIDE = "set it aside";
 // Proposal file -> when its plan runs: held until its day, left to expire, set aside next tick.
+// byAmbiguity: a proposal by a name that fits a page the brain has as well as a new one; the hub
+// never guesses which, so it waits on Settings, never the home (G603).
 // byCapture: an assistant's own capture citing a source, about a person, that waits for the owner by
 // the source-save rule (not the capture agent's or the owner's): kept waiting under the scope freeze
 // and counted on its own line, never an ask (coordinator, 2026-11-01; G600).
-export interface Queues { held: Map<string, string>; expiring: Map<string, string>; setAside: Map<string, string>; byCapture: Set<string> }
-export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map(), byCapture: new Set() });
+export interface Queues { held: Map<string, string>; expiring: Map<string, string>; setAside: Map<string, string>; byCapture: Set<string>; byAmbiguity: Set<string> }
+export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map(), byCapture: new Set(), byAmbiguity: new Set() });
 const HELD_DATED = new WeakSet<Plan>();
 
 // Active, and one the owner lets write: a core tier, inside the wall, or the capture agent.
@@ -378,6 +380,9 @@ function nextDay(rules: Rules, now: Date): Date {
 }
 
 const ABOUT_PERSON = "It's about a person, so only you decide it.";
+// A new page by a name that fits a page the brain has too (the write asks "new or same as …?"):
+// the hub never guesses which (G603).
+const AMBIGUOUS = "Its name fits more than one note, so you decide where it goes.";
 function saveVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[number], kind: string, a: EscalationPolicy["auto_decide"], notes: Note[], now: Date): Verdict {
   const rules = rulesOf(root);
   const r = pr.request as { id?: string; title?: string; type?: string; attribute?: string; value?: unknown; text?: string; retract?: boolean; sources?: unknown[] };
@@ -470,7 +475,7 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // A new page is saved by name: a note that now has that name is where it would land (the write
   // path resolves it the same way), so it is weighed against that note.
   const named = !r.id && r.title && r.type ? resolveEntity(notes, r.type, String((r as { title?: string }).title)) : undefined;
-  if (named?.ambiguous) return wait("Its name fits more than one note, so you decide where it goes.");
+  if (named?.ambiguous) return wait(AMBIGUOUS);
   const id = r.id ?? named?.id;
   const note = id ? notes.find((n) => n.fm.id === id) : undefined;
   const cur = note && r.attribute ? note.fm.facts?.[r.attribute] : undefined;
@@ -569,6 +574,7 @@ export function autoSaves(root: string, now = new Date(), state?: ReturnType<typ
       else if ("plan" in v && (v.plan.label === SAVED || v.plan.label === CONFLICT)) out.add(it.ref);
       else if ("plan" in v && v.plan.label === SET_ASIDE) queues?.setAside.set(it.ref, v.plan.at);
       else if ("plan" in v && v.plan.choice === "reject") queues?.expiring.set(it.ref, v.plan.at);
+      else if ("never" in v && v.never === AMBIGUOUS) queues?.byAmbiguity.add(it.ref);
       else if ("never" in v && v.never === ABOUT_PERSON) {
         const pr = proposalOf(root, it.ref);
         if (pr && !isOwnerId(pr.by) && pr.by !== captureAgent(build!.rules) && captured(root, pr.file)) queues?.byCapture.add(it.ref);

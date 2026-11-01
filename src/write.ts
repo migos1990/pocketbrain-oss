@@ -1266,6 +1266,7 @@ export function reopenLostAccepts(root: string): string[] {
   if (!existsSync(dir)) return [];
   const notes = loadBrain(root);
   const packets = notes.filter((n) => n.fm.type === "dispute");
+  const rules = loadRules(root);
   const out: string[] = [], paths: string[] = [], keys: string[] = [];
   let forgot: Set<string> | undefined;
   // Proposals already waiting (a write that filed one again under another name): never a twin card.
@@ -1275,8 +1276,35 @@ export function reopenLostAccepts(root: string): string[] {
     try { p = YAML.parse(readFileSync(join(dir, f), "utf8")) ?? {}; } catch { continue; }
     const req = p.request;
     if (p.decision !== "accept" || p.by !== "auto-decide" || typeof p.capture !== "string" || !req?.attribute || req.retract || existsSync(join(root, "inbox", f))) continue;
-    const id = req.id ?? (req.title && req.type ? resolveEntity(notes, req.type, String(req.title)).id : undefined);
+    const named = !req.id && req.title && req.type ? resolveEntity(notes, req.type, String(req.title)) : undefined;
+    const id = req.id ?? named?.id;
     const note = id ? notes.find((n) => n.fm.id === id) : undefined;
+    // As the write stores it (normalized, a name linked as [[id|label]] or [[label]]): its label.
+    // own: a page the name fits only counts when one of its records cites this proposal's own
+    // source, never a namesake that happens to hold the same value (G603 slice audit F1).
+    const mine = new Set((req.sources ?? []).map((x) => refString(x as SourceRef)));
+    const cites = (r: FactRecord | undefined) => !!r && (r.sources ?? []).some((x) => mine.has(refString(x as SourceRef)));
+    const landed = (n: Note, own = false): boolean => {
+      const spec = attributeSpec(rules, n.fm.type, req.attribute!);
+      const plain = (v: unknown) => { let x = v; try { x = normalizeValue(v as never, spec); } catch { /* as written */ } return compareKey(typeof x === "string" ? x.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") : x); };
+      const key = plain(req.value);
+      const cur = n.fm.facts?.[req.attribute!];
+      const held = [...(cur ? (isDisputed(cur) ? cur.candidates : records(cur)) : []), ...(n.fm.history?.[req.attribute!] ?? [])];
+      const fk = `${n.fm.id}#${req.attribute}`;
+      const inPacket = packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => plain(c.value) === key));
+      if (own) return held.some((r) => r && cites(r) && plain(r.value) === key) || packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => cites(c) && plain(c.value) === key));
+      if (inPacket || held.some((r) => r && plain(r.value) === key)) return true;
+      // A max or min the write ignores by design (an older last contact): not lost.
+      const live = cur && !isDisputed(cur) && !isList(cur) ? cur as FactRecord : undefined;
+      if (live && (spec.merge === "max" || spec.merge === "min")) {
+        let v: unknown = req.value; try { v = normalizeValue(req.value as never, spec); } catch { /* as written */ }
+        if (spec.merge === "max" ? !(String(v) > String(live.value)) : !(String(v) < String(live.value))) return true;
+      }
+      // A by-title capture's write handed back under the page's id (not_in_your_view) waits already (G601).
+      return waiting.some((w) => w && w.attribute === req.attribute && ((w.id ?? w.title) === (req.id ?? req.title) || w.id === n.fm.id) && plain(w.value) === key);
+    };
+    // A page the name fits holds the fact already: it landed there before the name fit another (G603).
+    if (!note && named?.ambiguous && notes.some((n) => named.ambiguous!.includes(n.fm.id) && landed(n, true))) continue;
     // A new page that was never made is lost too (a forgotten person's inbox files went with them);
     // a page named by id that is gone now was merged or forgotten, so it stays decided.
     if (!note) {
@@ -1288,23 +1316,8 @@ export function reopenLostAccepts(root: string): string[] {
       out.push(f); paths.push(`inbox/${f}`, `inbox/decided/${f}`); keys.push(`${req.type}:${req.title}#${req.attribute}`);
       continue;
     }
-    // As the write stores it (normalized, a name linked as [[id|label]] or [[label]]): its label.
-    const spec = attributeSpec(loadRules(root), note.fm.type, req.attribute);
-    const plain = (v: unknown) => { let x = v; try { x = normalizeValue(v as never, spec); } catch { /* as written */ } return compareKey(typeof x === "string" ? x.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") : x); };
-    const key = plain(req.value);
-    const cur = note.fm.facts?.[req.attribute];
-    const held = [...(cur ? (isDisputed(cur) ? cur.candidates : records(cur)) : []), ...(note.fm.history?.[req.attribute] ?? [])];
+    if (landed(note)) continue;
     const fk = `${note.fm.id}#${req.attribute}`;
-    const inPacket = packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => plain(c.value) === key));
-    if (inPacket || held.some((r) => r && plain(r.value) === key)) continue;
-    // A max or min the write ignores by design (an older last contact): not lost.
-    const live = cur && !isDisputed(cur) && !isList(cur) ? cur as FactRecord : undefined;
-    if (live && (spec.merge === "max" || spec.merge === "min")) {
-      let v: unknown = req.value; try { v = normalizeValue(req.value as never, spec); } catch { /* as written */ }
-      if (spec.merge === "max" ? !(String(v) > String(live.value)) : !(String(v) < String(live.value))) continue;
-    }
-    // A by-title capture's write handed back under the page's id (not_in_your_view) waits already (G601).
-    if (waiting.some((w) => w && w.attribute === req.attribute && ((w.id ?? w.title) === (req.id ?? req.title) || w.id === note.fm.id) && plain(w.value) === key)) continue;
     writeFileSync(join(root, "inbox", f), YAML.stringify(reopened(p), { lineWidth: 0 }));
     rmSync(join(dir, f));
     out.push(f); paths.push(`inbox/${f}`, `inbox/decided/${f}`); keys.push(fk);

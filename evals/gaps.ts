@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G603: {
+    closed: "9686cc74",
+    title: "A by-name fact whose name fits a page and a new one was counted as an ask, and could be reopened after it landed",
+    severity: "medium",
+    finding: "Owner's Mac after a6921606 (2026-11-01, counts only): with G601 live, the 6 captures and imports it gave back their writer waited as \"Its name fits more than one note, so you decide where it goes\" and the north star failed with 6 asks not about a contradiction. A capture names its subject by title, never an id (no id was dropped by the import or the reopen), and resolveEntity finds the name fits a page the brain has as well as a new one (an exact match on two pages, or a near match: same surname, a compatible first name), so the write asks \"new or same as ...?\" and the hub must not guess. reopenLostAccepts also treated such a name as a page never made, so a decided copy whose fact one of the fitting pages already held was put back in the inbox.",
+    fix: "src/filing.ts: the ambiguous-name wait goes on a byAmbiguity queue; scripts/north-star.ts counts it on its own held_by_ambiguity line (Settings, never the home), never as an ask. src/write.ts reopenLostAccepts: a by-name decided copy whose name fits pages, one of which holds its fact from the copy's own source, stays decided. Builder slice audit (tree 40f38da6) F1: a namesake page that happened to hold the same value kept a lost fact decided; only a record or conflict candidate citing the proposal\'s own source counts. Tests: test/ambiguous-name.test.ts, test/g603-namesake-keeps-decided.test.ts, the G603 rows in test/contracts/write.contract.test.ts.",
+  },
   G601: {
     closed: "f834639f",
     title: "A capture put back in the inbox at the hub's start lost its writer and waited as your own material",

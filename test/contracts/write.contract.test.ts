@@ -603,3 +603,31 @@ test("contract write: a forgotten person never comes back through reopen and fil
   expect(zed(root)).toEqual([]);
   delete process.env.PB_CONFIG_DIR;
 });
+
+// G603: a decided by-name copy whose name fits a page the brain has and a new one is never put back
+// in the inbox when a page it fits holds its fact already: it landed there.
+test("contract write: an ambiguous-name decided copy whose fact a fitting page holds stays decided (G603)", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { reopenLostAccepts } = await import("../../src/write");
+  const { git } = await import("../../src/git");
+  const root = makeBrain();
+  write(root, { agent: "planner", kind: "fact", id: "people/jane-roy", attribute: "office", value: "Room 4", as_of: "2026-10-05", sources: ["gmail:f000000000000009"] } as never);
+  mkdirSync(join(root, "inbox", "decided"), { recursive: true });
+  writeFileSync(join(root, "inbox", "decided", "2026-10-06-planner-c2.yaml"), "by: auto-decide\ndecision: accept\ncapture: inbox/captures/c2.md\nrequest: { agent: planner, kind: fact, title: Jan Roy, type: person, attribute: office, value: Room 4, as_of: 2026-10-05, sources: [\"gmail:f000000000000009\"] }\n");
+  git(root, ["add", "-A"]); git(root, ["commit", "-q", "-m", "fixture: a decided copy"]);
+  expect(reopenLostAccepts(root)).toEqual([]);
+});
+
+// G603 slice audit F1: a namesake page that happens to hold the same value never keeps a lost
+// by-name fact from the owner; only a record citing the proposal's own source counts as landed.
+test("contract write: a namesake's equal value never keeps a lost by-name fact decided (G603)", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { reopenLostAccepts } = await import("../../src/write");
+  const { git } = await import("../../src/git");
+  const root = makeBrain();
+  write(root, { agent: "planner", kind: "fact", id: "people/jane-roy", attribute: "office", value: "Room 4", as_of: "2026-10-05", sources: ["gmail:f00000000000000a"] } as never);
+  mkdirSync(join(root, "inbox", "decided"), { recursive: true });
+  writeFileSync(join(root, "inbox", "decided", "2026-10-06-planner-c3.yaml"), "by: auto-decide\ndecision: accept\ncapture: inbox/captures/c3.md\nrequest: { agent: planner, kind: fact, title: Jan Roy, type: person, attribute: office, value: Room 4, as_of: 2026-10-05, sources: [\"doc:capture/c3\"] }\n");
+  git(root, ["add", "-A"]); git(root, ["commit", "-q", "-m", "fixture: a decided copy"]);
+  expect(reopenLostAccepts(root)).toEqual(["2026-10-06-planner-c3.yaml"]);
+});

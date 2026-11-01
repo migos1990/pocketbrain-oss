@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A fact named by a person or page name that fits a page you have as well as a new one waits on Settings for you to say which, and is no longer counted as a question on your home. A fact that already landed on one of those pages (from that same source) is no longer put back in your inbox when the hub restarts (G603).
 - A fact the hub put back in your inbox when it restarted keeps the assistant or source it came from, so it files or waits by that one's rules. Before, it waited as "your own material" (G601).
 - A memory or fact proposed twice with the same value now files or waits the same way as the first one. Before, the second one waited as "your own material" and counted as something to decide (G600).
 - Undo of a settle always puts back what that settle changed, even when a later line in your diary names the same change (G595).
