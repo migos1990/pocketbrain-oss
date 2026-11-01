@@ -10,6 +10,9 @@
 ## Gate
 <!-- The last lines of `bun scripts/gate.ts main` on this head. -->
 
+## Security
+<!-- The builder's `/security-review` result (High and Medium findings, or none) and CI's code scan. -->
+
 ## Access core
 <!-- none, or the slice audit report for this exact tree. -->
 

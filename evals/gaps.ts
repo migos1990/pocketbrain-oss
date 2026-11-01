@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G590: {
+    closed: "bfa1bdb5",
+    title: "A settle's Undo said Changed since across a month boundary",
+    severity: "medium",
+    finding: "Builder, main's CI on 2026-11-01: test/owner-settle.test.ts went red once the UTC clock rolled into November. undo.ts reopen() looked for the settle's commit only in diary/<row.at's month>.jsonl, but the row is filed under the owner's day's month, so for a few hours at each month boundary (UTC ahead of Toronto) the owner's Undo of a settle said Changed since.",
+    fix: "reopen() in src/undo.ts searches every diary month for the settle's token. Test: test/owner-settle.test.ts pins the clock into the next UTC month while the owner's day stays in the last one.",
+  },
+  G591: {
+    title: "The gardener scorecard test went red on the day Toronto's clocks went back",
+    severity: "low",
+    finding: "main CI 2026-11-01 00:15Z: test/gardener.test.ts pinned PB_NOW to today's date at 07:30Z, which is 03:30 in Toronto on summer time but 02:30 from 2026-11-01, outside the gardener's daily 03:25-05:00 window, so the run counted as a tripwire trip and the scorecard said 0 runs. The code was right; the test's pin depended on the season.",
+    fix: "test/gardener.test.ts pins 08:30Z, which is in the window on summer and winter time and on the day the clocks change.",
+    closed: "9c3c8154",
+  },
   G546: {
     title: "A page with the owner's surname never linked to the owner",
     severity: "medium",

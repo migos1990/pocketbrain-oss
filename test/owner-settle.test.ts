@@ -165,3 +165,21 @@ test("a tap on a side keeps that side's rank; it is not the owner's word", async
   expect(r.sources.map(String).some((s) => s.startsWith(`approved:`))).toBe(true);
   expect(status(root, id)).toBe("resolved");
 });
+
+// The UTC clock in the next month while the owner's day is still in the last one (the hours each
+// month boundary that UTC and Toronto differ; main's CI on 2026-11-01): the settle's row is in the
+// owner's month's diary file, and its Undo still finds the settle.
+test("a pick's Undo opens the conflict again when the clock is in the next month and the owner's day isn't", () => {
+  const { root, id } = brain();
+  lean(root, id);
+  const was = process.env.PB_NOW;
+  process.env.PB_NOW = "2026-11-01T02:00:00Z"; // makeBrain pins the owner's day to 2026-10-08
+  try {
+    ownerDecide(root, id, 2, `settle-${id}`);
+    const row = readDiary(root).at(-1)!;
+    expect(row.at.slice(0, 7)).not.toBe(process.env.PB_TODAY!.slice(0, 7));
+    expect(undoFact(root, row.undo_token).outcome).toBe("undone");
+    expect(room(root).value).toBe("B-201");
+    expect(status(root, id)).toBe("open");
+  } finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+});

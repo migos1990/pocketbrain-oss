@@ -122,8 +122,9 @@ function reopen(root: string, row: DiaryRow, token: string): UndoResult {
   if (!same(shownValue(note.fm.facts?.[attr]), row.to)) return changed;
   const packet = parseNote(readFileSync(join(root, rel), "utf8"), rel);
   if (packet.fm.status !== "resolved") return changed;
-  const month = row.at.slice(0, 7);
-  const sha = gitRun(root, ["log", "-1", "--format=%H", `-S${token}`, "--", `diary/${month}.jsonl`]).out.trim();
+  // Any month's file: the row sits in the owner's day's month, which isn't the UTC month of
+  // row.at for a few hours at each month boundary (main's CI, 2026-11-01).
+  const sha = gitRun(root, ["log", "-1", "--format=%H", `-S${token}`, "--", "diary/"]).out.trim();
   if (!sha) return changed;
   const show = (path: string) => { const r = gitRun(root, ["show", `${sha}^:${path}`]); return r.ok ? r.out : undefined; };
   const oldNote = show(note.path), oldPacket = show(rel);

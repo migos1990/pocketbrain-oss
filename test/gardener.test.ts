@@ -134,9 +134,11 @@ test("a note read only by the gardener is still forgotten; it stays out of the s
 test("the scorecard keeps the gardener on its own line", async () => {
   const root = makeBrain();
   // The run is logged at PB_NOW and the proposal by the wall clock, so both go on today's date,
-  // inside the gardener's hours (IN's time of day).
+  // inside the gardener's hours (daily 03:25-05:00 Toronto). 08:30Z is 04:30 on summer time and
+  // 03:30 on winter time, so it stays in the window on every day, the day the clocks change too
+  // (G591: IN's 07:30Z was 02:30 on 2026-11-01, outside it, and the run was a tripwire trip).
   const day = new Date().toISOString().slice(0, 10);
-  process.env.PB_NOW = `${day}${IN.slice(10)}`;
+  process.env.PB_NOW = `${day}T08:30:00Z`;
   const tok = issueToken(root, "gardener");
   await call(root, tok, "POST", "/v1/gardener/upkeep");
   await call(root, tok, "POST", "/v1/remember", { id: "projects/course-a", attribute: "next_step", value: "Publish grades", ...SRC });
