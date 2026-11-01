@@ -3,8 +3,10 @@
 // the owner (only real conflicts so far), and the diary of what the brain learned, newest day first,
 // each line with Undo. Built from diary/*.jsonl (src/diary.ts), never from git log. The page itself is
 // html-home.ts; the words are the owner's (test/owner-copy.test.ts).
+import { dateWordForms } from "../util";
 import type { Note } from "../brain";
-import { isDisputed, sensitivityRank, loadBrain } from "../brain";
+import { isDisputed, sensitivityRank, loadBrain, type Sensitivity } from "../brain";
+import { records, scrubExact } from "../carve";
 import type { Rules } from "../rules";
 import { ownerName, ownAssistant } from "../rules";
 import { isOwnerId } from "../owner";
@@ -19,7 +21,7 @@ import { loadRules } from "../rules";
 import { readEntriesSince, type ReadEntry } from "../readlog";
 import type { WrongLine } from "./home-beliefs";
 import { ownerDay, clock } from "../clock";
-import { sensitiveShape } from "../shape";
+import { sensitiveShape, sensitiveName } from "../shape";
 import type { Mark } from "./marks";
 
 export interface HomeLine {
@@ -185,7 +187,7 @@ export function heldName(rules: Rules, n: Note | undefined, u: { page: string; t
   // A page every fact of which came from addresses the pages don't hold was named by that mail.
   const recs = Object.values(n?.fm.facts ?? {}).flatMap((f) => { const x = f as { items?: unknown[]; candidates?: unknown[] }; return (x.items ?? x.candidates ?? [f]) as { sender?: unknown }[]; });
   const fromStranger = u.unknownSender && (!n || (recs.length > 0 && recs.every((r) => r?.sender === "unknown")));
-  if (fromStranger || n?.fm.type === "money" || u.page.startsWith("money/") || sensitiveShape(rules, title)) return undefined;
+  if (fromStranger || n?.fm.type === "money" || u.page.startsWith("money/") || sensitiveName(rules, title)) return undefined;
   return title;
 }
 
@@ -237,6 +239,31 @@ export function differ(values: string[]): { shared: string; rest: string[] } {
   return n >= 2 ? { shared: words[0]!.slice(0, n).join(" "), rest: words.map((w) => w.slice(n).join(" ")) } : { shared: "", rest: values };
 }
 
+// Whether a diary line's value is private at render time (audit v7, G551; CLAUDE.md "Lines on the
+// 30-day sign-in"): the page's sensitivity and every record of the fact as the note holds them now,
+// and the row's own as a floor. A note that is gone counts as private: there is nothing to check.
+export function privateNow(note: Note | undefined, attr: string, rowSensitivity?: Sensitivity): boolean {
+  const P = sensitivityRank("private");
+  if (rowSensitivity && sensitivityRank(rowSensitivity) >= P) return true;
+  if (!note) return true;
+  if (sensitivityRank(note.fm.sensitivity) >= P) return true;
+  const f = note.fm.facts?.[attr];
+  return !!f && records(f).some((r) => !!r.sensitivity && sensitivityRank(r.sensitivity) >= P);
+}
+
+// A page's text with every live value that is shut now (unseen, or private on its record or its
+// page) taken out as a whole word and said as `mark`: what /p shows on the 30-day sign-in, and what
+// Ask and the box answer with there too (slice audit of claude/audit9-fixes: a fact made private
+// after it was written still showed in Ask's prose, G582).
+const valueText = (v: unknown): string => (v === undefined || v === null ? "" : typeof v === "string" ? v : Array.isArray(v) ? v.map(valueText).join(", ") : typeof v === "object" ? Object.values(v as object).map(valueText).join(", ") : String(v));
+export function shutBody(n: Note, mark = "(private)"): string {
+  const P = sensitivityRank("private");
+  const shut = (r: { unseen?: boolean; sensitivity?: Sensitivity }) => !!r.unseen || sensitivityRank(r.sensitivity ?? n.fm.sensitivity) >= P || sensitivityRank(n.fm.sensitivity) >= P;
+  const values = Object.values(n.fm.facts ?? {}).flatMap((f) => records(f).filter((r) => !r.valid_to && shut(r)))
+    .map((r) => valueText(r.value).trim()).flatMap((v) => [v, ...dateWordForms(v)]).filter((v) => v.length >= 2).sort((a, b) => b.length - a.length);
+  return values.length ? scrubExact(n.body ?? "", values).replace(/\[withheld\]/g, mark) : (n.body ?? "");
+}
+
 // A filing that confirmed a held value, by the kind of source it added (G524).
 const CONFIRMED_BY: Record<string, string> = { email: "email", calendar: "calendar event", notion: "Notion page", assistant: "assistant", you: "word of yours" };
 
@@ -249,10 +276,8 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   const held = (() => { const f = notes.get(id)?.fm.facts?.[attr] as { items?: { unseen?: boolean; valid_to?: string }[]; unseen?: boolean } | undefined; return !!f && (f.unseen === true || (f.items ?? []).some((i) => i.unseen && !i.valid_to)); })();
   // Decided from the page as it is now, never only from the stored row (audit v7's rule; owner-canvas
   // slice audit): a page or a fact's live record made private since says only that something is new.
-  const isPrivate = (x: unknown) => typeof x === "string" && sensitivityRank(x as never) >= sensitivityRank("private");
-  const noteNow = notes.get(id), factNow = noteNow?.fm.facts?.[attr] as { sensitivity?: string; valid_to?: string; items?: { sensitivity?: string; valid_to?: string }[]; candidates?: { sensitivity?: string }[] } | undefined;
-  const privateNow = isPrivate(noteNow?.fm.sensitivity) || [factNow, ...(factNow?.items ?? []).filter((i) => !i.valid_to), ...(factNow?.candidates ?? [])].some((r) => isPrivate(r?.sensitivity));
-  const shapeless = held || privateNow || sensitivityRank(row.sensitivity) >= sensitivityRank("private");
+  const noteNow = notes.get(id), factNow = noteNow?.fm.facts?.[attr] as { items?: unknown[] } | undefined;
+  const shapeless = held || privateNow(noteNow, attr, row.sensitivity);
   // A private line names its page only as its held card would (heldName).
   const stranger = [factNow, ...(factNow?.items ?? [])].some((r) => (r as { sender?: unknown } | undefined)?.sender === "unknown");
   const safeName = heldName(rules, noteNow, { page: id, title: row.title, unknownSender: stranger }) !== undefined;
@@ -505,7 +530,7 @@ export function changedPages(root: string, rules: Rules, notes: Note[], now: Dat
     if (!n || id.startsWith("disputes/") || !shown(n)) continue;
     const f = n.fm.facts?.[attr] as { items?: { unseen?: boolean; valid_to?: string }[]; unseen?: boolean } | undefined;
     const held = !!f && (f.unseen === true || (f.items ?? []).some((i) => i.unseen && !i.valid_to));
-    const quiet = held || sensitivityRank(row.sensitivity) >= sensitivityRank("private") || sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
+    const quiet = held || privateNow(n, attr, row.sensitivity);
     let p = out.get(id);
     if (!p) {
       const day = dayOf(row.at);

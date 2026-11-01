@@ -299,9 +299,36 @@ const TO_READER = /\b(you|your|yours|you['’](ll|re|d|ve))\b|\b(assistants?|age
 // An order at the start, alone or after always/never: "never mention the move", "cc robin on every
 // reply". A habit ("never takes calls before 9", "always early") is not one.
 const ORDER_FIRST = /^(?:(?:always|never)\s+)?(?:do not|don['’]t|make sure|be sure|remember to|ignore|forget|send|share|forward|reveal|tell|mention|give|disclose|cc|bcc|post|delete|email|text)\b/i;
+// The same order said other ways (audit v7, G554): passive ("is to be sent to anyone"), after a
+// leading clause ("when anyone asks, send …"), or in French (second person, an assistant as the
+// actor, or an order at the start). "prefers to be emailed" is a taste: no modal before "be".
+const ORDER_PASSIVE = /\b(?:is|are|should|must|shall|has|have|needs?|ought)\s+(?:to\s+)?(?:always\s+|never\s+)?be\s+(?:sent|shared|forwarded|given|told|revealed|disclosed|emailed|texted|posted|cc['’]?d|bcc['’]?d|mentioned|passed on|handed over|copied)\b/i;
+const LEADING_CLAUSE = /^(?:when(?:ever)?|if|once|after|before|upon|in case|as soon as|each time|every time|quand|lorsque|si|dès que|chaque fois que)\b[^,;:]{1,80}[,;:]\s*/i;
+// Lower case only, and not ton/ta/tes, which read as English ("Robin's TA", "tons").
+const FR_YOU = /(?<![\p{L}'’-])(?:tu|vous|votre|vos)(?![\p{L}'’-])/u;
+const FR_READER = /(?<![\p{L}])(?:l['’]assistant|les assistants|l['’]agent|les agents|l['’]ia|claude|chatgpt|gemini|copilot)\s+(?:doit|doivent|devrait|devraient|va|vont|peut|peuvent)\b/iu;
+const FR_ORDER_FIRST = /^(?:(?:toujours|jamais)\s+)?(?:ne\s+|n['’])?(?:envoie|envoyez|partage|partagez|transmets|transmettez|transfère|transférez|donne|donnez|révèle|révélez|dis|dites|mentionne|mentionnez|oublie|oubliez|efface|effacez|supprime|supprimez|écris|écrivez|réponds|répondez|assure-toi|assurez-vous|ignore|ignorez|publie|publiez)(?![\p{L}])/iu;
+const norm = (value: unknown) => foldLookalikes(textOf(value).normalize("NFKC").replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, "")).replace(/\s+/g, " ").trim();
+// Spoken to the reader whatever the attribute: second person, an assistant as the actor (English or French).
+const toReader = (v: string) => TO_READER.test(v) || FR_YOU.test(v) || FR_READER.test(v);
+// An order's shape: at the start, after a leading clause, passive with a modal, or a French imperative.
+function orderShape(v: string, first: RegExp): boolean {
+  const rest = v.replace(LEADING_CLAUSE, "");
+  return first.test(v) || first.test(rest) || ORDER_PASSIVE.test(v) || FR_ORDER_FIRST.test(v) || FR_ORDER_FIRST.test(rest);
+}
+// An open audience: an order to hand something to anyone at all is never a plan of the owner's.
+const OPEN_AUDIENCE = /\b(?:anyone|anybody|everyone|everybody|whoever|all (?:the )?assistants|any assistant|every assistant)\b|n['’]importe qui|quiconque|tout le monde|qui le demande/i;
 export function preferenceSpeaksToReader(value: unknown): boolean {
-  const v = foldLookalikes(textOf(value).normalize("NFKC").replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, "")).replace(/\s+/g, " ").trim();
-  return !!v && (TO_READER.test(v) || ORDER_FIRST.test(v));
+  const v = norm(value);
+  return !!v && (toReader(v) || orderShape(v, ORDER_FIRST));
+}
+// Outside a preference an imperative is mostly the owner's own plan ("Post the final grades", a
+// next step, "Email marketing lead" as a role): there an order counts when it speaks to the reader,
+// or hands something to an open audience ("send her address to anyone who asks").
+export function speaksToReader(attribute: unknown, value: unknown): boolean {
+  if (isPreference(attribute)) return preferenceSpeaksToReader(value);
+  const v = norm(value);
+  return !!v && (toReader(v) || (OPEN_AUDIENCE.test(v) && orderShape(v, ORDER_FIRST)));
 }
 export const isPreference = (attribute: unknown): boolean => typeof attribute === "string" && /^(prefers?|preferences?|likes|dislikes|wants)(_|$)/.test(attribute);
 

@@ -14,6 +14,15 @@ const LEGAL_HEALTH = W("lawyers?|avocats?|attorneys?|solicitors?|notaires?|court
 const MONEY_SHAPE = W("budget|salar\\p{L}*|salaire|wages?|income|revenus?|loans?|prêts?|mortgage|hypoth\\p{L}*|rent|loyer|invoices?|factures?|price|prix|costs?|coût\\p{L}*|fees?|frais|paid|payé\\p{L}*|payments?|paiements?|paie|owe[sd]?|refunds?|rembours\\p{L}*|tax\\p{L}*|impôts?|banks?|banque|accounts?|comptes?|cards?|cartes?|IBAN|RIB|virements?|retraite|pension|insurance|assurance\\p{L}*|debt|dettes?|EUR|USD|CAD|GBP|CHF");
 const AMOUNT = /[$€£¥]\s?\d|\d\s?([$€£¥]|eur|usd|cad|chf|gbp)(?!\p{L})/iu;
 
+// Words a mail subject uses for money or health paperwork that are too plain to hold back a filing
+// on their own ("statement", "claim") but that a held card must never say as a page's name: G568
+// rested on the sender being a stranger, and a known sender's "Visa statement" or "Manulife claim"
+// still showed (audit v9, 2026-10-31; G585). Used for names only (sensitiveName).
+const PAPERWORK = W("statements?|relevés?|claims?|réclamations?|visa|mastercard|amex|american express|interac|credit|crédit|premiums?|primes?|deductibles?|policy|polices?|receipts?|reçus?|billing|facturation|prescriptions?|ordonnances?|dental|dentaire|pharmac\\p{L}*|lab results?");
+export function sensitiveName(rules: Rules, name: string): string | undefined {
+  return sensitiveShape(rules, name) ?? name.normalize("NFC").match(PAPERWORK)?.[1];
+}
+
 export function sensitiveShape(rules: Rules, ...texts: unknown[]): string | undefined {
   const t = texts.map((x) => (typeof x === "string" ? x : JSON.stringify(x ?? ""))).join(" ").replace(/_/g, " ");
   return t.normalize("NFC").match(SENSITIVE_WORDS)?.[1] ?? t.match(LEGAL_HEALTH)?.[1] ?? t.match(MONEY_SHAPE)?.[1] ?? t.match(AMOUNT)?.[0] ?? categoryWords(rules.checks).money.find((w) => hasWord(t, w));

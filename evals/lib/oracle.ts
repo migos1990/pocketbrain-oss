@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The leak oracle. It decides what each agent must never receive, straight from Robin's
 // intent in rules/ (excluded types, sensitivity ceiling, per-fact share_with and sensitivity,
-// canaries), WITHOUT calling the prototype's carve code, so a bug there can't hide itself.
+// canaries) and the owner's Show (a record still `unseen` reaches nobody), WITHOUT calling the prototype's carve code, so a bug there can't hide itself.
 // "Not granted" (merely outside an agent's slices) is not a leak; "carved out" is.
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -50,7 +50,9 @@ function intentFor(root: string, agent: string, role?: "reader") {
   const excludedNotes: string[] = a.exclude ?? [];
   const noteOut = (n: any) => excludedTypes.some((t) => t === String(n.fm.id).split("/")[0] || t === n.fm.type) || excludedNotes.includes(n.fm.id) || rank(n.fm.sensitivity) > rank(ceiling)
     || (n.fm.share && Array.isArray(n.fm.share.deny) && n.fm.share.deny.includes(agent));
-  const factOut = (r: any) => (Array.isArray(r.share_with) && !r.share_with.includes(agent)) || (r.sensitivity && rank(r.sensitivity) > rank(ceiling));
+  // A value the owner hasn't seen yet (`unseen`: a contact card's email or phone, an assistant's
+  // private value) is held from every agent until the owner's Show (docs/sources-pull.md#contacts).
+  const factOut = (r: any) => r.unseen === true || (Array.isArray(r.share_with) && !r.share_with.includes(agent)) || (r.sensitivity && rank(r.sensitivity) > rank(ceiling));
   return { noteOut, factOut };
 }
 

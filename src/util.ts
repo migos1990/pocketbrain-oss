@@ -189,3 +189,19 @@ export function codeVersion(dir = join(import.meta.dir, "..")): string {
 // it. /health answers it and scripts/deploy.ts go compares it with the sha it was asked for.
 let startedOn: string | undefined;
 export const codeAtStart = (): string => (startedOn ??= codeVersion());
+
+// "2026-10-05" as the page writer says it in a sentence (src/wiki.ts): "5 Oct", and "5 Oct 2026"
+// for another year. Every form a date inside a value may take in prose, so whatever scrubs a
+// hidden value from text scrubs these too (slice audit of the audit v9 stack, G589).
+export const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function dateWordForms(v: string): string[] {
+  const out: string[] = [];
+  for (const m of v.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
+    const mo = +m[2]!;
+    if (mo < 1 || mo > 12) continue;
+    const said = `${+m[3]!} ${MONTHS_SHORT[mo - 1]}`;
+    out.push(v.replace(m[0], said), v.replace(m[0], `${said} ${m[1]}`), said, `${said} ${m[1]}`);
+  }
+  return [...new Set(out)];
+}
+

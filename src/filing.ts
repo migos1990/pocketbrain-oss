@@ -26,7 +26,7 @@ import { logWrite } from "./write";
 import { loadRules, attributeSpec, isOwnerWord, isGardener, tierOf } from "./rules";
 import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide } from "./write";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
-import { refString, schemeOf, isExactLouisRef, SCHEMES, sourceRank } from "./sources";
+import { refString, schemeOf, isExactLouisRef, SCHEMES, sourceRank, asAgentWord } from "./sources";
 import { isOwnerConfirmed, normVerification, isOwnerId } from "./owner";
 import { getQuote } from "./quotes";
 import { renderTouchedPages } from "./wiki";
@@ -187,7 +187,10 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // hold_assistants_until in rules/escalation.yaml), held until that day with a diary line saying
     // so; then, or with no hold, it files by the rules above: on its page with Undo, a private one
     // under the serving hold, a different value as a conflict to settle.
-    if (pr && !isOwnerId(pr.by) && !captured(root, pr.file) && (pr.request.kind ?? "fact") === "fact" && coreAssistant(rules, pr.by)) return filed(holdUntilEnd(fileVerdict(root, it, pr, ctx.notes, now), rules, now, a.hold_assistants_until));
+    // A core assistant's own memory, imported (`memsync import`, or its memory_dump), is its word
+    // as surely as its remember would be, so it files the same way (G587: claude.ai's 22 were left
+    // to expire, as only the capture agent's and the owner's captured proposals filed).
+    if (pr && !isOwnerId(pr.by) && (!captured(root, pr.file) || importedBy(root, pr.file, pr.by)) && (pr.request.kind ?? "fact") === "fact" && coreAssistant(rules, pr.by)) return filed(holdUntilEnd(fileVerdict(root, it, pr, ctx.notes, now), rules, now, a.hold_assistants_until));
   }
   if (it.private) return { never: "Private: only you decide this." };
   if (it.money) return { never: "Money: only you decide this." };
@@ -405,6 +408,18 @@ function captured(root: string, file: string): boolean {
   try { return typeof (YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { capture?: unknown })?.capture === "string"; } catch { return false; }
 }
 
+// A proposal from an assistant's imported memory: its capture was stored `via: import` by that same
+// assistant (src/memimport.ts, memsync's memory_dump), never a mail, a drop or another agent's.
+function importedBy(root: string, file: string, by: string): boolean {
+  try {
+    const rel = (YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { capture?: unknown })?.capture;
+    if (typeof rel !== "string" || !/^inbox\/captures\/[^/]+\.md$/.test(rel)) return false;
+    const fm = /^---\n([\s\S]*?)\n---/.exec(readFileSync(join(root, rel), "utf8"))?.[1];
+    const c = fm ? YAML.parse(fm) as { via?: unknown; by?: unknown } : undefined;
+    return c?.via === "import" && c?.by === by;
+  } catch { return false; }
+}
+
 // With auto_decide.file: all, a fact a capture or a pull found files itself on the next tick, on a
 // person's page, a new page or a private one alike, with Undo, and no daily cap. It waits only
 // when it isn't simply a new fact: a different value for one the brain holds (unless it is a newer
@@ -432,7 +447,13 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   const cur = note && r.attribute ? note.fm.facts?.[r.attribute] : undefined;
   if (cur && typeof cur === "object" && !isList(cur as never) && "candidates" in (cur as object)) return wait("This fact is already in conflict, so you decide it.");
   const live = cur ? records(cur as never).filter((x) => x && !x.retired && !x.valid_to) : [];
-  const differs = (x: FactRecord) => compareKey(x.value) !== compareKey(r.value);
+  const spec = attributeSpec(rules, String(note?.fm.type ?? r.type ?? ""), String(r.attribute ?? ""));
+  // A list of values (merge: set or append) takes another item beside the ones it holds: only an
+  // item with the same key and other content contradicts one. A card's second address on a page
+  // where the owner gave one waited as an ask that never filed (audit v8, 2026-10-31; G565).
+  const listed = cur && isList(cur as never) && (spec.merge === "set" || spec.merge === "append");
+  const keyOf = (v: unknown) => spec.item_key && v && typeof v === "object" ? String((v as Record<string, unknown>)[spec.item_key]) : undefined;
+  const differs = (x: FactRecord) => compareKey(x.value) !== compareKey(r.value) && (!listed || (keyOf(x.value) !== undefined && keyOf(x.value) === keyOf(r.value)));
   // The owner's word, or a co-owner's in their own area (isOwnerWord, as the write path weighs it):
   // the write path decides (audit v4, 2026-10-26: asking here first meant a capture never reached
   // "older sources never re-ask"). A source dated before the owner's word goes to history and asks
@@ -448,7 +469,7 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // A sender no person page holds files a private or money fact under the serving hold (G420,
   // G429, G454): decideProposal saves it unseen, marked unknown sender, so it waits for the
   // owner's Show on the home instead of as a card.
-  const merge = attributeSpec(rules, String(note?.fm.type ?? r.type ?? ""), String(r.attribute ?? "")).merge ?? "replace";
+  const merge = spec.merge ?? "replace";
   // A different value for one the brain holds is a conflict: filed as one (both sides kept, with
   // Undo), and it waits for the Gardener's nightly pass before it asks (owner, 2026-10-25: "ask me
   // only conflicts caught by the gardener"; G416). Money, health and legal ones ask the same day.
@@ -473,14 +494,15 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
     const kinds = new Set((r.sources ?? []).map((y) => schemeOf(refString(y as never)) ?? ""));
     // Only what the hub pulled itself updates this way; an assistant's word for what a mail says is
     // weighed by the write as a conflict side (G536).
-    const update = captured(root, pr.file) && live.filter(differs).every((x) => (x.sources ?? []).length && (x.sources ?? []).every((y) => kinds.has(schemeOf(refString(y)) ?? "")) && String(r.as_of ?? "") > String(x.as_of ?? ""));
+    // An assistant's imported memory is its word, never an update of what a source said (G587 F2).
+    const update = captured(root, pr.file) && !importedBy(root, pr.file, pr.by) && live.filter(differs).every((x) => (x.sources ?? []).length && (x.sources ?? []).every((y) => kinds.has(schemeOf(refString(y)) ?? "")) && String(r.as_of ?? "") > String(x.as_of ?? ""));
     if (!update) return conflict;
   }
   // A run of values (merge: latest): the write keeps the newer one and moves the other to history,
   // but only from a source at least as strong and on another date or with a higher number; any
   // other different value opens a conflict there, so it waits here instead of being called saved.
   if (merge === "latest" && live.some(differs)) {
-    const mine = sourceRank({ sources: (r.sources ?? []) as FactRecord["sources"], verification: (r as { verification?: FactRecord["verification"] }).verification ?? "self-reported", confidence: (r as { confidence?: FactRecord["confidence"] }).confidence });
+    const mine = sourceRank({ sources: (importedBy(root, pr.file, pr.by) ? asAgentWord(r.sources ?? [], pr.by) : r.sources ?? []) as FactRecord["sources"], verification: (r as { verification?: FactRecord["verification"] }).verification ?? "self-reported", confidence: (r as { confidence?: FactRecord["confidence"] }).confidence });
     const steps = live.filter(differs).every((x) => sourceRank(x) <= mine && (String(r.as_of ?? "") !== String(x.as_of ?? "") || versionOrder(String(r.value), String(x.value)) !== 0));
     if (!steps) return conflict;
   }

@@ -11,7 +11,7 @@ import { confirmSlices } from "./fga";
 import { refString } from "./sources";
 import { squash, distinctive, needleFor, findCarried, withholdIn, type Needle } from "./match";
 import { categoryWords } from "./checks";
-import { escapeRe, hasWord, tokenIndex, wordSet } from "./util";
+import { escapeRe, hasWord, tokenIndex, wordSet, dateWordForms } from "./util";
 import { capForRole } from "./tokenrole";
 
 export interface Grant {
@@ -537,8 +537,13 @@ function carveFromMemo(notes: Note[], rules: Rules, grant: Grant, memo: Memo, na
 }
 
 // Dates and single lowercase words ("account") match too much ordinary prose to be useful.
+// A carved value holding a date is carved as the page writer says it too ("due 8 Dec at noon",
+// G589); a bare carved date is withheld in words in its own page only (`scrubPage` in view.ts),
+// since "24 Sep" on another page is as common as 2026-09-24 there.
 function carvedNeedles(carved: Map<string, string>, shown: Set<string>): [string, string][] {
-  return [...carved.entries()].filter(([s]) => s.trim().length >= 4 && !STOP_VALUES.has(s.toLowerCase()) && distinctive(s, shown));
+  const all = new Map(carved);
+  for (const [s, from] of carved) if (distinctive(s, shown)) for (const w of dateWordForms(s)) if (w !== s && !all.has(w) && distinctive(w, shown) && !/^\d{1,2} \p{L}{3}( \d{4})?$/u.test(w)) all.set(w, from);
+  return [...all.entries()].filter(([s]) => s.trim().length >= 4 && !STOP_VALUES.has(s.toLowerCase()) && distinctive(s, shown));
 }
 
 // A merged note is a pointer, out of every view; it is carved as the note it finally merged into

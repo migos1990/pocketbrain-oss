@@ -17,11 +17,12 @@ import { keptQuotes, itemRef } from "../quotes";
 import { sensitiveShape } from "../shape";
 import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
 import { appPage } from "./html-app";
-import { plain } from "./home";
+import { plain, shutBody } from "./home";
 import { ownerConflicts } from "../core";
 import { inboxConflicts } from "../settle-inbox";
 import { MADE } from "../wiki";
 import { sensitivityRank } from "../brain";
+import { scrubExact } from "../carve";
 
 export const PAGE_COPY = {
   back: "Memory",
@@ -48,6 +49,7 @@ export const PAGE_COPY = {
   send: "Send",
   empty: "Nothing written here yet. Tell me something about {name}.",
   shut: "private · sign in again to see it",
+  inProse: "(private)",
   shutPage: "This page is private. Sign in again to read it.",
   openPrivate: "Only you see this page. It stays open 10 minutes after you sign in.",
   edit: "Edit this page",
@@ -102,6 +104,12 @@ function shutItems(s: State, n: Note): Set<string> {
     }
   }
   return out;
+}
+
+// The page's text with every live value that is shut now taken out, as a whole word (carve.ts
+// scrubExact), shown as PAGE_COPY.inProse.
+function shutInProse(n: Note): string {
+  return shutBody(n, PAGE_COPY.inProse);
 }
 
 function facts(s: State, n: Note, fresh: boolean): string {
@@ -189,7 +197,9 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const count = sourceCount(n);
   const held = fresh ? new Set<string>() : shutItems(s, n);
   let withheld = false;
-  const prose = wikiBody(s, n.body, (ref) => {
+  // The prose was written when its facts were; a value private now is never in it on the 30-day
+  // sign-in, whatever it was then (audit v7, G551).
+  const prose = wikiBody(s, fresh ? n.body : shutInProse(n), (ref) => {
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
     return [];
@@ -224,7 +234,7 @@ ${pinned}`, { css: PAGE_CSS, wrap: "page" });
 export interface AskProse { html: string; cites: { href: string; label: string }[] }
 export function askProse(s: State, n: Note, fresh: boolean): AskProse | undefined {
   if (!fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
-  const top = (n.body ?? "").split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !x.startsWith("[^"));
+  const top = (fresh ? n.body ?? "" : shutInProse(n)).split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !x.startsWith("[^"));
   if (!top) return undefined;
   const notes = new Set((top.match(/\[\^[^\]\s]+\]/g) ?? []));
   const text = top.replace(/\[\^[^\]\s]+\]/g, "").split(MADE).join(" ").replace(/\s+/g, " ").trim();

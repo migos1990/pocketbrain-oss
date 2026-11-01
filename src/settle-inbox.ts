@@ -7,6 +7,8 @@
 // accepts it (at its source's rank, with the tap recorded), and a typed value is the owner's word.
 import { loadBrain, isDisputed, isList, sensitivityRank, type FactRecord } from "./brain";
 import { records } from "./carve";
+import { sensitiveShape } from "./shape";
+import { loadRules } from "./rules";
 import { compareKey } from "./normalize";
 import { sourceKind } from "./diary";
 import { inboxCards, decideProposal, write } from "./write";
@@ -19,7 +21,7 @@ export interface InboxConflict extends SettleCase { file: string }
 const idOf = (file: string) => `p-${file.replace(/\.yaml$/, "")}`;
 
 export function inboxConflicts(root: string): InboxConflict[] {
-  const notes = loadBrain(root, { shared: true });
+  const notes = loadBrain(root, { shared: true }), rules = loadRules(root);
   const out: InboxConflict[] = [];
   for (const card of inboxCards(root)) {
     const req = card.doc.request;
@@ -31,7 +33,9 @@ export function inboxConflicts(root: string): InboxConflict[] {
     if (!live || compareKey(live.value) === compareKey(req.value)) continue;
     const incoming = { sources: req.sources ?? [], verification: req.verification } as Pick<FactRecord, "sources" | "verification">;
     out.push({
-      ...(sensitivityRank(live.sensitivity ?? note.fm.sensitivity) >= sensitivityRank("private") || sensitivityRank(req.sensitivity ?? note.fm.sensitivity) >= sensitivityRank("private") ? { private: true } : {}),
+      // Private as the page and the fact are now (G583 and its slice audit): the page, any live
+      // record, the proposal's level, or a value or attribute shaped like money, health or legal.
+      ...([note.fm.sensitivity, live.sensitivity, req.sensitivity].some((x) => !!x && sensitivityRank(x) >= sensitivityRank("private")) || records(f).some((r) => !r.valid_to && (r.unseen || (!!r.sensitivity && sensitivityRank(r.sensitivity) >= sensitivityRank("private")))) || !!sensitiveShape(rules, req.attribute, live.value, req.value) ? { private: true } : {}),
       id: idOf(card.file), file: card.file, fact_key: `${note.fm.id}#${req.attribute}`, page: note.fm.id, title: String(note.fm.title ?? note.fm.id), attr: req.attribute,
       sides: [
         { n: 1, value: live.value, as_of: live.as_of, source_word: sourceKind(live), by: String(live.by ?? ""), sources: Math.max(1, (live.sources ?? []).length) },

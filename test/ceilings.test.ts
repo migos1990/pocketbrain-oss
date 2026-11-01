@@ -433,3 +433,53 @@ test("verify_source answers no-match for a claim quoting a secret-shaped value (
   for (const [item, claim] of VERIFY_SECRET_CEILING) expect([claim, checkClaim(item, claim).result]).toEqual([claim, "no-match"]);
   expect(checkClaim("Session 6 moved to Oct 11 in Hall B210.", "session 6 Oct 11 B210").result).toBe("match");
 });
+
+// A hidden date said in words (G589): withheld in its own page's text, where the page writer says
+// it ("Due for X: 8 Dec"). On another page a bare date in words passes, like the same date in
+// digits always has (distinctive in src/match.ts): "24 Sep" is too common to withhold brain-wide.
+test("a hidden bare date said in words on another page passes (ceiling)", async () => {
+  const { makeDemoBrain } = await import("./fixture");
+  const { readNote } = await import("../src/core");
+  const { withTokenRole } = await import("../src/tokenrole");
+  const { root } = await makeDemoBrain();
+  const own = join(root, "projects/product-discovery-course.md"), other = join(root, "projects/atlas-launch.md");
+  writeFileSync(own, readFileSync(own, "utf8").replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    sensitivity: private\n"));
+  writeFileSync(other, readFileSync(other, "utf8") + "\nThe course hands in its projects on 8 Dec.\n");
+  const as = (id: string) => JSON.stringify(withTokenRole("claude", "reader", () => readNote(root, "claude", id)));
+  expect(as("projects/product-discovery-course")).not.toContain("8 Dec");
+  expect(as("projects/atlas-launch")).toContain("on 8 Dec.");
+}, 60_000);
+
+// The same page's own text (scrubPage in src/view.ts, G594): only the page writer's sentence about a
+// hidden fact is withheld, found by its reference label. A date a person typed into the page passes
+// in every spelling, the digits included, as it always has: matching dates was an oracle (G592-G594).
+const DATE_CEILING = ["2026-12-09", "9 Dec", "9 December", "December 9", "Dec 9", "le 9 décembre", "12/9", "9/12/2026", "the 9th", "Dec. 9", "9-Dec", "décembre 9"];
+test("a hidden date on its own page: spellings that pass, and a day the page also grants (ceiling)", async () => {
+  const { makeDemoBrain } = await import("./fixture");
+  const { readNote } = await import("../src/core");
+  const { withTokenRole } = await import("../src/tokenrole");
+  const { root } = await makeDemoBrain();
+  const ID = "projects/product-discovery-course", f = join(root, `${ID}.md`);
+  const kick = `  kickoff:\n    value: 2026-11-30\n    as_of: 2026-09-27\n    sources:\n      - gmail:000000000000d02c\n    verification: self-reported\n    by: capture\n    recorded: 2026-09-27\n`;
+  writeFileSync(f, readFileSync(f, "utf8")
+    .replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-09\n    sensitivity: private\n  review:\n    value: 2026-11-30\n    sensitivity: private\n")
+    .replace("facts:\n", `facts:\n${kick}`)
+    .replace("(Written by the hub", `Hand note: ${DATE_CEILING.join("; ")}. Review on 30 Nov.\n\n(Written by the hub`));
+  const body = (withTokenRole("claude", "reader", () => readNote(root, "claude", ID)) as { body: string }).body;
+  expect(body).toContain(`Hand note: ${DATE_CEILING.join("; ")}. Review on 30 Nov.`);
+}, 60_000);
+
+// G593/G594: hand-typed dates pass on the page in any form, in a link's text or beside a granted
+// date of another year alike (the page's date scrub matched values, and is gone).
+test("a hidden date in a link's text, or year-less beside a granted date of another year, passes (ceiling)", async () => {
+  const { makeDemoBrain } = await import("./fixture");
+  const { readNote } = await import("../src/core");
+  const { root } = await makeDemoBrain();
+  const ID = "projects/product-discovery-course", f = join(root, `${ID}.md`);
+  writeFileSync(f, readFileSync(f, "utf8")
+    .replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    share_with: [chatgpt]\n")
+    .replace("facts:\n", "facts:\n  last_run:\n    value: 2025-12-08\n    as_of: 2025-12-08\n    sources:\n      - gmail:000000000000d02c\n    verification: self-reported\n    by: capture\n    recorded: 2025-12-08\n")
+    .replace("(Written by the hub", "Due 8 Dec. See [[projects/final-projects|hand-in 2026-12-08]].\n\n(Written by the hub"));
+  const out = JSON.stringify(readNote(root, "claude", ID));
+  expect(out).toContain("Due 8 Dec. See [[projects/final-projects|hand-in 2026-12-08]].");
+}, 60_000);

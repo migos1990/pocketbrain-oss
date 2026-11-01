@@ -29,8 +29,12 @@ export function undoFact(root: string, token: string): UndoResult {
   const row = rows.find((r) => r.undo_token === token && r.kind !== "undone");
   if (!row) return { outcome: "not_found", message: "nothing to undo for that line" };
   if (rows.some((r) => r.undoes === token)) return { outcome: "already_undone", fact_key: row.fact_key, row, message: "already undone" };
+  if (row.kind === "seen") return rehold(root, row, token);
   if (row.kind === "conflict" || row.to === undefined && row.kind !== "retracted") return { outcome: "not_undoable", fact_key: row.fact_key, row, message: "this line has nothing to undo" };
   if (row.kind === "settled") return reopen(root, row, token);
+  // Only these kinds change a value; any other (kept, held, set_aside) never deletes a fact (audit
+  // v7, G552: Undo on a Show line fell through to the new-fact branch; Show has its own, above).
+  if (!["new", "changed", "item_added", "confirmed", "retracted"].includes(row.kind)) return { outcome: "not_undoable", fact_key: row.fact_key, row, message: "this line has nothing to undo" };
   const hash = row.fact_key.lastIndexOf("#");
   const id = row.fact_key.slice(0, hash), attr = row.fact_key.slice(hash + 1);
   const note = loadBrain(root).find((n) => n.fm.id === id);
@@ -98,6 +102,29 @@ export function undoFact(root: string, token: string): UndoResult {
   return { outcome: "undone", fact_key: row.fact_key, row, message: "Undone" };
 }
 
+// Undo of Show (src/seen.ts) is its inverse: the live value the owner saw is held for them again,
+// so no assistant gets it until the next Show. Nothing else moves; only while that value is live.
+function rehold(root: string, row: DiaryRow, token: string): UndoResult {
+  const hash = row.fact_key.lastIndexOf("#");
+  const id = row.fact_key.slice(0, hash), attr = row.fact_key.slice(hash + 1);
+  const note = loadBrain(root).find((n) => n.fm.id === id);
+  const f = note?.fm.facts?.[attr];
+  const changed: UndoResult = { outcome: "changed_since", fact_key: row.fact_key, row, message: "Changed since" };
+  if (!note || !f || !existsSync(join(root, note.path)) || isDisputed(f)) return changed;
+  const live = (isList(f) ? f.items : [f as FactRecord]).filter((r) => !r.valid_to && !r.retired);
+  if (!live.length || (row.to !== undefined && !same(shownValue(f), row.to))) return changed;
+  for (const r of live) (r as FactRecord & { unseen?: boolean }).unseen = true;
+  const d = today(), at = clock().toISOString();
+  note.fm.updated = d;
+  saveNote(root, note);
+  const undo = { ...diaryRow({ at, factKey: row.fact_key, title: row.title, kind: "undone", from: undefined, to: undefined, incoming: { value: undefined, as_of: d, sources: [], verification: "confirmed-by-owner", by: OWNER, recorded: d }, rank: 5, sensitivity: row.sensitivity }), undoes: token };
+  const rel = appendDiary(root, undo, d.slice(0, 7));
+  const unsaved = commitPaths(root, [note.path, rel], `owner: hold ${row.fact_key} again\n\nWhy: the owner undid Show from ${row.at.slice(0, 10)}; the value waits for them again and no assistant gets it.\nKind: owner-edit\nFact-Keys: ${row.fact_key}`, OWNER);
+  if (unsaved) return { outcome: "not_saved", fact_key: row.fact_key, row, message: `not saved: ${unsaved}` };
+  logWrite(root, { at, agent: OWNER, kind: "owner-edit", op: "undo", key: row.fact_key, outcome: "committed" });
+  return { outcome: "undone", fact_key: row.fact_key, row, message: "Held again" };
+}
+
 function emptied(root: string, note: Note): boolean {
   if (Object.keys(note.fm.facts ?? {}).length) return false;
   if (!Object.values(note.fm.history ?? {}).flat().every((r) => (r as FactRecord).ended_by?.correction)) return false;
@@ -124,7 +151,9 @@ function reopen(root: string, row: DiaryRow, token: string): UndoResult {
   if (packet.fm.status !== "resolved") return changed;
   // Any month's file: the row sits in the owner's day's month, which isn't the UTC month of
   // row.at for a few hours at each month boundary (main's CI, 2026-11-01).
-  const sha = gitRun(root, ["log", "-1", "--format=%H", `-S${token}`, "--", "diary/"]).out.trim();
+  // The commit that added the settle's line, the oldest naming its token: a later diary row that
+  // carries the token (a value naming it) is never taken for it (builder's audit of G590).
+  const sha = gitRun(root, ["log", "--reverse", "--format=%H", `-S${token}`, "--", "diary/"]).out.split("\n")[0]!.trim();
   if (!sha) return changed;
   const show = (path: string) => { const r = gitRun(root, ["show", `${sha}^:${path}`]); return r.ok ? r.out : undefined; };
   const oldNote = show(note.path), oldPacket = show(rel);

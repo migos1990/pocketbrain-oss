@@ -188,6 +188,8 @@ The freeze from 2026-10-08 is lifted. Still parked (log only, don't build): a co
 
 15. **A co-owner's word counts only in the co-owner's areas** (`docs/household.md`). `loadRules` cuts a co-owner's assistant to those areas, personal at most, no money and none of the owner's roles; `write()` records its owner-word as `confirmed-by-co-owner` (never an owner ref, never in the owner's registry), refuses its writes elsewhere, and ranks the label as an owner's word only on that assistant's own record in that co-owner's area. No agent may send the label. slices.yaml can't redefine her area slice, ask to see offers her assistant nothing past those limits, and the resolver and the nightly pass treat her word there like the owner's.
 
+16. **Lines on the 30-day sign-in re-derive their sensitivity from the note at render time, never from a stored row.** A diary row, a read-log entry or any record kept from when a value was written says how private it was then; a page or fact made private or secret since must hide it now on every owner screen (the home, a page's Changed list and prose, the Let sheet, Who knows). Screen code reads a stored row's `sensitivity` only through `privateNow` (`src/dashboard/home.ts`), which takes it as a floor and checks the page and the fact's records as they are now; `test/stored-sensitivity-lint.test.ts` fails on any other read in a screen file that reads the diary (audit v7, G544, G551).
+
 ## How to add…
 
 - **A write check:** add a function block in `runChecks` (`src/checks.ts`). If it is security, put its name in `ALWAYS_ON`. Give it a test in `test/security.test.ts` or `test/write.test.ts`.

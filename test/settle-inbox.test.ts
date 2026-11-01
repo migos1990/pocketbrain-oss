@@ -72,3 +72,21 @@ test("a private conflict shows its values only after a fresh sign-in", async () 
   expect(shut).toContain(`action="/action/sign-in-again"`);
   expect(settlePage(c, "x", loadRules(root), undefined, { fresh: true })).toContain("900 dollars");
 });
+
+// Slice audit of claude/audit9-fixes (low): an inbox conflict took its privacy from the live record
+// before the page, so a page made private with an explicitly personal live record showed its sides.
+test("an inbox conflict on a page made private since is private, whatever the live record says (G583)", async () => {
+  const { saveNote } = await import("../src/brain");
+  const { root } = conflictOnPrivatePage();
+  expect(inboxConflicts(root)[0]!.private).toBeUndefined();
+  const n = loadBrain(root).find((x) => x.fm.id === "people/jane-roy")!;
+  (n.fm.facts!.role as FactRecord).sensitivity = "personal";
+  n.fm.sensitivity = "private";
+  saveNote(root, n);
+  // The proposal says its own level, everyday: only the page now makes it private.
+  const { readFileSync, writeFileSync } = await import("node:fs");
+  const file = join(root, "inbox", inbox(root)[0]!);
+  writeFileSync(file, readFileSync(file, "utf8").replace(/^(request:\n)/m, "$1  sensitivity: personal\n"));
+  expect(readFileSync(file, "utf8")).toContain("  sensitivity: personal");
+  expect(inboxConflicts(root)[0]!.private).toBe(true);
+});

@@ -31,18 +31,35 @@ const AGENTS = ["ava", "bex", "cyd", "dax"] as const;
 export interface GenAgent { name: string; roles: ("full" | "reader")[] }
 export interface Generated { root: string; seed: number; agents: GenAgent[]; ops: string[] }
 
-function words(r: R) {
-  const used = new Set<string>();
+function words(r: R, shared?: { used: Set<string>; dates: Set<string> }) {
+  const used = shared?.used ?? new Set<string>();
   const C = "bdfgklmnprstvzq", V = "aeiouy";
   const word = () => { for (;;) { let w = ""; for (let i = r.int(2, 3); i > 0; i--) w += r.pick([...C]) + r.pick([...V]); w = w[0].toUpperCase() + w.slice(1) + r.pick(["n", "r", "x", "th", "l"]); if (!used.has(w.toLowerCase())) { used.add(w.toLowerCase()); return w; } } };
   const name = () => `${word()} ${word()}`;
-  const dates = new Set<string>();
+  const dates = shared?.dates ?? new Set<string>();
   const date = () => { for (;;) { const d = `${r.int(1991, 2019)}-${String(r.int(1, 12)).padStart(2, "0")}-${String(r.int(1, 28)).padStart(2, "0")}`; if (!dates.has(d)) { dates.add(d); return d; } } };
   const amounts = new Set<string>();
   const amount = () => { for (;;) { const a = `CAD ${r.int(1, 99)},${String(r.int(0, 999)).padStart(3, "0")}.${String(r.int(10, 99))}`; if (!amounts.has(a)) { amounts.add(a); return a; } } };
   let src = 0;
   const source = () => `gmail:f${(0x100000000000000 + ++src * 7919 + r.int(0, 999)).toString(16).slice(-15)}`;
-  return { word, name, date, amount, source };
+  return { word, name, date, amount, source, used, dates };
+}
+
+// What a contact card files on a person page (src/contacts.ts, docs/sources-pull.md#contacts): a
+// nickname, and emails and phones floored private and held from every agent until the owner's Show
+// (`unseen`, src/seen.ts); some already seen. Each cites the card. Drawn from a stream of its own,
+// after the notes, so a seed's other notes and its policy are the ones it always made; its words
+// and dates are never used elsewhere in the brain (audit v8, 2026-10-31; G563).
+function cardFacts(seed: number, w: ReturnType<typeof words>, facts: Record<string, any>) {
+  const r = prng(seed ^ 0xca4d);
+  const c = words(r, w);
+  const phones = new Set<string>();
+  const phone = () => { for (;;) { const p = `+1${r.int(200, 989)}555${String(r.int(0, 9999)).padStart(4, "0")}`; if (!phones.has(p)) { phones.add(p); return p; } } };
+  const card = `contacts:vcard/${c.word().toLowerCase()}@${r.int(0x100000, 0xffffff).toString(16)}${r.int(0x100000, 0xffffff).toString(16)}`;
+  const rec = (value: string, held: boolean) => ({ value, sensitivity: "private", as_of: c.date(), sources: [card], verification: "self-reported", by: "capture", recorded: c.date(), ...(held ? { unseen: true } : {}) });
+  facts.aliases = { items: [{ value: c.word(), as_of: c.date(), sources: [card], verification: "self-reported", by: "capture", recorded: c.date() }] };
+  facts.emails = { items: [rec(`${c.word().toLowerCase()}.${c.word().toLowerCase()}@card.example`, r.chance(0.7))] };
+  facts.phones = { items: [rec(phone(), r.chance(0.7)), ...(r.chance(0.5) ? [rec(phone(), r.chance(0.7))] : [])] };
 }
 
 export function generate(seed: number): Generated {
@@ -76,6 +93,8 @@ export function generate(seed: number): Generated {
     const fm: Record<string, any> = { id, type: TYPE_OF[folder], title, ...(r.chance(0.4) ? { aliases: [w.name()] } : {}), area: r.pick(areas), sensitivity: r.pick(LEVELS), ...(r.chance(0.5) ? { tags: r.some(TAGS, 0.5) } : {}), status: "active", created, updated, by: "owner", facts };
     notes.push({ fm, body: `About ${title}.` });
   }
+  // Contact cards on the people pages.
+  for (const n of notes) if (n.fm.type === "person") cardFacts(seed ^ notes.indexOf(n), w, n.fm.facts);
   // Links between notes, hidden or not, and decisions that replace one another.
   for (const n of notes) if (r.chance(0.5)) n.body += ` See [[${r.pick(notes).fm.id}]].`;
   const decisions = notes.filter((n) => n.fm.type === "decision");

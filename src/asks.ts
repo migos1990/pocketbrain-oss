@@ -346,8 +346,11 @@ function handOver(root: string, agent: string, a: Ask): string {
     event(root, { ask: a.id, ev: "expired", why: "the note changed since the approval" });
     throw new CoreError(410, `this approval no longer holds; ask ${ownerName(rules)} again`);
   }
-  const one: Rules = { ...rules, slices: { ...rules.slices, [`ask:${a.id}`]: { include: [noteId] } } };
-  const res = carve(notes, one, { agent, slices: [`ask:${a.id}`], exclude_types: [], exclude: [], ceiling: note.fm.sensitivity === "private" && !co ? "private" : "personal" });
+  const left = leftOutByName(rules, agent);
+  const one: Rules = { ...rules, slices: { ...rules.slices, [`ask:${a.id}`]: { include: [noteId], ...(left.exclude_attributes.length ? { exclude_attributes: left.exclude_attributes } : {}) } } };
+  // The owner's offer reads at the assistant's own ceiling at most (G555); an assistant's ask, as before.
+  const ceiling = note.fm.sensitivity === "private" && !co ? "private" : "personal";
+  const res = carve(notes, one, { agent, slices: [`ask:${a.id}`], exclude_types: [], exclude: left.exclude, ceiling: a.offered && sensitivityRank(grantFor(rules, agent).ceiling) < sensitivityRank(ceiling) ? grantFor(rules, agent).ceiling : ceiling });
   const v = res.visible.get(noteId)!;
   const md = renderNote(v, res, one).join("\n") + "\n";
   event(root, { ask: a.id, ev: "used", agent, note: noteId });
@@ -374,7 +377,22 @@ function releasable(rules: Rules, agent: string, note: Note, offered = false): b
 function offerFits(rules: Rules, agent: string, note: Note): boolean {
   const a = rules.policy.agents[agent];
   if (!a || a.inside_wall || a.role === "gardener" || a.collaborator) return false;
-  return !(a.exclude ?? []).includes(note.fm.id) && !(a.exclude_types ?? []).some((t) => t === folderOf(note) || t === note.fm.type) && note.fm.area !== "probe";
+  const sliceOut = grantFor(rules, agent).slices.some((x) => rules.slices[x]?.exclude?.includes(note.fm.id));
+  return !(a.exclude ?? []).includes(note.fm.id) && !sliceOut && !(a.exclude_types ?? []).some((t) => t === folderOf(note) || t === note.fm.type) && note.fm.area !== "probe"
+    // Never past the assistant's own ceiling: a trial one (personal) gets no private page (audit v7, G555).
+    && sensitivityRank(note.fm.sensitivity) <= sensitivityRank(grantFor(rules, agent).ceiling);
+}
+
+// What the agent's own grant leaves out by name, fact by fact (its exclude, and its slices' exclude and
+// exclude_attributes): kept out of a page it reads once too (audit v7, G555: Just this one delivered
+// a fact the owner kept from that assistant by name).
+function leftOutByName(rules: Rules, agent: string): { exclude: string[]; exclude_attributes: string[] } {
+  const g = grantFor(rules, agent);
+  const slices = g.slices.map((s) => rules.slices[s]).filter(Boolean);
+  return {
+    exclude: [...new Set([...g.exclude, ...slices.flatMap((s) => s!.exclude ?? [])].filter((k) => k.includes("#")))],
+    exclude_attributes: [...new Set(slices.flatMap((s) => s!.exclude_attributes ?? []))],
+  };
 }
 
 // How long the owner's offer waits for the assistant's next check-in.

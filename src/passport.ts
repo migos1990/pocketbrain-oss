@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { CONTENT_DIRS, loadBrain, parseNote, saveNote, serializeNote, today, isList, isDisputed, type Fact, type FactRecord, type Note } from "./brain";
 import { loadRules, ownerName } from "./rules";
 import { carve, grantFor, visibleFacts } from "./carve";
-import { redactLinks, agentFact } from "./view";
+import { agentFact, scrubPage } from "./view";
 import { withoutTokenRole } from "./tokenrole";
 import { git } from "./git";
 import { OWNER } from "./owner";
@@ -81,7 +81,7 @@ export function exportSlice(root: string, agent: string): SliceBundle {
   const notes = [...res.visible.values()].map((v) => ({
     id: v.note.fm.id, title: v.note.fm.title, type: v.note.fm.type, area: v.note.fm.area, aliases: v.note.fm.aliases ?? [],
     facts: Object.fromEntries(visibleFacts(v, res).map(([a, f]) => [a, agentFact(f, agent, res)])),
-    ...(v.body && v.note.body.trim() ? { body: redactLinks(v.note.body, res) } : {}),
+    ...(v.body && v.note.body.trim() ? { body: scrubPage(v.note.body, v, res) } : {}),
   })).sort((a, b) => a.id.localeCompare(b.id));
   return { memory_passport: BUNDLE_VERSION, bundle: "slice", exported: today(), agent, notes };
 }

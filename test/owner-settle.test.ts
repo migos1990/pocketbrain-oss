@@ -176,10 +176,50 @@ test("a pick's Undo opens the conflict again when the clock is in the next month
   process.env.PB_NOW = "2026-11-01T02:00:00Z"; // makeBrain pins the owner's day to 2026-10-08
   try {
     ownerDecide(root, id, 2, `settle-${id}`);
-    const row = readDiary(root).at(-1)!;
+    // The settle's own row: lean() above wrote the conflict's row at the real clock, which sorts
+    // after PB_NOW once the real time passes it.
+    const row = readDiary(root).filter((r) => r.kind === "settled").at(-1)!;
     expect(row.at.slice(0, 7)).not.toBe(process.env.PB_TODAY!.slice(0, 7));
     expect(undoFact(root, row.undo_token).outcome).toBe("undone");
     expect(room(root).value).toBe("B-201");
     expect(status(root, id)).toBe("open");
   } finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+});
+
+// Audit v9 (2026-10-31; G583): on the 30-day sign-in Settle printed a conflict whose live record is
+// private (only the sides were weighed), and money-shaped values the home card withholds.
+test("a conflict whose live record is private, or whose values are shaped like money, shows its sides only after a fresh sign-in (G583)", () => {
+  const { root, id } = brain();
+  lean(root, id);
+  expect(ownerConflicts(root)[0]!.private).toBeUndefined();
+  // The live record made private after the conflict opened.
+  const n = loadBrain(root).find((x) => x.fm.id === "projects/course-c")!;
+  (n.fm.facts!.room as FactRecord).sensitivity = "private";
+  saveNote(root, n);
+  sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "owner: room private");
+  expect(ownerConflicts(root)[0]!.private).toBe(true);
+  // Money-shaped values on an everyday page.
+  const m = brain();
+  writeFileSync(join(m.root, "projects", "flat.md"), `---\nid: projects/flat\ntype: project\ntitle: Flat\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: { value: "pay the deposit of $1,200", as_of: 2026-10-07, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: planner, recorded: 2026-10-07 }\n---\n`);
+  sh(m.root, "git", "add", "-A"); sh(m.root, "git", "commit", "-qm", "owner: flat");
+  expect(write(m.root, { agent: "planner", id: "projects/flat", attribute: "next_step", value: "pay the deposit of $1,350", as_of: "2026-10-07", sources: ["gcal:e2@e2"], verification: "self-reported" } as never, { acceptedBy: "auto-decide", contest: true }).outcome).toBe("disputed");
+  const flat = loadBrain(m.root).filter((x) => x.fm.type === "dispute").find((x) => x.fm.fact_key === "projects/flat#next_step")!;
+  const fid = String(flat.fm.id).split("/")[1]!;
+  lean(m.root, fid);
+  expect(ownerConflict(m.root, fid)!.private).toBe(true);
+});
+
+// Builder's audit of G590, 2026-11-01: Undo took the newest commit under diary/ whose count of
+// the settle's token changed, so a later diary row carrying that token (a value naming it) made
+// Undo answer Undone while putting back nothing. It takes the commit that added the settle line.
+test("a pick's Undo finds the settle's own commit, not a later diary row that names its token", () => {
+  const { root, id } = brain();
+  lean(root, id);
+  ownerDecide(root, id, 2, `settle-${id}`);
+  const row = readDiary(root).at(-1)!;
+  write(root, { agent: "planner", id: "projects/course-c", attribute: "status_note", value: `ref ${row.undo_token}`, as_of: "2026-10-07", sources: ["gcal:e2@e2"], verification: "self-reported" } as never, {});
+  expect(readDiary(root).filter((r) => JSON.stringify(r).includes(row.undo_token)).length).toBeGreaterThan(1);
+  expect(undoFact(root, row.undo_token).outcome).toBe("undone");
+  expect(room(root).value).toBe("B-201");
+  expect(status(root, id)).toBe("open");
 });

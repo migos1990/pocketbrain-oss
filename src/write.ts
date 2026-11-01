@@ -11,10 +11,10 @@ import YAML from "yaml";
 import type { Note, FactRecord, SourceRef, Frontmatter, Sensitivity } from "./brain";
 import { loadBrain, parseNote, saveNote, isList, isDisputed, slugify, today, sensitivityRank } from "./brain";
 import type { Rules } from "./rules";
-import { loadRules, attributeSpec, tierOf, ownerName } from "./rules";
-import { runChecks, shapeFails, thirdPartySensitive, findInjection, preferenceSpeaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
+import { loadRules, attributeSpec, tierOf, ownerName, captureAgentName } from "./rules";
+import { runChecks, shapeFails, thirdPartySensitive, findInjection, speaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
 import { normalizeValue, compareKey } from "./normalize";
-import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES } from "./sources";
+import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath } from "./louis";
 import { tokenRole } from "./tokenrole";
 import { carve, grantFor, records, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
@@ -374,9 +374,10 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // with the resolver (Louis always sees everything). Forced here, so no agent can opt out.
   if (thirdParty) req = { ...req, sensitivity: sensitivityRank(req.sensitivity ?? "public") > sensitivityRank("private") ? req.sensitivity : "private", share_with: rules.policy.resolver ? [rules.policy.resolver] : [] };
   const fails = runChecks(req, enabled, ownerName(rules));
-  // A preference written to the assistant reading it is an order: only the owner files one (G526).
-  if (!isOwnerId(opts.acceptedBy) && !req.retract && isPreference(req.attribute) && preferenceSpeaksToReader(req.value))
-    fails.push({ check: "injection_shapes", outcome: "inbox", reason: "the preference tells the assistant reading it what to do", fix: "a preference says how the person likes things; the owner reviews this one" });
+  // A value written to the assistant reading it is an order: only the owner files one (G526), under
+  // any attribute's name (audit v7, G554: the same order under notes or working_style was served).
+  if (!isOwnerId(opts.acceptedBy) && !req.retract && speaksToReader(req.attribute, req.value))
+    fails.push({ check: "injection_shapes", outcome: "inbox", reason: `the ${isPreference(req.attribute) ? "preference" : "value"} tells the assistant reading it what to do`, fix: "a fact says how things are; the owner reviews this one" });
   const refusals = fails.filter((f) => f.outcome === "refuse");
   const editor = rules.policy.owner_editor === req.agent;
   const done = (r: WriteResult) => {
@@ -736,15 +737,32 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   const ownerWord = (r: FactRecord) => isOwnerWord(rules, note!.fm.area, r);
   // An item of a kind the hub reads counts as an exact source once the hub has read it; until then
   // it is the writer's word, so a made-up mail id outranks nothing (G441).
-  const read = hubReadRefs(root);
+  // A contact card is read by the hub alone and no assistant reads the owner's address book, so a
+  // card ref is the hub's only on what the hub pulled: borrowing the owner's card ref, a core
+  // assistant replaced the card's "Robin's father" with "Robin's uncle" (audit v8, 2026-10-31;
+  // G564). The incoming value counts it only when this write files a pull (`pulled`), whoever the
+  // capture agent is, since a brain whose resolver is an assistant files cards as that assistant
+  // (slice audit of abb3479e); a held record counts it when the capture agent or an inside-wall
+  // agent wrote it, so naming a resolver later doesn't demote the cards already filed.
+  const read = hubReadRefs(root), hub = captureAgentName(rules.policy);
+  const readFor = (x: string, r: FactRecord) => read.has(x) && (!x.startsWith("contacts:") || (r === incoming ? !!opts.pulled : r.by === hub || !!(r.by && rules.policy.agents[r.by]?.inside_wall)));
   const asRead = (r: FactRecord): FactRecord => {
     const refs = (r.sources ?? []).map(refString);
-    const unread = refs.filter((x) => HUB_READS.test(x) && !read.has(x));
+    const unread = refs.filter((x) => HUB_READS.test(x) && !readFor(x, r));
     if (!unread.length) return r;
     const sources = (r.sources ?? []).map((x) => unread.includes(refString(x)) ? `agent:${r.by ?? "unknown"}` : x);
-    const anyRead = refs.some((x) => HUB_READS.test(x) && read.has(x));
+    const anyRead = refs.some((x) => HUB_READS.test(x) && readFor(x, r));
     return { ...r, sources, ...(r.verification === "verified-by-source" && !anyRead ? { verification: "self-reported" } : {}) } as FactRecord;
   };
+  // What a borrowed card ref is worth is stored, not only ranked: the record kept "verified-by-
+  // source", and the sender check (sameperson.ts trustedAddresses) took an address an assistant
+  // planted on a person's page, citing that person's real card, as one the brain vouches for, so its
+  // mail filed as a known sender's (audit v9, 2026-10-31; G581). The owner's own accept keeps it.
+  // Only a card ref's own demotion is stored: a mail id the connector hasn't checked yet keeps its
+  // label until it has (the checked-refs rule, G2; rt-person-forged-source).
+  const inRefs = incoming.sources.map(refString);
+  const cardOnly = inRefs.some((x) => x.startsWith("contacts:") && !readFor(x, incoming)) && !inRefs.some((x) => HUB_READS.test(x) && !x.startsWith("contacts:"));
+  if (!isOwnerId(opts.acceptedBy) && cardOnly && incoming.verification === "verified-by-source" && asRead(incoming).verification !== "verified-by-source") incoming.verification = "self-reported";
   const rank = (r: FactRecord) => ownerWord(r) ? 5 : r.verification === "confirmed-by-co-owner" ? Math.min(sourceRank(asRead(r)), 2) : sourceRank(asRead(r));
   const merge = spec.merge ?? "replace";
   let step: number | undefined;
@@ -1323,7 +1341,15 @@ function decideOne(root: string, file: string, decision: "accept" | "reject", by
     const req = isOwnerId(by)
       ? { ...p.request, ...asOf, sources: [...(p.request.sources ?? []), approvedRef(today(), `inbox/${rel.split("/").pop()}`)], ...ownerClaim(p.request) }
       : typeof (p as { capture?: unknown }).capture === "string" && by === "auto-decide" ? { ...p.request, ...asOf } : p.request;
-    r = write(root, req, { acceptedBy: by, contest: opts.contest, hold: opts.hold, stranger, pulled: typeof (p as { capture?: unknown }).capture === "string" });
+    // `pulled` is for what the hub read itself or the owner gave it (a source pull, the CLI, the drop
+    // folder, the mailbox). An assistant's imported memory is that assistant's word: the hub's yes
+    // is weighed as its own write, its carve included (G587 slice audit F1, F2).
+    // Its refs are kept as the assistant's word too, so the stored record ranks as one (F2).
+    const capRel = (p as { capture?: unknown }).capture;
+    const via = typeof capRel === "string" ? captureVia(root, capRel) : undefined;
+    const imported = typeof capRel === "string" && via === "import" && typeof p.request.agent === "string";
+    const sent = imported ? { ...req, sources: asAgentWord(req.sources ?? [], String(p.request.agent)) } : req;
+    r = write(root, sent, { acceptedBy: by, contest: opts.contest, hold: opts.hold, stranger, pulled: typeof capRel === "string" && via !== "import" });
     if (r.outcome === "refused") return r;
     // The write handed it back to the owner as this very proposal (a conflict on a page with a
     // private fact): it stays in the inbox, never answered as accepted with nothing saved (G431).
@@ -1360,6 +1386,15 @@ function decideOne(root: string, file: string, decision: "accept" | "reject", by
   if (decision === "accept") keepQuote(root, rel, (p.request.sources ?? []).map(refString));
   sweepQuotes(root); // the source's words go with the recorded decision (src/quotes.ts)
   return { ...r, message: `${decision}ed: ${r.message}` };
+}
+
+// How a capture reached the hub (its frontmatter `via`), or undefined when it can't be read.
+function captureVia(root: string, rel: string): string | undefined {
+  try {
+    const fm = /^---\n([\s\S]*?)\n---/.exec(readFileSync(join(root, rel), "utf8"))?.[1];
+    const via = fm ? (YAML.parse(fm) as { via?: unknown })?.via : undefined;
+    return typeof via === "string" ? via : undefined;
+  } catch { return undefined; }
 }
 
 // Why a pulled fact from an unknown sender waits for the owner (src/sender.ts): private or money,

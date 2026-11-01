@@ -11,7 +11,8 @@ import { neighbours, neighbourLines, connectedLine, NEIGHBOURS_SHOWN } from "./l
 import { loadBrain, reloadNotes, parseNote, saveNote, today, isList, isDisputed, sensitivityRank, linksIn } from "./brain";
 import { loadRules, attributeSpec, ownerName, isOwnerWord, type Rules } from "./rules";
 import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, type CarveResult } from "./carve";
-import { cappedView, renderNote, redactLinks, scrubLeaves, agentFact, pageSummary } from "./view";
+import { sensitiveShape } from "./shape";
+import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage } from "./view";
 import { contextBudget, tokensOf, fitBlocks, cutLine } from "./context";
 import { write, logWrite, gardenerProposals, REJECT_DAYS, type WriteResult } from "./write";
 import { runChecks, redactSecrets, findInjection, findSecret, refShapeOk, approvalClaim, type WriteRequest } from "./checks";
@@ -341,7 +342,7 @@ function noteOut(root: string, agent: string, id: string, section?: string) {
   const v = res.visible.get(id.replace(/\.md$/, ""));
   if (!v) return { rules, res };
   const fm = v.note.fm;
-  const full = v.body && v.note.body.trim() ? redactLinks(v.note.body, res) : undefined;
+  const full = v.body && v.note.body.trim() ? scrubPage(v.note.body, v, res) : undefined;
   const part = section !== undefined && full ? sectionWithRefs(full, section.trim()) : undefined;
   // A parent outside the slice answers like no parent (invariant 3).
   const parent = parentOf(v.note);
@@ -668,6 +669,10 @@ function settle(root: string, p: Packet, chosen: FactRecord, by: string, step: n
   // is the owner only, as carve.ts reads it (an empty allow list includes no agent), so it fails closed.
   const lists = [...everySide(p), live, chosen].map((c) => c?.share_with).filter((l): l is string[] => !!l);
   if (lists.length) chosen.share_with = lists.reduce((a, l) => a.filter((x) => l.includes(x)));
+  // The answer is still an agent's own share only when every list that narrowed it was that agent's
+  // own (invariant 4, as planMerge keeps it, G584; slice audit of claude/audit9-fixes).
+  const sharers = [...everySide(p), live, chosen].filter((c) => c?.share_with);
+  if (chosen.shared_by && (chosen.by !== chosen.shared_by || sharers.some((c) => c!.shared_by !== chosen.shared_by))) delete chosen.shared_by;
   const facts = (p.target.fm.facts ??= {});
   const f = facts[p.attr];
   const before = structuredClone(shownValue(f));
@@ -830,7 +835,19 @@ export interface SettleSide { n: number; value: unknown; as_of?: string; source_
 // private: a side's value is private or above; the screen shows it only after a fresh sign-in.
 export interface SettleCase { id: string; fact_key: string; page: string; title: string; attr: string; sides: SettleSide[]; held?: boolean; private?: boolean }
 
-function settleCase(p: Packet, held = false): SettleCase {
+// The owner's settle screen hides its sides on the 30-day sign-in like the home card does (audit
+// v9, 2026-10-31; G583): a page or the live record made private since the conflict opened, not only
+// a side, and a value or attribute shaped like money, health or legal (sensitiveShape, as home.ts
+// withholds a card's two values).
+function settlePrivate(p: Packet, rules: Rules): boolean {
+  if (isPrivate(p)) return true;
+  const P = sensitivityRank("private");
+  const live = p.target.fm.facts?.[p.attr];
+  if (live && records(live).some((r) => !!r?.sensitivity && sensitivityRank(r.sensitivity) >= P)) return true;
+  return !!sensitiveShape(rules, p.attr, ...everySide(p).map((c) => c.value));
+}
+
+function settleCase(p: Packet, held = false, rules?: Rules): SettleCase {
   const cands = (p.note.fm.candidates ?? []) as FactRecord[];
   const sug = p.note.fm.suggestion as { choice?: unknown; why?: unknown } | undefined;
   return {
@@ -845,7 +862,7 @@ function settleCase(p: Packet, held = false): SettleCase {
       return out;
     }, []),
     ...(held ? { held: true } : {}),
-    ...(isPrivate(p) ? { private: true } : {}),
+    ...((rules ? settlePrivate(p, rules) : isPrivate(p)) ? { private: true } : {}),
   };
 }
 
@@ -854,13 +871,13 @@ function settleCase(p: Packet, held = false): SettleCase {
 export function ownerConflicts(root: string, now = clock(), o: { held?: boolean } = {}): SettleCase[] {
   const dir = join(root, "disputes");
   if (!existsSync(dir)) return [];
-  const seen = gardenerSeen(root, loadRules(root));
+  const rules = loadRules(root), seen = gardenerSeen(root, rules);
   return readdirSync(dir).filter((f) => /^c-\d+\.md$/.test(f)).sort()
     .map((f) => { try { return loadPacket(root, f.replace(/\.md$/, "")); } catch { return undefined; } })
     .filter((p): p is Packet => !!p && ["open", "escalated"].includes(String(p.note.fm.status)))
     .map((p) => ({ p, held: heldPacket(p, seen, now) }))
     .filter((x) => o.held || !x.held)
-    .map((x) => settleCase(x.p, x.held));
+    .map((x) => settleCase(x.p, x.held, rules));
 }
 
 export function ownerConflict(root: string, id: string, now = clock()): SettleCase | undefined {

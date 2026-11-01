@@ -154,3 +154,12 @@ export function extractRefs(text: string): string[] {
   for (const m of text.matchAll(/Instinct memory(?: note)?:?\s+([a-z0-9_\-/]+)/gi)) out.add(`instinct-mem:${m[1]}`);
   return [...out];
 }
+
+// An assistant's imported memory cites the capture it came in (`doc:capture/<id>`), but it is that
+// assistant's word, so it is kept and ranked as one: `agent:<agent>/capture/<id>` (G587 audit F2).
+export function asAgentWord(sources: readonly unknown[], agent: string): string[] {
+  return sources.map((x) => {
+    const ref = refString(x as never);
+    return ref.startsWith("doc:capture/") ? `agent:${agent}/${ref.slice("doc:".length)}` : ref;
+  });
+}

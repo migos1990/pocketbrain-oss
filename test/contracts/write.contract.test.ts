@@ -506,3 +506,58 @@ function makeCopyForMerge(root: string): string {
   cpSync(root, d, { recursive: true });
   return d;
 }
+
+// Builder's slice audit of G587 (F1, F2): an assistant's imported memory, filed by the hub, is that
+// assistant's own write: never on or over a fact hidden from it, never ranked as a document.
+test("contract write: the hub's filing of an assistant's imported memory never reaches a note hidden from it, nor outranks a source (G587)", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { importMemory } = await import("../../src/memimport");
+  const { runAuto } = await import("../../src/filing");
+  const { makeModel } = await import("../../src/model");
+  const { weigh } = await import("../asked");
+  const later = new Date(Date.now() + 40 * 86_400_000);
+  const imp = async (root: string, text: string, fact: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), "pb-mem-"));
+    writeFileSync(join(dir, "m.md"), text);
+    await importMemory(root, "planner", [dir], makeModel({ provider: "fake", model: "fake-1" }, { fake: () => JSON.stringify({ facts: [{ type: "person", quote: text.slice(2).trim(), ...fact }] }) }));
+    weigh(root, new Date());
+    runAuto(root, later);
+  };
+  // people/paul-advisor is hidden from planner (personal, tagged finance).
+  const hidden = makeBrain();
+  const was = JSON.stringify(fact(hidden, "people/paul-advisor", "role"));
+  await imp(hidden, "- Paul Advisor is retired\n", { entity: "Paul Advisor", attribute: "role", value: "Retired", as_of: "2026-10-08" });
+  expect(JSON.stringify(fact(hidden, "people/paul-advisor", "role"))).toBe(was);
+  await imp(hidden, "- Paul Advisor works at Bigbank\n", { entity: "Paul Advisor", attribute: "org", value: "Bigbank" });
+  expect(fact(hidden, "people/paul-advisor", "org")).toBeUndefined();
+  // A value a document holds: the import's newer word is a conflict, never an update.
+  const doc = makeBrain();
+  expect(write(doc, { agent: "steward", kind: "fact", id: "people/jane-roy", attribute: "org", value: "Globex", as_of: "2026-10-01", sources: ["doc:capture/2026-10-01-aaaa"], source_type: "document" } as never).outcome).not.toBe("refused");
+  await imp(doc, "- Jane works at Acme\n", { entity: "Jane Roy", attribute: "org", value: "Acme", as_of: "2026-10-08" });
+  const org = JSON.stringify(fact(doc, "people/jane-roy", "org"));
+  expect(org).toContain("Globex");
+  expect(org).toMatch(/"contested":"c-|"candidates"/);
+});
+
+// Builder's re-audit of G587 (F2, merge: latest): an imported newer version never silently replaces
+// a version from an exact source; the same assistant's remember opens a conflict there too.
+test("contract write: an assistant's imported newer version never replaces an exact source's without a conflict (G587)", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { importMemory } = await import("../../src/memimport");
+  const { runAuto } = await import("../../src/filing");
+  const { makeModel } = await import("../../src/model");
+  const { weigh } = await import("../asked");
+  const root = makeBrain();
+  const f = join(root, "rules/checks.yaml");
+  writeFileSync(f, readFileSync(f, "utf8").replace("      next_step:", "      version: { merge: latest }\n      next_step:"));
+  sh(root, "-c", "user.name=owner", "-c", "user.email=o@x", "commit", "-qam", "owner: version attribute");
+  write(root, { agent: "steward", kind: "fact", id: "projects/course-a", attribute: "version", value: "1.0", as_of: "2026-09-01", sources: ["gmail:f000000000000002"], source_type: "email" } as never);
+  const dir = mkdtempSync(join(tmpdir(), "pb-mem-"));
+  writeFileSync(join(dir, "m.md"), "- Course A is at version 2.0\n");
+  await importMemory(root, "planner", [dir], makeModel({ provider: "fake", model: "fake-1" }, { fake: () => JSON.stringify({ facts: [{ entity: "Course A", type: "project", attribute: "version", value: "2.0", quote: "Course A is at version 2.0", as_of: "2026-10-08" }] }) }));
+  weigh(root, new Date());
+  runAuto(root, new Date(Date.now() + 40 * 86_400_000));
+  expect(JSON.stringify(fact(root, "projects/course-a", "version"))).toMatch(/"contested":"c-|"candidates"/);
+});

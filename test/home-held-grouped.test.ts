@@ -89,3 +89,19 @@ test("each held value has one Read it on the home: its card, never its memory to
     expect(card).not.toContain("diary-seen");
   } finally { delete process.env.PB_NOW; }
 }, 60_000);
+
+// Audit v9 (2026-10-31; G585): held cards still named "Visa statement" and "Manulife claim" from a
+// known sender on an ordinary page: G568 hid a page name for a stranger's mail or a money page, and
+// the shape check missed statements, claims and card brands. The name is withheld by its shape.
+test("a held card never names a page shaped like a statement or a claim, whoever sent it (G585)", () => {
+  const root = makeBrain();
+  const titles = ["Visa statement", "Manulife claim", "Desjardins relevé", "Mastercard alert", "Sun Life réclamation"];
+  titles.forEach((title, i) => { const slug = `held-shape-${i}`; writeFileSync(join(root, "projects", `${slug}.md`), `---\nid: projects/${slug}\ntype: project\ntitle: ${title}\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  next_step: { value: "read it", as_of: 2026-10-28, sources: ["gmail:f00000000000004${i}"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true, sender: known }\n---\n`); });
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+  Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: held"], { cwd: root });
+  const v = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
+  const said = JSON.stringify(v.waiting);
+  expect(v.waiting.length).toBeGreaterThan(0);
+  for (const t of titles) expect([t, said.includes(t)]).toEqual([t, false]);
+  // A plain name from a known sender still says its page (the first test above).
+});

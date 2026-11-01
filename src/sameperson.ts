@@ -11,7 +11,7 @@ import { join } from "node:path";
 import YAML from "yaml";
 import type { FactRecord, Note } from "./brain";
 import { loadBrain, isDisputed } from "./brain";
-import { loadRules, attributeSpec, type Rules } from "./rules";
+import { loadRules, attributeSpec, captureAgentName, type Rules } from "./rules";
 import { records } from "./carve";
 import { compareKey } from "./normalize";
 import { refString, ownerVouched } from "./sources";
@@ -43,8 +43,16 @@ const notSameFile = (root: string) => join(dir(root), "not-same.json");
 // A source-verified address counts only while no ref it cites was found missing by the connector
 // (log/refs-checked.jsonl), so a forged message id can't vouch for it. An address the owner approved
 // on a card (approved:, which only the hub writes) is trusted as before taps ranked as their source.
-const trusted = (r: FactRecord, checked?: Map<string, boolean>) => !r.valid_to && !r.retired
-  && (ownerVouched(r) || (r.verification === "verified-by-source" && !r.sources.some((x) => checked?.get(refString(x)) === false)));
+// A card ref vouches only on a record the hub filed (the capture agent's, or an inside-wall agent's,
+// as write.ts weighs it): a record saved before G581 by an assistant citing a borrowed card still
+// says verified-by-source, and it never makes the address it planted a known sender (audit v9).
+const cardOnly = (r: FactRecord, rules: Rules) => {
+  const refs = r.sources.map(refString);
+  return refs.some((x) => x.startsWith("contacts:")) && refs.every((x) => x.startsWith("contacts:") || x.startsWith("agent:"))
+    && r.by !== captureAgentName(rules.policy) && !(r.by && rules.policy.agents[r.by]?.inside_wall);
+};
+const trusted = (r: FactRecord, rules: Rules, checked?: Map<string, boolean>) => !r.valid_to && !r.retired
+  && (ownerVouched(r) || (r.verification === "verified-by-source" && !cardOnly(r, rules) && !r.sources.some((x) => checked?.get(refString(x)) === false)));
 
 function kindOf(rules: Rules, type: string, attr: string): AddressKind | undefined {
   const n = attributeSpec(rules, type, attr).normalize;
@@ -68,7 +76,7 @@ export function trustedAddresses(note: Note, rules: Rules, checked?: Map<string,
     const kind = kindOf(rules, note.fm.type, attr);
     if (!kind || isDisputed(f)) continue;
     for (const r of records(f)) {
-      if (typeof r.value !== "string" || !trusted(r, checked)) continue;
+      if (typeof r.value !== "string" || !trusted(r, rules, checked)) continue;
       const a = normalizeAddress(kind, r.value);
       if (!a) continue;
       const key = `${kind}:${a}`;

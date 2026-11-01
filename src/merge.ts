@@ -175,7 +175,9 @@ export function planMerge(keepIn: Note, dropIn: Note, dispute: (keep: Note, attr
     // (G572: a merge kept the weaker label and the owner's word stopped guarding the value).
     if (isOwnerConfirmed(normVerification(from.verification)) && !isOwnerConfirmed(normVerification(into.verification))) { into.verification = OWNER_CONFIRMED; delete into.co_owner; }
     else if (from.verification === "confirmed-by-co-owner" && !isOwnerConfirmed(normVerification(into.verification)) && into.verification !== "confirmed-by-co-owner") { into.verification = "confirmed-by-co-owner"; if (from.co_owner) into.co_owner = from.co_owner; }
-    if (from.by !== into.by || isOwnerConfirmed(normVerification(from.verification)) || (from.sources ?? []).some((x) => OWNER_REF.test(refString(x)) || isExactLouisRef(refString(x)))) delete into.shared_by;
+    // A share someone else set joining it (no shared_by, or another's) narrows what the agent
+    // shared, so the record is no longer the agent's own share (audit v9, 2026-10-31; G584).
+    if ((from.share_with && from.shared_by !== into.shared_by) || from.by !== into.by || isOwnerConfirmed(normVerification(from.verification)) || (from.sources ?? []).some((x) => OWNER_REF.test(refString(x)) || isExactLouisRef(refString(x)))) delete into.shared_by;
   };
   const facts = (keep.fm.facts ??= {});
   for (const [attr, f] of Object.entries(drop.fm.facts ?? {})) {

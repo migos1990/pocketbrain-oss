@@ -2,6 +2,7 @@
 // The wiki shape of a note, read-only (docs/wiki.md): a one-line `summary:`, a `parent:` and the
 // page tree computed from parents (never stored), sections from `## ` headings, and Markdown
 // footnotes for refs. Every field is optional; a note without them reads as it always did.
+import { MONTHS_SHORT } from "./util";
 import { linksIn, parseNote, isDisputed, isList, loadBrain, saveNote, sensitivityRank, today, CONTENT_DIRS, type Note, type FactRecord, type Fact } from "./brain";
 import { git, gitRun, gitTime } from "./git";
 import { findSecret, redactSecrets } from "./checks";
@@ -380,7 +381,7 @@ const SOURCE_WORD: Record<string, string> = { gmail: "Email", "gmail-thread": "E
 const shown = (v: unknown): string => Array.isArray(v) ? v.map(shown).join(", ") : typeof v === "object" && v ? JSON.stringify(v) : String(v);
 // A value that already reads as what someone did ("sent Sam a request for feedback on …").
 const DID = /^(?:[a-z]+ed|sent|met|told|gave|made|wrote|took|got|brought|built|taught|led|ran|knew|is|was|has|had|works|leads|runs|manages|knows|reports|teaches|helps|owns|lives|says|wants|needs|plans|uses)\b/;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = MONTHS_SHORT;
 // "2026-10-05" reads "5 Oct" in a sentence this year and "5 Oct 2025" from another (the reference
 // under the text keeps the whole date); anything else is left as written.
 const inWords = (v: string) => v.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m, y: string, mo: string, d: string) => +mo >= 1 && +mo <= 12 ? `${+d} ${MONTHS[+mo - 1]}${y === today().slice(0, 4) ? "" : ` ${y}`}` : m);

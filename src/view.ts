@@ -11,7 +11,7 @@ import type { CarveResult, Visible } from "./carve";
 import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFor } from "./carve";
 import { needleFor, findCarried, type Needle } from "./match";
 import { escapeRe, tokenIndex } from "./util";
-import { summaryOf } from "./wiki";
+import { summaryOf, reference, MADE } from "./wiki";
 import { headCommit } from "./git";
 import { visibleStanding, standingLine } from "./standing";
 import { tokensOf, fitBlocks, cutLine, contextBudget } from "./context";
@@ -61,6 +61,55 @@ export function scrubCarved(text: string, res: CarveResult, deep = true): string
   const needles = deep ? needlesOf(res) : [];
   if (!needles.length || !findCarried(out, needles)) return out;
   return out.split("\n").map((line) => findCarried(line, needles) ? line.replace(/^(\s*(?:[-*] )?).*$/, "$1[withheld]") : line).join("\n");
+}
+
+// The writer's own sentences about a fact hidden from this agent (G589, G594). The page writer
+// (src/wiki.ts pageLead) says each fact in one sentence ending with its reference label, and leaves a
+// fact hidden from any reader out, but a fact hidden after the writer last ran stays in its text
+// until the page is written again. Such a sentence is found by its label, never by matching the
+// value: matching dates against what the page grants let a writer probe the hidden value (security
+// review of the stack, G594). The label is the fact's own (p-<attr>) or one shared with facts citing
+// the same source, whose sentences go too. Hand-written dates are ceiling rows (test/ceilings.test.ts).
+const hidLabelCache = new WeakMap<CarveResult, Map<string, Set<string>>>();
+function hiddenLabels(v: Visible, res: CarveResult, defs: Map<string, string>): Set<string> {
+  let byNote = hidLabelCache.get(res);
+  if (!byNote) {
+    byNote = new Map();
+    for (const h of res.hiddenFacts) { const i = h.key.indexOf("#"); const id = h.key.slice(0, i); (byNote.get(id) ?? byNote.set(id, new Set()).get(id)!).add(h.key.slice(i + 1)); }
+    hidLabelCache.set(res, byNote);
+  }
+  const out = new Set<string>();
+  for (const attr of byNote.get(v.note.fm.id) ?? []) {
+    out.add(`p-${attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`);
+    const f = v.note.fm.facts?.[attr];
+    const recs: FactRecord[] = [...(f ? (isList(f) ? f.items : [f as FactRecord]) : []), ...((v.note.fm.history?.[attr] ?? []) as FactRecord[])];
+    const said = recs.map((r) => reference(r));
+    for (const [label, text] of defs) if (said.some((x) => text.includes(x))) out.add(label);
+  }
+  return out;
+}
+
+function withoutHiddenSentences(text: string, v: Visible, res: CarveResult): string {
+  const at = text.indexOf(MADE);
+  if (at < 0 || !res.hiddenFacts.length) return text;
+  const defs = new Map<string, string>();
+  for (const m of text.matchAll(/^\[\^([^\]\s]+)\]:\s*(.*)$/gm)) defs.set(m[1]!, m[2]!);
+  const hid = hiddenLabels(v, res, defs);
+  if (!hid.size) return text;
+  const cites = (s: string) => [...s.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!);
+  const lead = text.slice(0, at).split(/(\n\s*\n)/).map((para) =>
+    para.replace(/[^\n]*?(?:\[\^[^\]\s]+\])+(?: A different value is waiting to be checked\.)?[ \t]*/g, (s) => cites(s).some((l) => hid.has(l)) ? "" : s).replace(/[ \t]+$/, "")).join("");
+  let out = lead + text.slice(at);
+  // A reference no sentence cites any more goes too (it names the hidden fact's source and date).
+  const left = new Set(cites(out.replace(/^\[\^[^\]\s]+\]:.*$/gm, "")));
+  out = out.replace(/^\[\^([^\]\s]+)\]:.*\n?/gm, (line, l: string) => hid.has(l) && !left.has(l) ? "" : line);
+  return out;
+}
+
+// A visible page's own text (body, summary) as this agent gets it: links and carved values as for
+// any text (redactLinks), then the writer's sentences about its hidden facts left out.
+export function scrubPage(text: string, v: Visible, res: CarveResult): string {
+  return withoutHiddenSentences(redactLinks(text, res), v, res);
 }
 
 // Links to hidden notes go first: scrubbing a carved name inside one (an alias that is also part of
@@ -134,7 +183,7 @@ export function statusBanner(v: Visible, res: CarveResult): string[] {
 // with the body grant, and scrubbed of links and carved values the same way.
 export function pageSummary(v: Visible, res: CarveResult): string | undefined {
   const sum = summaryOf(v.note);
-  return v.body && sum ? redactLinks(sum, res) : undefined;
+  return v.body && sum ? scrubPage(sum, v, res) : undefined;
 }
 
 // `body` replaces the note's text (one section, from read's section); it must already be redacted.
@@ -153,7 +202,7 @@ export function renderNote(v: Visible, res: CarveResult, rules: Rules, now = tod
     lines.push("");
     for (const [attr, f] of facts) lines.push(...factSummary(attr, scrubLeaves(f, res) as typeof f, fm.type, rules, now).map((l) => redactLinks(l, res, false)));
   }
-  const text = body ?? (v.body && v.note.body.trim() ? redactLinks(v.note.body.trim(), res) : "");
+  const text = body ?? (v.body && v.note.body.trim() ? scrubPage(v.note.body.trim(), v, res) : "");
   if (text) {
     lines.push("");
     lines.push(text.replace(/^(#{1,3}) /gm, "#### "));

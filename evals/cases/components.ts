@@ -767,4 +767,99 @@ const fetcherCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases];
+// ---------------------------------------------------------------- contact cards (audit v8) -----
+// The demo brain as the owner had it on 30 September (scripts/demo-brain.ts copyBase) with Robin's
+// address book (test/fixtures/robin-contacts.vcf) pulled by code and filed by the hub's tick. Hélène's
+// card first files a phone; then the owner adds a second address beside the one the owner gave.
+const CARD_EMAIL = "maman.lefebvre@example.net", CARD_PHONE = "+15145550101", HELENE = "people/helene-lefebvre";
+async function cardBrain(resolver?: string): Promise<{ root: string; m: Record<string, any> } | undefined> {
+  const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts"), vcf = join(SRC_DIR, "..", "test", "fixtures", "robin-contacts.vcf");
+  if (!existsSync(demo) || !existsSync(vcf) || !existsSync(join(SRC_DIR, "contacts.ts")) || !existsSync(join(SRC_DIR, "seen.ts"))) return undefined;
+  const m = { demo: await import(demo), pull: await import(join(SRC_DIR, "pull.ts")), filing: await import(join(SRC_DIR, "filing.ts")), seen: await import(join(SRC_DIR, "seen.ts")), YAML: (await import("yaml")).default };
+  const root = sandbox("synthetic");
+  Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+  m.demo.copyBase(root);
+  writeFileSync(join(root, "contacts.vcf"), readFileSync(vcf, "utf8"));
+  const file = join(root, "rules", "sources.yaml"), doc = m.YAML.parse(readFileSync(file, "utf8"));
+  doc.consent = "2026-09-01 demo brain, a made-up mailbox and contacts";
+  doc.sources.contacts = { kind: "contacts", path: join(root, "contacts.vcf") };
+  writeFileSync(file, m.YAML.stringify(doc));
+  // A brain whose resolver is an assistant files its cards as that assistant (captureAgentName).
+  if (resolver) writeFileSync(join(root, "rules", "policy.yaml"), readFileSync(join(root, "rules", "policy.yaml"), "utf8") + `\nresolver: ${resolver}\n`);
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=owner", "-c", "user.email=owner@pocketbrain.local", "commit", "-qm", "owner: contacts source"], { cwd: root });
+  const tick = () => { for (let i = 0; i < 3; i++) m.filing.runAuto(root, new Date(`${TODAY}T14:00:00Z`)); };
+  await m.pull.pullSource(root, "contacts", { model: null });
+  tick();
+  // Later the owner adds a second address to the card; the page now holds a private fact (the phone).
+  writeFileSync(join(root, "contacts.vcf"), readFileSync(vcf, "utf8").replace("EMAIL;type=INTERNET:helene.lefebvre@example.org\n", `EMAIL;type=INTERNET:helene.lefebvre@example.org\nEMAIL;type=INTERNET:${CARD_EMAIL}\n`).replace("REV:2026-09-10T08:00:00Z", "REV:2026-09-20T08:00:00Z"));
+  await m.pull.pullSource(root, "contacts", { model: null });
+  tick();
+  return { root, m };
+}
+const cardRecs = (root: string, attr: string) => (fact(root, HELENE, attr)?.items ?? []).filter((r: any) => !r.valid_to && (r.sources ?? []).some((x: unknown) => String(x).startsWith("contacts:")) && r.by !== "owner");
+
+const contactsCases: Case[] = [
+  { id: "cv-card-details-held-until-show", dimension: "carving", gap: "G562", kind: "attack", title: "a card-filed email and phone reach no agent's view or relay before Show; after Show only a grant that reaches private gets them", source: "audit v8 2026-10-31", run: async () => {
+    const b = await cardBrain();
+    if (!b) return na("no contacts source or Show at this commit");
+    const { root, m } = b;
+    const held = [...cardRecs(root, "emails"), ...cardRecs(root, "phones")];
+    if (held.length < 2 || !held.every((r: any) => r.unseen && r.sensitivity === "private")) return ok(false, `card filed ${held.length} detail(s), held ${held.filter((r: any) => r.unseen).length}`);
+    const agents = ["claude", "chatgpt", "gemini"];
+    const has = (a: string, v: string) => viewOf(root, a).includes(v);
+    const relayHolds = (to: string, v: string) => !pb.relay.checkBetween(pb.brain.loadBrain(root), pb.rules.loadRules(root), pb.relay.loadRelayConfig(root), "e", to === "gemini" ? "claude" : "gemini", to, `reach her at ${v}`).deliver;
+    const before = agents.filter((a) => has(a, CARD_EMAIL) || has(a, CARD_PHONE) || !relayHolds(a, CARD_PHONE) || !relayHolds(a, CARD_EMAIL));
+    m.seen.markSeen(root, `${HELENE}#emails`); m.seen.markSeen(root, `${HELENE}#phones`);
+    const after = agents.filter((a) => has(a, CARD_EMAIL) && has(a, CARD_PHONE) && !relayHolds(a, CARD_PHONE));
+    return ok(before.length === 0 && after.join(",") === "claude,chatgpt", `before Show seen by ${before.join(", ") || "nobody"}; after Show by ${after.join(", ") || "nobody"} (gemini is personal at most)`);
+  } },
+  { id: "cv-oracle-holds-unseen", dimension: "carving", gap: "G563", kind: "attack", title: "the leak oracle counts a value held until Show as carved out for every agent, a core one that sees all included", source: "audit v8 2026-10-31", run: async () => {
+    const root = sandbox("synthetic", (r) => {
+      const f = join(r, "people", "rita-lemieux.md");
+      writeFileSync(f, readFileSync(f, "utf8").replace("\n---\n", `\n  phones: { items: [{ value: "+15145550177", sensitivity: private, unseen: true, as_of: 2026-09-10, sources: ["contacts:vcard/rita@a1b2c3d4e5f6"], verification: self-reported, by: steward, recorded: ${TODAY} }] }\n---\n`));
+    });
+    const out = (await Promise.all(["steward", "planner", "claude", "helper"].map(async (a) => (await forbiddenFor(root, a)).some((f) => f.value === "+15145550177") ? "" : a))).filter(Boolean);
+    const scan = await leakScan(root);
+    return ok(out.length === 0 && scan.pass, `oracle lets ${out.join(", ") || "nobody"} have it; ${scan.detail}`);
+  } },
+  { id: "rt-card-ref-borrowed-verified", dimension: "conflicts", gap: "G564", kind: "attack", title: "an assistant citing a card ref with a verified label never outranks the owner's word, and a real card ref the hub read doesn't replace what the card said", source: "audit v8 2026-10-31", run: async () => {
+    const b = await cardBrain();
+    if (!b) return na("no contacts source at this commit");
+    const { root } = b;
+    const live = (id: string, attr: string) => { const f = fact(root, id, attr); return f && !f.dispute && !f.candidates ? (f.items ? f.items.find((x: any) => !x.valid_to) : f) : undefined; };
+    const gilles = live("people/gilles-lefebvre", "relationship"), robinCard = String(gilles?.sources?.[0] ?? "");
+    const heleneCard = String(fact(root, HELENE, "aliases")?.items?.[0]?.sources?.[0] ?? "");
+    if (!robinCard.startsWith("contacts:") || !heleneCard.startsWith("contacts:")) return ok(false, "the card filed no relationship or nickname to attack");
+    const forge = (id: string, value: string, ref: string) => write(root, "claude", { id, attribute: "relationship", value, as_of: TODAY, sources: [ref], source_type: "document", verification: "verified-by-source", confidence: "stated" }).outcome;
+    const o1 = forge(HELENE, "Robin's daughter", "contacts:vcard/helene@forged0001"), o2 = forge(HELENE, "Robin's daughter", heleneCard);
+    const owner = live(HELENE, "relationship");
+    const ownerHolds = owner?.value === "Robin's mother" && owner?.by === "owner";
+    const o3 = forge("people/gilles-lefebvre", "Robin's uncle", robinCard);
+    const g = live("people/gilles-lefebvre", "relationship");
+    const cardHolds = o3 !== "committed" && g?.value !== "Robin's uncle";
+    return ok(ownerHolds && cardHolds, `made-up card ${o1}, real card ${o2}, owner's word ${ownerHolds ? "holds" : "lost"}; borrowed owner card ${o3}, card's value ${cardHolds ? "holds" : "replaced"}`);
+  } },
+  { id: "rt-card-ref-borrowed-resolver", dimension: "conflicts", gap: "G564", kind: "attack", title: "in a brain whose resolver is the assistant itself (its cards filed as that assistant), borrowing the owner's card ref still can't replace what the card said", source: "slice audit of claude/audit8-contacts 2026-10-31", run: async () => {
+    const b = await cardBrain("claude");
+    if (!b) return na("no contacts source at this commit");
+    const { root } = b;
+    const page = pb.brain.loadBrain(root).find((n: any) => n.fm.type === "person" && n.fm.title === "Gilles Lefebvre");
+    const card = page && (pb.carve.records(page.fm.facts?.relationship ?? []) as any[]).find((x) => !x.valid_to);
+    if (!card || card.by !== "claude") return ok(false, `the card filed ${card ? `as ${card.by}` : "no relationship"}`);
+    const o = write(root, "claude", { id: page.fm.id, attribute: "relationship", value: "Robin's uncle", as_of: TODAY, sources: [String(card.sources[0])], source_type: "document", verification: "verified-by-source", confidence: "stated" }).outcome;
+    const f = fact(root, page.fm.id, "relationship");
+    const live = f?.candidates ? f.candidates.map((c: any) => c.value) : [f?.value];
+    return ok(o !== "committed" && live.includes("Robin's father") && (!!f?.candidates || !live.includes("Robin's uncle")), `borrowed owner card ${o}; live ${live.join(" | ")}`);
+  } },
+  { id: "pull-card-second-email-files", dimension: "upkeep", gap: "G565", kind: "benign", title: "a card's second email on a page where the owner gave one files itself beside it, private and held, and asks nothing", source: "audit v8 2026-10-31", run: async () => {
+    const b = await cardBrain();
+    if (!b) return na("no contacts source at this commit");
+    const { root } = b;
+    const filed = cardRecs(root, "emails").some((r: any) => r.value === CARD_EMAIL && r.unseen);
+    const ownerKept = (fact(root, HELENE, "emails")?.items ?? []).some((r: any) => r.value === "helene.lefebvre@example.org" && r.by === "owner" && !r.valid_to);
+    const waiting = Bun.spawnSync(["grep", "-rl", CARD_EMAIL, join(root, "inbox"), "--include=*.yaml"]).stdout.toString().split("\n").filter((f) => f && !f.includes("/captures/") && !f.includes("/decided/")).length;
+    return ok(filed && ownerKept && waiting === 0, `filed ${filed}; owner's address kept ${ownerKept}; ${waiting} waiting`);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases];

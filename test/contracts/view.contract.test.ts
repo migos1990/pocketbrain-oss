@@ -196,3 +196,86 @@ test("contract view: one list item or dispute candidate shared with another agen
     } finally { useCells(false); }
   }
 });
+
+// Builder re-audit of the audit v9 stack (G589): the page writer says a date in words ("Due for X:
+// 8 Dec."), and a hidden date was scrubbed only as 2026-12-08, so a reader token capped at personal
+// read "8 Dec" in context_pack and read until the writer's next pass.
+test("a hidden date never reaches an agent in the words the page writer says it in", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const { contextPack } = await import("../../src/core");
+  const { withTokenRole } = await import("../../src/tokenrole");
+  const { root } = await makeDemoBrain();
+  const ID = "projects/product-discovery-course", f = join(root, `${ID}.md`);
+  const text = readFileSync(f, "utf8");
+  expect(text).toContain("8 Dec");
+  writeFileSync(f, text.replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    sensitivity: private\n"));
+  expect(readFileSync(f, "utf8")).toContain("value: 2026-12-08\n    sensitivity: private");
+  const as = (fn: () => unknown) => JSON.stringify(withTokenRole("claude", "reader", fn));
+  for (const out of [as(() => contextPack(root, "claude", "Product Discovery course")), as(() => readNote(root, "claude", ID))]) {
+    expect(out).not.toContain("8 Dec");
+    expect(out).not.toContain("2026-12-08");
+  }
+}, 60_000);
+
+// G589's first cut withheld every carved date in words brain-wide, so gemini read "You were last
+// in touch with Grace on [withheld]" beside Grace's own last_contact 2026-09-24, because another
+// page hid the same day. A page's own visible date is never withheld for another page's hidden one.
+test("a date an agent is shown on a page is never withheld there for another page's hidden fact", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const { root } = await makeDemoBrain();
+  const out = JSON.stringify(readNote(root, "gemini", "people/grace-liu"));
+  expect(out).toContain("on 24 Sep.");
+  expect(out).not.toContain("[withheld]");
+}, 60_000);
+
+// Builder's final audit F4 (G592): a page's hidden date must never blank the same day where the page
+// grants it as another fact, so the sentence can't tell the agent the hidden value.
+test("a page's hidden date never withholds a day the page grants the agent as another fact", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const ID = "projects/product-discovery-course";
+  const body = async (due: string) => {
+    const { root } = await makeDemoBrain();
+    const f = join(root, `${ID}.md`);
+    writeFileSync(f, readFileSync(f, "utf8")
+      .replace("  due:\n    value: 2026-12-08\n", `  due:\n    value: ${due}\n    sensitivity: private\n`)
+      .replace("facts:\n", "facts:\n  kickoff:\n    value: 2026-12-08\n    as_of: 2026-09-27\n    sources:\n      - gmail:000000000000d02c\n    verification: self-reported\n    by: capture\n    recorded: 2026-09-27\n")
+      .replace("(Written by the hub", "Kickoff: 8 Dec.\n\n(Written by the hub"));
+    const { withTokenRole } = await import("../../src/tokenrole");
+    return JSON.stringify(withTokenRole("claude", "reader", () => readNote(root, "claude", ID)));
+  };
+  const [same, other] = [await body("2026-12-08"), await body("2026-12-09")];
+  expect(same).toContain("Kickoff: 8 Dec.");
+  expect(other).toContain("Kickoff: 8 Dec.");
+}, 120_000);
+
+// Builder final audit G1 (G593, invariant 3): the page's date scrub ran before links were redacted,
+// so a link to a hidden note whose id held the hidden date read [[projects/[withheld]-kickoff]].
+test("a link to a hidden note answers [[redacted]] even when its id holds the page's hidden date", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const { root } = await makeDemoBrain();
+  const ID = "projects/product-discovery-course", f = join(root, `${ID}.md`);
+  writeFileSync(join(root, "projects/2026-12-08-kickoff.md"), "---\nid: projects/2026-12-08-kickoff\ntype: project\ntitle: Secret kickoff\narea: teaching\nsensitivity: secret\nstatus: active\ncreated: 2026-09-01\nupdated: 2026-09-01\nby: owner\n---\nx\n");
+  writeFileSync(f, readFileSync(f, "utf8").replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    share_with: [chatgpt]\n").replace("(Written by the hub", "See [[projects/2026-12-08-kickoff]].\n\n(Written by the hub"));
+  const out = JSON.stringify(readNote(root, "claude", ID));
+  expect(out).toContain("See [[redacted]].");
+  expect(out).not.toContain("kickoff");
+}, 60_000);
+
+// Security review of the stack (G594): a writer must never be able to bring a hidden fact's sentence
+// back by adding a fact that holds a candidate value; the sentence is withheld by its label.
+test("a hidden fact's own sentence never comes back when the page grants its value elsewhere", async () => {
+  const { makeDemoBrain } = await import("../fixture");
+  const ID = "projects/product-discovery-course";
+  const lead = async (granted: string) => {
+    const { root } = await makeDemoBrain();
+    const f = join(root, `${ID}.md`);
+    writeFileSync(f, readFileSync(f, "utf8")
+      .replace("  due:\n    value: 2026-12-08\n", "  due:\n    value: 2026-12-08\n    share_with: [chatgpt]\n")
+      .replace("facts:\n", `facts:\n  probe:\n    value: ${granted}\n    as_of: 2026-09-27\n    sources:\n      - gmail:000000000000d02c\n    verification: self-reported\n    by: claude\n    recorded: 2026-09-27\n`));
+    const body = (readNote(root, "claude", ID) as { body: string }).body;
+    return body.slice(0, body.indexOf("(Written by the hub"));
+  };
+  const [hit, miss] = [await lead("2026-12-08"), await lead("2026-12-09")];
+  expect(hit).not.toContain("Due for");
+  expect(hit).toBe(miss);
+}, 120_000);

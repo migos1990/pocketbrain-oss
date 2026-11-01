@@ -18,7 +18,7 @@ import type { Fact, FactRecord, Note } from "./brain";
 import { loadBrain, saveNote, isDisputed, isList, CONTENT_DIRS } from "./brain";
 import { loadRules, tierOf } from "./rules";
 import { carve, grantFor, linkFor, visibleFacts, shownUpdated, type CarveResult } from "./carve";
-import { redactLinks, agentFact, needlesOf, guidanceFor, pageSummary } from "./view";
+import { agentFact, needlesOf, guidanceFor, pageSummary, scrubPage } from "./view";
 import { carriedForms, type Needle } from "./match";
 import { escapeRe, textKeys, tokenKey } from "./util";
 import { headCommit } from "./git";
@@ -232,7 +232,7 @@ function cellNote(v: CarveResult["visible"] extends Map<string, infer V> ? V : n
   if (f.summary !== undefined) f.summary = pageSummary(v, res);
   if (f.parent !== undefined && !(typeof f.parent === "string" && res.visible.has(f.parent))) f.parent = undefined;
   // Links to notes outside the slice are redacted here, so the cell never holds their ids.
-  return { fm, body: v.body ? redactLinks(v.note.body, res) : "", path: v.note.path };
+  return { fm, body: v.body ? scrubPage(v.note.body, v, res) : "", path: v.note.path };
 }
 
 function build(root: string, agent: string, notes: Note[], slices?: string[], dir = cellDir(root, agent)): CellInfo {

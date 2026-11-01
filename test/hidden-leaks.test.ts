@@ -320,3 +320,45 @@ test("another writer citing the same source with an earlier date also puts the s
   expect(r.outcome).toBe("inbox");
   expect(r.message).not.toMatch(/2026-08-20|supersed/);
 });
+
+// Audit v9 (2026-10-31; G584): a merge folding an owner-set share into the agent's own shared-away
+// record kept the agent's shared_by, so the owner's narrower share looked like the agent's own
+// (invariant 4) and the agent's next write went from inbox to disputed.
+test("a merge never makes an owner-set share look like the agent's own (G584)", async () => {
+  const { planMerge } = await import("../src/merge");
+  const root = plannerShared();
+  const keep = note(root, "projects/course-a");
+  const drop = structuredClone(keep);
+  drop.fm.id = "projects/course-a-copy";
+  drop.path = "projects/course-a-copy.md";
+  // The owner's own share, set by hand on the planner's record: no shared_by.
+  const rec = drop.fm.facts!.grant_code as unknown as Record<string, unknown>;
+  rec.share_with = [];
+  delete rec.shared_by;
+  drop.fm.facts = { grant_code: rec } as never;
+  const { keep: merged } = planMerge(keep, drop, () => "c-0");
+  const g = merged.fm.facts!.grant_code as { share_with?: string[]; shared_by?: string };
+  expect(g.share_with).toEqual([]);
+  expect(g.shared_by).toBeUndefined();
+  saveNote(root, merged);
+  run(root, ["commit", "-qam", "owner: merge"]);
+  expect(remember(root, "planner", next).outcome).toBe("inbox");
+});
+
+// Slice audit of claude/audit9-fixes (2026-10-31; G584 follow-up): settling a conflict narrowed the
+// chosen side's share_with by the other side's list and kept the chosen side's shared_by, the same
+// look-alike own share the merge made.
+test("settling a conflict never makes a share narrowed by another side look like the chosen agent's own (G584)", async () => {
+  const { ownerDecide } = await import("../src/core");
+  const root = plannerShared();
+  const w = write(root, { agent: "steward", kind: "fact", id: "projects/course-a", attribute: "grant_code", value: "Osprey-3", as_of: "2026-09-01", sources: ["gcal:e5@e5"], verification: "self-reported", share_with: [] } as never, { acceptedBy: "auto-decide", contest: true });
+  expect(w.outcome).toBe("disputed");
+  const packet = loadBrain(root).find((n) => n.fm.type === "dispute")!;
+  const cands = packet.fm.candidates as { value: string }[];
+  ownerDecide(root, String(packet.fm.id).split("/")[1]!, cands.findIndex((c) => c.value === "Falcon-88") + 1);
+  const g = note(root, "projects/course-a").fm.facts!.grant_code as { value: string; share_with?: string[]; shared_by?: string };
+  expect(g.value).toBe("Falcon-88");
+  expect(g.share_with).toEqual([]);
+  expect(g.shared_by).toBeUndefined();
+  expect(remember(root, "planner", next).outcome).toBe("inbox");
+});

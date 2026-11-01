@@ -14,7 +14,7 @@ import { withFileLock } from "../filelock";
 import { join } from "node:path";
 import { loadRules } from "../rules";
 import { loadBrain } from "../brain";
-import { carve, grantFor } from "../carve";
+import { carve, grantFor, records } from "../carve";
 import { renderView } from "../view";
 import { CoreError, ownerWhy, ownerDecide, ownerKeepBoth, ownerConflict, ownerConflicts } from "../core";
 import { settlePage, heldMailPage } from "./html-settle";
@@ -37,7 +37,7 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, learnedThisWeek, backedUpWords } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse } from "./html-page";
 import { signInAgain } from "./html-home";
@@ -99,16 +99,19 @@ export const FRESH_MINUTES = 10;
 // screens (/home, /p, /settle) offer, and only what keeps a thing back or puts one right, runs on the
 // 30-day sign-in; every other action, and anything that lets a held thing out, needs a sign-in from
 // the last FRESH_MINUTES. Checked once, before any action runs.
-export const STALE_OK: Record<string, (form: Record<string, string>) => boolean> = {
+// A pick or typed answer on a conflict whose sides the settle screen hides past a fresh sign-in
+// (a private one) needs a fresh sign-in too (audit v7, G553: an old form picked a hidden side).
+const hiddenSides = (root: string | undefined, id: string | undefined) => !!root && !!id && !!(id.startsWith("p-") ? inboxConflict(root, id) : ownerConflict(root, id))?.private;
+export const STALE_OK: Record<string, (form: Record<string, string>, root?: string) => boolean> = {
   "sign-in-again": () => true,
   "settle-mail": (form) => form.n === "drop",
-  "settle-pick": () => true,
+  "settle-pick": (form, root) => !hiddenSides(root, form.id),
   "settle-both": () => true,
   "diary-undo": () => true,
   "fix-everywhere": () => true,
   "note-hide": () => true,
 };
-export const needsFresh = (action: string, form: Record<string, string>): boolean => !STALE_OK[action]?.(form);
+export const needsFresh = (action: string, form: Record<string, string>, root?: string): boolean => !STALE_OK[action]?.(form, root);
 // A folder with no .git keeps no sign-in file, so its sign-in times live in this run only.
 const signedInHere = new Map<string, string>();
 function freshSignIn(root: string, sid: string, now: Date): boolean {
@@ -251,12 +254,22 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const rules = loadRules(root), fresh = freshSignIn(root, sid, now());
     const day = now().getTime() - 86_400_000;
     const all = (chats.get(sid) ?? []).filter((t) => t.at >= day);
-    const shown = all.filter((t) => fresh || !t.fresh);
-    const notes = loadBrain(root, { shared: true });
+    // An answer given on an older sign-in hides too once its page or fact is private now (G551).
+    const notes = loadBrain(root, { shared: true }), byId = new Map(notes.map((n) => [n.fm.id, n]));
+    const privateTurn = (t: AskTurn) => {
+      const key = t.reply.fact_key, page = t.reply.page ?? key?.slice(0, key.lastIndexOf("#"));
+      if (!page) return false;
+      if (key) return privateNow(byId.get(page), key.slice(key.lastIndexOf("#") + 1));
+      // A turn about the whole page may have said any of its facts (a page with no prose answers
+      // with up to three): it hides once any of them is private or held now (G582 re-audit).
+      const n = byId.get(page);
+      return privateNow(n, "") || Object.keys(n?.fm.facts ?? {}).some((a) => privateNow(n, a) || records(n!.fm.facts![a]!).some((r) => !!r.unseen && !r.valid_to));
+    };
+    const shown = all.filter((t) => fresh || (!t.fresh && !privateTurn(t)));
     const titles = new Map(notes.map((n) => [n.fm.id, displayName(n.fm.id, n.fm.title)]));
     // An answer about a page shows that page's prose as the page is now (askProse in html-page.ts).
     let st: ReturnType<typeof loadState> | undefined;
-    const prose = (t: AskTurn) => { const n = t.reply.kind === "say.lookup" && t.reply.page ? notes.find((x) => x.fm.id === t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {}; };
+    const prose = (t: AskTurn) => { const n = t.reply.kind === "say.lookup" && t.reply.page ? byId.get(t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {}; };
     const turns = shown.map((t) => ({ ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}), ...prose(t) }));
     return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, older: all.length - shown.length, flash }), { headers: PAGE_HEADERS });
   };
@@ -417,8 +430,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const go = (path: string, r: { ok?: string; err?: string; undo?: string; wrong?: string }, hash = "") => new Response(null, { status: 303, headers: { location: `${path}?${r.err !== undefined ? `err=${keepFlash(sid, r.err)}` : `ok=${keepFlash(sid, r.ok ?? "")}${r.undo ? `&undo=${r.undo}` : ""}${r.wrong ? `&wrong=${encodeURIComponent(r.wrong)}` : ""}`}${hash}` } });
       const fail = (e: unknown) => { if (!(e instanceof CoreError)) console.error(e); return ownerFacingError(e); };
       const gated = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : /^\/(propose|consent)\//.test(url.pathname) ? url.pathname.split("/")[1]! : "";
-      if (gated && needsFresh(gated, form) && !freshSignIn(root, sid, now())) {
-        if (gated === "settle-mail") return go(`/settle/${encodeURIComponent(form.id ?? "")}`, { err: "Sign in again to let it through: it may hold something private." });
+      if (gated && needsFresh(gated, form, root) && !freshSignIn(root, sid, now())) {
+        if (gated === "settle-mail" || gated === "settle-pick") return go(`/settle/${encodeURIComponent(form.id ?? "")}`, { err: gated === "settle-pick" ? "Sign in again to settle it: its sides show only right after you sign in." : "Sign in again to let it through: it may hold something private." });
         return go(gated === "diary-seen" ? "/home" : back, { err: gated === "diary-seen" ? "Sign in again to see it: a held value shows only right after you sign in." : "Sign in again to do that: it needs a sign-in from the last few minutes." });
       }
 

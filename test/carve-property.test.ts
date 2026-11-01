@@ -2,9 +2,9 @@
 // The carve as a property (backlog 276): for random brains and policies (test/carve-gen.ts:
 // areas, tags, types, sensitivity, aliases, object and list facts, fact-level sensitivity and
 // share_with, slices of every kind, excludes, tiers, reader tokens, merges, superseded decisions,
-// handoffs), no agent's output through the live MCP server (orientation, read, search,
-// context_pack, whats_new with its handoffs, memory_check) carries a value, a name, a note id or a
-// date of a note or fact carved out for it. "Carved out" is the leak oracle's (evals/lib/oracle.ts),
+// handoffs, contact cards' emails and phones held until Show), no agent's output through the live
+// MCP server (orientation, read, search, context_pack, whats_new with its handoffs, memory_check)
+// carries a value, a name, a note id or a date of a note or fact carved out for it. "Carved out" is the leak oracle's (evals/lib/oracle.ts),
 // written from rules/ without the carve code. What an agent asked for (a read id, a search word, a
 // topic) is taken out of that call's own answer before it is checked: echoing it isn't a leak.
 //   CI: CARVE_CASES brains (default 6).  Soak: CARVE_SOAK=1 (300 brains), or CARVE_CASES=n.
@@ -129,6 +129,19 @@ test("carve property: the generator is deterministic and covers what it claims",
   expect(all.some((g) => g.agents.some((x) => x.roles.includes("reader")))).toBe(true);
   expect(all.some((g) => g.ops.some((o) => o.startsWith("merge") && o.endsWith("ok")))).toBe(true);
   expect(all.some((g) => g.ops.some((o) => o.startsWith("handoff ")))).toBe(true);
+  // Contact cards (G563): emails and phones citing a card, private, some held until Show and some
+  // seen, and the oracle forbids every held one to every agent, a core one that sees all included.
+  const card = (r: any) => (r.sources ?? []).some((x: unknown) => String(x).startsWith("contacts:"));
+  const cardRecs = notes.flatMap((n) => ["emails", "phones"].flatMap((a) => (n.fm.facts?.[a] as any)?.items ?? [])).filter(card);
+  expect(cardRecs.some((r: any) => r.unseen === true)).toBe(true);
+  expect(cardRecs.some((r: any) => r.sensitivity === "private" && !r.unseen)).toBe(true);
+  for (const g of all) {
+    const held = loadBrain(g.root).flatMap((n) => ["emails", "phones"].flatMap((a) => (n.fm.facts?.[a] as any)?.items ?? [])).filter((r: any) => card(r) && r.unseen).map((r: any) => String(r.value));
+    for (const a of g.agents) {
+      const out = new Set((await forbiddenFor(g.root, a.name)).map((f) => f.value));
+      expect(held.filter((v) => !out.has(v))).toEqual([]);
+    }
+  }
 }, 120_000);
 
 // G254, the coordinator's repro (the note copied from evals/cases/handoff.ts on claude/handoff-eval):

@@ -22,7 +22,7 @@ import { clock } from "./clock";
 import { ownerConflicts, ownerDecide } from "./core";
 import { forgetPerson } from "./forget";
 import { forgetNote } from "./dashboard/edit";
-import { plain, attrWords, isVerbAttribute, lineWords, type LineKey } from "./dashboard/home";
+import { plain, attrWords, isVerbAttribute, lineWords, privateNow, shutBody, type LineKey } from "./dashboard/home";
 import { findSecret, SENSITIVE_WORDS } from "./checks";
 import { KEY_ENV, logJudgment, modelConfigFor, parseJson, type Model } from "./model";
 import { modelFor } from "./usage";
@@ -178,9 +178,42 @@ export function parseTells(text: string, d = today()): Told[] {
 
 // Reported speech: what someone else said, heard or thinks. Its clause is theirs, not the owner's.
 const HEARD_FROM = /^(?:(?:[Ss]o\s+)?([A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)*|[Mm]y \p{Ll}+|[Ss]he|[Hh]e|[Tt]hey)\s+(?:told me|tells me|told us|said|says|mentioned|thinks|thought|heard|claims|claimed|reckons|wrote|texted|emailed)(?:\s+(?:to me|me))?(?:\s+that)?[,:]?\s+|(?:I|[Ww]e)\s+(?:heard|was told|were told|read)(?:\s+(?:from|by)\s+([^,]+?))?(?:\s+that)?[,:]?\s+|[Aa]pparently,?\s+|[Aa]ccording to ([^,]+),\s*|[Ww]ord is,?\s+|[Rr]umou?r (?:is|has it),?\s+)(.+)$/u;
+// More shapes of the same (audit v7, G556: "Per Paul, Jane is the dean" filed as the owner's word):
+// each is [pattern, group holding who said it (0: no one named), group holding what they said].
+const NAMED = String.raw`([A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)*|[Mm]y \p{Ll}+)`;
+const SAID_BY: [RegExp, number, number][] = [
+  // leading: "Per Paul, …", "Via Paul, …", "From Paul: …", "As Paul put it, …", "Heard from Paul that …"
+  [new RegExp(String.raw`^(?:[Aa]s\s+)?[Pp]er\s+${NAMED}\s*[,:]\s*(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^[Vv]ia\s+${NAMED}\s*[,:]\s*(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^[Ff]rom\s+${NAMED}\s*:\s*(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^[Aa]s\s+${NAMED}\s+(?:put it|puts it|says|said|tells it|told me|told it)\s*[,:]?\s+(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^${NAMED}\s+(?:let me know|informed me|pointed out|assured me|warned me|swears|swore|insists|insisted|confirmed to me)(?:\s+that)?\s*[,:]?\s+(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^${NAMED}['’]s\s+(?:take|word|view|version|story)(?:\s+is)?\s*[,:]\s*(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^[Hh]eard\s+(?:from|via)\s+${NAMED}(?:\s+that)?\s*[,:]?\s+(.+)$`, "u"), 1, 2],
+  [/^(?:[Ss]upposedly|[Rr]eportedly|[Aa]llegedly|[Oo]stensibly),?\s+(.+)$/u, 0, 1],
+  // French: "Selon Paul, …", "D'après Paul, …", "Paul m'a dit que …", "Apparemment …", "Il paraît que …"
+  [new RegExp(String.raw`^(?:[Ss]elon|[Dd]['’]après)\s+${NAMED}\s*,\s*(.+)$`, "u"), 1, 2],
+  [new RegExp(String.raw`^${NAMED}\s+(?:m['’]a dit|m['’]a écrit|m['’]a raconté|m['’]a appris|dit|pense|croit|affirme|prétend)\s+(?:que\s+|qu['’])(.+)$`, "u"), 1, 2],
+  [/^(?:[Aa]pparemment|[Ss]emble-t-il|[Pp]araît-il),?\s+(.+)$/u, 0, 1],
+  [/^(?:[Ii]l para[iî]t|[Oo]n m['’]a dit|[Oo]n dit|[Jj]['’]ai entendu(?: dire)?|[Jj]['’]ai lu)\s+(?:que\s+|qu['’])(.+)$/u, 0, 1],
+  // trailing: "Jane is the dean, Paul says", "… (per Paul)", "… according to Paul", "…, or so Paul says"
+  [new RegExp(String.raw`^(.+?)(?:\s*,\s*|\s+\(|\s+)(?:or so\s+)?(?:(?:as\s+)?per|according to|selon|d['’]après)\s+${NAMED}\)?[.!]*$`, "u"), 2, 1],
+  [new RegExp(String.raw`^(.+?)\s*,\s*(?:or so\s+)?${NAMED}\s+(?:says|said|tells me|told me|thinks|claims|reckons|swears|dit)[.!]*$`, "u"), 2, 1],
+];
 export function hearsay(text: string): { who: string; rest: string } | undefined {
-  const m = text.trim().match(HEARD_FROM);
-  if (!m) return undefined;
+  const t = text.trim();
+  const m = t.match(HEARD_FROM);
+  if (!m) {
+    for (const [re, w, r] of SAID_BY) {
+      const x = t.match(re);
+      if (!x) continue;
+      const rest = x[r]!.replace(/[.!]+$/, "").trim();
+      if (!rest || !/\s/.test(rest)) continue;
+      const raw = w ? (x[w] ?? "").trim() : "";
+      return { who: !raw || /^(she|he|they|i|we)$/i.test(raw) ? "someone else" : raw.replace(/^my\s+/i, "your "), rest: rest[0]!.toUpperCase() + rest.slice(1) };
+    }
+    return undefined;
+  }
   const rest = m[4]!.replace(/[.!]+$/, "").trim();
   if (!rest || !/\s/.test(rest)) return undefined;
   const raw = (m[1] ?? m[2] ?? m[3] ?? "").trim();
@@ -333,7 +366,7 @@ const valueOf = (f: Fact): unknown => isList(f) ? f.items.filter((i) => !i.valid
 // sentence or two; a page with none says up to three of its facts.
 function about(page: Note, title: (id: string) => string | undefined, fresh?: boolean): string {
   const name = String(page.fm.title);
-  const top = (page.body ?? "").split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !x.startsWith("[^"));
+  const top = (fresh ? page.body ?? "" : shutBody(page)).split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !x.startsWith("[^"));
   const prose = top ? plain(top.replace(/\[\^[^\]\s]+\]/g, "").split(MADE).join(" "), title).replace(/\s+/g, " ").trim() : "";
   if (prose) return prose.length <= 280 ? prose : `${prose.slice(0, 280).replace(/\s+\S*$/, "")}…`;
   const facts = Object.entries(page.fm.facts ?? {}).filter(([, f]) => !isDisputed(f) && (fresh || !closedFact(page, f))).slice(0, 3)
@@ -591,7 +624,8 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   const row = rows.at(-1);
   // The page's text follows its facts now, not tonight (the page writer, its own hub commit).
   try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
-  const audience = audienceOf(row?.sensitivity ?? page.fm.sensitivity);
+  // Who sees it, from the page as it is now (G551), the row only as a floor.
+  const audience = audienceOf(privateNow(loadBrain(root).find((n) => n.fm.id === page.fm.id) ?? page, told.attribute, row?.sensitivity) ? "private" : "personal");
   return { kind: "say.noted", page: page.fm.id, fact_key, undo_token: row?.undo_token, audience, label, text: `${say("say.noted", { what: label, audience })}${guess}` };
 }
 
