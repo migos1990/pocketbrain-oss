@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- The north star counts every item that waits for you as an ask, the ones held by a rule included (an assistant that can't see all of the page, a capture about a person, a name that fits two pages); their lines now say why, not leave them out. Its count of your home is the number your home shows, held values included. What it counts changes only with your typed word (G618).
 - A fact named by a person you merged into another page files onto the kept page. Before, the merged page's old name still counted as a second page, so every fact by that name waited on Settings as "fits more than one note" (G617).
 - The hub side of the pocketBrain phone app: a phone link opened in the app pairs the phone once (`POST /app/pair`), and Face ID then makes a sign-in fresh again (`POST /app/fresh`) instead of another texted link. The hub keeps only each phone key's hash. `pocketbrain dashboard phones` lists paired phones and `phones remove` ends one and its sign-ins. The texted link's page has "Open in the pocketBrain app". See docs/phone-app.md.
 - The pocketBrain phone app itself, in `mobile/` (Expo): your owner pages full screen, paired with a phone link, with Face ID in place of "Sign in again". Built with Expo's cloud builds; not in the stores yet. See docs/phone-app.md, The app.

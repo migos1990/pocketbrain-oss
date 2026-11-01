@@ -25,7 +25,8 @@ const fileAll = (root: string) => {
 };
 const open = (root: string) => readdirSync(join(root, "inbox")).filter((f) => f.endsWith(".yaml"));
 
-test("G603: a by-name proposal whose name fits a page and a new one waits, counted as held_by_ambiguity, not an ask", async () => {
+// One counted list (owner, 2026-11-01, through the coordinator after "i trust u"; audit v10): a held item is still an ask, its held line only says why.
+test("G603: a by-name proposal whose name fits a page and a new one waits, counted in asks, with held_by_ambiguity saying why", async () => {
   const { measure, counts } = await import("../scripts/north-star");
   const root = makeBrain();
   fileAll(root);
@@ -38,8 +39,9 @@ test("G603: a by-name proposal whose name fits a page and a new one waits, count
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
   expect(m.held_by_ambiguity).toBe(1);
-  expect(m.asks).toBe(0);
-  expect(m.not_conflict).toBe(0);
+  expect(m.asks).toBe(1);
+  expect(m.asks_by_kind.held_by_ambiguity).toBe(1);
+  expect(m.not_conflict).toBe(1);
   expect(counts(m).held_by_ambiguity).toBe(1);
 }, 60_000);
 

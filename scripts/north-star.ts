@@ -4,7 +4,15 @@
 //   asks           what the owner must decide (every open item but an alert or an assistant's mail
 //                  request, src/textline/items.ts openItems, 36 h after the last day, so a conflict
 //                  held for the night pass counts once its fallback releases it; minus what the
-//                  hub files on its own, src/filing.ts autoSaves)
+//                  hub files on its own, src/filing.ts autoSaves). One counted list (audit v10,
+//                  2026-11-01): an item held by a rule (held_by_access, held_by_capture,
+//                  held_by_ambiguity below) still waits for the owner, so it is an ask; those lines
+//                  only say why. An assistant's proposal held until a day (assistant_held) or left to
+//                  expire (assistant_expiring) leaves on its own, so it is not.
+// What it counts is the owner's to change: a change to what this file counts as an ask, as a
+// page that passes, or to what makes it pass needs the owner's own typed word in a thread, never a
+// coordinator's or a thread's call (audit v10: three commits on 2026-11-01 took held items out of
+// asks without it). A test that pins these numbers changes only with that word.
 //   pages_ok       share of the pages touched that week (or yesterday) that end the night with
 //                  cited prose (a body sentence plus a footnote naming a source), at least one
 //                  inbound [[link]] from another active page, and more than the hub's own text:
@@ -14,23 +22,24 @@
 // Also printed, not part of pass (re-audit 2026-10-25): brain commits in the window, how many say
 // why (a "Why:" line in the message), and how many of them the Gardener made; and of the pages that
 // pass, how many have prose beyond the hub's text and how many show a source's words.
-//   home_asks      conflicts the owner's home screen lists (src/dashboard/home.ts): the only place
-//                  that asks in the phone UI. The rest wait on Settings (/overview).
+//   home_asks      what the owner's home screen counts as waiting (waitingCount in
+//                  src/dashboard/home.ts: conflicts, held values, held mail), its own number. The
+//                  rest wait on Settings (/overview). home_asked lists the home's conflicts by fact.
 //   assistant_held a core assistant's own proposals held until a day (src/filing.ts
 //                  the owner's hold_assistants_until), when they file; and assistant_expiring, an outside
 //                  assistant's that expire unconfirmed. Queues with a day, not asks: printed apart
 //   held_by_access an assistant's write the write path held for the owner because that assistant
 //                  can't see all of the page (invariant 3, "not_in_your_view") and that contradicts
 //                  nothing the page holds (no differing live value): the access rule working, not a
-//                  filing failure. Waits on Settings, never the home; not an ask (G598). One whose
+//                  filing failure. Waits on Settings, never the home; an ask (G598). One whose
 //                  value differs is a conflict the home lists, so it counts as an ask about one.
 //   held_by_capture an assistant's own capture (not the capture agent's or the owner's) that cites
 //                  a source and is about a person: the source-save rule waits for the owner
 //                  ("It's about a person"), kept under the scope freeze. Waits on Settings, never the
-//                  home; not an ask (G600).
+//                  home; an ask (G600).
 //   held_by_ambiguity a proposal by a name that fits a page the brain has as well as a new one
 //                  ("new or same as …?"): the hub never guesses which. Waits on Settings, never the
-//                  home; not an ask (G603).
+//                  home; an ask (G603).
 //   bun scripts/north-star.ts                  replay a fixed week on the shipped default rules
 //   bun scripts/north-star.ts --file-all       the same week with auto_decide file: all on, to compare
 //   bun scripts/north-star.ts --brain <path>   the same two numbers for a real brain (read-only, counts only;
@@ -63,6 +72,7 @@ import { ownerConflicts } from "../src/core";
 import { inboxConflicts } from "../src/settle-inbox";
 import { loadState, type State } from "../src/dashboard/data";
 import { ownerPage } from "../src/dashboard/html-page";
+import { waitingCount } from "../src/dashboard/home";
 import YAML from "yaml";
 
 const DECISIONS = new Set(["dispute", "proposal", "held-answer"]);
@@ -173,11 +183,13 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   const homeConflicts = new Set(inboxConflicts(root).map((c) => c.file));
   // A handback the write held because its assistant can't see all of the page (invariant 3) that
   // contradicts nothing: the access rule working, not a filing failure. It waits on Settings, never
-  // on the home; counted on its own line, never an ask (coordinator, 2026-11-01; G598).
+  // on the home. It is an ask like any other wait, and its own line says why (G598; one list, audit v10).
   const byAccess = new Set(items.filter((i) => i.kind === "proposal" && !homeConflicts.has(i.ref) && !changesHeld(root, i.ref) && notInView(root, i.ref)).map((i) => i.ref));
-  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref) || byAccess.has(i.ref) || queues.byCapture.has(i.ref) || queues.byAmbiguity.has(i.ref))));
+  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref))));
+  // Each ask under its kind; a proposal held by a rule under that rule's name, so the breakdown says why.
+  const heldBy = (ref: string) => byAccess.has(ref) ? "held_by_access" : queues.byCapture.has(ref) ? "held_by_capture" : queues.byAmbiguity.has(ref) ? "held_by_ambiguity" : undefined;
   const by: Record<string, number> = {};
-  for (const i of waiting) by[i.kind] = (by[i.kind] ?? 0) + 1;
+  for (const i of waiting) { const k = (i.kind === "proposal" && heldBy(i.ref)) || i.kind; by[k] = (by[k] ?? 0) + 1; }
   const asked = waiting.map((i) => askedKey(root, i));
   // Asks that aren't about a contradiction: a proposal counts as one only when it changes a value
   // the brain holds (its reason says "changes <attribute> from", or the home lists it as a
@@ -193,11 +205,13 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   if (held) by.held = held;
   const asks = Object.values(by).reduce((a, b) => a + b, 0);
   const share = pages.length ? ok / pages.length : 0;
-  // What the phone UI's home lists (the only screen that asks): open conflicts, the Gardener's too.
+  // What the phone UI's home lists (the only screen that asks): its own count of what waits
+  // (conflicts, held values, held mail), and its conflicts by fact.
   const home_asked = ownerConflicts(root, later, { held: true }).map((c) => `${c.page}#${c.attr}`);
+  const home_asks = waitingCount(root, later);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
-  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: byAccess.size, held_by_capture: queues.byCapture.size, held_by_ambiguity: queues.byAmbiguity.size, home_asks: home_asked.length, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
+  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
 }
 
 // ---------- the fixed week ----------
@@ -348,9 +362,9 @@ export function report(m: NorthStar, label: string): string {
     `  asks: ${m.asks}${m.planted ? ` (want exactly ${m.planted}, the planted contradictions)` : ""}${kinds ? `: ${kinds}` : ""}`,
     `  asks the home screen lists: ${m.home_asks}${m.asks > m.home_asks ? ` (${m.asks - m.home_asks} wait on Settings)` : ""}`,
     `  held until your hold on assistants' proposals ends: ${m.assistant_held} assistant proposal(s); ${m.assistant_expiring} more expire unconfirmed (not asks)`,
-    `  held by access: ${m.held_by_access} assistant proposal(s) on a page that assistant can't fully see, contradicting nothing; they wait on Settings (not asks)`,
-    `  held by capture: ${m.held_by_capture} assistant capture(s) about a person, citing a source, that wait for you by rule; they wait on Settings (not asks)`,
-    `  held by ambiguity: ${m.held_by_ambiguity} proposal(s) by a name that fits a page you have as well as a new one; the hub never guesses, so they wait on Settings (not asks)`,
+    `  held by access: ${m.held_by_access} assistant proposal(s) on a page that assistant can't fully see, contradicting nothing; they wait on Settings (counted in asks)`,
+    `  held by capture: ${m.held_by_capture} assistant capture(s) about a person, citing a source, that wait for you by rule; they wait on Settings (counted in asks)`,
+    `  held by ambiguity: ${m.held_by_ambiguity} proposal(s) by a name that fits a page you have as well as a new one; the hub never guesses, so they wait on Settings (counted in asks)`,
     `  pages touched: ${m.pages}; with cited prose, an inbound link and more than the hub's own text: ${m.pages_ok} (${pct(m.share)}, want >= ${pct(BAR.share)}); cited prose ${m.prose}, inbound link ${m.inbound}`,
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,
     ...(m.why ? [`  commits: ${m.why.commits}, ${m.why.with_why} saying why; the Gardener's: ${m.why.gardener}, ${m.why.gardener_why} saying why (reported, not in pass)`] : []),

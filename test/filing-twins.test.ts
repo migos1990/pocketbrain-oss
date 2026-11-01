@@ -49,7 +49,8 @@ test("G600: an assistant's twin proposal gets its card's verdict under file all"
 // Coordinator's call (2026-11-01): an assistant's capture that cites a mail and is about a person
 // waits for the owner by the source-save rule ("It's about a person"); under the scope freeze it
 // keeps waiting, on Settings, and the north star counts it on its own line, never as an ask.
-test("north star counts an assistant's captured person fact that waits by rule as held_by_capture, not an ask", async () => {
+// One counted list (owner, 2026-11-01, through the coordinator after "i trust u"; audit v10): a held item is still an ask, its held line only says why.
+test("north star counts an assistant's captured person fact that waits by rule in asks, with held_by_capture saying why", async () => {
   const { measure, counts } = await import("../scripts/north-star");
   const { mkdirSync } = await import("node:fs");
   const root = makeBrain();
@@ -62,6 +63,7 @@ test("north star counts an assistant's captured person fact that waits by rule a
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
   expect(m.held_by_capture).toBe(1);
-  expect(m.asks).toBe(0);
+  expect(m.asks).toBe(1);
+  expect(m.asks_by_kind.held_by_capture).toBe(1);
   expect(counts(m).held_by_capture).toBe(1);
 }, 60_000);

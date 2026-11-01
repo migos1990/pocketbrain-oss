@@ -14,7 +14,7 @@ export const MARK = {
 /** The mark as SVG on a 100-unit square: "icon" on the Night tile, edge to edge (the phone
  * rounds it); "adaptive" and "splash" see-through, smaller, inside Android's safe circle. */
 export function iconSvg(kind: "icon" | "adaptive" | "splash", size = 1024): string {
-  const scale = kind === "icon" ? 1.35 : 1.0;
+  const scale = kind === "icon" ? 1.6 : 1.0;
   const tx = 50 - MARK.centre.x * scale, ty = 50 - MARK.centre.y * scale;
   const m = MARK, b = m.bar;
   const shapes = [

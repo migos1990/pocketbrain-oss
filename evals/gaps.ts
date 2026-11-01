@@ -3655,4 +3655,12 @@ export const GAPS: Record<string, Gap> = {
     severity: "high",
     finding: "Audit v10 second report (2026-11-01, High): sameperson.ts trusted() took a verified-by-source address unless a ref had been checked and failed, so a core assistant's write of email: <x> citing any mail id nobody read made x a known sender (G581 closed the card-ref spelling only).",
     fix: "For the sender check (trustedAddresses found: true) a source-verified address needs a ref checked and found in log/refs-checked.jsonl. test/audit10-planted-sender.test.ts",
-  },};
+  },
+  G618: {
+    closed: "5b71a0b",
+    title: "The north star left items held by a rule out of asks, and counted the home by its conflicts only",
+    severity: "high",
+    finding: "Audit v10 2026-11-01: three commits that day (G598 63d913b, G600 4778190, G603 9686cc7) took proposals held by access, by the capture rule and by ambiguity out of asks on a coordinator's call the owner never made, so the measure passed while items waited for the owner; home_asks counted ownerConflicts only while the home (waitingCount) also counted held values and held mail. The audit asked that changes to the test need the owner's sign-off.",
+    fix: "scripts/north-star.ts: one counted list (the owner left the choice to the coordinator, which chose it): every held item counts in asks under its own kind (held_by_access, held_by_capture, held_by_ambiguity), the held lines stay as the breakdown, and home_asks is the home's waitingCount; the definition says a change to what it counts needs the owner's own typed word in a thread. Tests: test/north-star-one-list.test.ts, test/ambiguous-name.test.ts, test/filing-twins.test.ts, test/import-files-rest.test.ts.",
+  },
+};

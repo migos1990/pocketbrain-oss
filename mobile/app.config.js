@@ -29,6 +29,8 @@ module.exports = {
     },
     android: { package: ENV.id, allowBackup: false, adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", backgroundColor: "#121212" } },
     plugins: ["expo-secure-store", ["expo-local-authentication", { faceIDPermission: "Face ID unlocks the key that signs you in to your brain." }]],
-    extra: { appEnv: APP_ENV },
+    // The Expo (EAS) project the owner's cloud builds run under; a copy built on another Expo
+    // account sets EAS_PROJECT_ID to its own (docs/phone-app.md, Building it).
+    extra: { appEnv: APP_ENV, eas: { projectId: process.env.EAS_PROJECT_ID || "39086ad4-9075-4a3c-a13e-1fbabb1899f9" } },
   },
 };

@@ -20,7 +20,7 @@ The owner's rule (2026-10-25): a fact is asked about only when it conflicts. Thi
 
 - it is a fact already in conflict;
 - it changes a value you confirmed with one dated the same day or later: that is a conflict, asked at once (one dated before your word asks nothing: it files to the fact's history and the "Filed for you" row says "kept your word", see "Older sources never re-ask" in [owner-home.md](owner-home.md));
-- it would start a new page whose name now fits a page you have as well as a new one (the write path asks "new or same as …?"; a name that fits one note exactly is weighed against that note, as the write path would land it there). The hub never guesses which: it waits on Settings, and the north star counts it on its own `held_by_ambiguity` line, never as an ask (G603). At the hub's start, a decided copy by such a name stays decided when a page it fits holds its fact from that copy's own source (a namesake page holding the same value doesn't count);
+- it would start a new page whose name now fits a page you have as well as a new one (the write path asks "new or same as …?"; a name that fits one note exactly is weighed against that note, as the write path would land it there). The hub never guesses which: it waits on Settings, and the north star counts it as an ask, with its own `held_by_ambiguity` line saying why (G603; one counted list since audit v10, G618). At the hub's start, a decided copy by such a name stays decided when a page it fits holds its fact from that copy's own source (a namesake page holding the same value doesn't count);
 - it gives a different value for a fact the brain holds: that is a conflict, filed as one and asked once the Gardener has been by (below);
 - it retires something, or it is a question.
 

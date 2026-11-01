@@ -88,7 +88,8 @@ test("G598: north star counts a waiting proposal the home shows as a conflict as
 // Coordinator's call on G598: a handback the write held by invariant 3 that contradicts nothing
 // (an item added, the value the page already holds) is the rule working, not a filing failure. It
 // waits on Settings, never on the home, and the north star counts it on its own line, never as an ask.
-test("G598: north star counts a not_in_your_view handback that contradicts nothing as held_by_access, not an ask", async () => {
+// One counted list (owner, 2026-11-01, through the coordinator after "i trust u"; audit v10): a held item is still an ask, its held line only says why.
+test("G598: north star counts a not_in_your_view handback that contradicts nothing in asks, with held_by_access saying why", async () => {
   const { measure, counts } = await import("../scripts/north-star");
   const root = makeBrain();
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
@@ -98,8 +99,9 @@ test("G598: north star counts a not_in_your_view handback that contradicts nothi
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
   expect(m.held_by_access).toBe(1);
-  expect(m.asks).toBe(0);
-  expect(m.not_conflict).toBe(0);
+  expect(m.asks).toBe(1);
+  expect(m.asks_by_kind.held_by_access).toBe(1);
+  expect(m.not_conflict).toBe(1);
   expect(m.home_asks).toBe(0);
   expect(counts(m).held_by_access).toBe(1);
 }, 60_000);

@@ -60,3 +60,15 @@ test("the app icon is the logo with the film's eyes: Night tile, full bleed, and
   expect(config.android.adaptiveIcon).toEqual({ foregroundImage: "./assets/adaptive-icon.png", backgroundColor: MARK.night });
   expect(config.splash).toMatchObject({ image: "./assets/splash-icon.png", backgroundColor: MARK.night });
 });
+
+test("the app builds under the owner's Expo project, and a copy on another account names its own", () => {
+  const path = require.resolve("../mobile/app.config.js");
+  const load = () => { delete require.cache[path]; return (require(path) as { expo: { extra: { eas?: { projectId?: string } } } }).expo.extra.eas?.projectId; };
+  const before = process.env.EAS_PROJECT_ID;
+  try {
+    delete process.env.EAS_PROJECT_ID;
+    expect(load()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    process.env.EAS_PROJECT_ID = "00000000-0000-4000-8000-000000000000";
+    expect(load()).toBe("00000000-0000-4000-8000-000000000000");
+  } finally { if (before === undefined) delete process.env.EAS_PROJECT_ID; else process.env.EAS_PROJECT_ID = before; delete require.cache[path]; }
+});
