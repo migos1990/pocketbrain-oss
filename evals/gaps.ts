@@ -19,6 +19,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner's Mac after a6921606 (2026-11-01, counts only): with G601 live, the 6 captures and imports it gave back their writer waited as \"Its name fits more than one note, so you decide where it goes\" and the north star failed with 6 asks not about a contradiction. A capture names its subject by title, never an id (no id was dropped by the import or the reopen), and resolveEntity finds the name fits a page the brain has as well as a new one (an exact match on two pages, or a near match: same surname, a compatible first name), so the write asks \"new or same as ...?\" and the hub must not guess. reopenLostAccepts also treated such a name as a page never made, so a decided copy whose fact one of the fitting pages already held was put back in the inbox.",
     fix: "src/filing.ts: the ambiguous-name wait goes on a byAmbiguity queue; scripts/north-star.ts counts it on its own held_by_ambiguity line (Settings, never the home), never as an ask. src/write.ts reopenLostAccepts: a by-name decided copy whose name fits pages, one of which holds its fact from the copy's own source, stays decided. Builder slice audit (tree 40f38da6) F1: a namesake page that happened to hold the same value kept a lost fact decided; only a record or conflict candidate citing the proposal\'s own source counts. Tests: test/ambiguous-name.test.ts, test/g603-namesake-keeps-decided.test.ts, the G603 rows in test/contracts/write.contract.test.ts.",
   },
+  G602: {
+    title: "A line break in a source ref could forge forget trailers in a commit message",
+    severity: "low",
+    finding: "Builder's slice audit of G601 (tree f75736f3, 2026-11-01): the schema's control-character pattern skipped \\n and \\r in a source ref and its via, and OWNER_REF had no end anchor, so with source_resolvable off an assistant's ref quoted into a proposal's reason wrote its own lines into the commit message (a Forgot-Person: line held a name as forgotten, an Undid-Forget: line brought a forgotten person back); forgottenSlugs and undoForget read those trailers from any author.",
+    fix: "src/checks.ts shapeFails refuses a ref or via with a line break; src/owner.ts OWNER_REF is anchored at both ends; src/write.ts forgottenSlugs and src/forget.ts undoForget read forget trailers only from the owner's own commits (isOwnerEmail). Tests: test/ref-line-breaks.test.ts, test/contracts/checks.contract.test.ts and test/contracts/write.contract.test.ts (G602 rows).",
+    closed: "fa749416",
+  },
   G601: {
     closed: "f834639f",
     title: "A capture put back in the inbox at the hub's start lost its writer and waited as your own material",

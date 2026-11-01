@@ -249,7 +249,10 @@ export function shapeFails(req: WriteRequest): CheckFail[] {
     else if (v.length > max) bad(`${f} is longer than ${max} characters`, `shorten ${f}`);
     else if (f !== "text" && (CONTROL.test(v) || /[\n\r]/.test(v))) bad(`${f} has control characters or line breaks`, `send ${f} as one plain line`);
   }
-  const refOk = (s: unknown): boolean => (typeof s === "string" && s.length <= 2048 && !CONTROL.test(s)) || (!!s && typeof s === "object" && !Array.isArray(s) && typeof (s as { ref?: unknown }).ref === "string" && ((s as { via?: unknown }).via === undefined || typeof (s as { via?: unknown }).via === "string") && refOk((s as { ref: string }).ref));
+  // A ref is one line (G602): a line break in a ref or its via, quoted into a proposal's reason,
+  // would write its own lines into the commit message (a forged trailer).
+  const line = (s: string) => s.length <= 2048 && !CONTROL.test(s) && !/[\n\r]/.test(s);
+  const refOk = (s: unknown): boolean => (typeof s === "string" && line(s)) || (!!s && typeof s === "object" && !Array.isArray(s) && typeof (s as { ref?: unknown }).ref === "string" && ((s as { via?: unknown }).via === undefined || (typeof (s as { via?: unknown }).via === "string" && line((s as { via: string }).via))) && refOk((s as { ref: string }).ref));
   if (r.sources !== undefined && (!Array.isArray(r.sources) || r.sources.length > 50 || !r.sources.every(refOk))) bad("sources must be a list of refs (scheme:id text, or { ref, via }), each one line under 2048 characters", 'e.g. ["gmail:<id>"]');
   if (r.share_with !== undefined && (!Array.isArray(r.share_with) || !r.share_with.every((a) => typeof a === "string" && a.length <= 64))) bad("share_with must be a list of agent names", 'e.g. ["steward"]');
   // "constructor" is snake_case but names a built-in of every object; facts[attr] would find it.

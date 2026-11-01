@@ -13,7 +13,7 @@ import { CONTENT_DIRS, dropParsed, isDisputed, loadBrain, type Note } from "./br
 import { CoreError, dropStaleVectors } from "./core";
 import { commitPaths, git, gitRun } from "./git";
 import { hubRole } from "./hub";
-import { OWNER } from "./owner";
+import { OWNER, isOwnerEmail } from "./owner";
 import { addressesOf, dropPersonStanding, loadStanding, restorePersonTraces, type StandingTraces } from "./standing";
 import { logWrite, resolveEntity } from "./write";
 import YAML from "yaml";
@@ -151,8 +151,11 @@ export function forgetPerson(root: string, id: string, o: { now?: number } = {})
 
 export function undoForget(root: string, id: string, o: { now?: number } = {}): string {
   if (!ID.test(id) || id.includes("..")) throw new CoreError(400, `forget --undo takes a person note's id, like people/jane-roy`);
-  const hash = git(root, ["log", "-n", "1", "--author=@pocketbrain.local", "--format=%H", `--grep=^Forgot-Person: ${esc(id)}$`]);
-  const undone = hash && git(root, ["log", "-n", "1", "--format=%H", `--grep=^Undid-Forget: ${hash}$`]);
+  // The owner's own forget and the owner's own undo only (G602): an assistant's commit message
+  // could carry either trailer.
+  const owners = (args: string[]) => git(root, ["log", "--format=%H %ae", ...args]).split("\n").map((l) => l.split(" ")).filter(([h, e]) => h && isOwnerEmail(e ?? "")).map(([h]) => h!);
+  const hash = owners([`--grep=^Forgot-Person: ${esc(id)}$`])[0] ?? "";
+  const undone = hash && owners([`--grep=^Undid-Forget: ${hash}$`]).length > 0;
   if (!hash || undone) throw new CoreError(404, `no forget of ${id} to undo`);
   const msg = git(root, ["log", "-1", "--format=%B", hash]);
   const at = Date.parse(msg.match(/^Forgot-At: (\S+)$/m)?.[1] ?? "");

@@ -10,7 +10,7 @@ pocketbrain forget --undo people/jane-roy   # within 14 days: puts all of it bac
 
 ## What goes
 
-One commit, made as you (`Kind: owner-edit`, `Forgot-Person: <id>`), removes:
+One commit, made as you (`Kind: owner-edit`, `Forgot-Person: <id>`), removes (only your own commits' `Forgot-Person:` and `Undid-Forget:` lines count, so an assistant's commit message can't hold or free a name, G602):
 
 - **Their note.** From the next request no assistant can read, search or be handed it; it answers like a note that never existed. The cells rebuild on the new commit.
 - **Every link to them**, label or anchor included (`[[people/jane-roy|Jane]]`, `[[people/jane-roy#emails]]`), in note bodies and fact values. Each becomes `[[redacted]]`, which is what assistants already see for a note outside their view. A note for someone whose id only starts the same (`people/jane-roy-2`) is left alone.

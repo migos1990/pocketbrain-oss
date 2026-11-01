@@ -28,4 +28,8 @@ export function isOwnerId(name: unknown, displayName?: string): boolean {
 export const ownerRef = (date: string, channel: string) => `owner:${date}/${channel}`;
 // The owner approved a proposal by tapping Yes: recorded on the fact, ranked as nothing (src/sources.ts).
 export const approvedRef = (date: string, channel: string) => `approved:${date}/${channel}`;
-export const OWNER_REF = /^(owner|louis):\d{4}-\d{2}-\d{2}\/.+/;
+// One line, end to end (G602): a ref with a second line is never the owner's.
+export const OWNER_REF = /^(owner|louis):\d{4}-\d{2}-\d{2}\/.+$/;
+// The git author email of the owner's own commits (git.ts authorEnv: owner@, or louis@ for a brain
+// whose owner is Louis). An assistant's commit never has it.
+export const isOwnerEmail = (email: string): boolean => /^(owner|louis)@pocketbrain\.local$/.test(email.trim());

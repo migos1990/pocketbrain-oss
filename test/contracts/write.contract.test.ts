@@ -631,3 +631,17 @@ test("contract write: a namesake's equal value never keeps a lost by-name fact d
   git(root, ["add", "-A"]); git(root, ["commit", "-q", "-m", "fixture: a decided copy"]);
   expect(reopenLostAccepts(root)).toEqual(["2026-10-06-planner-c3.yaml"]);
 });
+
+// G602: forget trailers in an assistant's commit message neither hold a name nor free one.
+test("contract write: only the owner's commits say who was forgotten", async () => {
+  const { forgottenSlugs } = await import("../../src/write");
+  const { forgetPerson } = await import("../../src/forget");
+  const { git } = await import("../../src/git");
+  const { makeBrain } = await import("../fixture");
+  const root = makeBrain();
+  git(root, ["commit", "-q", "--allow-empty", "-m", "propose(planner): x\n\nForgot-Person: people/jane-roy"], "planner");
+  expect(forgottenSlugs(root).has("jane-roy")).toBe(false);
+  const { hash } = forgetPerson(root, "people/paul-advisor");
+  git(root, ["commit", "-q", "--allow-empty", "-m", `propose(planner): y\n\nUndid-Forget: ${hash}`], "planner");
+  expect(forgottenSlugs(root).has("paul-advisor")).toBe(true);
+});

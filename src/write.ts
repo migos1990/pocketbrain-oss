@@ -27,7 +27,7 @@ import { evidenceFor } from "./evidence";
 import { queueIfReplica, queueOp } from "./hub";
 import { decideCapture } from "./capture";
 import { coOwnerOf, isOwnerWord } from "./rules";
-import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, isOwnerId, ownerRef, approvedRef, normVerification } from "./owner";
+import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, isOwnerEmail, isOwnerId, ownerRef, approvedRef, normVerification } from "./owner";
 import { keepQuote, sweepQuotes } from "./quotes";
 import { hubReadRefs } from "./pull";
 import { appendDiary, diaryRow, shownValue, type DiaryKind } from "./diary";
@@ -1251,8 +1251,10 @@ export function forgottenName(title: string, forgot: Set<string>): boolean {
 export function forgottenSlugs(root: string): Set<string> {
   // A forget the owner undid (forget --undo: Undid-Forget: <the forget's commit>) doesn't count.
   const forgets = new Map<string, string>(), undone = new Set<string>();
-  for (const c of git(root, ["log", "--format=%H%n%B%x1e", "--grep=^Forgot-Person: ", "--grep=^Undid-Forget: "]).split("\x1e")) {
-    const [hash, ...body] = c.trim().split("\n");
+  // Only the owner's own commits count (G602): an assistant's commit message can't hold or free a name.
+  for (const c of git(root, ["log", "--format=%H%n%ae%n%B%x1e", "--grep=^Forgot-Person: ", "--grep=^Undid-Forget: "]).split("\x1e")) {
+    const [hash, email = "", ...body] = c.trim().split("\n");
+    if (!isOwnerEmail(email)) continue;
     for (const l of body) {
       const f = l.match(/^Forgot-Person: (\S+)$/), u = l.match(/^Undid-Forget: (\S+)$/);
       if (f && hash) forgets.set(hash, f[1].split("/").pop()!);

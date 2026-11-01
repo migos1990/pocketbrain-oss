@@ -49,6 +49,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- A source an assistant cites must be one line: a ref or its via with a line break is refused, so it can never write its own lines into a commit message, and only your own commits say who you forgot (G602).
 - A sealed edge bundle opens only with its full 16-byte tag: a tag cut short is refused whatever runtime opens it (G588).
 - `pocketbrain aftercheck classify on --cap 1` turns on the second-opinion classifier after an assistant's write with its own monthly spend cap, as one owner commit (`off` turns it off), so no one types into `rules/policy.yaml`. A conflict check whose model answer is cut off no longer stops the classifier: each step runs on its own and the failed one is retried, and the conflict check now has room for its whole answer.
 - The public repo (pocketbrain-oss) now follows `main`: after CI passes, a workflow exports that commit, refuses it on any denylisted term or a secret-shaped string beyond the known test fixtures, and pushes it there as one commit; `bun scripts/public-sync.ts check` says whether the public repo and pocketbrain.dev are in step, and a release tag is refused while the README's status line names another version (`cut` now moves it). See docs/release.md, The public repo and the site.
