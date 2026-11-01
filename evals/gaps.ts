@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G600: {
+    closed: "85498df4",
+    title: "A second proposal of the same value for one fact waited as your own material",
+    severity: "medium",
+    finding: "Owner's Mac after c6a01746 (2026-11-01, counts only): 4 new open proposals waited as \"It came from your own material, so it waits for you\" and the north star counted them as asks not about a contradiction. The inbox folds a second proposal of the same value for one fact under the first one's card (inboxCards' twins), but each is still its own open item; filing looked proposals up by card only (proposalOf over proposals()), so a twin was never found and fell to the own-material wait whatever its card's verdict was.",
+    fix: "src/filing.ts: withTwins adds each twin as its own proposal to filing's lookup (autoSaves' build and proposalOf), so a twin is judged by the same rules as its card: a handback the assistant can't see all of waits as one, a core assistant's fact files, a trial assistant's expires. The coordinator kept the person-only wait for an assistant's capture citing a mail (scope freeze) and had the north star count it on its own held_by_capture line, never as an ask. Tests: test/filing-twins.test.ts.",
+  },
   G598: {
     closed: "1895d61a",
     title: "Ten imported memories stayed open: a save that looped on a page the assistant can't fully see, and an id check that refused an existing page",

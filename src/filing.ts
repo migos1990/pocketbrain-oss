@@ -22,7 +22,7 @@ import { OWNER } from "./owner";
 import { CoreError } from "./core";
 import { sensitiveShape } from "./shape";
 import type { Rules } from "./rules";
-import { logWrite } from "./write";
+import { logWrite, inboxCards } from "./write";
 import { loadRules, attributeSpec, isOwnerWord, isGardener, tierOf } from "./rules";
 import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide } from "./write";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
@@ -112,7 +112,18 @@ function addedTimes(root: string): Map<string, number> {
 // While autoSaves runs: the inbox, rules and history read once, not once per item (owner,
 // 2026-10-23: 67 proposals took 2 s, two inbox reads and a git log each).
 let build: { root: string; props: Map<string, Proposal>; rules: Rules; added?: Map<string, number> } | undefined;
-const proposalOf = (root: string, file: string) => build?.root === root ? build.props.get(file) : proposals(root).find((x) => x.file === file);
+// A second proposal of the same value for one fact is folded under its card as a twin (inboxCards),
+// but it is still its own open item and is judged as its own proposal: looked up by card only, a
+// twin was never found and waited as "your own material" (G600).
+function withTwins(list: Proposal[], root: string): Map<string, Proposal> {
+  const out = new Map(list.map((x) => [x.file, x]));
+  for (const c of inboxCards(root)) for (const t of c.twins) if (!out.has(t.file)) out.set(t.file, {
+    file: t.file, by: String(t.doc.by ?? "?"), reason: String(t.doc.reason ?? ""), at: t.doc.at ? String(t.doc.at) : undefined,
+    request: (t.doc.request ?? {}) as Proposal["request"], unregistered: [], ...(t.doc.capture ? { capture: true as const } : {}),
+  });
+  return out;
+}
+const proposalOf = (root: string, file: string) => build?.root === root ? build.props.get(file) : withTwins(proposals(root), root).get(file);
 const rulesOf = (root: string) => build?.root === root ? build.rules : loadRules(root);
 
 // When the hub first saw an item it may decide. A deadline never starts before that, so an item
@@ -241,8 +252,11 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
 // never a date in code (re-audit 2026-10-30, G531). From that day they file by the usual rules.
 export const SET_ASIDE = "set it aside";
 // Proposal file -> when its plan runs: held until its day, left to expire, set aside next tick.
-export interface Queues { held: Map<string, string>; expiring: Map<string, string>; setAside: Map<string, string> }
-export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map() });
+// byCapture: an assistant's own capture citing a source, about a person, that waits for the owner by
+// the source-save rule (not the capture agent's or the owner's): kept waiting under the scope freeze
+// and counted on its own line, never an ask (coordinator, 2026-11-01; G600).
+export interface Queues { held: Map<string, string>; expiring: Map<string, string>; setAside: Map<string, string>; byCapture: Set<string> }
+export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map(), byCapture: new Set() });
 const HELD_DATED = new WeakSet<Plan>();
 
 // Active, and one the owner lets write: a core tier, inside the wall, or the capture agent.
@@ -359,6 +373,7 @@ function nextDay(rules: Rules, now: Date): Date {
   return new Date(now.getTime() + 86_400_000);
 }
 
+const ABOUT_PERSON = "It's about a person, so only you decide it.";
 function saveVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[number], kind: string, a: EscalationPolicy["auto_decide"], notes: Note[], now: Date): Verdict {
   const rules = rulesOf(root);
   const r = pr.request as { id?: string; title?: string; type?: string; attribute?: string; value?: unknown; text?: string; retract?: boolean; sources?: unknown[] };
@@ -367,7 +382,7 @@ function saveVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   if (a.source_saves_per_day <= 0) return wait("It could be saved for you, but that is off until you turn it on (auto_decide: { source_saves_per_day: 20 } in rules/escalation.yaml).");
   if (/owner_message_registered/.test(pr.reason) || refs.some((x) => isExactLouisRef(x) || SCHEMES[schemeOf(x) ?? ""] === "louis")) return wait("It cites your own word, so only you can keep or drop it.");
   const note = r.id ? notes.find((n) => n.fm.id === r.id) : undefined;
-  if (r.type === "person" || note?.fm.type === "person" || /^people\//.test(String(r.id ?? ""))) return wait("It's about a person, so only you decide it.");
+  if (r.type === "person" || note?.fm.type === "person" || /^people\//.test(String(r.id ?? ""))) return wait(ABOUT_PERSON);
   // A new note is saved by name, and the save sees every note: a name that now matches a person,
   // money or private note would land the fact there.
   const named = !r.id && r.title ? notes.filter((n) => compareKey(String(n.fm.title ?? "")) === compareKey(r.title!)) : [];
@@ -538,7 +553,7 @@ export function autoSaves(root: string, now = new Date(), state?: ReturnType<typ
   try { hubGate(root, ["commit"]); } catch { return out; }
   state ??= loadState(root);
   const ctx = { notes: state.notes };
-  build = { root, props: new Map(state.proposals.map((x) => [x.file, x])), rules: state.rules };
+  build = { root, props: withTwins(state.proposals, root), rules: state.rules };
   // A save that failed in the last day, under this code, is asked, not hidden: it may never go
   // through on its own. An older one, or one under other code, is tried again (G404, G407).
   const failed = failedSaves(root, now);
@@ -550,6 +565,10 @@ export function autoSaves(root: string, now = new Date(), state?: ReturnType<typ
       else if ("plan" in v && (v.plan.label === SAVED || v.plan.label === CONFLICT)) out.add(it.ref);
       else if ("plan" in v && v.plan.label === SET_ASIDE) queues?.setAside.set(it.ref, v.plan.at);
       else if ("plan" in v && v.plan.choice === "reject") queues?.expiring.set(it.ref, v.plan.at);
+      else if ("never" in v && v.never === ABOUT_PERSON) {
+        const pr = proposalOf(root, it.ref);
+        if (pr && !isOwnerId(pr.by) && pr.by !== captureAgent(build!.rules) && captured(root, pr.file)) queues?.byCapture.add(it.ref);
+      }
     }
   } finally { build = undefined; }
   return out;

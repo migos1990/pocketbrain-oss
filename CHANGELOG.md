@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A memory or fact proposed twice with the same value now files or waits the same way as the first one. Before, the second one waited as "your own material" and counted as something to decide (G600).
 - Undo of a settle always puts back what that settle changed, even when a later line in your diary names the same change (G595).
 - Undo of a settle works in the hours around a month's end, when the UTC month and your day's month differ (G590).
 - The last imported memories file too. A memory about a page your assistant can't fully see waits for you once, where before the hub retried it every minute and it never filed. A page whose name includes an assistant's name (an org page you made) takes the import, where before every write to it was refused (G598).
