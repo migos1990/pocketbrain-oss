@@ -153,8 +153,9 @@ test("a daily cap: past it, the rest wait for tomorrow; 0 turns saving off, and 
   const plan = planned(root, NOW)!;
   expect(plan.why).toMatch(/1 a day/);
   expect(Date.parse(plan.at)).toBeGreaterThan(NOW.getTime());
-  // Tomorrow, the next one goes.
-  expect(runAuto(root, new Date(NOW.getTime() + 86_400_000))).toHaveLength(1);
+  // Tomorrow, the next one goes. 36 hours on, not 24: on the day the clocks go back the owner's
+  // day is 25 hours long, so 24 hours after its first hour is still the same day.
+  expect(runAuto(root, new Date(NOW.getTime() + 36 * 3_600_000))).toHaveLength(1);
 
   for (const policy of ["health: { url: null }\nauto_decide: { source_saves_per_day: 0 }\n", "health: { url: null }\nauto_decide: { off: true }\n"]) {
     const r = brain(policy);

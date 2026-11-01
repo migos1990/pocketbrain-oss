@@ -124,6 +124,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Found writing G562's proof, 2026-10-31: on a page holding the owner's email and a private fact, a card's second email went to the inbox as \"Two sources disagree about a page that holds a private fact\" and never filed: filing's fileVerdict counted any different value as contradicting the owner's word, even in a list (merge: set) where it is just another item, against the source's own rule that a contradicting relationship is the only ask a card makes.",
     fix: "src/filing.ts fileVerdict: in a set or append list, a different value contradicts a live item only when they share the attribute's item_key; otherwise it files as another item, as write() adds it. Tests: test/contacts-doors.test.ts (the card filed Hélène's new email ... the owner's address is untouched), test/filing-list-items.test.ts (another item_key files beside the owner's item; the owner's item_key with other content doesn't); eval pull-card-second-email-files.",
   },
+  G588: {
+    closed: "b3dfd43f",
+    title: "A sealed edge part opened with a tag cut short under Node",
+    severity: "medium",
+    finding: "Semgrep on main, 2026-10-31: src/edge.ts seal() and open() used aes-256-gcm without authTagLength and setAuthTag took any length, so under Node a sealed bundle whose tag was cut to 4 bytes still opened: a forgery in about 2^32 tries. Bun's crypto refuses a short tag, so the hub's own runtime was not open, but nothing in the code relied on more than that.",
+    fix: "src/edge.ts: createCipheriv and createDecipheriv name authTagLength 16, and open() refuses a tag that is not 16 bytes before deciphering. Contract rows in test/contracts/cell.contract.test.ts: every AES-GCM cipher in edge.ts fixes its tag at 16 bytes (failed first); a sealed edge cell never opens with a tag cut short.",
+  },
   G546: {
     title: "A page with the owner's surname never linked to the owner",
     severity: "medium",

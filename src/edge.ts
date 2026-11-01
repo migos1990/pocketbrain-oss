@@ -43,15 +43,19 @@ export interface Bundle { v: number; agent: string; sealed_at: string; brain_com
 
 function seal(key: Buffer, data: Buffer, aad: string): Sealed {
   const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", key, iv);
+  const c = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   c.setAAD(Buffer.from(aad));
   const ct = Buffer.concat([c.update(data), c.final()]);
   return { iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), ct: ct.toString("base64") };
 }
+// A tag is 16 bytes or nothing opens: Node's GCM accepts a cut tag (4 bytes is a forgery in about
+// 2^32 tries) unless authTagLength is fixed, and the length is checked here too (G588).
 function open(key: Buffer, s: Sealed, aad: string): Buffer {
-  const d = createDecipheriv("aes-256-gcm", key, Buffer.from(s.iv, "base64"));
+  const tag = Buffer.from(s.tag, "base64");
+  if (tag.length !== 16) throw new Error("sealed: the tag is not 16 bytes");
+  const d = createDecipheriv("aes-256-gcm", key, Buffer.from(s.iv, "base64"), { authTagLength: 16 });
   d.setAAD(Buffer.from(aad));
-  d.setAuthTag(Buffer.from(s.tag, "base64"));
+  d.setAuthTag(tag);
   return Buffer.concat([d.update(Buffer.from(s.ct, "base64")), d.final()]);
 }
 // The wrap key for one token. The salt is fixed per brain (home state), so it can be learned once.

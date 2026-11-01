@@ -312,3 +312,39 @@ test("contract cell: a page's parent outside the slice and a carved value in its
   expect(helper).not.toContain("money/main-bank");
   expect(helper).not.toContain("Maple Trust");
 });
+
+// ---- sealed cells at the edge (src/edge.ts) ----
+// Semgrep 2026-10-31 (G588): AES-GCM opened with any tag length, so a sealed bundle whose tag was
+// cut to 4 bytes still opened under Node: a forgery in about 2^32 tries. Bun's crypto happens to
+// refuse a short tag, so the hub's runtime was not open, but the code relied on it. Every GCM cipher
+// in edge.ts names authTagLength 16 and open() refuses any other length itself.
+test("every AES-GCM cipher in edge.ts fixes its tag at 16 bytes, and open() checks the length itself", () => {
+  const src = readFileSync(join(import.meta.dir, "..", "..", "src", "edge.ts"), "utf8");
+  const calls = src.split("\n").filter((l) => /create(?:Dec|C)ipheriv\(\s*"aes-256-gcm"/.test(l));
+  expect(calls.length).toBeGreaterThanOrEqual(2);
+  for (const c of calls) expect([c, /authTagLength:\s*16\b/.test(c)]).toEqual([c, true]);
+  expect(src).toMatch(/tag\.length !== 16/);
+});
+test("a sealed edge cell never opens with a tag cut short, and opens with its full tag", async () => {
+  const { mkdtempSync, readFileSync: read } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { enroll, publish, openBundle } = await import("../../src/edge");
+  const was = process.env.PB_CONFIG_DIR;
+  process.env.PB_CONFIG_DIR = join(mkdtempSync(join(tmpdir(), "pb-edge-home-")), "keys");
+  try {
+    const root = makeBrain();
+    const token = enroll(root, "steward");
+    const out = mkdtempSync(join(tmpdir(), "pb-edge-out-"));
+    publish(root, out);
+    const b = JSON.parse(read(join(out, "steward.json"), "utf8"));
+    expect(openBundle(b, token)).toBeDefined();
+    for (const n of [4, 8, 12, 15]) {
+      const cut = structuredClone(b);
+      for (const k of Object.keys(cut.wraps)) cut.wraps[k].tag = Buffer.from(cut.wraps[k].tag, "base64").subarray(0, n).toString("base64");
+      expect([n, openBundle(cut, token)]).toEqual([n, undefined]);
+      const cells = structuredClone(b);
+      for (const k of Object.keys(cells.cells)) cells.cells[k].tag = Buffer.from(cells.cells[k].tag, "base64").subarray(0, n).toString("base64");
+      expect([n, openBundle(cells, token)]).toEqual([n, undefined]);
+    }
+  } finally { if (was === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = was; }
+});
