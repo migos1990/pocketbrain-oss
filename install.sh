@@ -1,8 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-only
 # pocketBrain installer: curl -fsSL <this file's address> | sh
-# Installs Bun if it's missing, then the pocketbrain command from the newest release tag (v*)
-# of the public source, cloned into ~/.pocketbrain/app. Nothing else on the machine changes, and
+# Says what it will do, installs Bun if it's missing, then the pocketbrain command from the newest
+# release tag (v*) of the public source (its default branch until there is one), cloned into ~/.pocketbrain/app. Nothing else on the machine changes, and
 # nothing about you is sent anywhere. Run it again to update. To remove it: pocketbrain uninstall,
 # then rm ~/.bun/bin/pocketbrain and the ~/.pocketbrain/app folder (docs/quickstart.md, Leaving)
 #
@@ -33,6 +33,14 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 BUN_BIN="${BUN_INSTALL:-$HOME/.bun}/bin"
+if [ -n "$PKG" ]; then WHERE="the $PKG package, with bun add -g"; else WHERE="its code in $SRC (from $REPO)"; fi
+say "This installs pocketBrain for you alone, on this computer:"
+say "  - Bun, the runtime it uses, in $BUN_BIN, if it isn't there yet (Bun's own installer also adds"
+say "    that folder to your shell's startup file)"
+say "  - $WHERE"
+say "  - the pocketbrain command, in $BUN_BIN"
+say "Nothing else on this computer changes, nothing about you is sent anywhere, and nothing is started."
+say ""
 if ! command -v bun >/dev/null 2>&1 && [ ! -x "$BUN_BIN/bun" ]; then
   say "Installing Bun, the runtime pocketBrain uses (https://bun.sh)..."
   command -v curl >/dev/null 2>&1 || fail "curl is missing. Fix: run sudo apt install curl, and run this installer again."
@@ -55,7 +63,12 @@ else
   fi
   { if [ -d "$SRC/.git" ]; then git -C "$SRC" fetch -q --tags origin; else mkdir -p "$(dirname "$SRC")" && git clone -q "$REPO" "$SRC"; fi; } || fail "Couldn't fetch pocketBrain from $REPO (no internet?). Fix: check your connection, then run git ls-remote $REPO, to see why, and run this installer again."
   REF="${POCKETBRAIN_REF:-$(git -C "$SRC" tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)}"
-  [ -n "$REF" ] || fail "$REPO has no release yet (no v* tag). Fix: run export POCKETBRAIN_REF=main, and run the install line again, for the newest unreleased code."
+  if [ -z "$REF" ]; then
+    # No release tag yet: the source's own default branch. A later run moves to the newest tag.
+    REF="$(git -C "$SRC" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+    REF="${REF:-main}"
+    say "$REPO has no release yet, so this installs the newest code on $REF. Run this installer again once there is a release to move to it."
+  fi
   git -C "$SRC" checkout -q -f "origin/$REF" 2>/dev/null || git -C "$SRC" checkout -q -f "$REF" 2>/dev/null || fail "$REPO has no $REF. Fix: run git -C $SRC tag -l, to see the releases, and pass one as POCKETBRAIN_REF."
   (cd "$SRC" && bun install --production >/dev/null 2>&1) || (cd "$SRC" && bun install --production) || fail "Couldn't install pocketBrain's libraries (no internet?). Fix: run cd $SRC && bun install --production, to see why."
   mkdir -p "$BUN_BIN"

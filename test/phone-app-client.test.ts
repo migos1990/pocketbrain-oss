@@ -132,3 +132,37 @@ test("the shell around the page is Night until the page is shown, so the opening
   expect(shell("failed")).toEqual({ background: MARK.night, bar: "light-content" });
   expect(shell("shown")).toEqual({ background: MARK.paper, bar: "dark-content" });
 });
+
+test("JS-only changes reach the phone over the air, and only builds with the same native code take them (owner, 2026-11-02)", async () => {
+  process.env.APP_ENV = "production";
+  const { expo } = require("../mobile/app.config.js") as { expo: Record<string, any> };
+  // An update is matched to builds by a fingerprint of the native code, so a JS bundle can never
+  // land on a build missing a native module it needs (expo-clipboard, 2026-11-02).
+  expect(expo.runtimeVersion).toEqual({ policy: "fingerprint" });
+  expect(expo.updates.url).toBe(`https://u.expo.dev/${expo.extra.eas.projectId}`);
+  // Launch never waits on the network: the app opens what it has and takes a new update next launch.
+  expect(expo.updates.fallbackToCacheTimeout).toBe(0);
+  const eas = JSON.parse(require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "../mobile/eas.json"), "utf8"));
+  expect(eas.build.production.channel).toBe("production");
+  expect(eas.build.preview.channel).toBe("preview");
+  const pkg = JSON.parse(require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "../mobile/package.json"), "utf8"));
+  expect(pkg.dependencies["expo-updates"]).toBeTruthy();
+  expect(pkg.scripts["update:production"]).toBe("APP_ENV=production eas update --channel production --environment production");
+});
+
+test("an unpaired phone first asks whether pocketBrain is on a computer yet, and a paired phone never sees that (owner, 2026-11-02)", async () => {
+  const { firstScreen, INSTALL_COMMAND, shareText } = await import("../mobile/src/first");
+  expect(firstScreen("https://mini.tail1234.ts.net:8443", undefined)).toBe("page");
+  expect(firstScreen("https://mini.tail1234.ts.net:8443", "not-yet")).toBe("page");
+  expect(firstScreen(null, undefined)).toBe("welcome");
+  expect(firstScreen(null, "not-yet")).toBe("steps");
+  expect(firstScreen(null, "have")).toBe("pair");
+  expect(INSTALL_COMMAND).toBe("curl -fsSL https://pocketbrain.dev/install.sh | sh");
+  // Sent from the phone's own share sheet: the steps in words, nothing sent by us.
+  const t = shareText();
+  expect(t).toContain(INSTALL_COMMAND);
+  expect(t).toContain("pocketbrain init");
+  expect(t).toContain("pocketbrain dashboard phone-link");
+  expect(t).toContain("https://pocketbrain.dev");
+  expect(t).not.toContain("pocketbrain.dev/start"); // no such page
+});

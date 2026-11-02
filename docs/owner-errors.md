@@ -151,7 +151,6 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `install.no-run` | pocketbrain installed but doesn't run. Fix: run bun add -g $PKG, to reinstall it. |
 | `install.dirty` | $SRC has changes of yours, so it isn't updated. Fix: run git -C $SRC stash, and run this installer again. |
 | `install.fetch` | Couldn't fetch pocketBrain from $REPO (no internet?). Fix: check your connection, then run git ls-remote $REPO, to see why, and run this installer again. |
-| `install.no-release` | $REPO has no release yet (no v* tag). Fix: run export POCKETBRAIN_REF=main, and run the install line again, for the newest unreleased code. |
 | `install.no-ref` | $REPO has no $REF. Fix: run git -C $SRC tag -l, to see the releases, and pass one as POCKETBRAIN_REF. |
 | `install.libraries` | Couldn't install pocketBrain's libraries (no internet?). Fix: run cd $SRC && bun install --production, to see why. |
 | `install.no-run-source` | pocketbrain installed but doesn't run. Fix: run bun $SRC/src/cli.ts help, to see why. |

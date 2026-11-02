@@ -23,6 +23,7 @@ import { compareKey, normalizeValue } from "./normalize";
 import { issueToken } from "./auth";
 import { git } from "./git";
 import { escapeRe } from "./util";
+import { DEFAULT_TZ } from "./clock";
 import { OWNER, OWNER_CONFIRMED, ownerRef as ownerRefOf } from "./owner";
 
 export const DEFAULT_AGENT = "assistant";
@@ -517,11 +518,21 @@ function readExports(ctx: Ctx, mboxFiles: string[], icsFiles: string[]) {
 
 // ---------- rules ----------
 
+// This computer's time zone, so the nightly pass, the digest and the brain's dates count the
+// owner's own day (src/clock.ts), not the default zone's. Left out when it is the default already,
+// or when the machine says only UTC (a server, a container, CI): that is rarely where its owner lives.
+export function machineZone(): string | undefined {
+  let tz: string | undefined;
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; }
+  return !tz || tz === DEFAULT_TZ || /^(Etc\/)?(UTC|GMT|UCT|Universal|Zulu)$/i.test(tz) ? undefined : tz;
+}
+
 function policyYaml(owner: string, agent: string, areas: string[]): string {
   // The first agent reads one area, so it owns that one only: an owner that can't read its area
   // would settle writes there blind (eval gap G144).
   const readable = areas.includes("work") ? "work" : areas[0];
-  const ownerLine = YAML.stringify({ owner: { name: owner } }).trim();
+  const tz = machineZone();
+  const ownerLine = YAML.stringify({ owner: { name: owner, ...(tz ? { timezone: tz } : {}) } }).trim();
   return `# Who sees what. Only you edit this folder. Every limit here is enforced in code.
 ${ownerLine}
 agents:

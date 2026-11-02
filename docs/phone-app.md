@@ -2,6 +2,10 @@
 
 The owner opens the dashboard on a phone over Tailscale ([dashboard-tailnet.md](dashboard-tailnet.md)). In a browser, every sign-in is a texted link that opens in Safari, and anything private asks for another one after 10 minutes (`FRESH_MINUTES` in `src/dashboard/server.ts`). The pocketBrain app for iOS and Android shows the same owner pages and signs in its own way: it pairs once with a phone link, then Face ID makes a sign-in fresh again. The hub gives the app no other data route: it loads the same pages, under the same cookie, CSRF and Host rules.
 
+## First run
+
+A phone that isn't paired opens on one question: "pocketBrain lives on your computer. Your phone opens it." with **I have it on a computer** and **Not yet** (`mobile/src/FirstRun.tsx`; which screen, `firstScreen` in `mobile/src/first.ts`). I have it goes to the pair screen and is remembered, so the question is asked once; a pair link opened from outside the app counts as I have it. Not yet shows three steps with a Copy button each: paste `curl -fsSL https://pocketbrain.dev/install.sh | sh` into Terminal on a Mac, Linux or Windows (WSL) computer, run `pocketbrain init`, then run `pocketbrain dashboard phone-link` and paste the link into the app. **Send these steps to my computer** opens the phone's own share sheet with the steps in words and pocketbrain.dev; the app sends nothing itself. The screen also says the computer needs to be on when the app is used. The pair screen's "No pocketBrain on a computer yet?" goes back to the steps. A paired phone never sees these screens. Pictures: `mobile/shots/first-welcome.png`, `first-steps.png`.
+
 ## Pairing
 
 1. Get a phone link: `pocketbrain dashboard phone-link` on the hub machine, or the signed-out page's "Text me a sign-in link". It is the same link a browser uses: one use, a day. With your Tailscale login set (`dashboard_tailnet_login`), the command prints the `tailscale serve` https address, which the app accepts; without it, the tailnet listener's plain one, which the app refuses.
@@ -63,3 +67,24 @@ APP_ENV=production npx eas-cli submit --platform ios --latest
 ```
 
 These need the owner's Expo account, and for iOS an Apple Developer account; nothing is published to a store from this repo. `mobile/app.config.js` names the owner's Expo project; a copy built on another Expo account sets `EAS_PROJECT_ID` to the id `npx eas-cli init` gives it.
+
+### Native build or over the air
+
+Most changes to the app ship over the air with EAS Update: the owner runs one command, and the phone picks up the new version the next time the app opens. A new build through TestFlight is needed only when the native code changes. The update is matched to builds by a fingerprint of the native code (`runtimeVersion: { policy: "fingerprint" }` in `mobile/app.config.js`), so an update never reaches a build missing what it needs; a build that doesn't match keeps what it has.
+
+| Change | How it ships |
+|---|---|
+| Screens and logic in `mobile/App.tsx` and `mobile/src/` (the pair screen, Try again, the page's state, the injected script, colours, text) | Over the air |
+| Images that JS loads (`require("./assets/…")` in a screen) | Over the air |
+| A new package with native code (`expo-clipboard`, `expo-updates` itself), or an Expo SDK upgrade | New build |
+| `mobile/app.config.js` fields the phone reads at install: name, bundle id, icon, splash (the screen before JS starts), `infoPlist`, plugins, permissions, scheme | New build |
+| The hub's own pages (what the web view shows) | Neither: the hub's deploy, live on the next page load |
+
+To ship over the air, from the build folder after pulling main:
+
+```
+cd mobile && npm install
+EXPO_NO_KEYCHAIN=1 npm run update:production
+```
+
+When the fingerprint has changed, the update is published but no installed build takes it, so the phone shows nothing new. Then build and submit instead. The project's page on expo.dev shows the runtime version of each build and each update; when they differ, the change needs a build. The launch never waits on the network (`fallbackToCacheTimeout: 0`): the app opens what it has, downloads in the background, and uses the update on the next launch. An over-the-air update is still a change to the app's shell: it counts as live only once it has been seen on the owner's phone.

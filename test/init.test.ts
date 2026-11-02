@@ -436,14 +436,20 @@ test("the installer installs the newest release tag from the source, without npm
   expect(dirty.stderr.toString().trim()).toBe(said("install.dirty", app, bare));
   expect(readFileSync(join(app, "src", "cli.ts"), "utf8")).toBe("// mine\n");
 
-  // A source with no release says how to get the unreleased code, and that way works.
+  // The installer says what it will do before it does anything.
+  expect(first.stdout.toString().split("\n")[0]).toBe("This installs pocketBrain for you alone, on this computer:");
+  expect(first.stdout.toString()).toContain(`its code in ${app}`);
+
+  // A source with no release yet installs its default branch, and says so; a later release is picked up.
   const other = mkdtempSync(join(tmpdir(), "pb-home-"));
   const bareNoTags = join(other, "plain.git");
   expect(Bun.spawnSync(["git", "clone", "-q", "--bare", "--no-tags", work, bareNoTags]).exitCode).toBe(0);
   Bun.spawnSync(["git", "--git-dir", bareNoTags, "tag", "-d", "v0.9.0", "v0.10.0", "v0.11.0"]);
   const none = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags } });
-  expect(none.exitCode).toBe(1);
-  expect(none.stderr.toString().trim()).toBe(said("install.no-release", join(other, ".pocketbrain", "app"), bareNoTags));
+  expect(none.stderr.toString()).toBe("");
+  expect(none.exitCode).toBe(0);
+  expect(none.stdout.toString()).toContain("no release yet, so this installs the newest code on main");
+  expect(Bun.spawnSync([join(other, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim()).toBe("pocketbrain v0.11.0");
   const main = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags, POCKETBRAIN_REF: "main" } });
   expect(main.exitCode).toBe(0);
   expect(Bun.spawnSync([join(other, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim()).toBe("pocketbrain v0.11.0");

@@ -12,9 +12,10 @@ const C = {
   raised: "#1C1C1C", line: "#303030", soft: "#A3A29C", faint: "#6E6D69", alert: "#FF8CCB",
 };
 const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
-export const PHONE_LINK_COMMAND = "pocketbrain dashboard phone-link";
+import { PHONE_LINK_COMMAND } from "./commands";
+export { PHONE_LINK_COMMAND };
 
-export function PairScreen({ busy, msg, onPair }: { busy: boolean; msg: string; onPair: (link: string) => void }) {
+export function PairScreen({ busy, msg, onPair, onBack }: { busy: boolean; msg: string; onPair: (link: string) => void; onBack?: () => void }) {
   const [link, setLink] = useState("");
   const [focus, setFocus] = useState(false);
   const paste = async () => { const t = await Clipboard.getStringAsync().catch(() => ""); if (t) { setLink(t.trim()); onPair(t); } };
@@ -66,6 +67,11 @@ export function PairScreen({ busy, msg, onPair }: { busy: boolean; msg: string; 
           </Pressable>
 
           <Text style={s.foot}>Got the link by text? Open it on this phone and tap Open in the pocketBrain app.</Text>
+          {onBack ? (
+            <Pressable onPress={onBack} accessibilityRole="button" style={s.back}>
+              <Text style={s.backText}>No pocketBrain on a computer yet?</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -99,5 +105,7 @@ const s = StyleSheet.create({
   goTextOff: { color: C.faint },
   goText: { color: C.night, fontSize: 17, fontWeight: "700" },
   pressed: { opacity: 0.7 },
+  back: { alignSelf: "center", padding: 12, marginTop: 8 },
+  backText: { color: C.pink, fontSize: 15 },
   foot: { color: C.faint, fontSize: 14, lineHeight: 20, marginTop: 24, textAlign: "center" },
 });

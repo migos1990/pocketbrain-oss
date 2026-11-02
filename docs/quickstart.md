@@ -14,7 +14,7 @@ git clone <public repository> ~/pocketbrain && cd ~/pocketbrain && bun install &
 
 It puts the `pocketbrain` command in `~/.bun/bin`. To update later: `cd ~/pocketbrain && git pull && bun install`. If Terminal then says it can't find `pocketbrain`, **open a new Terminal window**; if it still can't, your Bun didn't come from its own installer, so add `~/.bun/bin` to your PATH.
 
-A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is written (`install.sh`: it adds Bun if it's missing and installs the newest release into `~/.pocketbrain/app`), but the site doesn't serve it yet.
+A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is written (`install.sh`: it first says what it will do, adds Bun if it's missing, and installs the newest release, or the newest code until there is a release, into `~/.pocketbrain/app`), but the site doesn't serve it yet. You can read it first in the repository; it's short.
 
 ## 2. Create your brain (3 minutes)
 
@@ -35,7 +35,7 @@ When it's done, it shows two things:
 pocketbrain start
 ```
 
-Leave this window open while you use your assistant. The brain listens only on your own computer. The start message includes a link to your dashboard, where you approve what your assistant proposes.
+Leave this window open while you use your assistant. The brain listens only on your own computer. It first prints your dashboard link (where you approve what your assistant proposes), the command to connect an app, and `pocketbrain doctor`; the lines after that are the hub's own log.
 
 ## 4. Connect your assistant (1 minute)
 
@@ -112,7 +112,7 @@ You can also start from a Google Takeout export. Add `--from-mbox "All mail.mbox
 - Your assistant owns only the area it reads (work, or your first area). The others have no owner in `rules/policy.yaml`, so anything written there comes to you. Give one an owner (`health: { owner: claude }`) only once that assistant's slices include it.
 - To add another assistant: `pocketbrain add <name> --slices area:work,contacts-basic`, then `--yes`. [add-an-agent.md](add-an-agent.md) says which door to pick and how to test it.
 - If a token leaks, `pocketbrain token --revoke claude` cuts that assistant off at once.
-- Every per-day rule (the nightly pass and the digest, the request-budget alert, the handoff and source-check caps, and the dates the brain writes) counts your day in `owner.timezone` in `rules/policy.yaml` (default America/Toronto; for example `owner: { timezone: Europe/Paris }`), so a late evening is still today. The dashboard shows its dates and times in that zone too (stored times stay UTC; the full stamp is on hover where a page shows one).
+- Every per-day rule (the nightly pass and the digest, the request-budget alert, the handoff and source-check caps, and the dates the brain writes) counts your day in `owner.timezone` in `rules/policy.yaml`. `init` sets it to this computer's time zone, unless the computer says only UTC or is already in the default zone, America/Toronto; to change it, edit that line (for example `owner: { timezone: Europe/Paris }`), so a late evening is still today. The dashboard shows its dates and times in that zone too (stored times stay UTC; the full stamp is on hover where a page shows one).
 - `pocketbrain help` lists the few commands you need. `pocketbrain help --all` lists all of them.
 - Your brain is a plain folder of Markdown files under git. Back it up to a *private* place, or run `pocketbrain backup --init`.
 

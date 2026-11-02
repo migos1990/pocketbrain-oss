@@ -13,12 +13,15 @@ import { pair, fresh } from "./src/hub";
 import { inject } from "./src/inject";
 import { Mark } from "./src/Mark";
 import { PairScreen } from "./src/PairScreen";
+import { SetUpSteps, Welcome } from "./src/FirstRun";
+import { firstScreen, type Choice } from "./src/first";
 import { Trouble } from "./src/Trouble";
 import { pageStep, shell, START, type PageEvent } from "./src/page";
 import { MARK } from "./src/logo";
 
 const HUB = "pb.hub";       // the hub's https address, not secret
 const KEY = "pb.device";    // the device key, readable only after Face ID
+const FIRST = "pb.firstrun"; // the first screen's answer, so it is asked once (src/first.ts)
 const INK = { paper: "#EEEDE8", ink: "#121212", pink: "#FF48B0" };
 
 async function saveKey(device: string) {
@@ -53,6 +56,14 @@ export default function App() {
   }, [step]);
 
   useEffect(() => { SecureStore.getItemAsync(HUB).then(setHub); }, []);
+  // The first screen's answer: "I have it on a computer" is kept, so the question is asked once.
+  const [choice, setChoice] = useState<Choice | undefined>(undefined);
+  useEffect(() => { SecureStore.getItemAsync(FIRST).then((v) => { if (v === "have") setChoice("have"); }).catch(() => {}); }, []);
+  const choose = useCallback((c: Choice | undefined) => {
+    setChoice(c); setMsg("");
+    if (c === "have") SecureStore.setItemAsync(FIRST, "have").catch(() => {});
+    else SecureStore.deleteItemAsync(FIRST).catch(() => {});
+  }, []);
 
   const doPair = useCallback(async (raw: string) => {
     const p = parsePairLink(raw);
@@ -71,7 +82,7 @@ export default function App() {
 
   // A link opened from the hub's sign-in page: pocketbrain://pair?hub=…&key=…
   const url = Linking.useURL();
-  useEffect(() => { if (url?.startsWith("pocketbrain://pair")) doPair(url); }, [url, doPair]);
+  useEffect(() => { if (url?.startsWith("pocketbrain://pair")) { choose("have"); doPair(url); } }, [url, doPair, choose]);
 
   const onFresh = useCallback(async () => {
     if (!hub) return;
@@ -99,7 +110,10 @@ export default function App() {
       {msg ? <Text style={s.note}>{msg}</Text> : null}
     </SafeAreaView>
   );
-  return <PairScreen busy={busy} msg={msg} onPair={doPair} />;
+  const first = firstScreen(hub, choice);
+  if (first === "welcome") return <Welcome onHave={() => choose("have")} onNotYet={() => choose("not-yet")} />;
+  if (first === "steps") return <SetUpSteps onDone={() => choose("have")} onBack={() => choose(undefined)} />;
+  return <PairScreen busy={busy} msg={msg} onPair={doPair} onBack={() => choose("not-yet")} />;
 }
 
 const s = StyleSheet.create({

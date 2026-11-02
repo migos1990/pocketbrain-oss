@@ -66,6 +66,7 @@ import { comingBack, comingBackText } from "./access-request";
 import * as share from "./share";
 import { createInvite, mintFromShell, shellMintRefusal, reachRefusal } from "./invite";
 import { initBrain, interview, InitError, AGENT_KINDS, KIND_NAME, type AgentKind, type InitOptions } from "./init";
+import { timezoneOf } from "./clock";
 import { APP_LABEL, INSTRUCTION_PLACE, bridge, configPath, dropAgentKey, isLocalApp, isLoopback, mergeConfig, saveAgentKey, snippet, stdinLines, writeAppConfig } from "./local-apps";
 import { tick, watch, watchdog, loadTextState } from "./textline/poll";
 import { ESCALATION_TEMPLATE, loadEscalation, useTransport, TRANSPORTS } from "./textline/policy";
@@ -132,20 +133,15 @@ const SHORT_USAGE = `pocketbrain <command>
   doctor                             is everything healthy
   handover --to "Name" --out <dir>  give the whole brain to a person
   export --out <file>                the brain (or --agent's slice) as a Memory Passport bundle
-  reexplain <agent> "<what>"         you had to explain something again (the week's main number)
-  week                               the 7-day scorecard
-  fix "<what>"                       you had to fix something by hand (resets the real-use bar)
-  bar                                the real-use bar: days of daily use with no hand fix, restore drill
-  task ["<what>"] [--done <n>]       what waits on your own hands; listed in the digest until done
-  menubar                            the hub, the bar and your agents in one look; the Mac menu-bar app runs this
+  token --revoke <agent>             cut one assistant off at once (and delete its key file on this computer)
 
-  help --all                         every command
+  help --all                         every command, including the weekly scorecard and the real-use bar
   The brain is --brain <dir>, or $PB_BRAIN, or the current directory, or the one init made last.
 `;
 
 const USAGE = `pocketbrain <command>
 
-  init <dir> --name "Your name" [--kind claude-code|claude-ai|town|browser] [--agent <name>] [--areas work,personal]
+  init <dir> --name "Your name" [--kind claude-code|cursor|vscode|codex|gemini|claude-desktop|mcp|claude-ai|town|browser] [--write] [--agent <name>] [--areas work,personal]
        [--from-text notes.txt|dir]… [--from-mbox mail.mbox]… [--from-ics calendar.ics]… [--me you@example.com]…
        [--export-area personal] [--no-token]
   init <dir> --interview             a new brain from nothing: rules/, one trial agent and its token,
@@ -498,6 +494,8 @@ function runInit(args: string[]): number {
     const kept = rememberedBrain();
     if (!kept) try { mkdirSync(configDir(), { recursive: true }); writeFileSync(join(configDir(), "brain"), r.root + "\n"); } catch { /* optional convenience */ }
     console.log(`\nYour brain is ready in ${r.root} (${r.notes} notes).`);
+    const tz = loadRules(r.root).policy.owner?.timezone;
+    console.log(tz ? `Your day (the nightly tidy pass, the morning digest, the brain's dates) runs in ${tz}, this computer's time zone.` : `Your day runs in ${timezoneOf(loadRules(r.root))}. If that isn't yours, set it in rules/policy.yaml, for example owner: { name: …, timezone: Europe/Paris }.`);
     if (kept && resolve(kept) !== r.root) console.log(`Commands without --brain still use ${kept}. To use this one, pass --brain ${r.root} or set PB_BRAIN.`);
     console.log(`\nWhat ${r.agent} will see:\n${r.preview}`);
     console.log(`\nWhat init removed, kept private or guessed: ${r.report}`);
@@ -1017,6 +1015,9 @@ ${p.text}`);
       // owner-only file in the brain's .git folder (src/dashboard/server.ts loginLinkFile).
       console.log(d.loginSay);
       if ("servePort" in d) console.log(`  (after tailscale serve --bg --https=${d.servePort} http://127.0.0.1:${d.server.port}; never funnel)`);
+      // A person at the terminal gets the three things that matter first; the lines after are the hub's log.
+      // The dashboard line above says where its sign-in link is; no key is printed here either (G609).
+      if (cmd === "start" && process.stdout.isTTY) console.log(`\nYour brain is running. Leave this window open while you use your assistants.\n  Your dashboard (this computer only): the line above says how to open it\n  Connect an app on this computer:    pocketbrain add cursor --kind cursor --write --yes   (or vscode, codex, gemini, claude-desktop, mcp; docs/connect.md)\n  Is everything healthy?              pocketbrain doctor\nWhat follows is the hub's own log.\n`);
       if ("tailnetProblem" in d) console.error(d.tailnetProblem);
     }
     // A stop (launchd, Ctrl-C) keeps what this hub parsed for the next start (src/brain.ts); start
