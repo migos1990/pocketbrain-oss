@@ -192,3 +192,14 @@ test("contract checks: a source ref or its via with a line break never passes th
   for (const s of ["gmail:f000000000000006", { ref: "gmail:f000000000000006", via: "Planner's note" }])
     expect(shapeFails({ ...r, sources: [s] } as never)).toEqual([]);
 });
+
+test("contract checks: a card number in a source ref is refused everywhere but a pulled item's all-digit version (G628)", () => {
+  const digits = CARD.replace(/ /g, "");
+  const rows: [string, boolean][] = [
+    [`gcal:${digits}@1`, true], // the id
+    [`gmail:${digits}`, true], // gmail refs carry no version
+    [`gdoc:abc@v-${digits}`, true], // a version that isn't all digits is read
+    [`gcal:abc@${digits}`, false], // the source's own revision number (ceilings.test.ts REF_CEILING)
+  ];
+  for (const [ref, refused] of rows) expect([ref, runChecks({ ...base, sources: [ref] }, new Set(["no_secret_shapes"])).some((f) => f.check === "no_secret_shapes")]).toEqual([ref, refused]);
+});

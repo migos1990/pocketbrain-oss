@@ -33,6 +33,13 @@ export function isTailnetIp(ip: string | undefined): boolean {
 // may hold 443 on this machine, and serve and funnel share a port's config.
 export const SERVE_PORT = 8443;
 
+/** The phone link `dashboard phone-link` prints: the `tailscale serve` https address when the
+ *  owner's Tailscale login is set and the machine has a name (the phone app refuses plain http),
+ *  else the tailnet listener's own address. */
+export function phoneLinkUrl(t: { address: string; name?: string }, login: string | undefined, key: string, port: number): string {
+  return t.name && login ? `https://${t.name}:${SERVE_PORT}/login?key=${key}` : `http://${t.name ?? t.address}:${port}/login?key=${key}`;
+}
+
 // This machine's tailnet address and MagicDNS name, as Tailscale itself reports them. Never
 // guessed from an interface in 100.64.0.0/10: that range is also carrier-grade NAT.
 // The Mac App Store and standalone apps don't put `tailscale` on PATH; their CLI is inside the app.

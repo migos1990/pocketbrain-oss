@@ -5,7 +5,7 @@
 // moves a row (on purpose or not) shows up as a failing test. To close a ceiling row, move it to
 // the catch table in the same branch as the fix.
 import { test, expect } from "bun:test";
-import { findSecret, findInjection, redactSecrets } from "../src/checks";
+import { findSecret, findInjection, redactSecrets, runChecks } from "../src/checks";
 import { secretIn } from "../src/backup";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -269,6 +269,13 @@ test("secret shapes the write path knowingly lets through (ceiling)", () => {
 });
 test("ordinary text the secret shapes knowingly refuse (over-hold)", () => {
   for (const [input, what] of SECRET_OVERHOLD) expect([input, findSecret(input)]).toEqual([input, what]);
+});
+
+// A pulled item's ref carries the source's version after "@" (src/pull.ts refFor): the write
+// path reads the ref without an all-digit version (G628), so a card number put there passes.
+const REF_CEILING: string[] = [`gcal:evt1@4111${"1111".repeat(3)}`, `discord:123/456@4111${"1111".repeat(3)}`];
+test("source refs the write path knowingly lets through (ceiling)", () => {
+  for (const ref of REF_CEILING) expect([ref, runChecks({ agent: "a", id: "people/x", attribute: "a", value: "v", as_of: "2026-10-01", sources: [ref] } as never, new Set(["no_secret_shapes"])).map((f) => f.check)]).toEqual([ref, []]);
 });
 // Capture and logs blank only the secret: the words around it stay (one row per G47 shape).
 const REDACT_KEEPS: [string, string][] = [

@@ -166,3 +166,12 @@ test("a used or old link on the phone says so in plain words, with the button fo
     expect(page).not.toContain("pocketbrain ");
   }
 });
+
+test("the Terminal's phone link is the https address the app accepts when tailscale serve is set up", async () => {
+  const { phoneLinkUrl } = await import("../src/dashboard/tailnet");
+  // The owner's Tailscale login set: `tailscale serve` on 8443 is the door the phone app pairs through.
+  expect(phoneLinkUrl({ address: TN.address, name: TN.name }, TN.login, "k".repeat(32), PORT)).toBe(`https://${TN.name}:8443/login?key=${"k".repeat(32)}`);
+  // No login set, or no MagicDNS name: the tailnet listener's plain address, as before.
+  expect(phoneLinkUrl({ address: TN.address, name: TN.name }, undefined, "k".repeat(32), PORT)).toBe(`http://${TN.name}:${PORT}/login?key=${"k".repeat(32)}`);
+  expect(phoneLinkUrl({ address: TN.address }, TN.login, "k".repeat(32), PORT)).toBe(`http://${TN.address}:${PORT}/login?key=${"k".repeat(32)}`);
+});

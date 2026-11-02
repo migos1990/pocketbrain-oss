@@ -94,6 +94,14 @@ const DIGITS = String.raw`[#*]?\d{4,8}[#*]?${END}`;
 const NOYEAR = String.raw`(?![#*]?(?:19|20)\d\d[#*]?${END})`;
 const TOKEN = String.raw`(?:${DIGITS}|(?![vV]\d|sha\d|md5)(?=\S*[A-Za-zÀ-ÿ])(?=\S*\d|\S+[#$%^&*+=~])\S{4,})`;
 
+// A pulled item's ref ends in its version as the source gives it (src/pull.ts refFor): a calendar
+// event's etag is 16 digits, a Discord edit a 13-digit time, and one in ten passes Luhn. That
+// version is the source's revision number, not a secret (owner's phone, 2026-11-02, G628), so the
+// secret check reads the ref without it; a number anywhere else in a ref is still read. Not caught:
+// a card number sent as a ref's all-digit version (test/ceilings.test.ts).
+const VERSIONED_REF = /^((?:gcal|gdoc|granola|imessage|slack|zoom|discord|contacts):[^@\s]+)@\d{1,20}$/;
+const withoutVersion = (ref: string) => ref.replace(VERSIONED_REF, "$1");
+
 // Secret shapes. `test` filters false positives (Luhn on card numbers and SINs).
 const SECRET_SHAPES: { what: string; re: RegExp; test?: (m: string, text: string) => boolean }[] = [
   { what: "a card-number-shaped number", re: /\b(?:\d[ -]?){13,19}\b/g, test: (m) => { const d = m.replace(/\D/g, ""); return d.length >= 13 && d.length <= 19 && luhn(d); } },
@@ -453,7 +461,7 @@ export function runChecks(req: WriteRequest, enabled: Set<string>, ownerDisplay?
       else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); strings(x, out); }
       return out;
     };
-    const s = findSecret(strings({ ...req, agent: undefined, sources: (req.sources ?? []).map((x) => (typeof x === "string" ? x : refString(x))) }).join("\n"));
+    const s = findSecret(strings({ ...req, agent: undefined, sources: (req.sources ?? []).map((x) => withoutVersion(typeof x === "string" ? x : refString(x))) }).join("\n"));
     if (s) fails.push({ check: "no_secret_shapes", outcome: "refuse", reason: `contains ${s}`, fix: "secrets live in your password manager, never in the brain; store where to find it instead" });
   }
 

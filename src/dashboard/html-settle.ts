@@ -8,7 +8,7 @@ import type { SettleCase, SettleSide } from "../core";
 import type { Rules } from "../rules";
 import type { Note } from "../brain";
 import type { HeldMessage } from "./data";
-import { agentLabel, cap, factName, withNames } from "./labels";
+import { agentLabel, cap, factName, withNames, refusalWords } from "./labels";
 import { fromWords, plain, differ } from "./home";
 import { displayName } from "../diary";
 import { esc, hidden, signInAgain } from "./html-home";
@@ -96,14 +96,18 @@ const AREAS = new Set(["work", "teaching", "personal"]);
 const top = (o: SettleWhere) => `<div class="bar"><a href="/home">‹ ${SETTLE_COPY.back}</a>${o.pos && o.of && o.of > 1 ? `<span>${esc(fill(SETTLE_COPY.of, { n: o.pos, of: o.of }))}</span>` : ""}</div>`;
 const where = (c: SettleCase, area?: string) => `<p class="where"><span class="dot a-${area && AREAS.has(area) ? area : "none"}" aria-hidden="true"></span>${esc(displayName(c.page, c.title))}${area ? ` · ${esc(cap(area))}` : ""}</p>`;
 
+// What went wrong with a tap is said in the owner's words, under the sides he tapped (owner's phone,
+// 2026-11-02, G628: a check's own words printed at the top of the screen).
 export function settlePage(c: SettleCase | undefined, csrf: string, rules: Rules, flash?: string, o: { fresh?: boolean; words?: Record<number, string> } & SettleWhere = {}): string {
+  const said = flash ? `<p class="bubble" role="status">${esc(refusalWords(flash).replace(" It still waits for you; dismiss it if it's wrong.", " It still waits here: pick another side, or tell me what's right."))}</p>` : "";
+  const near = !!c && !(c.private && !o.fresh);
   // A private value shows only right after a sign-in (spec §8); before that, the question without it.
   const body = !c ? `<p class="quiet">${SETTLE_COPY.gone}</p>` : c.private && !o.fresh ? `${where(c, o.area)}<h1>${esc(fill(SETTLE_COPY.many, { name: displayName(c.page, c.title), attr: c.attr.replace(/_/g, " ") }))}</h1><p class="quiet">${SETTLE_COPY.shut}</p>${signInAgain(csrf)}` : `${where(c, o.area)}<h1>${esc(question(c))}</h1><p class="sub">${esc(c.held ? SETTLE_COPY.held : c.sides.length > 2 ? SETTLE_COPY.subMany : SETTLE_COPY.sub)}</p>
-${ordered(c).map((s, i) => row(c, s, csrf, rules, i === 0 && !!s.lean, o.words?.[s.n])).join("")}
+${ordered(c).map((s, i) => row(c, s, csrf, rules, i === 0 && !!s.lean, o.words?.[s.n])).join("")}${said}
 <form class="pick both" method="post" action="/action/settle-both">${hidden(csrf, { id: c.id })}<button><b>${c.sides.length > 2 ? SETTLE_COPY.all : SETTLE_COPY.both}</b><small>${SETTLE_COPY.bothSmall}</small></button></form>
 <p class="tell">${SETTLE_COPY.orTell}</p>${composer(csrf, { id: c.id }, SETTLE_COPY.box, { label: SETTLE_COPY.box, action: "/action/settle-pick", name: "value", send: SETTLE_COPY.send })}`;
   return appPage(SETTLE_COPY.title, "mind", `${top(o)}
-${flash ? `<p class="bubble" role="status">${esc(flash)}</p>` : ""}<div class="ask">${body}</div>`, { css: SETTLE_CSS });
+${near ? "" : said}<div class="ask">${body}</div>`, { css: SETTLE_CSS });
 }
 
 // Why the relay held it, without the value it matched (that shows only in the message itself).

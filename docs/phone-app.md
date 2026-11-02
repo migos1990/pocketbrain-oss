@@ -4,7 +4,7 @@ The owner opens the dashboard on a phone over Tailscale ([dashboard-tailnet.md](
 
 ## Pairing
 
-1. Get a phone link: `pocketbrain dashboard phone-link` on the hub machine, or the signed-out page's "Text me a sign-in link". It is the same link a browser uses: one use, a day.
+1. Get a phone link: `pocketbrain dashboard phone-link` on the hub machine, or the signed-out page's "Text me a sign-in link". It is the same link a browser uses: one use, a day. With your Tailscale login set (`dashboard_tailnet_login`), the command prints the `tailscale serve` https address, which the app accepts; without it, the tailnet listener's plain one, which the app refuses.
 2. Open it in the app. The link's page has "Open in the pocketBrain app", which hands the app the hub's address and the link's key (`pocketbrain://pair?hub=…&key=…`).
 3. The app posts the key to `POST /app/pair` with a name for the phone. The hub spends the link, signs the phone in for 30 days and answers with a **device key**, which the app keeps in the phone's keychain behind Face ID.
 

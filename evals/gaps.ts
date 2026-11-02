@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G628: {
+    closed: "61665760",
+    title: "Settle on a calendar side was refused as a card number, and the refusal showed in the check's words",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-02: on the settle screen for the Martinique trip's next step, a tap on the calendar's side printed \"no_secret_shapes: contains a card-number-shaped number. Fix: …\" at the top and saved nothing. The value was a plain sentence; the number was the gcal ref's version, Google's 16-digit etag, which passes Luhn about one time in ten.",
+    fix: "src/checks.ts no_secret_shapes reads a pulled item's ref without its all-digit @version (a ceiling row in test/ceilings.test.ts, a must-never row in the checks contract). src/dashboard/html-settle.ts: a refusal is said through refusalWords under the sides. Tests: test/settle-calendar-ref.test.ts.",
+  },
   G626: {
     closed: "f0241ad2",
     title: "The home's number and the north star's asks counted two lists that shared one item",

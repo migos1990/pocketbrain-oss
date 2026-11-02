@@ -48,7 +48,7 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, OwnerSetError } from "./ownerset";
-import { tailnetSettings, tailnetSelf } from "./dashboard/tailnet";
+import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
 import { loadKeys, keysDir } from "./secrets";
@@ -1070,7 +1070,7 @@ ${p.text}`);
   if (cmd === "dashboard" && args[0] === "phone-link") {
     const t = tailnetSelf();
     if (!tailnetSettings(root).dashboard_tailnet || !t?.address) { console.error("the dashboard isn't on your tailnet: pocketbrain dashboard tailnet on --device <your phone's Tailscale address>"); return 1; }
-    console.log(`open on your phone (works once, for a day): http://${t.name ?? t.address}:${Number(arg(args, "--port") ?? 8788)}/login?key=${mintPhoneLink(root)}`);
+    console.log(`open on your phone or paste in the pocketBrain app (works once, for a day): ${phoneLinkUrl(t, tailnetSettings(root).dashboard_tailnet_login, mintPhoneLink(root), Number(arg(args, "--port") ?? 8788))}`);
     return 0;
   }
   if (cmd === "dashboard") {
