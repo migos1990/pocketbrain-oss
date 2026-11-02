@@ -496,6 +496,11 @@ export function settingsWords(a: Pick<OwnerAsks, "by" | "settings">): string {
   return `${cap(parts.join("; "))}.`;
 }
 
+// How many questions still wait on a Settle (or Decide) screen: what the line after a pick says is
+// left (G631).
+export function settleLeft(root: string, now = new Date()): number {
+  return conflicts(root, now, true).waiting.filter((w) => w.href.startsWith("/settle/")).length;
+}
 // The north star passes its own asks, read at its own time, so the two count one list (G626).
 export function waitingCount(root: string, now = new Date(), asks?: OwnerAsks): number {
   return waitingTotal(conflicts(root, now, true, asks ?? ownerAsks(root, now)).waiting);

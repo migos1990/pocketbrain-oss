@@ -45,6 +45,6 @@ test("held values sit under a heading that says what they are and what to do; an
 test("what was just done reads as done, not as a card that asks", () => {
   const root = named(1);
   const html = homePage(homeView(root, loadRules(root), loadBrain(root), NOW), "c", { flash: "Person 1 prefers tea. Your assistants get it now.", done: true });
-  expect(html).toMatch(/<p class="done" role="status">/);
+  expect(html).toMatch(/class="done" role="status">/);
   expect(html).not.toContain('<p class="bubble" role="status">Person 1');
 });

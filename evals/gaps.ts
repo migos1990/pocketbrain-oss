@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G631: {
+    closed: "23b624c7",
+    title: "A pick on Settle didn't end the question: it landed on the page with a line above, no count, no Undo there",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-02: \"you click on one or two, but like one should then disappear\"; a pick went to the page with \"Noted. Undo is under Changed.\" added above it, so it read as the same screen with a message, and nothing said what was settled or what was left.",
+    fix: "src/dashboard/server.ts: settle-pick and settle-both go back to /home with one line (what was settled, said as the home says it, or only its page for a private one; settleLeft's count of what is left) and the diary line's Undo (tok, drawn by html-app.ts homePage); diary-seen gets the same Undo. Tests: test/settle-flow.test.ts.",
+  },
   G630: {
     closed: "835b79d4",
     title: "A held value could only be seen by letting it out, and the line after said it in odd words",

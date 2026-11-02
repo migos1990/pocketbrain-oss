@@ -89,7 +89,7 @@ test("not sure, keep both: nothing changes, the live value stops waiting and not
   expect(ownerConflicts(root)).toHaveLength(0);
 });
 
-test("the dashboard: /settle/<id> shows the rows; a tap settles and lands on the page; a typed value is the owner's word", async () => {
+test("the dashboard: /settle/<id> shows the rows; a tap settles and goes back to the home (G631); a typed value is the owner's word", async () => {
   const H = "127.0.0.1:8793";
   const { root, id } = brain();
   lean(root, id);
@@ -107,7 +107,7 @@ test("the dashboard: /settle/<id> shows the rows; a tap settles and lands on the
   const csrf = pg.text.match(/name="csrf" value="([^"]+)"/)![1]!;
   const typed = await req("POST", "/action/settle-pick", { csrf, id, value: "110" });
   expect(typed.status).toBe(303);
-  expect(typed.loc).toStartWith("/p/projects/course-c?ok=");
+  expect(typed.loc).toStartWith("/home?ok=");
   expect(room(root).value).toBe("110"); // a typed number is a value, never a side's number
   expect(room(root).verification).toBe("confirmed-by-owner");
   const gone = await req("GET", `/settle/${id}`);

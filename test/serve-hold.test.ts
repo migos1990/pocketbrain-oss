@@ -70,6 +70,6 @@ test("home lists what waits for the owner's eyes, and Show releases it", async (
   expect(shown.status).toBe(303);
   expect(shown.loc).not.toContain("1200");
   expect(flashOf(shown.loc).ok).toContain("Jane Roy's fee is 1200 dollars a year."); // as the home says it (G625)
-  expect((await req("GET", shown.loc)).text).toMatch(/<p class="done" role="status">/);
+  expect((await req("GET", shown.loc)).text).toMatch(/class="done" role="status">/);
   expect(sees(root, "planner", "1200 dollars")).toBe(true);
 });

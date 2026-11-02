@@ -40,7 +40,7 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, settleLeft, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
@@ -48,7 +48,7 @@ import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY, FONT_PATH } 
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
-import { readDiary } from "../diary";
+import { readDiary, shownValue } from "../diary";
 import { inboxConflict, inboxConflicts, settleInbox } from "../settle-inbox";
 import { ownerSay, ownerSayModel, boxModel, type SayReply } from "../owner-say";
 import { undoFact } from "../undo";
@@ -233,13 +233,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // under each memory (marks.ts); Who knows has the assistants' rows; Memory and Ask stand alone.
   const clock = () => process.env.PB_NOW ? new Date(process.env.PB_NOW) : new Date();
   // fresh: a sign-in from the last FRESH_MINUTES, the only one a held value shows on (G630).
-  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false, done = false, fresh = false) => {
+  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false, done = false, fresh = false, tok?: string) => {
     const rules = loadRules(root), notes = loadBrain(root, { shared: true });
     const v = homeView(root, rules, notes, clock(), { all, fresh });
     const of = marksFor(rules, notes);
     v.since = withMarks(v.since, rules, notes, of);
     v.earlier = v.earlier.map((d) => ({ ...d, lines: withMarks(d.lines, rules, notes, of) }));
-    return new Response(homePage(v, csrf, { said, reply, flash, done }), { headers: PAGE_HEADERS });
+    return new Response(homePage(v, csrf, { said, reply, flash, done, ...(tok ? { undo: tok } : {}) }), { headers: PAGE_HEADERS });
   };
   const who = (csrf: string, fresh: boolean, flash?: string) => {
     const rules = loadRules(root), notes = loadBrain(root, { shared: true });
@@ -497,7 +497,19 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const back = refUrl?.host === host && /^\/(?![/\\])/.test(refUrl.pathname) ? refUrl.pathname : "/";
       // The message stays on the hub for this sign-in; the URL carries only its id (audit v5: Show
       // put a held value in the address).
-      const go = (path: string, r: { ok?: string; err?: string; undo?: string; wrong?: string }, hash = "") => new Response(null, { status: 303, headers: { location: `${path}?${r.err !== undefined ? `err=${keepFlash(sid, r.err)}` : `ok=${keepFlash(sid, r.ok ?? "")}${r.undo ? `&undo=${r.undo}` : ""}${r.wrong ? `&wrong=${encodeURIComponent(r.wrong)}` : ""}`}${hash}` } });
+      // tok: diary undo tokens for the home's done line (G631), comma-joined.
+      const go = (path: string, r: { ok?: string; err?: string; undo?: string; wrong?: string; tok?: string[] }, hash = "") => new Response(null, { status: 303, headers: { location: `${path}?${r.err !== undefined ? `err=${keepFlash(sid, r.err)}` : `ok=${keepFlash(sid, r.ok ?? "")}${r.undo ? `&undo=${r.undo}` : ""}${r.tok?.length ? `&tok=${r.tok.join(",")}` : ""}${r.wrong ? `&wrong=${encodeURIComponent(r.wrong)}` : ""}`}${hash}` } });
+      // The diary rows an action just added for one fact: their Undo tokens, newest last.
+      const diaryAt = () => readDiary(root).length;
+      const newTokens = (at: number, factKey?: string) => readDiary(root).slice(at).filter((r) => !factKey || r.fact_key === factKey).map((r) => r.undo_token).filter((t) => /^[0-9a-f]{16}$/.test(t));
+      // What a pick leaves (G631): the next question waits on the home, or nothing does.
+      const leftWords = () => { const n = settleLeft(root, now()); return n === 0 ? "Nothing else to settle." : n === 1 ? "1 more to settle." : `${n} more to settle.`; };
+      // One plain line for what was settled: the fact as the home says it, or only its page for a private one.
+      const settledWords = (c: { page: string; attr: string; fact_key: string; private?: boolean }) => {
+        const notes = loadBrain(root), n = notes.find((x) => x.fm.id === c.page), f = n?.fm.facts?.[c.attr];
+        if (!n || f === undefined || c.private || privateNow(n, c.attr, undefined)) return `Settled: ${displayName(c.page, n?.fm.title)}'s ${attrWords(c.attr)}.`;
+        return `Settled: ${factSentence(c.page, n.fm.title, c.attr, shownValue(f), new Map(notes.map((x) => [x.fm.id, x])))}`;
+      };
       const fail = (e: unknown) => { if (!(e instanceof CoreError)) console.error(e); return ownerFacingError(e); };
       const gated = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : /^\/(propose|consent)\//.test(url.pathname) ? url.pathname.split("/")[1]! : "";
       if (gated && needsFresh(gated, form, root) && !freshSignIn(root, sid, now())) {
@@ -563,20 +575,22 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         const c = id.startsWith("p-") ? inboxConflict(root, id) : ownerConflict(root, id);
         if (!c) return go("/home", { err: "Nothing to settle there any more." });
         const back = `/settle/${encodeURIComponent(id)}`;
+        const at = diaryAt();
         // A conflict that waits in the inbox (src/settle-inbox.ts): keep yours, take the new one, or type it.
         if (id.startsWith("p-")) {
           try {
-            if (action === "settle-both") { settleInbox(root, id, { n: 1 }); return go("/home", { ok: "Kept what you had. I won't ask again unless something newer comes in." }); }
+            if (action === "settle-both") { settleInbox(root, id, { n: 1 }); return go("/home", { ok: `Kept what you had. I won't ask again unless something newer comes in. ${leftWords()}`, tok: newTokens(at, c.fact_key) }); }
             if (!form.n && !value) return go(back, { err: "Pick one, or type what it is." });
             settleInbox(root, id, value ? { typed: value } : { n: Number(form.n) });
-            return go(`/p/${c.page.split("/").map(encodeURIComponent).join("/")}`, { ok: "Noted." });
+            // A pick ends the question: back to the home, where it is gone and the number is one less (G631).
+            return go("/home", { ok: `${settledWords(c)} ${leftWords()}`, tok: newTokens(at, c.fact_key) });
           } catch (e) { return go(back, { err: fail(e) }); }
         }
         try {
-          if (action === "settle-both") { ownerKeepBoth(root, id); return go("/home", { ok: "Kept both. I won't ask again unless something newer comes in." }); }
+          if (action === "settle-both") { ownerKeepBoth(root, id); return go("/home", { ok: `Kept both. I won't ask again unless something newer comes in. ${leftWords()}`, tok: newTokens(at, c.fact_key) }); }
           if (!form.n && !value) return go(back, { err: "Pick one, or type what it is." });
           ownerDecide(root, id, value || form.n!, `settle-${id}`, { typed: !!value });
-          return go(`/p/${c.page.split("/").map(encodeURIComponent).join("/")}`, { ok: "Noted. Undo is under Changed." });
+          return go("/home", { ok: `${settledWords(c)} ${leftWords()}`, tok: newTokens(at, c.fact_key) });
         } catch (e) { return go(back, { err: fail(e) }); }
       }
       if (action === "sign-in-again") {
@@ -589,7 +603,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         // Show: the owner sees a held value, and from now on their assistants get it (src/seen.ts).
         // A card can hold several values that read the same (home.ts heldName): one key per line.
         const keys = (form.key ?? "").split("\n").map((k) => k.trim()).filter(Boolean).slice(0, 50);
-        const notes = loadBrain(root), said: string[] = [];
+        const notes = loadBrain(root), said: string[] = [], at = diaryAt();
         for (const key of keys) {
           const r = markSeen(root, key);
           if (r.outcome === "not_saved") return go("/home", { err: r.message });
@@ -601,7 +615,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           said.push(factSentence(id, n?.fm.title, attr, r.value, new Map(notes.map((x) => [x.fm.id, x]))));
         }
         if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
-        return go("/home", { ok: `${said.join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.` });
+        return go("/home", { ok: `${said.join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.`, tok: newTokens(at) });
       }
       if (action === "diary-keep") {
         // Keep it private (G630): still held from every assistant, no longer waiting (src/seen.ts).
@@ -748,7 +762,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const words = Object.fromEntries((c?.sides ?? []).map((x) => [x.n, sideWords(root, rules, pageNote, x.refs, x.value, fresh)] as const).filter((e): e is [number, string] => !!e[1]));
       return new Response(settlePage(c, csrf, rules, url.searchParams.get("err") ?? undefined, { fresh, words, ...(area ? { area: String(area) } : {}), ...(c && ids.includes(c.id) ? { pos: ids.indexOf(c.id) + 1, of: ids.length } : {}) }), { headers: PAGE_HEADERS });
     }
-    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1", !!url.searchParams.get("ok"), freshSignIn(root, sid, now()));
+    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1", !!url.searchParams.get("ok"), freshSignIn(root, sid, now()), url.searchParams.get("tok")?.match(/^[0-9a-f]{16}(?:,[0-9a-f]{16}){0,49}$/)?.[0]);
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
     if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);
     if (p === "/let") return letSheet(csrf, url.searchParams) ?? page("dash.no-note", "brain", { id: url.searchParams.get("key")?.split("#")[0] ?? "" });

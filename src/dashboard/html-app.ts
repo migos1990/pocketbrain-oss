@@ -167,6 +167,7 @@ h2.group{font-size:15px;line-height:20px;font-weight:900;letter-spacing:0;text-t
 .hint{margin:0 0 8px;font-size:14px;line-height:19px;color:var(--muted)}
 .done{display:flex;gap:8px;align-items:flex-start;margin:12px 0 4px;padding:8px 10px;font-size:14px;line-height:19px;color:var(--muted);background:var(--raised);border-radius:8px}
 .done svg{flex:none;margin-top:2px;color:var(--text)}
+.done span{flex:1;min-width:0}.done form{margin:0;flex:none}
 .card{border-top:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px}
 .card:last-child{border-bottom:2px solid var(--text)}
 .card .what{font-size:19px;line-height:25px;font-weight:500;color:var(--text);overflow-wrap:anywhere}
@@ -355,7 +356,7 @@ const held = (w: Waiting) => (!!w.seen && !isKept(w)) || w.href === "/home?all=1
 const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
 const group = (head: string, hint: string, cards: string[], n: number | null = cards.length) => cards.length ? `<h2 class="group">${esc(head)}${n === null ? "" : ` <b>${n}</b>`}</h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
 const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
-export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean } = {}): string {
+export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean; undo?: string } = {}): string {
   const all = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
   // The face: what waits, then the memories worth acting on, six cards in all (MIND_CAP); the full
   // list (?all=1) is every line with its Undo.
@@ -370,7 +371,8 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
     + group(APP_COPY.keptHead, APP_COPY.keptHint, kept.map((w) => waitingCard(w, csrf)), null)
     + (v.gardener.length ? `<h2 class="group">${esc(APP_COPY.gardenerHead)}</h2><ul class="mind">${v.gardener.map((w) => waitingCard(w, csrf, true)).join("")}</ul>` : "");
   const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
-  const reply = o.done && o.flash && !o.reply ? `<p class="done" role="status">${DONE}<span>${esc(o.flash)}</span></p>` : replyHtml(csrf, o);
+  // What was just done: one quiet line, with Undo when the diary can take it back (G631).
+  const reply = o.done && o.flash && !o.reply ? `<div class="done" role="status">${DONE}<span>${esc(o.flash)}</span>${o.undo ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: o.undo })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${o.flash}`)}">${HOME_COPY.undo}</button></form>` : ""}</div>` : replyHtml(csrf, o);
   return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}
 ${reply}
 ${asks}${mems.length ? `${asks ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
