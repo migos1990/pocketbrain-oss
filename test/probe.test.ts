@@ -122,3 +122,15 @@ test("probe: /health fails when the brain's rules can't be read, so the local ch
     expect(checks.find((c) => c.name === "local")?.ok).toBe(false);
   } finally { s.stop(true); }
 });
+
+test("probe: with the owner's Tailscale login set, a missing https door on 8443 is a failing check, and a served one passes (G629)", async () => {
+  const root = makeBrain();
+  writeFileSync(join(root, "rules", "hub.yaml"), "hub: mac\nepoch: 1\nsince: 2026-10-08\nreplicas: { mac: {} }\ndashboard_tailnet: true\ndashboard_tailnet_login: robin@example.com\ndashboard_tailnet_devices: [100.88.1.2]\n");
+  const status = (o: unknown) => () => ({ exitCode: 0, stdout: Buffer.from(JSON.stringify(o)) });
+  const hub = net({ "http://hub/health": new Response("ok") });
+  const gone = (await runChecks(root, "http://hub", hub, status({}))).find((c) => c.name === "phone_door")!;
+  expect(gone.ok).toBe(false);
+  expect(gone.detail).toContain("tailscale serve --bg --https=8443 http://127.0.0.1:8788");
+  const up = { Web: { "mini.tail1234.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8788" } } } } };
+  expect((await runChecks(root, "http://hub", hub, status(up))).find((c) => c.name === "phone_door")!.ok).toBe(true);
+});

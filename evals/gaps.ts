@@ -3698,6 +3698,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
+  G629: {
+    closed: "70dabd88",
+    title: "The phone app's https door was off and nothing said so",
+    severity: "medium",
+    finding: "Owner's first TestFlight pairing, 2026-11-02: the app couldn't reach https://<mac>:8443. Tailscale Serve had never been enabled for the tailnet, so `tailscale serve status` was empty and nothing answered on 8443, while the docs and the project's notes assumed the door was live. Neither doctor nor the health probe looked for it.",
+    fix: "serveDoorProblem and a doctor.tailnet-no-serve line in tailnetDoorChecks (src/dashboard/tailnet.ts): with dashboard_tailnet_login set, `tailscale serve status --json` must show a 8443 handler proxying to the dashboard's port. The health probe's phone_door check (src/probe.ts runChecks) alerts once when it goes missing. Tests: test/dashboard-tailnet.test.ts, test/probe.test.ts.",
+  },
   G627: {
     closed: "ce9b1635",
     title: "The owner's page kept its old text after a rule change",

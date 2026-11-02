@@ -685,7 +685,8 @@ const dashCases: Case[] = [
       ["funnel on the serve port fails", fails(tnMod.tailnetDoorChecks(on, [], serve({ AllowFunnel: { [`mini.tail1234.ts.net:${tnMod.SERVE_PORT}`]: true } })))],
       ["funnel on the dashboard port fails", fails(tnMod.tailnetDoorChecks(on, [], serve({ AllowFunnel: { "mini.tail1234.ts.net:8788": true } })))],
       ["a tunnel rule to the serve port fails", fails(tnMod.tailnetDoorChecks(on, [{ service: `https://mini.tail1234.ts.net:${tnMod.SERVE_PORT}` }], serve({})))],
-      ["a funnel door on 443 alone is fine", !fails(tnMod.tailnetDoorChecks(on, [], serve({ AllowFunnel: { "mini.tail1234.ts.net:443": true } })))],
+      // With the owner's login set, the https door must be served too (G629), so the fine case has it.
+      ["a funnel door on 443 alone is fine", !fails(tnMod.tailnetDoorChecks(on, [], serve({ AllowFunnel: { "mini.tail1234.ts.net:443": true }, Web: { [`mini.tail1234.ts.net:${tnMod.SERVE_PORT}`]: { Handlers: { "/": { Proxy: "http://127.0.0.1:8788" } } } } })))],
     ]);
   }),
   dashCase("rt-dash-redirect-stays-home", "an action's redirect back never leaves the dashboard, even when the referer's path starts with //", async () => {

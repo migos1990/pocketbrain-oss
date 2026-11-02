@@ -72,18 +72,35 @@ export function tailnetDoorChecks(
   const ports = [String(SERVE_PORT), String(cfg.dashboard_port ?? 8788)];
   if (!(cfg.dashboard_tailnet_devices ?? []).some((ip) => isTailnetIp(ip))) out.push({ level: "warn", id: "doctor.tailnet-no-devices" });
   for (const r of ingress) if (ports.some((p) => r.service?.includes(`:${p}`)) || /\.ts\.net/i.test(r.service ?? "")) out.push({ level: "FAIL", id: "doctor.tailnet-tunnel", vars: { service: r.service ?? "" } });
-  let funnels: string[] | undefined;
-  try {
-    const r = serveStatus();
-    if (r.exitCode === 0) funnels = Object.entries((JSON.parse(Buffer.from(r.stdout).toString() || "{}") as { AllowFunnel?: Record<string, boolean> }).AllowFunnel ?? {}).filter(([, v]) => v).map(([k]) => k);
-  } catch { funnels = undefined; }
-  if (!funnels) out.push({ level: "warn", id: "doctor.tailnet-serve-unread" });
+  const st = readServe(serveStatus);
+  if (!st) out.push({ level: "warn", id: "doctor.tailnet-serve-unread" });
   else {
+    const funnels = Object.entries(st.AllowFunnel ?? {}).filter(([, v]) => v).map(([k]) => k);
     const bad = funnels.filter((hp) => ports.some((p) => hp.endsWith(`:${p}`)));
     if (bad.length) out.push({ level: "FAIL", id: "doctor.tailnet-funnel", vars: { hosts: bad.join(", "), port: bad[0].split(":").pop() ?? "" } });
+    if (cfg.dashboard_tailnet_login && !servesDashboard(st, cfg.dashboard_port ?? 8788)) out.push({ level: "FAIL", id: "doctor.tailnet-no-serve", vars: { port: String(cfg.dashboard_port ?? 8788) } });
   }
   if (!out.length) out.push({ level: "ok", text: `tailnet dashboard: no funnel or tunnel rule reaches ports ${ports.join(" or ")}; ${cfg.dashboard_tailnet_devices!.length} device(s) listed` });
   return out;
+}
+
+type ServeStatus = { AllowFunnel?: Record<string, boolean>; Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }> };
+function readServe(serveStatus: Run): ServeStatus | undefined {
+  try { const r = serveStatus(); return r.exitCode === 0 ? JSON.parse(Buffer.from(r.stdout).toString() || "{}") as ServeStatus : undefined; } catch { return undefined; }
+}
+// `tailscale serve` answers https on SERVE_PORT by proxying to the dashboard's own port.
+function servesDashboard(st: ServeStatus, port: number): boolean {
+  return Object.entries(st.Web ?? {}).some(([hp, w]) => hp.endsWith(`:${SERVE_PORT}`) && Object.values(w.Handlers ?? {}).some((h) => new RegExp(`^https?://(127\\.0\\.0\\.1|localhost):${port}/?$`).test(h.Proxy ?? "")));
+}
+
+/** The probe's check on the phone app's door (G629): with the owner's Tailscale login set, the
+ *  https door is `tailscale serve` on SERVE_PORT to the dashboard; a sentence when it's missing.
+ *  Undefined when it's there, when the login isn't set, or when Tailscale's CLI doesn't answer. */
+export function serveDoorProblem(cfg: { dashboard_tailnet?: boolean; dashboard_tailnet_login?: string; dashboard_port?: number }, serveStatus: Run = cli(["serve", "status", "--json"])): string | undefined {
+  if (!cfg.dashboard_tailnet || !cfg.dashboard_tailnet_login) return undefined;
+  const st = readServe(serveStatus);
+  const port = cfg.dashboard_port ?? 8788;
+  return !st || servesDashboard(st, port) ? undefined : `nothing serves https on ${SERVE_PORT} to the dashboard, so the phone app can't reach it; run tailscale serve --bg --https=${SERVE_PORT} http://127.0.0.1:${port}`;
 }
 
 export function tailnetSelf(run: () => { exitCode: number | null; stdout: Buffer | Uint8Array } = status): { address: string; name?: string } | undefined {

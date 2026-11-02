@@ -23,6 +23,7 @@ import { freeDiskMb } from "./textline/items";
 import { offsiteCheck } from "./offsite";
 import { loadUpcoming } from "./upcoming";
 import YAML from "yaml";
+import { tailnetSettings, serveDoorProblem } from "./dashboard/tailnet";
 import { filedWithoutLine } from "./diary";
 const readYamlFile = (f: string): { sources?: Record<string, unknown> } | undefined => existsSync(f) ? YAML.parse(readFileSync(f, "utf8")) : undefined;
 
@@ -35,10 +36,16 @@ async function get(f: Fetch, url: string, init: RequestInit = {}): Promise<Respo
   try { return await f(url, { redirect: "manual", signal: AbortSignal.timeout(8000), ...init }); } catch { return undefined; }
 }
 
-export async function runChecks(root: string, localUrl: string, f: Fetch = fetch): Promise<Check[]> {
+export async function runChecks(root: string, localUrl: string, f: Fetch = fetch, serveStatus?: Parameters<typeof serveDoorProblem>[1]): Promise<Check[]> {
   const out: Check[] = [];
   const local = await get(f, `${localUrl}/health`);
   out.push({ name: "local", ok: local?.status === 200, detail: local ? `hub /health answered ${local.status}` : "hub /health did not answer" });
+  // The phone app's https door (G629): `tailscale serve` on 8443, needed once the owner's login is set.
+  const tn = tailnetSettings(root);
+  if (tn.dashboard_tailnet && tn.dashboard_tailnet_login) {
+    const problem = serveDoorProblem(tn, serveStatus);
+    out.push({ name: "phone_door", ok: !problem, detail: problem ?? "tailscale serve answers https on 8443 for the dashboard" });
+  }
   const pub = loadHub(root)?.public_url?.replace(/\/+$/, "");
   if (!pub) return out;
   const door = await get(f, `${pub}/health`);

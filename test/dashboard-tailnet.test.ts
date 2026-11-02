@@ -160,7 +160,8 @@ test("doctor's tailnet checks: a funnel on the dashboard's ports, a tunnel rule 
   const serve = (o: unknown) => () => ({ exitCode: 0, stdout: Buffer.from(JSON.stringify(o)) });
   const on = { dashboard_tailnet: true, dashboard_tailnet_login: "robin@example.com", dashboard_tailnet_devices: [PHONE], dashboard_port: 8788 };
   const levels = (xs: { level: string }[]) => xs.map((x) => x.level);
-  expect(levels(tailnetDoorChecks(on, [], serve({ AllowFunnel: { "mini.tail1234.ts.net:443": true } })))).toEqual(["ok"]);
+  const door = { TCP: { "8443": { HTTPS: true } }, Web: { "mini.tail1234.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8788" } } } } };
+  expect(levels(tailnetDoorChecks(on, [], serve({ ...door, AllowFunnel: { "mini.tail1234.ts.net:443": true } })))).toEqual(["ok"]);
   const funnel = tailnetDoorChecks(on, [], serve({ AllowFunnel: { "mini.tail1234.ts.net:8443": true } }));
   expect(levels(funnel)).toContain("FAIL");
   expect(funnel.find((f) => f.level === "FAIL")).toMatchObject({ id: "doctor.tailnet-funnel", vars: { port: "8443" } });
@@ -229,4 +230,25 @@ test("the sign-in cookie lasts 30 days, so it survives closing Safari or a home-
   const { tn } = setup();
   const cookie = (await tn(`/login?key=${KEY}`)).headers.get("set-cookie")!;
   expect(cookie).toMatch(/Max-Age=2592000/);
+});
+
+test("the https door the phone app needs: a login set with nothing served on 8443 fails doctor and the probe (G629)", async () => {
+  const { tailnetDoorChecks, serveDoorProblem } = await import("../src/dashboard/tailnet");
+  const serve = (o: unknown) => () => ({ exitCode: 0, stdout: Buffer.from(JSON.stringify(o)) });
+  const on = { dashboard_tailnet: true, dashboard_tailnet_login: "robin@example.com", dashboard_tailnet_devices: [PHONE], dashboard_port: 8788 };
+  const door = { TCP: { "8443": { HTTPS: true } }, Web: { "mini.tail1234.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8788" } } } } };
+  // What the Mac showed on 2026-11-02: "No serve config" is `{}` in JSON.
+  const none = tailnetDoorChecks(on, [], serve({}));
+  expect(none.find((f) => f.level === "FAIL")).toMatchObject({ id: "doctor.tailnet-no-serve", vars: { port: "8788" } });
+  expect(serveDoorProblem(on, serve({}))).toContain("8443");
+  // 8443 served, but to another port than the dashboard's.
+  const elsewhere = { ...door, Web: { "mini.tail1234.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:3000" } } } } };
+  expect(tailnetDoorChecks(on, [], serve(elsewhere)).map((f) => f.level)).toContain("FAIL");
+  expect(serveDoorProblem(on, serve(door))).toBeUndefined();
+  // No login set: the https path is off by choice, so nothing to check.
+  const noLogin = { dashboard_tailnet: true, dashboard_tailnet_devices: [PHONE] };
+  expect(serveDoorProblem(noLogin, serve({}))).toBeUndefined();
+  expect(tailnetDoorChecks(noLogin, [], serve({})).map((f) => f.level)).toEqual(["ok"]);
+  // Tailscale's CLI not answering: unknown, not a failure.
+  expect(serveDoorProblem(on, () => ({ exitCode: 1, stdout: Buffer.from("") }))).toBeUndefined();
 });
