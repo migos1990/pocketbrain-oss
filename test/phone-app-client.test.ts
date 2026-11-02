@@ -72,3 +72,11 @@ test("the app builds under the owner's Expo project, and a copy on another accou
     expect(load()).toBe("00000000-0000-4000-8000-000000000000");
   } finally { if (before === undefined) delete process.env.EAS_PROJECT_ID; else process.env.EAS_PROJECT_ID = before; delete require.cache[path]; }
 });
+
+test("a build names an update channel only when the app has expo-updates, so eas build never stops to ask", async () => {
+  const { readFileSync } = await import("node:fs");
+  const eas = JSON.parse(readFileSync("mobile/eas.json", "utf8")) as { build: Record<string, { channel?: string }> };
+  const deps = (JSON.parse(readFileSync("mobile/package.json", "utf8")) as { dependencies: Record<string, string> }).dependencies;
+  for (const [name, profile] of Object.entries(eas.build))
+    if (profile.channel) expect(`${name}: expo-updates ${deps["expo-updates"] ? "present" : "missing"}`).toBe(`${name}: expo-updates present`);
+});

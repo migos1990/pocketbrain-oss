@@ -54,4 +54,11 @@ npx eas-cli build --profile preview --platform ios      # TestFlight or an inter
 npx eas-cli build --profile preview --platform android  # an APK to install directly
 ```
 
+For TestFlight, build and submit with the same `APP_ENV`, since `mobile/app.config.js` picks the bundle id from it and falls back to the development one:
+
+```
+APP_ENV=production npx eas-cli build --profile production --platform ios
+APP_ENV=production npx eas-cli submit --platform ios --latest
+```
+
 These need the owner's Expo account, and for iOS an Apple Developer account; nothing is published to a store from this repo. `mobile/app.config.js` names the owner's Expo project; a copy built on another Expo account sets `EAS_PROJECT_ID` to the id `npx eas-cli init` gives it.
