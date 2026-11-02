@@ -95,7 +95,7 @@ export default function App() {
     else setMsg(r === "wait" ? "Too many tries this hour. Try again later." : "Couldn't reach your hub. Is Tailscale on?");
   }, [hub]);
 
-  const opening = <View style={s.opening}><StatusBar barStyle="light-content" /><Mark size={160} /></View>;
+  const opening = <View style={s.opening}><StatusBar barStyle="light-content" /><Mark size={160} pose="step" /></View>;
   if (hub === undefined) return opening;
   if (hub) return (
     <SafeAreaView style={[s.page, { backgroundColor: shell(phase).background }]}>

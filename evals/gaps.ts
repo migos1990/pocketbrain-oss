@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G632: {
+    closed: "30b75a34",
+    title: "The no-values-in-URLs check failed by chance on a hex Undo token",
+    severity: "low",
+    finding: "Gate, 2026-11-02: test/no-values-in-urls.test.ts looked for \"fee\" in Show's whole redirect; since G631 the redirect carries tok=, 16 random hex characters, and tok=77d825ffeec7463e held \"fee\".",
+    fix: "test/no-values-in-urls.test.ts reads the location past the server's random ids (ok=@…, tok=), each checked for its exact shape, and a pinned case (PB_NOW 2026-10-08T14:02:24Z, token 5a37cb69feede409) holds the flake still: the old whole-URL check fails on it every time.",
+  },
   G631: {
     closed: "23b624c7",
     title: "A pick on Settle didn't end the question: it landed on the page with a line above, no count, no Undo there",

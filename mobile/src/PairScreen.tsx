@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The first screen of a phone that isn't paired yet (docs/phone-app.md, Pairing): the logo on
 // Night, as the icon and the opening screen, then the two steps and one button.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Mark } from "./Mark";
@@ -20,13 +20,16 @@ export function PairScreen({ busy, msg, onPair, onBack }: { busy: boolean; msg: 
   const [focus, setFocus] = useState(false);
   const paste = async () => { const t = await Clipboard.getStringAsync().catch(() => ""); if (t) { setLink(t.trim()); onPair(t); } };
   const ready = link.trim().length > 0 && !busy;
+  // The brain looks down at the field while it has focus, and blinks once and looks at a new error.
+  const [blink, setBlink] = useState(0);
+  useEffect(() => { if (msg) setBlink((n) => n + 1); }, [msg]);
   return (
     <View style={s.page}>
       <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView style={s.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.brand}>
-            <Mark size={104} />
+            <Mark size={104} gaze={focus || msg ? { x: msg ? 0.4 : 0, y: 1 } : { x: 0, y: 0 }} blink={blink} />
             <Text style={s.word} accessibilityRole="header">pocketBrain</Text>
           </View>
 

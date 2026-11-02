@@ -9,7 +9,26 @@ export const MARK = {
   eyes: [{ cx: 26.3, cy: 31.9 }, { cx: 39.3, cy: 31.9 }],
   eye: { r: 5.5, rim: 0.9, pupil: 2.1, look: 2 }, // look: how far a pupil moves left or right
   centre: { x: 31.5, y: 30 }, // the middle of what the cloud covers
+  legs: { w: 2.6 }, // stroke width of a leg, round caps
 } as const;
+
+// The brain's legs, only in the app's own screens (never the icon or splash). Each pose is two
+// legs, each a shin and a foot as [x1, y1, x2, y2] in mark units, plus how far the whole body
+// moves down (sit).
+export const POSES = ["stand", "step", "sit"] as const;
+export type Pose = (typeof POSES)[number];
+type Seg = readonly [number, number, number, number];
+export const LEGS: Record<Pose, { body: number; segs: readonly Seg[] }> = {
+  stand: { body: 0, segs: [[26, 52, 26, 62], [26, 62, 31, 62], [38, 51, 38, 62], [38, 62, 43, 62]] },
+  step: { body: 0, segs: [[26, 52, 25, 62], [25, 62, 30, 62], [38, 51, 40, 59], [40, 59, 45, 59.5]] },
+  sit: { body: 4, segs: [[27, 52, 45, 58], [45, 58, 47, 53.5], [36, 50, 54, 56], [54, 56, 56, 51.5]] },
+};
+
+/** A segment with round caps drawn as a box: its centre, its length including both caps, and its angle. */
+export function segBox([x1, y1, x2, y2]: Seg, w: number): { cx: number; cy: number; len: number; deg: number } {
+  const r = (n: number) => Math.round(n * 1000) / 1000;
+  return { cx: r((x1 + x2) / 2), cy: r((y1 + y2) / 2), len: r(Math.hypot(x2 - x1, y2 - y1) + w), deg: r((Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI) };
+}
 
 /** The mark as SVG on a 100-unit square: "icon" on the Night tile, edge to edge (the phone
  * rounds it); "adaptive" and "splash" see-through, smaller, inside Android's safe circle. */

@@ -23,6 +23,8 @@ import { inboxConflicts } from "../settle-inbox";
 import { MADE } from "../wiki";
 import { sensitivityRank } from "../brain";
 import { scrubExact } from "../carve";
+import { describeCardState, isOrg, whatItIs } from "../describe";
+import { siteHost } from "./home";
 
 export const PAGE_COPY = {
   back: "Memory",
@@ -55,7 +57,18 @@ export const PAGE_COPY = {
   edit: "Edit this page",
   editShort: "Edit",
   roleAt: "{role} at {org}",
+  isThisIt: "Is this it?",
+  yesItIs: "Yes, that's it",
+  notIt: "Not it",
+  fromWeb: "The Gardener found this on the web. Nothing is saved until you say yes.",
+  declined: "You said the web's guess wasn't it.",
+  askAgain: "Ask again",
+  undo: "Undo",
 } as const;
+
+// The line the Notion import wrote on an org it made from a free-text field: how the page came to
+// be, not what the org is, so the page doesn't show it.
+const IMPORT_LINE = /^Created by the Notion import from the free-text Org field\.\s*$/m;
 
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
 // Two inks on a page: the name big, the surname in the headline ink; the role line between two
@@ -80,6 +93,17 @@ export const PAGE_CSS = `
 .prose blockquote{margin:0 0 8px;padding-left:12px;border-left:3px solid var(--marker-ink);color:var(--text)}
 a.project{margin:18px 0 0;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px;color:var(--text)}
 .project .nm{font-weight:900;font-size:22px;letter-spacing:-.02em}.project .flag{align-self:flex-start;font-size:13px;line-height:18px;font-weight:800;background:var(--marker-ink);color:var(--on-marker);padding:1px 6px;mix-blend-mode:var(--blend)}
+.band .what{margin:0;padding:7px 0;border-bottom:2px solid var(--text);font-size:15px;line-height:20px;font-weight:500;overflow-wrap:anywhere}
+.band .what a,.describe .said a{text-decoration:underline;text-underline-offset:2px}
+.describe{margin:0 0 18px;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:8px}
+.describe .q{margin:0;font-weight:900;font-size:22px;line-height:26px;letter-spacing:-.02em}
+.describe .said{margin:0;font-size:17px;line-height:24px;font-weight:600;overflow-wrap:anywhere}
+.describe blockquote{margin:0;padding-left:12px;border-left:3px solid var(--marker-ink);font-size:15px;line-height:22px;color:var(--text);overflow-wrap:anywhere}
+.describe .acts{display:flex;gap:10px;flex-wrap:wrap}.describe form{margin:0}
+.describe .acts{align-items:center;gap:18px}
+.describe button.yes{font:inherit;font-size:16px;font-weight:800;border:0;border-radius:0;padding:0 16px;min-height:44px;background:var(--headline-ink);color:var(--on-headline);cursor:pointer}
+.describe .kind{margin:0;font-size:13px;line-height:18px;color:var(--muted)}
+.describe.quiet-card{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 h2.sec{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:24px 0 6px}
 p.links{margin:0;font-size:16px;line-height:24px}
 p.links a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
@@ -148,11 +172,13 @@ function facts(s: State, n: Note, fresh: boolean): string {
   return rows ? `<dl>${rows}</dl>` : "";
 }
 
+// The owner's yes on a suggestion (approved:) is an approval, not a source: a fact from one web
+// page is "1 source".
 function sourceCount(n: Note): number {
   const all = new Set<string>();
   for (const f of Object.values(n.fm.facts ?? {})) {
     const recs = isDisputed(f) ? f.candidates : isList(f) ? f.items : [f as FactRecord];
-    for (const r of recs) for (const x of r.sources ?? []) all.add(refString(x));
+    for (const r of recs) for (const x of r.sources ?? []) if (!refString(x).startsWith("approved:")) all.add(refString(x));
   }
   return all.size;
 }
@@ -215,7 +241,28 @@ const AREAS = new Set(["work", "teaching", "personal"]);
 // title (Mac, 2026-10-31: "What changed about Atlas?" on Atlas launch).
 const callName = (id: string, name: string) => folderOf(id) === "people" ? name.split(/\s+/)[0]! : name;
 
-export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; fresh?: boolean } = {}): string {
+// An org's line under its title, once it has one: what it is, and its site as a link.
+function orgLine(s: State, n: Note, fresh: boolean): string {
+  if (!isOrg(n)) return "";
+  const r = whatItIs(n);
+  if (!r || (!fresh && shut(n, r))) return "";
+  const w = n.fm.facts?.website;
+  const site = w && !isDisputed(w) && !isList(w) && !(w as FactRecord).valid_to && (fresh || !shut(n, w as FactRecord)) ? String((w as FactRecord).value ?? "") : "";
+  const link = /^https:\/\//.test(site) ? ` · <a href="${esc(site)}" rel="noopener noreferrer nofollow" target="_blank">${esc(siteHost(site))}</a>` : "";
+  return `<p class="what">${esc(plain(r.value, () => undefined))}${link}</p>`;
+}
+
+// The Gardener's suggestion for an org (src/describe.ts): the line, the site and the site's own
+// sentence, with Yes and Not it; after Not it, a way to let it look again.
+function describeCard(s: State, csrf: string, n: Note): string {
+  const { waiting, declined } = describeCardState(s.root, n);
+  const act = (action: string, label: string, cls = "") => `<form method="post" action="/action/${action}">${hidden(csrf, { id: n.fm.id })}<button${cls ? ` class="${cls}"` : ""}>${esc(label)}</button></form>`;
+  if (declined) return `<div class="describe quiet-card"><p class="kind">${PAGE_COPY.declined}</p>${act("org-again", PAGE_COPY.askAgain, "pill")}</div>`;
+  if (!waiting) return "";
+  return `<div class="describe"><p class="q">${PAGE_COPY.isThisIt}</p><p class="said">${esc(waiting.what_it_is)} · <a href="${esc(waiting.website)}" rel="noopener noreferrer nofollow" target="_blank">${esc(siteHost(waiting.website))}</a></p><blockquote>${esc(waiting.quote)}</blockquote><div class="acts">${act("org-yes", PAGE_COPY.yesItIs, "yes")}${act("org-no", PAGE_COPY.notIt, "pill")}</div><p class="kind">${PAGE_COPY.fromWeb}</p></div>`;
+}
+
+export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; undo?: string; fresh?: boolean } = {}): string {
   const fresh = !!o.fresh, closed = !fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
   const name = displayName(n.fm.id, n.fm.title);
   const first = callName(n.fm.id, name);
@@ -224,7 +271,8 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   let withheld = false;
   // The prose was written when its facts were; a value private now is never in it on the 30-day
   // sign-in, whatever it was then (audit v7, G551).
-  const prose = wikiBody(s, fresh ? n.body : shutInProse(n), (ref) => {
+  const text = fresh ? n.body : shutInProse(n);
+  const prose = wikiBody(s, isOrg(n) ? text.replace(IMPORT_LINE, "") : text, (ref) => {
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
     return [];
@@ -244,12 +292,14 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
   const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
-<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p></div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
-  const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
+  // Undo after an answer to the Gardener's line on an org: only that org's own answer (org-undo).
+  const undoOrg = o.flash && o.undo && isOrg(n) ? `<div class="chips"><form method="post" action="/action/org-undo">${hidden(csrf, { id: n.fm.id, hash: o.undo })}<button>${PAGE_COPY.undo}</button></form></div>` : "";
+  const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}${undoOrg}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
   return appPage(name, "memory", `${band}
-${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${mentionedList}
+${closed ? "" : describeCard(s, csrf, n)}${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${mentionedList}
 ${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}
 ${pinned}`, { css: PAGE_CSS, wrap: "page" });
 }

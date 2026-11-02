@@ -910,7 +910,7 @@ export function ownerKeepBoth(root: string, id: string): string {
 // logged in log/reads.jsonl under its tool name. The gardener still only proposes: upkeep and
 // forgetting make their usual rule-only, undoable commits, exactly as the hub's own night does.
 
-function requireGardener(root: string, agent: string, tool: string, writes = false): { rules: Rules; res: CarveResult } {
+export function requireGardener(root: string, agent: string, tool: string, writes = false): { rules: Rules; res: CarveResult } {
   const s = snapshot(root, agent); // grant and pause checks
   const hub = loadRules(root);
   if (hub.policy.agents[agent]?.role !== "gardener") throw new CoreError(403, `${tool} is for the gardener only`);

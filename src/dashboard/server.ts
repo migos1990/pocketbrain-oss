@@ -115,6 +115,12 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   "fix-everywhere": () => true,
   "note-hide": () => true,
   "diary-keep": () => true,
+  // The Gardener's line on an org (src/describe.ts): only ever on a page below private, and Undo
+  // takes each answer back, like settling a conflict that isn't private.
+  "org-yes": () => true,
+  "org-no": () => true,
+  "org-again": () => true,
+  "org-undo": () => true,
 };
 export const needsFresh = (action: string, form: Record<string, string>, root?: string): boolean => !STALE_OK[action]?.(form, root);
 // A folder with no .git keeps no sign-in file, so its sign-in times live in this run only.
@@ -317,7 +323,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   };
 
   // A page as the owner reads it (phone UI spec §2.2).
-  const pageScreen = (csrf: string, id: string, o: { said?: string; reply?: ReturnType<typeof ownerSay>; flash?: string; fresh?: boolean } = {}) => {
+  const pageScreen = (csrf: string, id: string, o: { said?: string; reply?: ReturnType<typeof ownerSay>; flash?: string; undo?: string; fresh?: boolean } = {}) => {
     const s = loadState(root);
     const n = s.notes.find((x) => x.fm.id === id);
     if (!n) return undefined;
@@ -694,6 +700,12 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         } catch (e) { return go("/home", { err: fail(e) }); }
       }
       // Forgetting, correcting and who-can-see come back with Undo too. A forgotten note has no page.
+      if (["org-yes", "org-no", "org-again", "org-undo"].includes(action)) {
+        try {
+          const ok = runAction({ root, transport: opts.transport }, action, form);
+          return go(back, { ok, undo: action === "org-undo" ? undefined : git(root, ["rev-parse", "HEAD"]) });
+        } catch (e) { return go(back, { err: fail(e) }); }
+      }
       if (["note-forget", "note-bring-back", "fact-wrong", "fact-done", "fact-forget", "note-hide", "note-show", "note-sensitivity"].includes(action)) {
         try {
           let ok = runAction({ root, transport: opts.transport }, action, form);
@@ -747,7 +759,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     // The home is the front door (audit v4); the old overview is one tap away from it.
     if (p === "/overview") return withFlash(overview(s, csrf, url.searchParams));
     const op = p.match(/^\/p\/(.+)$/);
-    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, fresh: freshSignIn(root, sid, now()) }) ?? page("dash.no-note", "brain", { id: op[1]! });
+    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()) }) ?? page("dash.no-note", "brain", { id: op[1]! });
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];

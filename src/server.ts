@@ -17,6 +17,7 @@ import { agentForOAuth, loadOAuth, resourceMetadata, challenge, OAUTH_MCP_PATH, 
 import { loadRules, ownerName, isGardener } from "./rules";
 import * as core from "./core";
 import { CoreError } from "./core";
+import { orgsToDescribe, suggestAbout } from "./describe";
 import { louisApi, LOUIS_OPENAPI } from "./textline/api";
 import { logLimits } from "./logs";
 import { captureConfig, extractPending } from "./capture";
@@ -344,6 +345,16 @@ const GARDENER_TOOLS = [
     inputSchema: { type: "object", properties: { id: { type: "string", description: "the page, like projects/course-a" }, summary: { type: "string", description: "one line, at most 300 characters" }, sections: { type: "array", items: { type: "object", properties: { heading: { type: "string" }, text: { type: "string" } }, required: ["heading", "text"] } }, references: { type: "array", items: { type: "object", properties: { label: { type: "string" }, text: { type: "string" } }, required: ["label", "text"] } } }, required: ["id"] },
   },
   {
+    name: "orgs_to_describe",
+    description: "Gardener only. Orgs whose page doesn't say what they are yet, up to 15 at a time: each one's id, name and aliases, nothing else. Off (an empty list) until the owner turns it on.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "suggest_about",
+    description: "Gardener only. Suggest what one org from orgs_to_describe is, for the owner to answer on its page: one plain line (no address), the org's own https site, and the site's sentence that names the org. A suggestion only: nothing is saved until the owner says yes.",
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "orgs/ring-club" }, what_it_is: { type: "string", description: "one plain line, 3 to 140 characters, like \"A boxing gym in Montréal\"" }, website: { type: "string", description: "https://…" }, quote: { type: "string", description: "the site's own sentence naming the org, at most 300 characters" } }, required: ["id", "what_it_is", "website", "quote"] },
+  },
+  {
     name: "memory_sync",
     description: "Gardener only. Once per night, after sleep_run: check each agent's own memory against the brain. Readable memories are scanned; the others get a few questions to answer next time they connect. Drift becomes corrections for the owner to approve; you see only counts.",
     inputSchema: { type: "object", properties: {} },
@@ -390,6 +401,8 @@ async function callTool(root: string, agent: string, name: string, a: Record<str
     case "open_disputes": return JSON.stringify(core.gardenerDisputes(root, agent), null, 2);
     case "suggest_answer": return JSON.stringify(await serial(() => core.gardenerSuggest(root, agent, a), { name: "suggest_answer" }), null, 2);
     case "wiki_sync": return JSON.stringify(await serial(() => core.gardenerWikiSync(root, agent, a), { name: "wiki_sync" }), null, 2);
+    case "orgs_to_describe": return JSON.stringify(orgsToDescribe(root, agent), null, 2);
+    case "suggest_about": return JSON.stringify(await serial(() => suggestAbout(root, agent, a), { name: "suggest_about" }), null, 2);
     case "memory_sync": return JSON.stringify(await serial(() => gardenerMemorySync(root, agent), { name: "memory_sync" }), null, 2);
     case "memory_check": if (isGardener(loadRules(root), agent)) break; return JSON.stringify(await serial(() => memoryCheck(root, agent)), null, 2);
     case "memory_check_reply": if (isGardener(loadRules(root), agent)) break; return JSON.stringify(await serial(() => memoryReply(root, agent, a as never)), null, 2);

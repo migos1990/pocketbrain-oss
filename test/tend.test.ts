@@ -136,7 +136,7 @@ test("--url wins over hub.yaml, and existing files are kept unless --force", () 
   const plan = tendPlan(root, { dir, url: "https://door.robin.example/" });
   expect(plan.mcpUrl).toBe("https://door.robin.example/mcp");
   writeFileSync(join(dir, "keep.txt"), "x");
-  expect(writeTendFiles(plan).written.length).toBe(6);
+  expect(writeTendFiles(plan).written.length).toBe(9); // nightly, weekly and the web-only describe run
   writeFileSync(join(dir, "agents/gardener/agent.md"), "my edits");
   const again = writeTendFiles(plan);
   expect(again.kept).toContain("agents/gardener/agent.md");

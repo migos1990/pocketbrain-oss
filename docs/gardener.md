@@ -42,6 +42,8 @@ These are refused (403, or a tool error over MCP) for every other agent. Each ca
 | `verify_source` | `POST /v1/gardener/verify` | Checks one claim against one source item that a fact in its view cites (an email, an event, a message). The hub reads the item and answers match, no-match or unreachable with a short quote and the item's own day (`dated`, the `as_of` for a newer value the quote states); the gardener never gets the source itself. Every fact in its view citing the item is checked too, by its own value: still said, it's re-confirmed; not said, it turns due (keys under `confirmed` and `due`; a person's value said only about someone else is under `elsewhere`, unconfirmed). 40 a day by default (`max_verifies_per_day`). See [sources-pull.md](sources-pull.md). |
 | `open_disputes` | (MCP only) | Open and escalated conflicts on facts it may see, each side numbered as you see it, with its sources (not which assistant wrote it) and whether it is your own word, and any suggestion it already made, plus a `next` line saying what to do with them. Only conflicts on facts it can read through its own slice are listed: not excluded from it, not shared away from it, no side above its level. |
 | `suggest_answer` | (MCP only) | Suggests which side of a conflict is true: the side number, 1 to 5 exact refs that back it (not `unverified`, links only over http(s), 200 characters each, no instruction or secret in them), and one plain line why (no instructions, no secrets, no claim that you approved). It is stored on the conflict and shown to you as "The Gardener suggests (n)" on the dashboard and as the "approve" answer on your phone (not on a private fact: there the message shows no values, so you answer by number or in the dashboard). It never settles: the conflict stays open, the fact doesn't change, and your tap is the answer. Its commit, and the one that stamps a held conflict it has read, carry a `Why:` line the hub writes from the change, never the Gardener's own words: the fact key, the side and the refs that back it, or the conflicts it read (G458). A resolver's own suggestion, when it escalates, takes precedence. When one side is your own word, it may only suggest that side. A conflict it can't see answers exactly like one that doesn't exist. The resolver sees the side number and each source's kind (`gmail:[withheld]`), never the reason or a source's text, which can quote notes outside its slice. |
+| `orgs_to_describe` | (MCP only) | Orgs whose page doesn't say what they are yet, 15 at a time: id, name and aliases only. Empty until `describe_orgs: true` is in `rules/gardener.yaml`. See [What an org is](#what-an-org-is). |
+| `suggest_about` | (MCP only) | Suggests what one of those orgs is: one plain line, its https site and the site's sentence naming it. Waits for your answer on the org's page; nothing is saved before your yes. |
 | `memory_sync` | `POST /v1/gardener/memory-sync` | After forgetting: scans readable assistant memories and quizzes the others ([memory-sync.md](memory-sync.md)). Drift becomes corrections for the owner; the gardener sees counts only. |
 
 There is deliberately no tool to read agents' journals. Journals stay readable only by their
@@ -224,6 +226,9 @@ model provider that runs it. With Managed Agents, it also sits in that session u
 deletes it. Nothing else leaves: no journals, no `rules/`, no keys. If that is too much, lower
 `max_sensitivity` to `personal` or narrow its slices. Its view shrinks to match.
 
+Once you turn on [What an org is](#what-an-org-is), the names of your orgs below private (never
+a person's name, never a page's text) also go to a web search run on Anthropic's side.
+
 ## What it costs
 
 That depends on your brain's size and the models you pick. For a brain of a few hundred notes,
@@ -258,3 +263,31 @@ A Gardener can run every night and still do nothing useful: with no source conne
 ## Wiki sync
 
 The Gardener's `wiki_sync` tool rewrites a page's summary and sections from the page's own facts. It is report-only until the owner runs `pocketbrain wiki sync on`. What the hub checks before a rewrite lands is in [wiki.md](wiki.md#the-gardener-keeps-pages-in-sync). The nightly pass also writes up to 3 pages that have no summary yet (step 8, after its proposals so page writing never reframes them), from `last_run`'s `wiki_missing`, and the hub refuses any name or number none of the page's facts hold.
+
+## What an org is
+
+An import can leave an org page with a name and nothing else. With `describe_orgs: true` in
+`rules/gardener.yaml` (you add the line yourself; it is off until then), the Gardener's web-only
+run looks each such org up and suggests one plain line on what it is, with the org's website.
+
+- **What it looks up:** orgs in its view, below private, with no `what_it_is` fact yet, whose name
+  doesn't read as money, health or legal. It gets their id, name and aliases only, and searches
+  only the name. Not a person's name, a page's text, or anything else from the brain.
+- **Its own run:** `pocketbrain tend --managed --describe` writes `agents/<gardener>-describe/`: an
+  agent with four hub tools (`orientation`, `orgs_to_describe`, `suggest_about`, `log_session`),
+  so it never reads a note, plus Anthropic's `web_search` and `web_fetch`. Every sandbox tool is off.
+  Its environment allows the open web, since an org's site isn't known before the search; the
+  nightly and weekly runs keep their own limited one and no web tools. `--describe --apply` creates
+  its deployment paused, on the weekly window, with a $10 budget. It reuses the vault, so no token
+  moves.
+- **What the hub checks:** the line is 3 to 140 characters with no address in it, and no
+  instruction, secret, approval claim, or money, health or legal words. The site is https, a
+  public name with no IP, port, user or password. The quote is the site's own sentence and
+  holds the org's whole name or an alias. At most 40 suggestions a day.
+- **What you see:** on the org's page, "Is this it?" with the line, a link to the site and the
+  site's sentence, then **Yes, that's it** and **Not it**. Yes saves `what_it_is` and `website`,
+  each citing the site (`url:`) plus your approval. The line then sits under the page's title with
+  the site's host as a link. Not it keeps the org from being asked again; **Ask again** lets the
+  Gardener look once more. Each answer comes back with Undo, which takes back only that answer.
+  These suggestions never count on your home or in Settings: they wait on the page.
+- **Where it waits:** `inbox/describe/<org>.yaml`, one file per org, never filed by the hub.

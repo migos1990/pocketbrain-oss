@@ -49,7 +49,7 @@ import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
-import { tendPlan, writeTendFiles, applyManaged, manualSteps, type TendPlan } from "./tend";
+import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
 import { loadKeys, keysDir } from "./secrets";
 import * as asks from "./asks";
@@ -1414,7 +1414,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     if (!args.includes("--managed")) { console.error("tend --managed [--agent g] [--dir ~/pocketbrain-agents] [--url https://brain.example] [--profile pocketbrain] [--nightly-model m] [--weekly-model m] [--force] [--apply --code <code>]"); return 2; }
     // G240/G285: --apply puts the gardener's token in a vault through ant, so from a terminal it
     // needs the gardener's rotation code; refused here, before anything reaches ant.
-    if (args.includes("--apply") && arg(args, "--code") === undefined) { console.error(`tend --managed --apply needs your yes: on the dashboard, open the gardener's page, press "Rotation code", then run the same command with --code <code>. Nothing changed.`); return 1; }
+    if (args.includes("--apply") && !args.includes("--describe") && arg(args, "--code") === undefined) { console.error(`tend --managed --apply needs your yes: on the dashboard, open the gardener's page, press "Rotation code", then run the same command with --code <code>. Nothing changed.`); return 1; }
     let plan: TendPlan;
     try { plan = tendPlan(root, { agent: arg(args, "--agent"), dir: arg(args, "--dir"), url: arg(args, "--url"), profile: arg(args, "--profile"), nightlyModel: arg(args, "--nightly-model"), weeklyModel: arg(args, "--weekly-model") }); }
     catch (e) { console.error((e as Error).message); return 1; }
@@ -1422,6 +1422,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     console.log(`The gardener (${plan.agent}) for ${plan.owner}, at ${plan.mcpUrl}, ${plan.timezone}: nightly "${plan.nightlyCron}", weekly "${plan.weeklyCron}".`);
     for (const f of w.written) console.log(`  wrote ${join(plan.dir, f)}`);
     for (const f of w.kept) console.log(`  kept  ${join(plan.dir, f)} (yours; --force to replace)`);
+    if (args.includes("--describe")) {
+      if (!args.includes("--apply")) { console.log(`\nNothing sent to Anthropic yet. Next: pocketbrain tend --managed --describe --apply, then pocketbrain gardener open 60 and ant --profile ${plan.profile} beta:deployments run --deployment-id <describe id in claude-lock.json>.`); return 0; }
+      const d = applyDescribe(root, plan);
+      for (const l of d.lines) (d.ok ? console.log : console.error)(`  ${l}`);
+      if (d.ok) console.log(`\nThe describe deployment is paused. First run by hand: pocketbrain gardener open 60, then ant --profile ${plan.profile} beta:deployments run --deployment-id <describe id>. Its suggestions wait on each org's page.`);
+      return d.ok ? 0 : 1;
+    }
     if (!args.includes("--apply")) { console.log(`\nNothing sent to Anthropic yet. Next:\n${manualSteps(plan)}`); return 0; }
     const r = applyManaged(root, plan, { code: arg(args, "--code") });
     for (const l of r.lines) (r.ok ? console.log : console.error)(`  ${l}`);

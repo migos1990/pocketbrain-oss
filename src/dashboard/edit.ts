@@ -4,7 +4,7 @@
 // goes to history) as a confirmed-by-owner record. Each save is one git commit by the owner and
 // one line in log/writes.jsonl. Secrets never go in, whoever types them; rules/ and conflict
 // packets are not editable here.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { loadBrain, parseNote, parseShared, saveNote, serializeNote, today, isList, isDisputed, CONTENT_DIRS, type Note, type FactRecord, type Sensitivity } from "../brain";
@@ -14,7 +14,8 @@ import { normalizeValue } from "../normalize";
 import { findSecret } from "../checks";
 import { logWrite } from "../write";
 import { git, authorEnv, gitTime } from "../git";
-import { OWNER, OWNER_CONFIRMED, isOwnerConfirmed, isOwnerId, ownerRef } from "../owner";
+import { OWNER, OWNER_CONFIRMED, isOwnerConfirmed, isOwnerId, ownerRef, approvedRef } from "../owner";
+import { describeFile, isOrg, suggestionFor, whatItIs } from "../describe";
 import { hubGate } from "../hub";
 import { CoreError, dropStaleVectors } from "../core";
 import { applyRewrite, footnotes, sections } from "../wiki";
@@ -458,4 +459,65 @@ export function setNoteSensitivity(root: string, id: string, level: string): str
   commit(root, note.fm.id, `make ${note.fm.id} ${level}`, []);
   logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-edit", key: note.fm.id, outcome: "committed", step: 6 });
   return `${note.fm.title} is ${level} now.`;
+}
+
+// The owner's answer to the Gardener's line on an org (src/describe.ts), from the org's page. Yes
+// saves what it is and its website as facts citing the site, with the owner's approval; Not it
+// keeps the suggestion as answered so it isn't asked again; Ask again lets the Gardener look once
+// more. Each is one owner commit, so the page's Undo takes it back.
+export function answerDescribe(root: string, id: string, answer: "yes" | "no" | "again"): string {
+  const note = editableNote(root, id);
+  if (!isOrg(note)) throw new CoreError(400, `${note.fm.id} isn't an org`);
+  const s = suggestionFor(root, note.fm.id);
+  const rel = describeFile(note.fm.id);
+  const title = String(note.fm.title ?? note.fm.id);
+  const d = today();
+  const done = (msg: string, keys: string[], paths: string[]) => {
+    git(root, ["add", "-A", ...paths]);
+    git(root, ["commit", "-q", "-m", `owner: ${msg}\n\nKind: owner-edit\nDescribe: ${note.fm.id}${keys.length ? `\nFact-Keys: ${keys.join(", ")}` : ""}`], OWNER);
+    logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-edit", op: `describe-${answer}`, key: keys[0] ?? note.fm.id, outcome: "committed", step: 6 });
+  };
+  if (answer === "again") {
+    if (s?.status !== "no") throw new CoreError(409, `nothing to ask again about ${title}`);
+    rmSync(join(root, rel));
+    done(`ask again what ${note.fm.id} is`, [], [rel]);
+    return `The Gardener may suggest what ${title} is again.`;
+  }
+  if (s?.status !== "waiting" || whatItIs(note)) throw new CoreError(409, `nothing waits on ${title}`);
+  const answered = { ...s, status: "no" as const, decided: d };
+  if (answer === "no") {
+    writeFileSync(join(root, rel), YAML.stringify(answered, { lineWidth: 0 }));
+    done(`not it, the Gardener's line on ${note.fm.id}`, [], [rel]);
+    return `Not it. The Gardener won't suggest a line for ${title} again.`;
+  }
+  const rules = loadRules(root);
+  const facts = (note.fm.facts ??= {});
+  const rec = (attr: string, v: string): FactRecord => ({ value: normalizeValue(v, attributeSpec(rules, note.fm.type, attr)), as_of: d, sources: [`url:${s.website}`, approvedRef(d, rel)], verification: "verified-by-source", by: s.by, recorded: d, last_confirmed: d });
+  const keys: string[] = [];
+  for (const [attr, v] of [["what_it_is", s.what_it_is], ["website", s.website]] as const) {
+    const old = facts[attr];
+    if (old && (isDisputed(old) || isList(old) || !(old as FactRecord).valid_to)) continue; // the page already holds one
+    if (old) ((note.fm.history ??= {})[attr] ??= []).push({ ...(old as FactRecord), ended_by: { step: 6, at: d, by: OWNER } });
+    facts[attr] = rec(attr, v);
+    keys.push(`${note.fm.id}#${attr}`);
+  }
+  note.fm.updated = d;
+  saveNote(root, note);
+  // Answered, so a later undo of the facts doesn't bring the question back on its own: Undo here
+  // reverts this commit, suggestion and facts together.
+  writeFileSync(join(root, rel), YAML.stringify({ ...answered, status: "yes", decided: d }, { lineWidth: 0 }));
+  done(`${note.fm.id} is ${s.what_it_is}`, keys, [`${note.fm.id}.md`, rel]);
+  dropStaleVectors(root);
+  return `Saved what ${title} is.`;
+}
+
+// Undo from the org's page after an answer: only one of that org's own answers (its Describe:
+// trailer), so the page's 30-day sign-in can't take back any other edit.
+export function undoDescribe(root: string, id: string, hash: string): string {
+  if (!/^[0-9a-f]{7,40}$/.test(hash)) throw new CoreError(400, "bad commit");
+  const clean = id.replace(/\.md$/, "");
+  const msg = git(root, ["log", "-1", "--format=%B", hash]);
+  if (!msg.split("\n").includes(`Describe: ${clean}`)) throw new CoreError(403, "only an answer about this org can be undone here");
+  undoOwnerEdit(root, hash);
+  return "Undone.";
 }

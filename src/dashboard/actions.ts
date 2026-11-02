@@ -16,7 +16,7 @@ import { digest } from "../digest";
 import { OWNER } from "../owner";
 import { addAgent } from "../addagent";
 import { bindClient, revokeClient, listPending, clientsOf, cutAtAuthServer, loadOAuth } from "../oauth";
-import { setFact, saveNoteText, saveNoteBody, saveSection, confirmFact, undoOwnerEdit, setEditor, revertCommit, forgetNote, bringBack, markNeverRight, markDone, forgetFact, hideNoteFrom, showNoteTo, setNoteSensitivity } from "./edit";
+import { setFact, saveNoteText, saveNoteBody, saveSection, confirmFact, undoOwnerEdit, setEditor, revertCommit, forgetNote, bringBack, markNeverRight, markDone, forgetFact, hideNoteFrom, showNoteTo, setNoteSensitivity, answerDescribe, undoDescribe } from "./edit";
 import { decideCapture } from "../capture";
 import { recordReexplain, recordOwnerTime } from "../measure";
 import { setMonthlyCap } from "./usage";
@@ -161,6 +161,12 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       return showNoteTo(root, need("id"), need("agent"));
     case "note-sensitivity":
       return setNoteSensitivity(root, need("id"), need("sensitivity"));
+    case "org-yes":
+    case "org-no":
+    case "org-again":
+      return answerDescribe(root, need("id"), action === "org-yes" ? "yes" : action === "org-no" ? "no" : "again");
+    case "org-undo":
+      return undoDescribe(root, need("id"), need("hash"));
     case "capture-release":
     case "capture-discard": {
       const r = decideCapture(root, need("file"), action === "capture-release" ? "release" : "discard");

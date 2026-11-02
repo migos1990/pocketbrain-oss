@@ -166,3 +166,23 @@ test("an unpaired phone first asks whether pocketBrain is on a computer yet, and
   expect(t).toContain("https://pocketbrain.dev");
   expect(t).not.toContain("pocketbrain.dev/start"); // no such page
 });
+
+test("the brain has two legs and three poses, drawn inside the mark's square, and the icon keeps no legs (owner, 2026-11-02)", async () => {
+  const { MARK, LEGS, POSES, iconSvg, segBox } = await import("../mobile/src/logo");
+  expect(POSES).toEqual(["stand", "step", "sit"]);
+  for (const p of POSES) {
+    const { body, segs } = LEGS[p];
+    expect(segs).toHaveLength(4); // two legs, each a shin and a foot
+    for (const [x1, y1, x2, y2] of segs) for (const [x, y] of [[x1, y1 + body], [x2, y2 + body]]) {
+      // A leg never leaves the 64-unit square, so a screen's layout doesn't move when it gets legs.
+      expect(x).toBeGreaterThanOrEqual(MARK.legs.w / 2); expect(x).toBeLessThanOrEqual(64 - MARK.legs.w / 2);
+      expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThanOrEqual(64 - MARK.legs.w / 2);
+    }
+  }
+  // Standing: both feet on one floor, pointing right.
+  expect(LEGS.stand.segs.map((s) => s[3])).toEqual([62, 62, 62, 62]);
+  // A segment drawn as a rotated rounded box: centre, length with its round caps, and angle.
+  expect(segBox([26, 52, 26, 62], 2)).toEqual({ cx: 26, cy: 57, len: 12, deg: 90 });
+  expect(segBox([26, 62, 31, 62], 2)).toEqual({ cx: 28.5, cy: 62, len: 7, deg: 0 });
+  expect(iconSvg("icon")).not.toContain("<line"); // icon and splash unchanged
+});
