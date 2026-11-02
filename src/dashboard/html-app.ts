@@ -6,7 +6,7 @@
 // model decides anything here. Fixed words are in APP_COPY, held to the owner's words by
 // test/owner-copy.test.ts.
 import type { HomeView, HomeLine, Waiting, ChangedPage } from "./home";
-import { faceLines, faceRoom } from "./home";
+import { faceLines, faceRoom, waitingTotal } from "./home";
 import type { Mark } from "./marks";
 import type { WrongLine } from "./home-beliefs";
 import type { SayReply } from "../owner-say";
@@ -34,7 +34,13 @@ export const APP_COPY = {
   quiet: "Nothing new on your mind since yesterday.",
   onlyYou: "Only you know this",
   stranger: "From an address your pages don't hold",
-  readIt: "Read it",
+  showIt: "Show it",
+  settleHead: "To settle",
+  settleHint: "Two sources disagree. Pick the one that's right.",
+  heldHead: "Private, held from your assistants",
+  heldHint: "An assistant saved these. Only you can see them until you tap Show it; then your assistants get it too.",
+  gardenerHead: "The Gardener looks tonight",
+  latelyHead: "Lately",
   seeThem: "See them",
   settle: "Settle",
   decide: "Decide",
@@ -149,6 +155,10 @@ form.box button{font:inherit;font-size:16px;font-weight:800;border:0;border-radi
 .talk{list-style:none;margin:0;padding:0}.answer p{margin:0}.answer .cites{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0}.chips form{margin:0}
 ul{list-style:none;margin:0;padding:0}
 .mind{display:flex;flex-direction:column}
+h2.group{font-size:15px;line-height:20px;font-weight:900;letter-spacing:0;text-transform:uppercase;margin:22px 0 2px}h2.group b{background:var(--marker-ink);color:var(--on-marker);padding:0 5px;margin-left:4px;mix-blend-mode:var(--blend)}
+.hint{margin:0 0 8px;font-size:14px;line-height:19px;color:var(--muted)}
+.done{display:flex;gap:8px;align-items:flex-start;margin:12px 0 4px;padding:8px 10px;font-size:14px;line-height:19px;color:var(--muted);background:var(--raised);border-radius:8px}
+.done svg{flex:none;margin-top:2px;color:var(--text)}
 .card{border-top:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px}
 .card:last-child{border-bottom:2px solid var(--text)}
 .card .what{font-size:19px;line-height:25px;font-weight:500;color:var(--text);overflow-wrap:anywhere}
@@ -291,7 +301,7 @@ export function marked(what: string, parts: string[] = []): string {
 
 // What waits on the owner, as the first things on their mind.
 function waitingCard(w: Waiting, csrf: string, gardener = false): string {
-  if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.readIt}: ${w.what}`)}">${APP_COPY.readIt}</button></form></div></li>`;
+  if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.showIt}: ${w.what}`)}">${APP_COPY.showIt}</button></form></div></li>`;
   if (w.href === "/home?all=1") return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock()}<a class="pill solid" href="${esc(w.href)}">${APP_COPY.seeThem}</a></div></li>`;
   if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${w.meta ? `${esc(w.meta)} · ` : ""}${APP_COPY.gardener}</small></div></li>`;
   const verb = w.href.startsWith("/settle/m-") ? APP_COPY.decide : APP_COPY.settle;
@@ -322,16 +332,28 @@ const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<
 
 // On your mind (/home): the box, then what waits on the owner, then the memories, least certain and
 // newest first (homeView's order), the day inside each line, never a heading.
-export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string } = {}): string {
+// What waits, each kind under a heading that says what to do (G625): conflicts and held messages to
+// settle, held values to show; the Gardener's are apart and not counted. What was just done is a
+// quiet done line, never a card.
+const held = (w: Waiting) => !!w.seen || w.href === "/home?all=1";
+const group = (head: string, hint: string, cards: string[], n = cards.length) => cards.length ? `<h2 class="group">${esc(head)} <b>${n}</b></h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
+const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
+export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean } = {}): string {
   const all = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
   // The face: what waits, then the memories worth acting on, six cards in all (MIND_CAP); the full
   // list (?all=1) is every line with its Undo.
   const lines = v.all ? all : faceLines(all, faceRoom(v.waiting.length + v.gardener.length));
   const more = v.all ? 0 : all.length - lines.length + v.folded + v.earlierFolded;
-  const cards = [...v.waiting.map((w) => waitingCard(w, csrf)), ...v.gardener.map((w) => waitingCard(w, csrf, true)), ...lines.map((l) => memoryCard(l, csrf, !v.all))];
-  return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(v.waiting.length)}
-${replyHtml(csrf, o)}
-${cards.length ? `<ul class="mind">${cards.join("")}</ul>` : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
+  // Each heading carries its own count, and the two add up to the big number.
+  const settle = v.waiting.filter((w) => !held(w)), hold = v.waiting.filter(held);
+  const asks = group(APP_COPY.settleHead, APP_COPY.settleHint, settle.map((w) => waitingCard(w, csrf)), waitingTotal(settle))
+    + group(APP_COPY.heldHead, APP_COPY.heldHint, hold.map((w) => waitingCard(w, csrf)), waitingTotal(hold))
+    + (v.gardener.length ? `<h2 class="group">${esc(APP_COPY.gardenerHead)}</h2><ul class="mind">${v.gardener.map((w) => waitingCard(w, csrf, true)).join("")}</ul>` : "");
+  const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
+  const reply = o.done && o.flash && !o.reply ? `<p class="done" role="status">${DONE}<span>${esc(o.flash)}</span></p>` : replyHtml(csrf, o);
+  return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}
+${reply}
+${asks}${mems.length ? `${asks ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
 ${box(csrf, {}, APP_COPY.box)}`, { wrap: "chat" });
 }
 

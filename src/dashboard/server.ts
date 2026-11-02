@@ -40,7 +40,7 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, lineWords, isVerbAttribute, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
@@ -231,13 +231,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // The owner app's four tabs (html-app.ts): On your mind is the home, with a mark per assistant
   // under each memory (marks.ts); Who knows has the assistants' rows; Memory and Ask stand alone.
   const clock = () => process.env.PB_NOW ? new Date(process.env.PB_NOW) : new Date();
-  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false) => {
+  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false, done = false) => {
     const rules = loadRules(root), notes = loadBrain(root, { shared: true });
     const v = homeView(root, rules, notes, clock(), { all });
     const of = marksFor(rules, notes);
     v.since = withMarks(v.since, rules, notes, of);
     v.earlier = v.earlier.map((d) => ({ ...d, lines: withMarks(d.lines, rules, notes, of) }));
-    return new Response(homePage(v, csrf, { said, reply, flash }), { headers: PAGE_HEADERS });
+    return new Response(homePage(v, csrf, { said, reply, flash, done }), { headers: PAGE_HEADERS });
   };
   const who = (csrf: string, fresh: boolean, flash?: string) => {
     const rules = loadRules(root), notes = loadBrain(root, { shared: true });
@@ -594,7 +594,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           if (r.outcome !== "seen") continue;
           const hash = key.lastIndexOf("#"), id = key.slice(0, hash);
           const n = notes.find((x) => x.fm.id === id);
-          said.push(`${displayName(id, n?.fm.title)}: ${key.slice(hash + 1).replace(/_/g, " ")} is ${plain(r.value)}.`);
+          // Said as the home says a memory (G625): "Ben Carter prefers tea", never "Ben Carter: prefers is tea".
+          const attr = key.slice(hash + 1);
+          said.push(`${lineWords(isVerbAttribute(attr) ? "verbNew" : "new", { title: displayName(id, n?.fm.title), attr: attrWords(attr), value: plain(r.value) })}.`);
         }
         if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
         return go("/home", { ok: `${said.join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.` });
@@ -732,7 +734,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const words = Object.fromEntries((c?.sides ?? []).map((x) => [x.n, sideWords(root, rules, pageNote, x.refs, x.value, fresh)] as const).filter((e): e is [number, string] => !!e[1]));
       return new Response(settlePage(c, csrf, rules, url.searchParams.get("err") ?? undefined, { fresh, words, ...(area ? { area: String(area) } : {}), ...(c && ids.includes(c.id) ? { pos: ids.indexOf(c.id) + 1, of: ids.length } : {}) }), { headers: PAGE_HEADERS });
     }
-    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1");
+    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1", !!url.searchParams.get("ok"));
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
     if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);
     if (p === "/let") return letSheet(csrf, url.searchParams) ?? page("dash.no-note", "brain", { id: url.searchParams.get("key")?.split("#")[0] ?? "" });

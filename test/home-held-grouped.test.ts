@@ -41,7 +41,7 @@ test("held values are a locked card each, a few of them, the rest one card that 
   expect(held).toHaveLength(HELD_EACH);
   for (const w of held.slice(0, -1)) expect(w.what).toMatch(/^Something new about Person \d\.$/);
   const last = held.at(-1)!;
-  expect(last.what).toBe("3 new things only you can see.");
+  expect(last.what).toBe("3 more held from your assistants.");
   // It counts and links to the full list, and releases nothing (PR #6 review): no Read it.
   expect(last.seen).toBeUndefined();
   expect(last.href).toBe("/home?all=1");
@@ -83,7 +83,7 @@ test("the card that counts the rest links to them and has no Read it: one tap ne
     const keys = [...html.matchAll(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="[^"]*"><input type="hidden" name="key" value="([^"]+)"/g)].map((m) => m[1]!);
     expect(keys).toHaveLength(HELD_EACH - 1);
     for (const k of keys) expect(k.split("\n")).toHaveLength(1);
-    const at = html.indexOf("3 new things only you can see");
+    const at = html.indexOf("3 more held from your assistants");
     const counting = html.slice(at, html.indexOf("</li>", at));
     expect(counting).toContain('href="/home?all=1"');
     expect(counting).not.toContain("diary-seen");

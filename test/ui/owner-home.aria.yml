@@ -5,6 +5,8 @@
       - /url: /who
   - heading "On your mind" [level=1]
   - paragraph: 4 things wait for you
+  - heading "To settle 3" [level=2]
+  - paragraph: Two sources disagree. Pick the one that's right.
   - list:
     - listitem:
       - text: "Next for Atlas launch: freeze the beta build on"
@@ -33,9 +35,14 @@
       - 'link "Settle: Next for Kitchen renovation: take the tile delivery on 12 October. Or 19 October?"':
         - /url: /settle/c-0003
         - text: Settle
+  - heading "Private, held from your assistants 1" [level=2]
+  - paragraph: An assistant saved these. Only you can see them until you tap Show it; then your assistants get it too.
+  - list:
     - listitem:
       - text: Something new about Hélène Lefebvre. Only you know this
-      - 'button "Read it: Something new about Hélène Lefebvre."': Read it
+      - 'button "Show it: Something new about Hélène Lefebvre."': Show it
+  - heading "Lately" [level=2]
+  - list:
     - listitem:
       - link "Antoine is head TA now, not teaching assistant.":
         - /url: /p/people/antoine-lavoie

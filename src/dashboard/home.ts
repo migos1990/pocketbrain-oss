@@ -42,7 +42,7 @@ export interface HomeLine {
   attr?: string; // the attribute, for which lines lead the face (faceLines)
   kind?: string; // the diary row's kind, likewise
 }
-export interface Waiting { what: string; verb: string; href: string; seen?: string; stranger?: boolean; meta?: string; parts?: string[] } // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
+export interface Waiting { what: string; verb: string; href: string; n?: number; seen?: string; stranger?: boolean; meta?: string; parts?: string[] } // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
 export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number }
@@ -149,6 +149,7 @@ export const LINE_COPY = {
   somethingNew: "Something new about {title}",
   somethingUnnamed: "Something new only you can see",
   manyUnnamed: "{value} new things only you can see",
+  moreHeld: "{value} more held from your assistants",
   manyNew: "{value} new things about {title}",
   heldUntil: "Something new about {title}, held until {until}",
   questionSetAside: "A question about {title} was set aside, since only a conflict asks you",
@@ -427,10 +428,10 @@ function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[
   const overflow = !expand && ordered.length > HELD_EACH;
   const cards = overflow ? [...ordered.slice(0, HELD_EACH - 1), ["", ordered.slice(HELD_EACH - 1).flatMap(([, us]) => us)] as [string, Unseen[]]] : ordered;
   const shown = cards.map(([name, us], i) => {
-    if (overflow && i === cards.length - 1) return { what: lineWords("manyUnnamed", { value: String(us.length) }), verb: `${us.some((u) => u.unknownSender) ? "from an address your pages don't hold · " : ""}only you can see them yet`, href: "/home?all=1", ...(us.some((u) => u.unknownSender) ? { stranger: true } : {}) };
+    if (overflow && i === cards.length - 1) return { n: us.length, what: lineWords("moreHeld", { value: String(us.length) }), verb: `${us.some((u) => u.unknownSender) ? "from an address your pages don't hold · " : ""}only you can see them yet`, href: "/home?all=1", ...(us.some((u) => u.unknownSender) ? { stranger: true } : {}) };
     const one = us.length === 1, page = us[0]!.page, stranger = us.some((u) => u.unknownSender);
     const what = name ? (one ? lineWords("somethingNew", { title: name }) : lineWords("manyNew", { title: name, value: String(us.length) })) : one ? lineWords("somethingUnnamed", {}) : lineWords("manyUnnamed", { value: String(us.length) });
-    return { what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(stranger ? { stranger: true } : {}) };
+    return { n: us.length, what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(stranger ? { stranger: true } : {}) };
   });
   // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
   const inbox = inboxConflicts(root).map((c) => line(c, "tap to settle"));
@@ -441,8 +442,11 @@ function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[
 
 // How many things the home lists as waiting on the owner: the one count the digest and the text
 // say too (conflicts to settle and held values to see; never the Gardener's, never an alert).
+// Each thing counts once (G625): a card that holds several held values counts each of them, so the
+// home's big number, the digest and the north star say the same number.
+export const waitingTotal = (ws: Waiting[]) => ws.reduce((a, w) => a + (w.n ?? 1), 0);
 export function waitingCount(root: string, now = new Date()): number {
-  return conflicts(root, now, true).waiting.length;
+  return waitingTotal(conflicts(root, now, true).waiting);
 }
 
 // One page's diary lines, newest first (the page screen's Changed list).

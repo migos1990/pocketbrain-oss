@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G625: {
+    closed: "7e6852e1",
+    title: "The home's number counted cards, not things, and asks, held values and a done notice looked alike",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-01 (\"I'm not sure what are the three things\"): On your mind said 3 things wait over a done notice (\"Your assistants get it now\"), two Read it cards and \"9 new things only you can see\". The number was the cards on the face, waitingCount (digest, north star) counted groups, and neither counted the held values.",
+    fix: "src/dashboard/home.ts: a waiting card carries how many things it holds (n), waitingTotal sums them and waitingCount uses it. src/dashboard/html-app.ts homePage: To settle and Private, held from your assistants, each with what to do and its count; Show it; Lately; the done notice is a quiet line with a check. src/dashboard/server.ts: Show it says the value as the home does. Tests: test/home-count-adds-up.test.ts, test/serve-hold.test.ts.",
+  },
   G623: {
     closed: "6f58da30",
     title: "The box opened every non-write reply with a stock phrase; the owner's to-do came back as Next for",

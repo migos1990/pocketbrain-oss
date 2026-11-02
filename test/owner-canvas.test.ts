@@ -26,7 +26,7 @@ async function setup(root?: string) {
   const res = (path: string) => d.handle(new Request(`http://${H}${path}`, { headers: { host: H, cookie } }));
   return { root, res, get: async (path: string) => (await res(path)).text() };
 }
-const cards = (html: string) => html.match(/<ul class="mind">([\s\S]*?)<\/ul>/)?.[1]?.match(/<li class="card[^"]*">[\s\S]*?<\/li>/g) ?? [];
+const cards = (html: string) => [...html.matchAll(/<ul class="mind">([\s\S]*?)<\/ul>/g)].flatMap((m) => m[1]!.match(/<li class="card[^"]*">[\s\S]*?<\/li>/g) ?? []); // every list on the face (G625: one per kind)
 const pinned = async <T>(f: () => Promise<T>) => { process.env.PB_NOW = DEMO_NOW; try { return await f(); } finally { delete process.env.PB_NOW; } };
 
 test("On your mind shows six cards at most, none of them a routine last-contact line, and no Undo but on what you just said", () => pinned(async () => {

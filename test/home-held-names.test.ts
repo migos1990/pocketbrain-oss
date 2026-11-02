@@ -41,7 +41,7 @@ test("held cards never name a stranger's subject or a money page, and the same c
   expect(held[0]!.seen!.split("\n").sort()).toEqual(["money/apple-payment-1#amount", "money/apple-payment-2#amount", "notes/louis-manulife-group-benefits-claim#status"]);
   const words = JSON.stringify([...v.waiting, ...v.since, ...v.earlier.flatMap((d) => d.lines)].map((l) => l.what));
   expect(words).not.toMatch(/Apple|payment|Manulife|benefits/);
-  expect(waitingCount(root, NOW)).toBe(1);
+  expect(waitingCount(root, NOW)).toBe(3); // one card, three things (G625)
 });
 
 test("Read it on a grouped card shows each of its values", async () => {
