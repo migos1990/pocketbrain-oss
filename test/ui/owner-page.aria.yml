@@ -27,23 +27,17 @@
     - superscript:
       - link "3":
         - /url: "#fn-3"
-    - text: Its sources also name
-    - link "Robin Lefebvre":
-      - /url: /p/people/robin-lefebvre
-    - text: .
-    - superscript:
-      - link "3":
-        - /url: "#fn-3"
     - text: See also
     - link "Atlas launch":
       - /url: /p/projects/atlas-launch
-    - text: and
-    - link "Senior designer hire":
-      - /url: /p/projects/designer-hire
     - text: .
     - superscript:
       - link "4":
         - /url: "#fn-4"
+    - text: See also
+    - link "Senior designer hire":
+      - /url: /p/projects/designer-hire
+    - text: .
     - superscript:
       - link "5":
         - /url: "#fn-5"

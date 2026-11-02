@@ -228,12 +228,14 @@ test("page writer: a page named in another page's source links back to it, cited
 
 // Real-brain north star, 2026-10-30: 8 of 9 touched pages with no link in linked out nowhere; 2 of
 // them shared a source item with another page that no name keys tied them by. Two pages drawn from
-// the same email link to each other, cited by it; never past a reader.
+// the same email link to each other, cited by it, when that email names them (G624: a receipt or
+// newsletter behind two pages is not about either); never past a reader.
 test("page writer: pages whose facts cite the same item link to each other, cited; never past a reader", () => {
   const root = makeBrain();
   person(root, "ana-diaz", "Ana Diaz", fact("role", "program director", "gmail:f0000000000000c1"));
   person(root, "cy-moss", "Cy Moss", fact("role", "registrar", "gmail:f0000000000000c1"));
   person(root, "eve-park", "Eve Park", fact("role", "counsel", "gmail:f0000000000000c1", ", sensitivity: private"));
+  capture(root, "gmail:f0000000000000c1", ["Ana Diaz", "Cy Moss"]);
   renderTouchedPages(root, SINCE);
   const cy = body(root, "people/cy-moss"), ana = body(root, "people/ana-diaz");
   expect(cy).toContain("[[people/ana-diaz|Ana Diaz]]");
@@ -531,8 +533,9 @@ test("page writer: a page left with no fact loses the hub's opening, keeps the r
 
 // Outside review v5, midday: 25 pages (decisions, money, orgs) had the hub's cited lead and nothing
 // linking to them. A page whose facts link another gets a link back ("See also"), cited by those
-// facts' sources; the owner's own page links their decision and money pages nothing else links.
-test("a page a fact links to links back, and the owner's page links their unlinked money pages", () => {
+// facts' sources. The owner's own page lists no other pages (G624, owner 2026-11-01: his page glued
+// unrelated mail together).
+test("a page a fact links to links back; the owner's page lists no unlinked pages", () => {
   const root = makeBrain();
   const pol = join(root, "rules", "policy.yaml");
   writeFileSync(pol, readFileSync(pol, "utf8").replace("owner: { name: Robin }", "owner: { name: Robin Vale }"));
@@ -547,8 +550,8 @@ test("a page a fact links to links back, and the owner's page links their unlink
   expect(paul).toMatch(/See also \[\[projects\/course-a\|[^\]]+\]\]\.\[\^p-see-course-a\]/);
   expect(paul).toContain("[^p-see-course-a]: ");
   const robin = body(root, "people/robin-vale");
-  // Main bank is linked from Course A's text already; the decision nothing links is listed.
-  expect(robin).toMatch(/See also [^\n]*\[\[decisions\/2026-09-01-pick-bank\|Pick a bank\]\]/);
+  expect(robin).toContain("Halifax");
+  expect(robin).not.toContain("See also");
   expect(robin).not.toContain("[[money/main-bank");
 });
 

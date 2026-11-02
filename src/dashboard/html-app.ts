@@ -6,7 +6,7 @@
 // model decides anything here. Fixed words are in APP_COPY, held to the owner's words by
 // test/owner-copy.test.ts.
 import type { HomeView, HomeLine, Waiting, ChangedPage } from "./home";
-import { faceLines, faceRoom, waitingTotal } from "./home";
+import { faceLines, faceRoom, waitingTotal, SETTINGS_HREF } from "./home";
 import type { Mark } from "./marks";
 import type { WrongLine } from "./home-beliefs";
 import type { SayReply } from "../owner-say";
@@ -40,6 +40,9 @@ export const APP_COPY = {
   heldHead: "Private, held from your assistants",
   heldHint: "An assistant saved these. Only you can see them until you tap Show it; then your assistants get it too.",
   gardenerHead: "The Gardener looks tonight",
+  settingsHead: "Needs a look in Settings",
+  settingsHint: "These wait for you on Settings, where each has its own question.",
+  openSettings: "Open Settings",
   latelyHead: "Lately",
   seeThem: "See them",
   settle: "Settle",
@@ -303,6 +306,7 @@ export function marked(what: string, parts: string[] = []): string {
 function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.showIt}: ${w.what}`)}">${APP_COPY.showIt}</button></form></div></li>`;
   if (w.href === "/home?all=1") return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock()}<a class="pill solid" href="${esc(w.href)}">${APP_COPY.seeThem}</a></div></li>`;
+  if (onSettings(w)) return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><span></span><a class="pill" href="${esc(w.href)}">${APP_COPY.openSettings}</a></div></li>`;
   if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${w.meta ? `${esc(w.meta)} · ` : ""}${APP_COPY.gardener}</small></div></li>`;
   const verb = w.href.startsWith("/settle/m-") ? APP_COPY.decide : APP_COPY.settle;
   // One link per block: the question opens from its Settle (or Decide), never twice.
@@ -336,6 +340,7 @@ const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<
 // settle, held values to show; the Gardener's are apart and not counted. What was just done is a
 // quiet done line, never a card.
 const held = (w: Waiting) => !!w.seen || w.href === "/home?all=1";
+const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
 const group = (head: string, hint: string, cards: string[], n = cards.length) => cards.length ? `<h2 class="group">${esc(head)} <b>${n}</b></h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
 const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
 export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean } = {}): string {
@@ -345,9 +350,10 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const lines = v.all ? all : faceLines(all, faceRoom(v.waiting.length + v.gardener.length));
   const more = v.all ? 0 : all.length - lines.length + v.folded + v.earlierFolded;
   // Each heading carries its own count, and the two add up to the big number.
-  const settle = v.waiting.filter((w) => !held(w)), hold = v.waiting.filter(held);
+  const settle = v.waiting.filter((w) => !held(w) && !onSettings(w)), hold = v.waiting.filter(held), elsewhere = v.waiting.filter(onSettings);
   const asks = group(APP_COPY.settleHead, APP_COPY.settleHint, settle.map((w) => waitingCard(w, csrf)), waitingTotal(settle))
     + group(APP_COPY.heldHead, APP_COPY.heldHint, hold.map((w) => waitingCard(w, csrf)), waitingTotal(hold))
+    + group(APP_COPY.settingsHead, APP_COPY.settingsHint, elsewhere.map((w) => waitingCard(w, csrf)), waitingTotal(elsewhere))
     + (v.gardener.length ? `<h2 class="group">${esc(APP_COPY.gardenerHead)}</h2><ul class="mind">${v.gardener.map((w) => waitingCard(w, csrf, true)).join("")}</ul>` : "");
   const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
   const reply = o.done && o.flash && !o.reply ? `<p class="done" role="status">${DONE}<span>${esc(o.flash)}</span></p>` : replyHtml(csrf, o);

@@ -563,7 +563,10 @@ export async function backfillNameKeys(root: string, since: string, max = NAME_K
 }
 
 // The opening text for one page, with its references, or undefined when no fact may be said.
-export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; rec: FactRecord }[]; said?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
+const FAMILY_ATTRS = new Set(["family", "relationship"]);
+// How many other pages a page's sources tie it to, at most (G624).
+export const TIES = 3;
+export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; attr?: string; rec: FactRecord }[]; said?: string; self?: boolean; ownerPage?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
   const lines: string[] = [], refs: { label: string; text: string }[] = [];
   const seen = new Map<string, Set<string>>(); // page named -> labels of the facts whose source names it
   // Links in a sentence written by the id they resolve to, so every reader resolves them; one some
@@ -572,6 +575,8 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean }[] = [];
   for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     if (NOT_PROSE.test(attr) || isDisputed(f) || o.hidden(`${n.fm.id}#${attr}`)) continue;
+    // The owner's own page says what is true of him, not how he knows himself (G624).
+    if (o.self && attr === "relationship") continue;
     const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)) && r.value !== undefined && r.value !== null && shown(r.value).trim());
     if (!recs.length || recs.some((r) => findSecret(shown(r.value)))) continue;
     // A value a section of the page already says (the Gardener's "Your relationship") isn't said twice.
@@ -591,7 +596,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     facts.push({ attr, vals, labs: [lab], waits });
     if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
     for (const r of recs) for (const s of r.sources ?? []) for (const to of o.names.get(itemOf(refString(s))) ?? [])
-      if (to !== n.fm.id && o.byId.has(to) && !o.blind(to)) seen.set(to, (seen.get(to) ?? new Set()).add(lab));
+      if (to !== n.fm.id && to !== o.ownerPage && o.byId.has(to) && !o.blind(to)) seen.set(to, (seen.get(to) ?? new Set()).add(lab));
   }
   // A person's role and org are one sentence, where the first of them stood, with both their
   // references ("Maya Chen is the design lead at Harbourline Software."); a list or a value
@@ -626,46 +631,50 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // A page the text already links isn't named again in the sources line.
   const linked = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
   for (const id of linked) seen.delete(id);
-  if (seen.size) {
-    const ids = [...seen.keys()].sort((a, b) => String(o.byId.get(a)!.fm.title ?? a).localeCompare(String(o.byId.get(b)!.fm.title ?? b))).slice(0, 8);
-    const links = ids.map((id) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`);
-    const labs = [...new Set(ids.flatMap((id) => [...seen.get(id)!]))];
-    lines.push(`Its sources also name ${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)}` : links[0]}.${labs.map((l) => `[^${l}]`).join("")}`);
+  // Pages its sources tie it to (G624, the owner's page on his phone): none on the owner's own
+  // page, and never the owner's page on another, since every source names him; on any other page
+  // at most TIES in all, each its own sentence, never a run of unrelated pages joined by commas.
+  let ties = TIES;
+  if (o.self) seen.clear();
+  const byTitle = (a: string, b: string) => String(o.byId.get(a)!.fm.title ?? a).localeCompare(String(o.byId.get(b)!.fm.title ?? b));
+  const link = (id: string) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`;
+  if (seen.size && ties) {
+    const ids = [...seen.keys()].sort(byTitle).slice(0, ties);
+    ties -= ids.length;
+    for (const id of ids) lines.push(`Its sources also name ${link(id)}.${[...seen.get(id)!].map((l) => `[^${l}]`).join("")}`);
   }
   // The other way: pages whose facts cite a source that names this one, cited by that fact's
   // sources, so a page named in someone's mail links back to them from the same evidence.
   const shownNow = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
   const by = new Map<string, FactRecord[]>();
-  for (const x of o.namedIn ?? []) if (x.from !== n.fm.id && !shownNow.has(x.from) && o.byId.has(x.from) && !o.blind(x.from)) by.set(x.from, [...(by.get(x.from) ?? []), x.rec]);
-  if (by.size) {
-    const ids = [...by.keys()].sort((a, b) => String(o.byId.get(a)!.fm.title ?? a).localeCompare(String(o.byId.get(b)!.fm.title ?? b))).slice(0, 8);
-    const labs: string[] = [];
+  for (const x of o.self ? [] : o.namedIn ?? []) if (x.from !== n.fm.id && x.from !== o.ownerPage && !shownNow.has(x.from) && o.byId.has(x.from) && !o.blind(x.from)) by.set(x.from, [...(by.get(x.from) ?? []), x.rec]);
+  if (by.size && ties) {
+    const ids = [...by.keys()].sort(byTitle).slice(0, ties);
+    ties -= ids.length;
     for (const id of ids) {
       const text = [...new Set(by.get(id)!.map(reference))].join("; ");
       const lab = `p-in-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
       if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
-      if (!labs.includes(lab)) labs.push(lab);
+      lines.push(`${called} also comes up in the sources of ${link(id)}.[^${lab}]`);
     }
-    const links = ids.map((id) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`);
-    lines.push(`${called} also comes up in the sources of ${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)}` : links[0]}.${labs.map((l) => `[^${l}]`).join("")}`);
   }
   // Pages whose facts link this one (and, on the owner's own page, their decisions and money that
   // nothing else links): "See also", cited by those facts' sources (outside review v5, midday:
   // 25 pages with a lead and no link in).
   const shownYet = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
   const also = new Map<string, FactRecord[]>();
-  for (const x of o.seeAlso ?? []) if (x.from !== n.fm.id && !shownYet.has(x.from) && o.byId.has(x.from) && !o.blind(x.from) && (x.rec.sources ?? []).length) also.set(x.from, [...(also.get(x.from) ?? []), x.rec]);
-  if (also.size) {
-    const ids = [...also.keys()].sort((a, b) => String(o.byId.get(a)!.fm.title ?? a).localeCompare(String(o.byId.get(b)!.fm.title ?? b))).slice(0, 8);
-    const labs: string[] = [];
+  // On the owner's own page only a person whose own fact says how they are related to him (family,
+  // relationship) links back: that is about him, as his mail is not (G624, G546).
+  for (const x of o.seeAlso ?? []) if (x.from !== n.fm.id && (!o.self || (FAMILY_ATTRS.has(x.attr ?? "") && o.byId.get(x.from)?.fm.type === "person")) && !shownYet.has(x.from) && o.byId.has(x.from) && !o.blind(x.from) && (x.rec.sources ?? []).length) also.set(x.from, [...(also.get(x.from) ?? []), x.rec]);
+  if (also.size && ties) {
+    const ids = [...also.keys()].sort(byTitle).slice(0, ties);
+    ties -= ids.length;
     for (const id of ids) {
       const text = [...new Set(also.get(id)!.map(reference))].join("; ");
       const lab = `p-see-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
       if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
-      if (!labs.includes(lab)) labs.push(lab);
+      lines.push(`See also ${link(id)}.[^${lab}]`);
     }
-    const links = ids.map((id) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`);
-    lines.push(`See also ${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)}` : links[0]}.${labs.map((l) => `[^${l}]`).join("")}`);
   }
   if (!lines.length) return undefined;
   return { text: lines.join(" "), refs };
@@ -767,13 +776,14 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
           citing.set(item, [...(citing.get(item) ?? []), { from: p.fm.id, attr, rec }]);
     }
   }
-  for (const xs of citing.values()) {
+  for (const [item, xs] of citing) {
     const ids = new Set(xs.map((x) => x.from));
     if (ids.size < 2 || ids.size > 8) continue; // one item behind many pages is a list or digest, not a tie
-    for (const to of ids) for (const x of xs) if (x.from !== to && !(namedIn.get(to) ?? []).some((y) => y.from === x.from && y.rec === x.rec)) namedIn.set(to, [...(namedIn.get(to) ?? []), x]);
+    // Only a source that names the page ties it (G624): two pages drawn from one receipt or
+    // newsletter are not about each other.
+    for (const to of ids) if ((names.get(item) ?? []).includes(to)) for (const x of xs) if (x.from !== to && !(namedIn.get(to) ?? []).some((y) => y.from === x.from && y.rec === x.rec)) namedIn.set(to, [...(namedIn.get(to) ?? []), x]);
   }
-  // Page -> the facts on other pages whose value links it: it links back ("See also"). The owner's
-  // own page links their decision and money pages that no other page links.
+  // Page -> the facts on other pages whose value links it: it links back ("See also").
   const active = (p: Note) => PAGE_DIRS.has(p.fm.id.split("/")[0]) && p.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(p.fm.status));
   const seeAlso = new Map<string, { from: string; attr: string; rec: FactRecord }[]>();
   const liveRecs = (p: Note) => Object.entries(p.fm.facts ?? {}).filter(([attr, f]) => !NOT_PROSE.test(attr) && !isDisputed(f)).flatMap(([attr, f]) => records(f).filter(live).filter((r) => !r.share_with && r.value !== undefined && r.value !== null).map((rec) => ({ attr, rec })));
@@ -785,14 +795,9 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
       for (const to of tos) if (to && to !== p.fm.id && byId.has(to)) seeAlso.set(to, [...(seeAlso.get(to) ?? []), { from: p.fm.id, attr, rec }]);
     }
   }
+  // The owner's own page lists no other pages (G624): every source names him, so a list there is
+  // whatever mail came in, not what is true of him.
   const self = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
-  if (self && byId.has(self)) {
-    const into = new Set<string>();
-    for (const p of notes) if (p.fm.id !== self && active(p)) for (const m of p.body.matchAll(/\[\[([^\]|]+)/g)) { const id = resolve(m[1].trim()); if (id) into.add(id); }
-    for (const [to] of seeAlso) into.add(to);
-    for (const q of notes) if (["decision", "money"].includes(String(q.fm.type)) && active(q) && !into.has(q.fm.id) && !(seeAlso.get(self) ?? []).some((x) => x.from === q.fm.id))
-      for (const { attr, rec } of liveRecs(q).slice(0, 3)) seeAlso.set(self, [...(seeAlso.get(self) ?? []), { from: q.fm.id, attr, rec }]);
-  }
   for (const p of [...pages]) for (const [id, xs] of seeAlso) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && active(q)) { pages.push(q); via.add(q.path); } }
   // A page named by a touched page's sources is written again with it.
   for (const p of [...pages]) for (const [id, xs] of namedIn) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && PAGE_DIRS.has(id.split("/")[0]) && q.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(q.fm.status))) { pages.push(q); via.add(q.path); } }
@@ -812,7 +817,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     // one the writer moved there before is Earlier notes too.
     const f = footnotes(n.body), secs = sections(f.text);
     const said = plainWords(secs.filter((x) => x.heading !== undefined && !OLD_HEADS.has(x.heading) && x.heading !== EARLIER && x.heading !== YOURS).map((x) => x.text).join("\n"));
-    const lead = pageLead(n, { hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
+    const lead = pageLead(n, { hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
     if (!lead) {
       // Nothing left to say (an Undo took the last fact out): the writer's own opening goes with its
       // references, so the page never keeps stating a value it no longer holds (UI thread, 2026-10-27).

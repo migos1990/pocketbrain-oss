@@ -102,7 +102,7 @@ test("G598: north star counts a not_in_your_view handback that contradicts nothi
   expect(m.asks).toBe(1);
   expect(m.asks_by_kind.held_by_access).toBe(1);
   expect(m.not_conflict).toBe(1);
-  expect(m.home_asks).toBe(0);
+  expect(m.home_asks).toBe(1); // its card on the home counts what waits on Settings (G626)
   expect(counts(m).held_by_access).toBe(1);
 }, 60_000);
 

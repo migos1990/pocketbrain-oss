@@ -642,6 +642,23 @@ const pullCases: Case[] = [
     const own = made === wiki.MADE && !(lead ?? "").includes(wiki.MADE);
     return ok(merged && first && own, `one sentence for role and org ${merged}; first name and no year ${first}; made-by line apart ${own}`);
   } },
+  { id: "wiki-owner-page-no-glued-sources", dimension: "upkeep", gap: "G624", title: "the owner's own page says only its facts (no how-you-know, no sources line, no See also), and two pages drawn from one receipt aren't tied to each other", source: "Louis 2026-11-01 (his page glued a physio, Bell and a flight together)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.TIES) return na("no tie rules at this commit");
+    const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `owner: { name: Robin Vale }\n${readFileSync(f, "utf8")}`); });
+    const rec = (v: string, ref: string) => `{ value: ${v}, as_of: 2026-10-05, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }`;
+    const page = (slug: string, title: string, facts: string, area = "work") => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-05\nupdated: 2026-10-05\nby: planner\nfacts:\n${facts}---\n`);
+    page("robin-vale", "Robin Vale", `  city: ${rec("Halifax", "gmail:f0000000000000e1")}\n  relationship: ${rec("customer of Best Buy Canada", "gmail:f0000000000000e2")}\n`, "personal");
+    page("kim-roux", "Kim Roux", `  role: ${rec("physiotherapist", "gmail:f0000000000000e3")}\n`);
+    page("lee-park", "Lee Park", `  role: ${rec("store clerk", "gmail:f0000000000000e3")}\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: pages"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const text = (slug: string) => readFileSync(join(root, "people", `${slug}.md`), "utf8").split(/^---$/m).slice(2).join("---");
+    const own = text("robin-vale"), kim = text("kim-roux");
+    const facts = own.includes("Halifax") && !/How you know|Best Buy|comes up in|See also|Its sources also name/.test(own);
+    const apart = !kim.includes("Lee Park") && !text("lee-park").includes("Kim Roux");
+    return ok(facts && apart, `owner's page says only its facts ${facts}; one receipt doesn't tie two pages ${apart}`);
+  } },
   { id: "src-recheck-weak-read-first", dimension: "upkeep", title: "a capped recheck reads first the source behind a weak, single-source fact assistants read, not the well-backed or unread ones", source: "backlog 310", run: async () => {
     if (!pb.pull?.recheckCandidates) return na("no recheck priority at this commit");
     const rec = (v: string, as_of: string, refs: string[], ver: string) => `{ value: ${v}, as_of: ${as_of}, sources: [${refs.map((r) => `"${r}"`).join(", ")}], verification: ${ver}, by: planner }`;

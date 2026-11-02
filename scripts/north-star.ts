@@ -7,7 +7,10 @@
 //                  hub files on its own, src/filing.ts autoSaves). One counted list (audit v10,
 //                  2026-11-01): an item held by a rule (held_by_access, held_by_capture,
 //                  held_by_ambiguity below) still waits for the owner, so it is an ask; those lines
-//                  only say why. An assistant's proposal held until a day (assistant_held) or left to
+//                  only say why. Each value the serving hold keeps until the owner taps Show it
+//                  is an ask too (held_by_serving; G626, the owner's "i trust u" of 2026-11-02
+//                  00:18Z and the coordinator's pick, as G618). The list is src/waiting.ts
+//                  ownerAsks, the one the home counts. An assistant's proposal held until a day (assistant_held) or left to
 //                  expire (assistant_expiring) leaves on its own, so it is not.
 // What it counts is the owner's to change: a change to what this file counts as an ask, as a
 // page that passes, or to what makes it pass needs the owner's own typed word in a thread, never a
@@ -23,8 +26,9 @@
 // why (a "Why:" line in the message), and how many of them the Gardener made; and of the pages that
 // pass, how many have prose beyond the hub's text and how many show a source's words.
 //   home_asks      what the owner's home screen counts as waiting (waitingCount in
-//                  src/dashboard/home.ts: conflicts, held values, held mail), its own number. The
-//                  rest wait on Settings (/overview). home_asked lists the home's conflicts by fact.
+//                  src/dashboard/home.ts: conflicts, held values, held mail, and one card that
+//                  counts what waits on Settings), the same list as asks (G626). home_asked lists
+//                  the home's conflicts by fact.
 //   assistant_held a core assistant's own proposals held until a day (src/filing.ts
 //                  the owner's hold_assistants_until), when they file; and assistant_expiring, an outside
 //                  assistant's that expire unconfirmed. Queues with a day, not asks: printed apart
@@ -63,22 +67,15 @@ import { loadBrain, linksIn, slugify, isDisputed, isList, CONTENT_DIRS, type Not
 import { footnotes, refsIn, MADE } from "../src/wiki";
 import { makeModel, type ModelRequest } from "../src/model";
 import { pullSource } from "../src/pull";
-import { autoSaves, runAuto, newQueues, heldByAccess } from "../src/filing";
-import { openItems } from "../src/textline/items";
-import { heldCount } from "../src/capture";
+import { runAuto } from "../src/filing";
 import { loadRules, isGardener } from "../src/rules";
 import { ownerSay } from "../src/owner-say";
 import { ownerConflicts } from "../src/core";
-import { inboxConflicts } from "../src/settle-inbox";
 import { loadState, type State } from "../src/dashboard/data";
 import { ownerPage } from "../src/dashboard/html-page";
 import { waitingCount } from "../src/dashboard/home";
+import { ownerAsks, changesHeld } from "../src/waiting";
 import YAML from "yaml";
-
-const DECISIONS = new Set(["dispute", "proposal", "held-answer"]);
-// What else waits for the owner's word, never a contradiction: held mail and captures, an upkeep
-// finding, a rules change, an account notice (the old deck's other cards, now on Settings).
-const OTHER_ASKS = new Set(["mail", "capture", "upkeep", "rules", "usage"]);
 
 export interface WhyCounts { commits: number; with_why: number; gardener: number; gardener_why: number }
 export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; held_by_ambiguity: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean }
@@ -134,14 +131,6 @@ function askedKey(root: string, i: { kind: string; ref: string }): string {
   return i.ref;
 }
 
-function notInView(root: string, file: string): boolean {
-  try { return heldByAccess((YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { reason?: unknown }).reason); } catch { return false; }
-}
-
-function changesHeld(root: string, file: string): boolean {
-  try { return /\bchanges \S+ from\b/.test(String((YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { reason?: unknown }).reason ?? "")); } catch { return false; }
-}
-
 // Pages whose file changed in commits since `since` (git, paths only).
 export function touchedSince(root: string, since: string): Set<string> {
   const r = Bun.spawnSync(["git", "-C", root, "log", `--since=${since}`, "--name-only", "--format="], { stdout: "pipe", stderr: "pipe" });
@@ -173,42 +162,26 @@ export function measure(root: string, since: string, now: Date, planted = 0): No
   const state = linkedProse.length ? loadState(root, now) : undefined;
   const okPages = linkedProse.filter((n) => proseBeyondHub(n) || quotesSource(state!, n));
   const ok = okPages.length;
-  // Every open decision (a conflict, a proposal the hub won't file on its own, a relayed answer).
+  // Every item that waits on the owner, one counted list with the home (src/waiting.ts, G626): open
+  // decisions the hub won't file on its own, the other cards that ask, captures held past their day,
+  // and each value the serving hold keeps for Show it (held_by_serving).
   const later = new Date(now.getTime() + 36 * 3_600_000);
-  const items = openItems(root, later);
-  const queues = newQueues();
-  const saves = autoSaves(root, now, undefined, queues); // at the end of the week: a save that keeps failing is an ask, not a plan
-  // A proposal the home lists as a conflict (its value differs from the fact's live value) is one
-  // too, whatever its reason says: the write's hidden-fact handback reads "(not_in_your_view)" (G598).
-  const homeConflicts = new Set(inboxConflicts(root).map((c) => c.file));
-  // A handback the write held because its assistant can't see all of the page (invariant 3) that
-  // contradicts nothing: the access rule working, not a filing failure. It waits on Settings, never
-  // on the home. It is an ask like any other wait, and its own line says why (G598; one list, audit v10).
-  const byAccess = new Set(items.filter((i) => i.kind === "proposal" && !homeConflicts.has(i.ref) && !changesHeld(root, i.ref) && notInView(root, i.ref)).map((i) => i.ref));
-  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref))));
-  // Each ask under its kind; a proposal held by a rule under that rule's name, so the breakdown says why.
-  const heldBy = (ref: string) => byAccess.has(ref) ? "held_by_access" : queues.byCapture.has(ref) ? "held_by_capture" : queues.byAmbiguity.has(ref) ? "held_by_ambiguity" : undefined;
-  const by: Record<string, number> = {};
-  for (const i of waiting) { const k = (i.kind === "proposal" && heldBy(i.ref)) || i.kind; by[k] = (by[k] ?? 0) + 1; }
+  const own = ownerAsks(root, now, later);
+  const { by, waiting, queues, homeConflicts } = own;
   const asked = waiting.map((i) => askedKey(root, i));
   // Asks that aren't about a contradiction: a proposal counts as one only when it changes a value
   // the brain holds (its reason says "changes <attribute> from", or the home lists it as a
   // conflict); every other card kind doesn't.
   const changes = waiting.filter((i) => i.kind === "dispute" || (i.kind === "proposal" && (changesHeld(root, i.ref) || homeConflicts.has(i.ref)))).length;
-  for (const i of items) if (OTHER_ASKS.has(i.kind)) by[i.kind] = (by[i.kind] ?? 0) + 1;
   // An assistant's own proposals: held until their day, or left to expire (outside review v5,
   // midday: a label with no date left 6 as asks forever). Queues, so never in asks; their own line.
   const assistant_held = queues.held.size, assistant_expiring = queues.expiring.size;
-  // A new note held past its day waits like an ask until it files; today's overflow files on the
-  // next day's pull (capture.ts releaseHeldDaily), a queue, not an ask.
-  const held = heldCount(root, { stuck: true });
-  if (held) by.held = held;
   const asks = Object.values(by).reduce((a, b) => a + b, 0);
   const share = pages.length ? ok / pages.length : 0;
   // What the phone UI's home lists (the only screen that asks): its own count of what waits
   // (conflicts, held values, held mail), and its conflicts by fact.
   const home_asked = ownerConflicts(root, later, { held: true }).map((c) => `${c.page}#${c.attr}`);
-  const home_asks = waitingCount(root, later);
+  const home_asks = waitingCount(root, later, own);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
   return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };

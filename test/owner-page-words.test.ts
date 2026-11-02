@@ -37,7 +37,8 @@ test("a page's text keeps its paragraphs, its line breaks and its headings", () 
 
 test("a source's words fold under a reference that says it opens", () => pinned(async () => {
   const { get } = await setup();
-  const page = await get("/p/people/robin-lefebvre");
+  // Maya's page cites mail: the owner's own page cites only his own notes since G624.
+  const page = await get("/p/people/maya-chen");
   expect(page).toContain('<details class="quote"><summary>');
   expect(page).not.toMatch(/<blockquote>\s*<\/blockquote>/);
   expect(PAGE_CSS).toMatch(/details\.quote summary::before\{content:"\+"/);

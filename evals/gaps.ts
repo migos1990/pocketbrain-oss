@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G626: {
+    closed: "f0241ad2",
+    title: "The home's number and the north star's asks counted two lists that shared one item",
+    severity: "medium",
+    finding: "The Mac at c1404d28 (2026-11-02): the home said 12 (1 to settle, 11 held values) and the north star counted 10 asks (1 conflict, 9 waiting on Settings). Held values weren't asks, and what waited on Settings never reached the home, so neither number said what waited on the owner.",
+    fix: "src/waiting.ts ownerAsks: one list of what waits on a tap from the owner, held values included (held_by_serving). scripts/north-star.ts measure counts it; src/dashboard/home.ts waitingCount counts the same list, with one card under Needs a look in Settings for what the home doesn't list itself (settingsWords). The owner's \"i trust u\" of 2026-11-02 00:18Z and the coordinator's pick of option 1. Test: test/home-equals-asks.test.ts.",
+  },
   G625: {
     closed: "7e6852e1",
     title: "The home's number counted cards, not things, and asks, held values and a done notice looked alike",
@@ -3676,6 +3683,13 @@ export const GAPS: Record<string, Gap> = {
     severity: "high",
     finding: "Audit v10 2026-11-01: three commits that day (G598 63d913b, G600 4778190, G603 9686cc7) took proposals held by access, by the capture rule and by ambiguity out of asks on a coordinator's call the owner never made, so the measure passed while items waited for the owner; home_asks counted ownerConflicts only while the home (waitingCount) also counted held values and held mail. The audit asked that changes to the test need the owner's sign-off.",
     fix: "scripts/north-star.ts: one counted list (the owner left the choice to the coordinator, which chose it): every held item counts in asks under its own kind (held_by_access, held_by_capture, held_by_ambiguity), the held lines stay as the breakdown, and home_asks is the home's waitingCount; the definition says a change to what it counts needs the owner's own typed word in a thread. Tests: test/north-star-one-list.test.ts, test/ambiguous-name.test.ts, test/filing-twins.test.ts, test/import-files-rest.test.ts.",
+  },
+  G624: {
+    closed: "bae4c40f",
+    title: "The owner's own page glued unrelated mail into one paragraph",
+    severity: "medium",
+    finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
+    fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
   G622: {
     closed: "542fd79",

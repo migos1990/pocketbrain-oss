@@ -3,6 +3,7 @@
 // the owner (only real conflicts so far), and the diary of what the brain learned, newest day first,
 // each line with Undo. Built from diary/*.jsonl (src/diary.ts), never from git log. The page itself is
 // html-home.ts; the words are the owner's (test/owner-copy.test.ts).
+import { ownerAsks, type OwnerAsks } from "../waiting";
 import { dateWordForms } from "../util";
 import type { Note } from "../brain";
 import { isDisputed, sensitivityRank, loadBrain, type Sensitivity } from "../brain";
@@ -24,6 +25,8 @@ import type { WrongLine } from "./home-beliefs";
 import { ownerDay, clock } from "../clock";
 import { sensitiveShape, sensitiveName } from "../shape";
 import type { Mark } from "./marks";
+// Settings, where what the home doesn't list itself waits (the dashboard's overview).
+export const SETTINGS_HREF = "/overview";
 
 export interface HomeLine {
   token: string;
@@ -379,7 +382,7 @@ function foldKept(rows: DiaryRow[]): (DiaryRow & { count?: number })[] {
 
 // Real conflicts the owner settles: open ones the Gardener is not still weighing (core.ts). Those it
 // still weighs are listed apart, quietly, and open the same settle screen.
-function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[]; gardener: Waiting[] } {
+function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(root, now)): { waiting: Waiting[]; gardener: Waiting[] } {
   const open = ownerConflicts(root, now, { held: true });
   const rules = loadRules(root);
   const notes = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n]));
@@ -437,7 +440,9 @@ function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[
   const inbox = inboxConflicts(root).map((c) => line(c, "tap to settle"));
   // A message the relay held between two assistants: send it or not, on its own settle screen.
   const mail = comms(root).filter((m) => m.verdict === "held").map((m) => ({ what: `${cap(agentLabel(rules, m.from))}'s message to ${agentLabel(rules, m.to)} is held.`, verb: "tap to decide", href: `/settle/m-${m.id}` }));
-  return { waiting: [...open.filter((c) => !c.held).map((c) => line(c, "tap to settle")), ...inbox, ...mail, ...shown], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
+  // What waits on Settings (src/waiting.ts): one card that counts it and links there (G626).
+  const settings: Waiting[] = asks.settings > 0 ? [{ n: asks.settings, what: settingsWords(asks), verb: "on Settings", href: SETTINGS_HREF }] : [];
+  return { waiting: [...open.filter((c) => !c.held).map((c) => line(c, "tap to settle")), ...inbox, ...mail, ...shown, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
 
 // How many things the home lists as waiting on the owner: the one count the digest and the text
@@ -445,8 +450,30 @@ function conflicts(root: string, now: Date, expand = false): { waiting: Waiting[
 // Each thing counts once (G625): a card that holds several held values counts each of them, so the
 // home's big number, the digest and the north star say the same number.
 export const waitingTotal = (ws: Waiting[]) => ws.reduce((a, w) => a + (w.n ?? 1), 0);
-export function waitingCount(root: string, now = new Date()): number {
-  return waitingTotal(conflicts(root, now, true).waiting);
+// What waits on Settings, by kind, in the owner's words: "4 names that fit two pages; 5 changes an
+// assistant couldn't see the whole page for". Kinds the home lists itself aren't here.
+const SETTINGS_KINDS: [string, string, string][] = [
+  ["held_by_ambiguity", "name that fits two pages", "names that fit two pages"],
+  ["held_by_access", "change an assistant couldn't see the whole page for", "changes an assistant couldn't see the whole page for"],
+  ["held_by_capture", "note about a person to check", "notes about people to check"],
+  ["held-answer", "answer to check", "answers to check"],
+  ["capture", "capture to check", "captures to check"],
+  ["held", "capture held past its day", "captures held past their day"],
+  ["upkeep", "upkeep finding", "upkeep findings"],
+  ["rules", "rules change", "rules changes"],
+  ["usage", "spending notice", "spending notices"],
+];
+export function settingsWords(a: Pick<OwnerAsks, "by" | "settings">): string {
+  const parts = SETTINGS_KINDS.filter(([k]) => (a.by[k] ?? 0) > 0).map(([k, one, many]) => `${a.by[k]} ${a.by[k] === 1 ? one : many}`);
+  const named = SETTINGS_KINDS.reduce((n, [k]) => n + (a.by[k] ?? 0), 0);
+  const rest = a.settings - named; // proposals that change nothing the home lists: "something to check"
+  if (rest > 0) parts.push(`${rest} ${rest === 1 ? "change to check" : "changes to check"}`);
+  return `${cap(parts.join("; "))}.`;
+}
+
+// The north star passes its own asks, read at its own time, so the two count one list (G626).
+export function waitingCount(root: string, now = new Date(), asks?: OwnerAsks): number {
+  return waitingTotal(conflicts(root, now, true, asks ?? ownerAsks(root, now)).waiting);
 }
 
 // One page's diary lines, newest first (the page screen's Changed list).

@@ -45,36 +45,36 @@
         - cell "ChatGPT"
         - cell "· loaded its notes \"Mom's move\""
         - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Valérie Roy"
-      - row "70 min ago Claude · loaded its notes \"Product Discovery course\" · Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie":
+      - row "70 min ago Claude · loaded its notes \"Product Discovery course\" · Product Discovery course, Claire Dubois, Antoine Lavoie, Isabelle Roy":
         - cell "70 min ago"
         - cell "Claude"
         - cell "· loaded its notes \"Product Discovery course\""
-        - cell "· Product Discovery course, Claire Dubois, Laila Haddad, Antoine Lavoie"
+        - cell "· Product Discovery course, Claire Dubois, Antoine Lavoie, Isabelle Roy"
       - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Kitchen renovation\""
         - cell "· Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent"
-      - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software":
+      - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
-        - cell "· Grace Liu, Karen Liu, Harbourline Software"
+        - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis"
       - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
         - cell "· Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah"
-      - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch":
+      - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch, Harbourline Software":
         - cell "3 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Maya Chen\""
-        - cell "· Maya Chen, Senior designer hire, Atlas launch"
-      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Robin Lefebvre":
+        - cell "· Maya Chen, Senior designer hire, Atlas launch, Harbourline Software"
+      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Sofia Marquez, Maya Chen":
         - cell "3 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Atlas launch\""
-        - cell "· Atlas launch, Atlas beta scope, Robin Lefebvre"
+        - cell "· Atlas launch, Atlas beta scope, Sofia Marquez, Maya Chen"
       - row "7 h ago gardener · open disputes · Atlas launch, Grace Liu, Kitchen renovation":
         - cell "7 h ago"
         - cell "gardener"
@@ -95,11 +95,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Priya Shah\""
         - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman"
-      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre":
+      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Jordan Ellis, Valérie Roy +2":
         - cell "2 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Mom's move\""
-        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre"
+        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Jordan Ellis, Valérie Roy +2"
       - row "3 days ago Gemini · loaded its notes \"Product Discovery course\"":
         - cell "3 days ago"
         - cell "Gemini"
@@ -114,11 +114,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
         - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre"
-      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Robin Lefebvre, Julie Tran, Kenji Watanabe":
+      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
         - cell "3 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Robin Lefebvre, Julie Tran, Kenji Watanabe"
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
       - row "6 days ago ChatGPT · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Harbourline Software +1":
         - cell "6 days ago"
         - cell "ChatGPT"
