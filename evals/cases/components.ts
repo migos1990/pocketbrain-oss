@@ -659,6 +659,23 @@ const pullCases: Case[] = [
     const apart = !kim.includes("Lee Park") && !text("lee-park").includes("Kim Roux");
     return ok(facts && apart, `owner's page says only its facts ${facts}; one receipt doesn't tie two pages ${apart}`);
   } },
+  { id: "wiki-owner-page-rewritten-untouched", dimension: "upkeep", gap: "G627", title: "the night writer rewrites the owner's own page even when nothing touched it in its window, so an old lead doesn't outlive a rule change", source: "Mac 2026-11-02 (G624 live, his page still said how you know)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.TIES) return na("no tie rules at this commit");
+    const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `owner: { name: Robin Vale }\n${readFileSync(f, "utf8")}`); });
+    const OLD = "2026-10-01T12:00:00Z";
+    const git = (name: string, ...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: `${name}@pocketbrain.local`, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: `${name}@pocketbrain.local`, GIT_AUTHOR_DATE: OLD, GIT_COMMITTER_DATE: OLD } });
+    const rec = (v: string, ref: string) => `{ value: ${v}, as_of: 2026-09-05, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: 2026-09-05 }`;
+    const file = join(root, "people", "robin-vale.md");
+    writeFileSync(file, `---\nid: people/robin-vale\ntype: person\ntitle: Robin Vale\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-09-01\nupdated: 2026-09-05\nby: planner\nfacts:\n  city: ${rec("Halifax", "gmail:f0000000000000f1")}\n  relationship: ${rec("customer of Best Buy Canada", "gmail:f0000000000000f2")}\n---\n`);
+    git("planner", "add", "-A"); git("planner", "commit", "-qm", "planner: his page");
+    writeFileSync(file, readFileSync(file, "utf8") + "Robin Vale's city is Halifax.[^pf-city] How you know Robin Vale: customer of Best Buy Canada.[^pf-relationship]\n\n(Written by the hub from this page's facts.)\n\n[^pf-city]: Email, 2026-09-05 (gmail:f0000000000000f1)\n[^pf-relationship]: Email, 2026-09-05 (gmail:f0000000000000f2)\n");
+    git("hub", "add", "-A"); git("hub", "commit", "-qm", "hub: page text for 1 page");
+    wiki.renderTouchedPages(root, new Date(Date.now() - 26 * 3_600_000).toISOString());
+    const own = readFileSync(file, "utf8").split(/^---$/m).slice(2).join("---");
+    const fresh = own.includes("Halifax") && !/How you know|Best Buy/.test(own);
+    return ok(fresh, `owner's untouched page rewritten under today's rules ${fresh}`);
+  } },
   { id: "src-recheck-weak-read-first", dimension: "upkeep", title: "a capped recheck reads first the source behind a weak, single-source fact assistants read, not the well-backed or unread ones", source: "backlog 310", run: async () => {
     if (!pb.pull?.recheckCandidates) return na("no recheck priority at this commit");
     const rec = (v: string, as_of: string, refs: string[], ver: string) => `{ value: ${v}, as_of: ${as_of}, sources: [${refs.map((r) => `"${r}"`).join(", ")}], verification: ${ver}, by: planner }`;

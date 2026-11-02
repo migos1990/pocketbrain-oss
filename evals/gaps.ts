@@ -3691,6 +3691,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
+  G627: {
+    closed: "ce9b1635",
+    title: "The owner's page kept its old text after a rule change",
+    severity: "medium",
+    finding: "Mac, 2026-11-02, with G624 live: the owner's own page still opened with \"How you know …\", stored by the writer before G624. The night writer only rewrites pages with a commit in its 26-hour window, and nothing had touched his page, so a rule change never reached the one page he reads most.",
+    fix: "renderTouchedPages (src/wiki.ts) always writes the owner's own page with the touched ones; text that comes out the same is not written, so an unchanged night costs nothing. Other old pages still heal only when touched. Test: test/owner-page-stale.test.ts. Eval: wiki-owner-page-rewritten-untouched.",
+  },
   G622: {
     closed: "542fd79",
     title: "A proposal filed by name that contradicted its page waited on Settings, not the settle screen",

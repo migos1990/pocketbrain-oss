@@ -523,9 +523,9 @@ function namesBySource(root: string, notes: Note[], owner: string): Map<string, 
 }
 
 // The pages a commit since `since` touched that the page writer writes.
-function touchedPages(root: string, notes: Note[], since: string): Note[] {
+function touchedPages(root: string, notes: Note[], since: string, always?: string): Note[] {
   const touched = new Set(git(root, ["log", `--since=${since}`, "--name-only", "--format="]).split("\n").filter((p) => p.endsWith(".md")));
-  return notes.filter((n) => touched.has(n.path) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
+  return notes.filter((n) => (touched.has(n.path) || n.fm.id === always) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
 }
 
 export const NAME_KEYS_PER_NIGHT = 20;
@@ -730,7 +730,11 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
   const rules = loadRules(root);
   const notes = loadBrain(root);
   const byId = new Map(notes.map((n) => [n.fm.id, n]));
-  const pages = touchedPages(root, notes, since);
+  // The owner's own page lists no other pages (G624): every source names him, so a list there is
+  // whatever mail came in, not what is true of him. It is written every run, touched or not (G627),
+  // so a rule change reaches it the next night; text that comes out the same is not written.
+  const self = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
+  const pages = touchedPages(root, notes, since, self);
   if (!pages.length) return { written: [], kept: [] };
   const views = Object.keys(rules.policy.agents ?? {}).flatMap((agent) => { try { return [carve(notes, rules, grantFor(rules, agent), { flags: false })]; } catch { return []; } });
   const names = namesBySource(root, notes, ownerName(rules));
@@ -795,9 +799,6 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
       for (const to of tos) if (to && to !== p.fm.id && byId.has(to)) seeAlso.set(to, [...(seeAlso.get(to) ?? []), { from: p.fm.id, attr, rec }]);
     }
   }
-  // The owner's own page lists no other pages (G624): every source names him, so a list there is
-  // whatever mail came in, not what is true of him.
-  const self = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
   for (const p of [...pages]) for (const [id, xs] of seeAlso) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && active(q)) { pages.push(q); via.add(q.path); } }
   // A page named by a touched page's sources is written again with it.
   for (const p of [...pages]) for (const [id, xs] of namedIn) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && PAGE_DIRS.has(id.split("/")[0]) && q.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(q.fm.status))) { pages.push(q); via.add(q.path); } }
