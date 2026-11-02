@@ -2,7 +2,7 @@
 // The pocketBrain phone app (docs/phone-app.md): the hub's own owner pages, full screen, plus
 // pairing and Face ID. One web UI for browser and app; the app adds only what a browser can't.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppState, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Linking from "expo-linking";
 import * as SecureStore from "expo-secure-store";
@@ -12,11 +12,14 @@ import { parsePairLink } from "./src/pair";
 import { pair, fresh } from "./src/hub";
 import { inject } from "./src/inject";
 import { Mark } from "./src/Mark";
+import { PairScreen } from "./src/PairScreen";
+import { Trouble } from "./src/Trouble";
+import { pageStep, START, type PageEvent } from "./src/page";
 import { MARK } from "./src/logo";
 
 const HUB = "pb.hub";       // the hub's https address, not secret
 const KEY = "pb.device";    // the device key, readable only after Face ID
-const INK = { paper: "#EEEDE8", ink: "#121212", blue: "#0078BF", pink: "#FF48B0" };
+const INK = { paper: "#EEEDE8", ink: "#121212", pink: "#FF48B0" };
 
 async function saveKey(device: string) {
   await SecureStore.setItemAsync(KEY, device, { requireAuthentication: true, authenticationPrompt: "Unlock pocketBrain", keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY });
@@ -30,12 +33,24 @@ export default function App() {
   const [hub, setHub] = useState<string | null | undefined>(undefined);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState("");
   const web = useRef<WebView>(null);
   // Face ID off for this run of the page script: cancelled, or a fresh sign-in that didn't stick
   // (the page asked again within a minute), so the app never loops on Face ID.
   const [faceId, setFaceId] = useState(true);
   const lastFresh = useRef(0);
+  // The page in the web view, so a dropped or failed page never leaves a blank screen (src/page.ts).
+  const page = useRef(START);
+  const [phase, setPhase] = useState(START.phase);
+  const [load, setLoad] = useState(0); // bumped to load the page again in a fresh web view
+  const step = useCallback((e: PageEvent) => {
+    const r = pageStep(page.current, e);
+    page.current = r.state; setPhase(r.state.phase);
+    if (r.reload) setLoad((n) => n + 1);
+  }, []);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (st) => step(st === "active" ? { kind: "foreground", at: Date.now() } : { kind: "background", at: Date.now() }));
+    return () => sub.remove();
+  }, [step]);
 
   useEffect(() => { SecureStore.getItemAsync(HUB).then(setHub); }, []);
 
@@ -74,31 +89,21 @@ export default function App() {
   if (hub) return (
     <SafeAreaView style={s.page}>
       <StatusBar barStyle="dark-content" />
-      <WebView ref={web} source={{ uri: `${hub}/` }} key={faceId ? "faceid" : "plain"} injectedJavaScript={inject(faceId)} onMessage={(e) => { if (e.nativeEvent.data === "fresh") onFresh(); }}
+      <WebView ref={web} source={{ uri: `${hub}/` }} key={`${faceId ? "faceid" : "plain"}-${load}`} injectedJavaScript={inject(faceId)}
+        onMessage={(e) => { const m = e.nativeEvent.data; if (m === "fresh") onFresh(); else if (m === "ready" || m === "blank") step({ kind: "loaded", blank: m === "blank" }); }}
+        onError={() => step({ kind: "error" })} onHttpError={(e) => step({ kind: "http", status: e.nativeEvent.statusCode })}
+        onContentProcessDidTerminate={() => step({ kind: "gone" })} onRenderProcessGone={() => step({ kind: "gone" })}
         sharedCookiesEnabled thirdPartyCookiesEnabled={false} allowsBackForwardNavigationGestures pullToRefreshEnabled
         originWhitelist={[hub]} setSupportMultipleWindows={false} startInLoadingState renderLoading={() => opening} style={s.page} />
+      {phase === "failed" ? <Trouble onRetry={() => step({ kind: "retry" })} /> : null}
       {msg ? <Text style={s.note}>{msg}</Text> : null}
     </SafeAreaView>
   );
-  return (
-    <SafeAreaView style={[s.page, s.pad]}>
-      <Text style={s.h1}>Pair this phone</Text>
-      <Text style={s.p}>On your hub, run pocketbrain dashboard phone-link, or tap Text me a sign-in link on its page. Open the link and tap Open in the pocketBrain app. Or paste the link here.</Text>
-      <TextInput style={s.input} value={link} onChangeText={setLink} placeholder="https://…/login?key=…" autoCapitalize="none" autoCorrect={false} />
-      <Pressable style={s.go} disabled={busy} onPress={() => doPair(link)}><Text style={s.goText}>{busy ? "Pairing…" : "Pair"}</Text></Pressable>
-      {msg ? <Text style={s.p}>{msg}</Text> : null}
-    </SafeAreaView>
-  );
+  return <PairScreen busy={busy} msg={msg} onPair={doPair} />;
 }
 
 const s = StyleSheet.create({
   opening: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: MARK.night },
   page: { flex: 1, backgroundColor: INK.paper },
-  pad: { padding: 24, gap: 16 },
-  h1: { fontSize: 28, fontWeight: "700", color: INK.ink },
-  p: { fontSize: 16, lineHeight: 22, color: INK.ink },
-  input: { borderWidth: 1, borderColor: INK.ink, padding: 12, fontSize: 16, color: INK.ink },
-  go: { backgroundColor: INK.blue, padding: 14, alignItems: "center" },
-  goText: { color: "#fff", fontSize: 17, fontWeight: "600" },
   note: { padding: 12, color: INK.ink, backgroundColor: INK.pink },
 });

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "expo": "~54.0.33",
+    "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.14",
     "expo-device": "~8.0.10",
     "expo-linking": "~8.0.11",

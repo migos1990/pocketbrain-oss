@@ -13,9 +13,19 @@ test("a phone link: the app button's and the texted one, https only, whole key o
   expect(parsePairLink(`pocketbrain://pair?hub=${encodeURIComponent(HUB)}&key=${K}`)).toEqual({ hub: HUB, key: K });
   expect(parsePairLink(`  ${HUB}/login?key=${K}\n`)).toEqual({ hub: HUB, key: K });
   expect(parsePairLink(`pocketbrain://pair?hub=${encodeURIComponent(`${HUB}/evil/path`)}&key=${K}`)).toEqual({ hub: HUB, key: K }); // origin only
-  for (const bad of [`http://mini.tail1234.ts.net:8788/login?key=${K}`, `${HUB}/login?key=short`, `${HUB}/home?key=${K}`, "hello", `pocketbrain://pair?key=${K}`, `pocketbrain://pair?hub=javascript:alert(1)&key=${K}`])
+  for (const bad of [`http://100.88.1.2:8788/login?key=${K}`, `http://hub.example.com/login?key=${K}`, `${HUB}/login?key=short`, `${HUB}/home?key=${K}`, "hello", `pocketbrain://pair?key=${K}`, `pocketbrain://pair?hub=javascript:alert(1)&key=${K}`])
     expect("error" in parsePairLink(bad)).toBe(true);
-  expect((parsePairLink(`http://mini.tail1234.ts.net:8788/login?key=${K}`) as { error: string }).error).toContain("https");
+  expect((parsePairLink(`http://100.88.1.2:8788/login?key=${K}`) as { error: string }).error).toContain("https");
+});
+
+test("the pair screen takes what the owner pastes: a tailnet name's plain link goes to its https door, and a whole text message gives up its link", () => {
+  // The Terminal's old link (2026-11-02): the tailnet listener's http address. Its name has an
+  // https door on 8443 (tailscale serve), so the app pairs there; an address without a name can't.
+  expect(parsePairLink(`http://mini.tail1234.ts.net:8788/login?key=${K}`)).toEqual({ hub: HUB, key: K });
+  expect(parsePairLink(`pocketbrain://pair?hub=${encodeURIComponent("http://mini.tail1234.ts.net:8788")}&key=${K}`)).toEqual({ hub: HUB, key: K });
+  // The texted sign-in message pasted whole.
+  expect(parsePairLink(`pocketBrain sign-in link for your phone (works once, for a day): ${HUB}/login?key=${K}`)).toEqual({ hub: HUB, key: K });
+  expect(parsePairLink(`open on your phone or paste in the pocketBrain app (works once, for a day): ${HUB}/login?key=${K}.`)).toEqual({ hub: HUB, key: K });
 });
 
 const answer = (status: number, body: unknown) => async () => ({ status, json: async () => body, text: async () => typeof body === "string" ? body : JSON.stringify(body) });
@@ -39,7 +49,7 @@ test("in a page, Sign in again and a signed-out page ask the app for Face ID, an
   expect(on).toContain('form[action="/send-link"]');
   expect(on).not.toMatch(/cookie|innerText|textContent|fetch\(/);
   // Face ID cancelled or a sign-in that didn't stick: the page's own buttons work, nothing asks again.
-  expect(inject(false)).not.toContain("postMessage");
+  expect(inject(false)).not.toContain('"fresh"');
 });
 
 test("the app icon is the logo with the film's eyes: Night tile, full bleed, and the checked-in images match", async () => {
@@ -79,4 +89,37 @@ test("a build names an update channel only when the app has expo-updates, so eas
   const deps = (JSON.parse(readFileSync("mobile/package.json", "utf8")) as { dependencies: Record<string, string> }).dependencies;
   for (const [name, profile] of Object.entries(eas.build))
     if (profile.channel) expect(`${name}: expo-updates ${deps["expo-updates"] ? "present" : "missing"}`).toBe(`${name}: expo-updates present`);
+});
+
+test("the page never stays blank: iOS unloading it, a failed load or an empty page reloads once, then shows Try again (owner, 2026-11-02)", async () => {
+  const { pageStep, START } = await import("../mobile/src/page");
+  // What the owner hit: back from the background, iOS had dropped the page and the app showed paper.
+  let r = pageStep({ ...START, phase: "shown" }, { kind: "gone" });
+  expect(r).toMatchObject({ reload: true, state: { phase: "loading" } });
+  // A load that fails (Tailscale off, hub down) shows the brand screen with Try again, never paper.
+  r = pageStep(START, { kind: "error" });
+  expect(r).toMatchObject({ reload: false, state: { phase: "failed" } });
+  expect(pageStep(r.state, { kind: "retry" })).toMatchObject({ reload: true, state: { phase: "loading", tries: 0 } });
+  expect(pageStep(START, { kind: "http", status: 502 }).state.phase).toBe("failed");
+  // The hub's own signed-out page (401) is a real page: the app's Face ID script takes it from there.
+  expect(pageStep(START, { kind: "http", status: 401 }).state.phase).toBe("loading");
+  // A page that loaded but drew nothing: one quiet reload, then Try again.
+  r = pageStep(START, { kind: "loaded", blank: true });
+  expect(r).toMatchObject({ reload: true, state: { tries: 1 } });
+  expect(pageStep(r.state, { kind: "loaded", blank: true }).state.phase).toBe("failed");
+  expect(pageStep(r.state, { kind: "loaded", blank: false })).toMatchObject({ reload: false, state: { phase: "shown", tries: 0 } });
+  // Back from the background: a failed page, or one left for over 10 minutes, loads again.
+  const away = pageStep({ ...START, phase: "shown" }, { kind: "background", at: 0 }).state;
+  expect(pageStep(away, { kind: "foreground", at: 60_000 }).reload).toBe(false);
+  expect(pageStep(away, { kind: "foreground", at: 11 * 60_000 }).reload).toBe(true);
+  const failedAway = pageStep({ ...START, phase: "failed" }, { kind: "background", at: 0 }).state;
+  expect(pageStep(failedAway, { kind: "foreground", at: 1000 }).reload).toBe(true);
+});
+
+test("each page tells the app whether it drew anything, and nothing else", () => {
+  for (const on of [true, false]) {
+    const js = inject(on);
+    expect(js).toContain('postMessage(document.body && document.body.childElementCount ? "ready" : "blank")');
+    expect(js).not.toMatch(/cookie|innerText|textContent|fetch\(/);
+  }
 });

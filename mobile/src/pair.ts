@@ -7,10 +7,15 @@ export type PairLink = { hub: string; key: string } | { error: string };
 
 const KEY = /^[A-Za-z0-9_-]{16,128}$/;
 
-/** The hub's address and the link's key, or one sentence saying what's wrong with it. */
+// The hub's https door is `tailscale serve` on this port (SERVE_PORT in src/dashboard/tailnet.ts).
+const SERVE_PORT = 8443;
+
+/** The hub's address and the link's key, or one sentence saying what's wrong with it. Takes a
+ *  whole pasted text message too: the first sign-in link in it counts. */
 export function parsePairLink(raw: string): PairLink {
+  const found = raw.match(/(?:pocketbrain:\/\/pair\?|https?:\/\/[^\s/]+\/login\?)[^\s]*/i)?.[0].replace(/[.,;:!?)\]]+$/, "");
   let u: URL;
-  try { u = new URL(raw.trim()); } catch { return { error: "That isn't a sign-in link. Paste the whole link from the text." }; }
+  try { u = new URL((found ?? raw).trim()); } catch { return { error: "That isn't a sign-in link. Paste the whole link from the text." }; }
   let hub: string, key: string;
   if (u.protocol === "pocketbrain:") {
     hub = u.searchParams.get("hub") ?? "";
@@ -22,6 +27,9 @@ export function parsePairLink(raw: string): PairLink {
     key = u.searchParams.get("key") ?? "";
   } else return { error: "That isn't a sign-in link. Paste the whole link from the text." };
   if (!KEY.test(key)) return { error: "That link is cut short. Paste the whole link from the text." };
+  // A tailnet name's plain address (the tailnet listener) has an https door on SERVE_PORT.
+  const plain = new URL(hub);
+  if (plain.protocol === "http:" && /\.ts\.net$/i.test(plain.hostname)) hub = `https://${plain.hostname}:${SERVE_PORT}`;
   // Phones refuse plain http to a named host, and the app does too: the hub's https address is
   // `tailscale serve` (docs/dashboard-tailnet.md).
   if (!hub.startsWith("https://")) return { error: "This link is for your hub's plain address. Use its https one: run `tailscale serve` on the hub, then get a new link there." };
