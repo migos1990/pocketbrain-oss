@@ -67,9 +67,11 @@ test("On your mind: the box, memories with their marks, held values locked; the 
     expect(home).toContain('<span class="sr">Known by ');
     expect(home).toMatch(/class="mark( [a-z0-9]+)?" aria-hidden="true">G</);
     expect(home).toContain('class="mark not"');
-    // Hélène's private value waits for Read it: a lock, no marks, no value.
+    // Hélène's private value waits for the owner: a lock and no marks; on this fresh sign-in its
+    // value with Keep it private and Let them have it (G630).
     expect(home).toContain(APP_COPY.onlyYou);
-    expect(home).toContain(`>${APP_COPY.showIt}</button>`);
+    expect(home).toContain(`>${APP_COPY.letThem}</button>`);
+    expect(home).toContain(`>${APP_COPY.keepPrivate}</button>`);
     expect(home).not.toContain(APP_COPY.assistants);
     const who = (await req("GET", "/who")).text;
     expect(who).toContain(APP_COPY.assistants);

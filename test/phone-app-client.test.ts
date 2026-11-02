@@ -123,3 +123,12 @@ test("each page tells the app whether it drew anything, and nothing else", () =>
     expect(js).not.toMatch(/cookie|innerText|textContent|fetch\(/);
   }
 });
+
+test("the shell around the page is Night until the page is shown, so the opening logo has no paper bars (owner, 2026-11-02)", async () => {
+  const { shell } = await import("../mobile/src/page");
+  const { MARK } = await import("../mobile/src/logo");
+  // What the owner saw: the Night logo with a paper bar under the status bar and one at the bottom.
+  expect(shell("loading")).toEqual({ background: MARK.night, bar: "light-content" });
+  expect(shell("failed")).toEqual({ background: MARK.night, bar: "light-content" });
+  expect(shell("shown")).toEqual({ background: MARK.paper, bar: "dark-content" });
+});

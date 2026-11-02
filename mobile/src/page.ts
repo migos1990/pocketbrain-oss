@@ -2,6 +2,7 @@
 // What the app does with the hub's page in its web view, so it never shows a blank screen
 // (owner, 2026-11-02: back from the background, iOS had dropped the page and the app showed only
 // paper). Pure, so the hub's test run checks it (test/phone-app-client.test.ts).
+import { MARK } from "./logo";
 
 export type Phase = "loading" | "shown" | "failed";
 export interface PageState { phase: Phase; tries: number; awayAt?: number }
@@ -36,4 +37,11 @@ export function pageStep(s: PageState, e: PageEvent): { state: PageState; reload
       return { state: { phase: s.phase, tries: s.tries }, reload: false };
     }
   }
+}
+
+// The app's own frame around the web view (the status bar's band and the home bar's band): Night
+// while the opening logo or Try again is up, paper once the hub's page shows, so the logo never
+// sits between two paper bars (owner, 2026-11-02).
+export function shell(phase: Phase): { background: string; bar: "light-content" | "dark-content" } {
+  return phase === "shown" ? { background: MARK.paper, bar: "dark-content" } : { background: MARK.night, bar: "light-content" };
 }

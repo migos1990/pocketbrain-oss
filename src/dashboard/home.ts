@@ -15,7 +15,7 @@ import { isOwnerId } from "../owner";
 import { readDiary, shownValue, displayName, sayDay, sayDays, ID_IN_TEXT, type DiaryRow } from "../diary";
 import { ownerLocal } from "../clock";
 import { ownerConflicts, type SettleCase } from "../core";
-import { unseenFacts, type Unseen } from "../seen";
+import { unseenFacts, keptFacts, type Unseen } from "../seen";
 import { inboxConflicts } from "../settle-inbox";
 import { comms } from "./data";
 import { agentLabel, agentTitle, cap } from "./labels";
@@ -45,7 +45,7 @@ export interface HomeLine {
   attr?: string; // the attribute, for which lines lead the face (faceLines)
   kind?: string; // the diary row's kind, likewise
 }
-export interface Waiting { what: string; verb: string; href: string; n?: number; seen?: string; stranger?: boolean; meta?: string; parts?: string[] } // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
+export interface Waiting { what: string; verb: string; href: string; n?: number; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
 export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number }
@@ -138,6 +138,9 @@ export const LINE_COPY = {
   siteNew: "{title}'s site is {value}",
   siteChanged: "{title}'s site is now {value}",
   siteSettled: "You settled it: {title}'s site is {value}",
+  kindNew: "{title} is filed under {value}",
+  kindChanged: "{title} is filed under {value} now",
+  kindSettled: "You settled it: {title} is filed under {value}",
   verbNew: "{title} {attr} {value}",
   verbChanged: "{title} now {attr} {value}",
   verbSettled: "You settled it: {title} {attr} {value}",
@@ -153,6 +156,8 @@ export const LINE_COPY = {
   somethingUnnamed: "Something new only you can see",
   manyUnnamed: "{value} new things only you can see",
   moreHeld: "{value} more held from your assistants",
+  keptPrivate: "Kept private: something about {title}",
+  keptUnnamed: "Kept private: something only you can see",
   manyNew: "{value} new things about {title}",
   heldUntil: "Something new about {title}, held until {until}",
   questionSetAside: "A question about {title} was set aside, since only a conflict asks you",
@@ -208,6 +213,9 @@ export function heldName(rules: Rules, n: Note | undefined, u: { page: string; t
 // Attributes that hold a web address, and the address as its host: "https://www.x.example/a" is
 // "x.example". Anything that isn't an address stays as it is.
 const SITE_ATTRIBUTES = new Set(["website", "site", "url", "homepage"]);
+// What kind of thing a page is reads as where it is filed: "Harbour Mutual is filed under insurance",
+// never "Harbour Mutual's kind is insurance" (owner's phone, 2026-11-02, G630).
+const KIND_ATTRIBUTES = new Set(["kind", "type", "category"]);
 export function siteHost(v: string): string {
   const m = v.trim().match(/^(?:[a-z][a-z0-9+.-]*:\/\/)?(?:www\.)?([^\s/?#:]+\.[^\s/?#:]+)(?::\d+)?(?:[/?#]\S*)?$/i);
   return m ? m[1]!.toLowerCase() : v;
@@ -324,7 +332,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   const val = (v: unknown) => site ? siteHost(say(v)) : say(v);
   const w = (k: LineKey) => lineWords(k, { title: t, attr: a, value: val(row.to), older: olderSay(row), source: CONFIRMED_BY[row.source_word] ?? "source", ...(row.from !== undefined && !shapeless ? { was: val(row.from) } : {}) });
   // A few attributes have their own sentence: what's next, when the owner was last in touch, a role.
-  const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : site ? "site" : undefined;
+  const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : site ? "site" : KIND_ATTRIBUTES.has(attr) ? "kind" : undefined;
   // What may be said is decided first (owner-canvas re-audit): a receipt says its page only by a
   // name heldName allows, and a family line, like any other, says nothing on a page private now.
   let what = row.why === "receipt" ? (safeName ? w("receipt") : lineWords("receiptUnnamed", {}))
@@ -382,7 +390,19 @@ function foldKept(rows: DiaryRow[]): (DiaryRow & { count?: number })[] {
 
 // Real conflicts the owner settles: open ones the Gardener is not still weighing (core.ts). Those it
 // still weighs are listed apart, quietly, and open the same settle screen.
-function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(root, now)): { waiting: Waiting[]; gardener: Waiting[] } {
+// One fact as a sentence the owner reads: a held value on its card, and the done line after Show
+// (G630). The page by its whole name, the value in words with no stray full stop of its own.
+export function factSentence(id: string, title: unknown, attr: string, value: unknown, notes: Map<string, Note>): string {
+  const t = displayName(id, title);
+  const v = plain(value, (x) => { const tt = notes.get(x)?.fm.title; return tt === undefined ? undefined : String(tt); }, slugsOf(notes)).replace(/[\s.]+$/, "");
+  const value_ = SITE_ATTRIBUTES.has(attr) ? siteHost(v) : v;
+  // The owner's own to-do says it as they did: "You owe Ben the sample" (G623).
+  if (attr === "next_step" && yourToDo(value_)) return `${yourToDo(value_)!}.`;
+  const k: LineKey = isVerbAttribute(attr) ? "verbNew" : attr === "next_step" ? "nextNew" : attr === "last_contact" ? "contactNew" : attr === "role" ? "roleNew" : SITE_ATTRIBUTES.has(attr) ? "siteNew" : KIND_ATTRIBUTES.has(attr) ? "kindNew" : "new";
+  return lineWords(k, { title: t, attr: words(attr), value: value_ });
+}
+
+function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(root, now), fresh = false): { waiting: Waiting[]; gardener: Waiting[] } {
   const open = ownerConflicts(root, now, { held: true });
   const rules = loadRules(root);
   const notes = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n]));
@@ -434,15 +454,20 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
     if (overflow && i === cards.length - 1) return { n: us.length, what: lineWords("moreHeld", { value: String(us.length) }), verb: `${us.some((u) => u.unknownSender) ? "from an address your pages don't hold · " : ""}only you can see them yet`, href: "/home?all=1", ...(us.some((u) => u.unknownSender) ? { stranger: true } : {}) };
     const one = us.length === 1, page = us[0]!.page, stranger = us.some((u) => u.unknownSender);
     const what = name ? (one ? lineWords("somethingNew", { title: name }) : lineWords("manyNew", { title: name, value: String(us.length) })) : one ? lineWords("somethingUnnamed", {}) : lineWords("manyUnnamed", { value: String(us.length) });
-    return { n: us.length, what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(stranger ? { stranger: true } : {}) };
+    // The values themselves only on a fresh sign-in (G630): read first, then let out or kept.
+    const look = fresh ? us.map((u) => factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)) : undefined;
+    return { n: us.length, what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(look ? { look } : {}), ...(stranger ? { stranger: true } : {}) };
   });
+  // The full list also shows what the owner kept private, counted nowhere (n: 0), each with Let
+  // them have it, so Keep it private is never final (review of #60, G630).
+  const kept: Waiting[] = expand ? keptFacts(root).map((u) => ({ n: 0, what: ((name) => name ? lineWords("keptPrivate", { title: name }) : lineWords("keptUnnamed", {}))(heldName(rules, notes.get(u.page), u)), verb: "kept private", href: `/p/${u.page.split("/").map(encodeURIComponent).join("/")}`, seen: u.fact_key, ...(fresh ? { look: [factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)] } : {}), ...(u.unknownSender ? { stranger: true } : {}) })) : [];
   // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
   const inbox = inboxConflicts(root).map((c) => line(c, "tap to settle"));
   // A message the relay held between two assistants: send it or not, on its own settle screen.
   const mail = comms(root).filter((m) => m.verdict === "held").map((m) => ({ what: `${cap(agentLabel(rules, m.from))}'s message to ${agentLabel(rules, m.to)} is held.`, verb: "tap to decide", href: `/settle/m-${m.id}` }));
   // What waits on Settings (src/waiting.ts): one card that counts it and links there (G626).
   const settings: Waiting[] = asks.settings > 0 ? [{ n: asks.settings, what: settingsWords(asks), verb: "on Settings", href: SETTINGS_HREF }] : [];
-  return { waiting: [...open.filter((c) => !c.held).map((c) => line(c, "tap to settle")), ...inbox, ...mail, ...shown, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
+  return { waiting: [...open.filter((c) => !c.held).map((c) => line(c, "tap to settle")), ...inbox, ...mail, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
 
 // How many things the home lists as waiting on the owner: the one count the digest and the text
@@ -570,7 +595,7 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
     name: firstName(rules),
     date: longDay(today),
     reads: assistantReads(root, rules, now, notes, o.fresh ?? true),
-    ...conflicts(root, now, o.all),
+    ...conflicts(root, now, o.all, undefined, o.fresh ?? false),
     since: recent.slice(0, cap).map(([r, l]) => (justSaid(r) ? { ...l, just: true } : l)),
     folded: Math.max(0, recent.length - cap),
     earlier: [...older].slice(0, o.all ? undefined : EARLIER_DAYS).map(([day, lines]) => ({ day: longDay(day), lines: o.all ? lines : lines.slice(0, EARLIER_PER_DAY) })),

@@ -14,7 +14,7 @@ import { inject } from "./src/inject";
 import { Mark } from "./src/Mark";
 import { PairScreen } from "./src/PairScreen";
 import { Trouble } from "./src/Trouble";
-import { pageStep, START, type PageEvent } from "./src/page";
+import { pageStep, shell, START, type PageEvent } from "./src/page";
 import { MARK } from "./src/logo";
 
 const HUB = "pb.hub";       // the hub's https address, not secret
@@ -87,8 +87,8 @@ export default function App() {
   const opening = <View style={s.opening}><StatusBar barStyle="light-content" /><Mark size={160} /></View>;
   if (hub === undefined) return opening;
   if (hub) return (
-    <SafeAreaView style={s.page}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={[s.page, { backgroundColor: shell(phase).background }]}>
+      <StatusBar barStyle={shell(phase).bar} />
       <WebView ref={web} source={{ uri: `${hub}/` }} key={`${faceId ? "faceid" : "plain"}-${load}`} injectedJavaScript={inject(faceId)}
         onMessage={(e) => { const m = e.nativeEvent.data; if (m === "fresh") onFresh(); else if (m === "ready" || m === "blank") step({ kind: "loaded", blank: m === "blank" }); }}
         onError={() => step({ kind: "error" })} onHttpError={(e) => step({ kind: "http", status: e.nativeEvent.statusCode })}

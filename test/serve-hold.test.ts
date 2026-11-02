@@ -62,7 +62,9 @@ test("home lists what waits for the owner's eyes, and Show releases it", async (
   const home = await req("GET", "/home");
   expect(home.text).toContain("Something new about Jane Roy");
   expect(home.text).toContain(APP_COPY.onlyYou);
-  expect(home.text).not.toContain("1200 dollars");
+  // A fresh sign-in reads the value before letting it out (G630); no assistant has it yet.
+  expect(home.text).toContain("Jane Roy&#39;s fee is 1200 dollars a year.");
+  expect(sees(root, "planner", "1200 dollars")).toBe(false);
   const csrf = home.text.match(/name="csrf" value="([^"]+)"/)![1]!;
   const shown = await req("POST", "/action/diary-seen", { csrf, key: "people/jane-roy#fee" });
   expect(shown.status).toBe(303);

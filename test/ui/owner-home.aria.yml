@@ -36,11 +36,15 @@
         - /url: /settle/c-0003
         - text: Settle
   - heading "Private, held from your assistants 1" [level=2]
-  - paragraph: An assistant saved these. Only you can see them until you tap Show it; then your assistants get it too.
+  - paragraph: An assistant saved these. Only you can see them. Read each one, then let your assistants have it or keep it private.
   - list:
     - listitem:
-      - text: Something new about Hélène Lefebvre. Only you know this
-      - 'button "Show it: Something new about Hélène Lefebvre."': Show it
+      - text: Something new about Hélène Lefebvre.
+      - list:
+        - listitem: Hélène Lefebvre prefers visits in the morning until the hip surgery on 20 November.
+      - text: Only you know this
+      - 'button "Keep it private: Something new about Hélène Lefebvre."': Keep it private
+      - 'button "Let them have it: Something new about Hélène Lefebvre."': Let them have it
   - heading "Lately" [level=2]
   - list:
     - listitem:

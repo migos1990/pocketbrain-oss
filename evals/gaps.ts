@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G630: {
+    closed: "835b79d4",
+    title: "A held value could only be seen by letting it out, and the line after said it in odd words",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-02: each card under Private, held from your assistants said only \"Something new about <page>\" with Show it, and Show it both showed the value and gave it to every assistant, so the owner couldn't read what he was deciding on. The quiet line after read \"<page>'s kind is insurance.. Your assistants get it now.\" (two full stops, the attribute's raw name).",
+    fix: "src/dashboard/home.ts: a held card carries its values as sentences (factSentence) only on a fresh sign-in; html-app.ts draws them with Keep it private and Let them have it, and Read it (sign in again, Face ID in the app) on an older sign-in. src/seen.ts keepPrivate keeps the value held and off what waits (kept_private). server.ts: the done line is factSentence, no added full stop; a kind/type/category reads \"is filed under\". Tests: test/held-read-first.test.ts.",
+  },
   G628: {
     closed: "61665760",
     title: "Settle on a calendar side was refused as a card number, and the refusal showed in the check's words",

@@ -4,7 +4,7 @@
 // never reaches it. The owner can also opt in to their own tailnet (src/dashboard/tailnet.ts). Auth is a local owner session: a login link printed once at start-up
 // sets an HttpOnly cookie; every action also needs the session's CSRF token, and requests
 // for any other Host are refused (DNS rebinding).
-import { markSeen } from "../seen";
+import { markSeen, keepPrivate } from "../seen";
 import { displayName } from "../diary";
 import { plain } from "./home";
 import { pageParam } from "./paging";
@@ -40,7 +40,7 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, lineWords, isVerbAttribute, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
@@ -114,6 +114,7 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   "diary-undo": () => true,
   "fix-everywhere": () => true,
   "note-hide": () => true,
+  "diary-keep": () => true,
 };
 export const needsFresh = (action: string, form: Record<string, string>, root?: string): boolean => !STALE_OK[action]?.(form, root);
 // A folder with no .git keeps no sign-in file, so its sign-in times live in this run only.
@@ -231,9 +232,10 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // The owner app's four tabs (html-app.ts): On your mind is the home, with a mark per assistant
   // under each memory (marks.ts); Who knows has the assistants' rows; Memory and Ask stand alone.
   const clock = () => process.env.PB_NOW ? new Date(process.env.PB_NOW) : new Date();
-  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false, done = false) => {
+  // fresh: a sign-in from the last FRESH_MINUTES, the only one a held value shows on (G630).
+  const home = (csrf: string, said?: string, reply?: ReturnType<typeof ownerSay>, flash?: string, all = false, done = false, fresh = false) => {
     const rules = loadRules(root), notes = loadBrain(root, { shared: true });
-    const v = homeView(root, rules, notes, clock(), { all });
+    const v = homeView(root, rules, notes, clock(), { all, fresh });
     const of = marksFor(rules, notes);
     v.since = withMarks(v.since, rules, notes, of);
     v.earlier = v.earlier.map((d) => ({ ...d, lines: withMarks(d.lines, rules, notes, of) }));
@@ -540,7 +542,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           chats.set(sid, turns);
           return ask(csrf, sid);
         }
-        return home(csrf, said, reply);
+        return home(csrf, said, reply, undefined, false, false, freshSignIn(root, sid, now()));
       }
       const action = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : "";
       // Undo from a diary line (src/undo.ts): a forward write, back to the home with what happened.
@@ -596,10 +598,22 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           const n = notes.find((x) => x.fm.id === id);
           // Said as the home says a memory (G625): "Ben Carter prefers tea", never "Ben Carter: prefers is tea".
           const attr = key.slice(hash + 1);
-          said.push(`${lineWords(isVerbAttribute(attr) ? "verbNew" : "new", { title: displayName(id, n?.fm.title), attr: attrWords(attr), value: plain(r.value) })}.`);
+          said.push(factSentence(id, n?.fm.title, attr, r.value, new Map(notes.map((x) => [x.fm.id, x]))));
         }
         if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
         return go("/home", { ok: `${said.join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.` });
+      }
+      if (action === "diary-keep") {
+        // Keep it private (G630): still held from every assistant, no longer waiting (src/seen.ts).
+        const keys = (form.key ?? "").split("\n").map((k) => k.trim()).filter(Boolean).slice(0, 50);
+        let kept = 0;
+        for (const key of keys) {
+          const r = keepPrivate(root, key);
+          // A save that fails after others went through says how many were kept (review of #60).
+          if (r.outcome === "not_saved") return go("/home", { err: kept ? `${kept} kept private; the rest ${r.message}` : r.message });
+          if (r.outcome === "kept") kept++;
+        }
+        return kept ? go("/home", { ok: APP_COPY.keptPrivate }) : go("/home", { err: "Nothing waiting there any more." });
       }
       if (action === "fix-everywhere") {
         // The belief radar's one tap (src/dashboard/home-beliefs.ts): every assistant gets the brain's
@@ -734,7 +748,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const words = Object.fromEntries((c?.sides ?? []).map((x) => [x.n, sideWords(root, rules, pageNote, x.refs, x.value, fresh)] as const).filter((e): e is [number, string] => !!e[1]));
       return new Response(settlePage(c, csrf, rules, url.searchParams.get("err") ?? undefined, { fresh, words, ...(area ? { area: String(area) } : {}), ...(c && ids.includes(c.id) ? { pos: ids.indexOf(c.id) + 1, of: ids.length } : {}) }), { headers: PAGE_HEADERS });
     }
-    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1", !!url.searchParams.get("ok"));
+    if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1", !!url.searchParams.get("ok"), freshSignIn(root, sid, now()));
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
     if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);
     if (p === "/let") return letSheet(csrf, url.searchParams) ?? page("dash.no-note", "brain", { id: url.searchParams.get("key")?.split("#")[0] ?? "" });

@@ -29,6 +29,7 @@ export interface FactRecord {
   share_with?: string[]; // if set, only these agents ever get this fact
   sender?: "unknown"; // filed from a sender no person page holds (src/sender.ts); never the address
   unseen?: boolean; // held: served to no agent until the owner has seen it (phone UI spec §7, src/seen.ts)
+  kept_private?: string; // the day the owner read a held value and kept it from their assistants (src/seen.ts keepPrivate): still held, no longer waiting
   contested?: string; // a conflict waits beside this live value (disputes/<id>); readers keep using the value (G425)
   shared_by?: string; // the agent whose own write set share_with (none when the owner or the write path set it)
   review_after?: string;

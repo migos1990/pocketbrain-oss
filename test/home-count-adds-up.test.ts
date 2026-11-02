@@ -30,13 +30,13 @@ test("the big number counts every thing that waits, the same number waitingCount
   expect(big(html)).toBe(7);
 });
 
-test("held values sit under a heading that says what they are and what Show it does", () => {
+test("held values sit under a heading that says what they are and what to do; an older sign-in offers Read it (G630)", () => {
   const root = named(5);
   const html = homePage(homeView(root, loadRules(root), loadBrain(root), NOW), "c");
   expect(html).toContain(`<h2 class="group">${APP_COPY.heldHead} <b>5</b></h2>`);
   expect(html).toContain(APP_COPY.heldHint);
-  expect(html).toContain(`>${APP_COPY.showIt}</button>`);
-  expect(html).not.toContain(">Read it<");
+  expect(html).toContain(`>${APP_COPY.readIt}</button>`);
+  expect(html).not.toContain(`>${APP_COPY.letThem}<`);
   // The card that counts the rest says they are more of the same.
   expect(html).toContain("3 more held from your assistants.");
   expect(html).not.toContain("only you can see.");
