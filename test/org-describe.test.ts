@@ -197,3 +197,24 @@ test("Undo on the org's page takes back only that org's answer", async () => {
   expect(runAction({ root }, "org-undo", { id: "orgs/ring-club", hash: yes })).toBe("Undone.");
   expect(fact(root, "what_it_is")).toBeUndefined();
 });
+
+// The owner turns it on with one command, never a hand edit of rules/ (docs/gardener.md).
+test("gardener describe-orgs: prints the one line, asks, writes only that key, refuses when set", () => {
+  const root = makeBrain();
+  const run = (...a: string[]) => Bun.spawnSync(["bun", join(import.meta.dir, "..", "src", "cli.ts"), "gardener", "describe-orgs", ...a], { env: { ...process.env, PB_BRAIN: root }, stdin: "ignore" });
+  writeFileSync(join(root, "rules", "gardener.yaml"), "# mine\nant_profile: pocketbrain\n");
+  git(root, ["add", "rules/gardener.yaml"]);
+  git(root, ["commit", "-q", "-m", "owner: gardener\n\nKind: owner-edit"], OWNER);
+  // No terminal and no --yes: it says the line and writes nothing.
+  const ask = run();
+  expect(ask.stdout.toString()).toContain("describe_orgs: true");
+  expect(readFileSync(join(root, "rules", "gardener.yaml"), "utf8")).not.toContain("describe_orgs");
+  const owner = git(root, ["log", "-1", "--format=%an"]);
+  const yes = run("--yes");
+  expect(yes.exitCode).toBe(0);
+  expect(readFileSync(join(root, "rules", "gardener.yaml"), "utf8")).toBe("# mine\nant_profile: pocketbrain\ndescribe_orgs: true\n");
+  expect(git(root, ["log", "-1", "--format=%an"])).toBe(owner); // committed as the owner
+  const again = run("--yes");
+  expect(again.exitCode).not.toBe(0);
+  expect(again.stderr.toString()).toContain("already");
+});

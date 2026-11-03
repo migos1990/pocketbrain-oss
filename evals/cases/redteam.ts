@@ -1318,9 +1318,12 @@ const browserDoorCases: Case[] = [
   { id: "rt-browser-lockout-per-client", dimension: "e2e", kind: "attack", title: "junk sign-ins from one client don't lock the agent out for everyone", source: "synthetic", run: () => live(async (l) => {
     if (!existsSync(join(SRC, "browser.ts"))) return na("no browser door at this commit");
     for (let i = 0; i < 22; i++) await signIn(l, "helper", `pb_helper_junk${i}`, "203.0.113.9");
-    const blocked = await signIn(l, "helper", l.tokens.helper, "203.0.113.9");
+    const blocked = await signIn(l, "helper", "pb_helper_junk99", "203.0.113.9");
     const other = await signIn(l, "helper", l.tokens.helper, "198.51.100.4");
-    return steps([["attacker throttled", blocked.status === 429], ["agent still signs in", other.status === 303]]);
+    // The right key signs in even from the junk's own bucket (G633): behind any proxy but
+    // Cloudflare's, every caller shares one.
+    const same = await signIn(l, "helper", l.tokens.helper, "203.0.113.9");
+    return steps([["attacker throttled", blocked.status === 429], ["agent still signs in", other.status === 303], ["right key not locked out", same.status === 303]]);
   }, browserOn("helper")) },
   { id: "rt-browser-bad-input", dimension: "e2e", kind: "attack", title: "a malformed note id is a 404 and a forged agent name can't write lines into the hub log", source: "synthetic", run: () => live(async (l) => {
     if (!existsSync(join(SRC, "browser.ts"))) return na("no browser door at this commit");

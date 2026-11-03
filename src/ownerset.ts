@@ -91,7 +91,9 @@ export function setNight(root: string, mode: string): string {
 // `pocketbrain dashboard tailnet on --device <100.x> | off` (docs/dashboard-tailnet.md): the
 // dashboard on the owner's tailnet, for the devices listed. Added devices join the list; off keeps
 // the list. hub.yaml once there is one, policy.yaml on a single machine (tailnetSettings reads both).
-export function setDashboardTailnet(root: string, on: boolean, devices: string[] = []): string {
+// `login` (from `pocketbrain phone`, this machine's own Tailscale login) is written only when no
+// login is set yet: one the owner set is never replaced.
+export function setDashboardTailnet(root: string, on: boolean, devices: string[] = [], login?: string): string {
   const file = loadHub(root) ? "hub.yaml" : "policy.yaml";
   const bad = devices.filter((d) => !/^\d{1,3}(\.\d{1,3}){3}$/.test(d) || !isTailnetIp(d));
   if (bad.length) throw new OwnerSetError(`--device is a device's Tailscale address (100.x.y.z, shown under its name in the Tailscale app), not ${bad.join(", ")}`);
@@ -99,7 +101,9 @@ export function setDashboardTailnet(root: string, on: boolean, devices: string[]
   const have = tailnetSettings(root).dashboard_tailnet_devices ?? [];
   const list = [...new Set([...have, ...devices])];
   if (!list.length) throw new OwnerSetError("name the device that may open it: pocketbrain dashboard tailnet on --device <its Tailscale address>");
-  return setRulesKeys(root, file, { dashboard_tailnet: true, dashboard_tailnet_devices: list }, `dashboard_tailnet on for ${list.join(", ")}`);
+  const cur = tailnetSettings(root);
+  const addLogin = login && !cur.dashboard_tailnet_login ? { dashboard_tailnet_login: login } : {};
+  return setRulesKeys(root, file, { dashboard_tailnet: true, dashboard_tailnet_devices: list, ...addLogin }, `dashboard_tailnet on for ${list.join(", ")}${addLogin.dashboard_tailnet_login ? `, login ${login}` : ""}`);
 }
 
 // `pocketbrain wiki sync on|off`: whether the Gardener's wiki_sync writes pages or only reports
@@ -107,6 +111,17 @@ export function setDashboardTailnet(root: string, on: boolean, devices: string[]
 export function setWikiSync(root: string, mode: string): string {
   if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki sync on | off");
   return setRulesKeys(root, "policy.yaml", { wiki: { sync: mode === "on" } }, `wiki sync ${mode}`);
+}
+
+// `pocketbrain gardener describe-orgs [--yes]` (docs/gardener.md, "What an org is"): adds the one
+// line `describe_orgs: true` to rules/gardener.yaml and nothing else. Refused when the key is there
+// already, whatever its value: changing it back is the owner's own edit.
+export const DESCRIBE_LINE = "describe_orgs: true";
+export function setDescribeOrgs(root: string): string {
+  const f = join(root, "rules", "gardener.yaml");
+  const cur = existsSync(f) ? YAML.parse(readFileSync(f, "utf8")) as Record<string, unknown> | null : null;
+  if (cur && typeof cur === "object" && "describe_orgs" in cur) throw new OwnerSetError(`rules/gardener.yaml already has describe_orgs: ${String(cur.describe_orgs)}; nothing changed`);
+  return setRulesKeys(root, "gardener.yaml", { describe_orgs: true }, "let the Gardener say what thin orgs are");
 }
 
 // `pocketbrain backfill on|off`: whether the nightly source backfill attaches the mail it finds or

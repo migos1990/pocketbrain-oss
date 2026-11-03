@@ -44,6 +44,7 @@
     "conformance": "bun scripts/conformance.ts"
   },
   "dependencies": {
+    "qrcode-generator": "2.0.4",
     "yaml": "^2.9.1"
   },
   "optionalDependencies": {
@@ -53,6 +54,7 @@
     "@types/bun": "^1.4.2",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
+    "jsqr": "1.4.0",
     "playwright": "1.56.1",
     "typescript": "^7.0.2"
   },

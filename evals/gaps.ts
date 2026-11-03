@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G633: {
+    closed: "3d1010df",
+    title: "Strangers' junk sign-ins could lock an agent's right key out of the browser door",
+    severity: "low",
+    finding: "Audit, 2026-11-02: src/browser.ts counted failed sign-ins per cf-connecting-ip and refused at 20 before reading the key; behind tailscale serve or any proxy but Cloudflare's every caller is the \"local\" bucket, so anyone reaching the door could keep the agent out.",
+    fix: "src/browser.ts login checks the key first; the count refuses only a wrong key (429), and the right key signs in whoever filled the bucket. Tests: test/browser.test.ts \"junk sign-ins in a shared bucket never lock out the right key\".",
+  },
   G632: {
     closed: "30b75a34",
     title: "The no-values-in-URLs check failed by chance on a hex Undo token",

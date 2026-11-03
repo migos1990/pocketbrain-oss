@@ -267,7 +267,8 @@ The Gardener's `wiki_sync` tool rewrites a page's summary and sections from the 
 ## What an org is
 
 An import can leave an org page with a name and nothing else. With `describe_orgs: true` in
-`rules/gardener.yaml` (you add the line yourself; it is off until then), the Gardener's web-only
+`rules/gardener.yaml` (off until then; `pocketbrain gardener describe-orgs` prints the one line, asks,
+and adds only that key, or refuses if it is there already), the Gardener's web-only
 run looks each such org up and suggests one plain line on what it is, with the org's website.
 
 - **What it looks up:** orgs in its view, below private, with no `what_it_is` fact yet, whose name

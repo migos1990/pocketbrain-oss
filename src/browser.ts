@@ -115,8 +115,11 @@ function refusal(root: string, agent: string, hash: string): { status: number; w
   return undefined;
 }
 
-// Failed sign-ins are counted per client, so one client's junk can't lock the agent out. Behind
-// the tunnel Cloudflare sets cf-connecting-ip; the hub itself only listens on loopback.
+// Failed sign-ins are counted per client. Behind the tunnel Cloudflare sets cf-connecting-ip; the
+// hub itself only listens on loopback, so behind any other proxy (tailscale serve, a reverse
+// proxy) every caller shares the "local" bucket, and a header a caller sets is no identity. So the
+// count only refuses wrong keys: the right key always signs in, whoever filled the bucket (G633).
+// A key is 24 random bytes, so the count is there to quiet junk, not to stop a guess.
 const client = (root: string, req: Request) => `${root}\0${req.headers.get("cf-connecting-ip") ?? "local"}`;
 function tooManyFails(key: string): boolean {
   const list = (fails.get(key) ?? []).filter((t) => now() - t < FAIL_WINDOW);
@@ -126,7 +129,6 @@ function tooManyFails(key: string): boolean {
 
 async function login(root: string, req: Request): Promise<Response> {
   const key = client(root, req);
-  if (tooManyFails(key)) return signIn(429, "Too many failed sign-ins. Try again in a few minutes.");
   const f = await form(req);
   const token = f.get("password")?.trim() ?? "";
   const named = f.get("agent")?.trim().toLowerCase();
@@ -139,6 +141,7 @@ async function login(root: string, req: Request): Promise<Response> {
     : named && named !== agent ? { status: 401, why: nameOk ? `token is not ${named}'s` : "agent name malformed" }
     : refusal(root, agent, sha256(token));
   if (no) {
+    if (tooManyFails(key)) return signIn(429, "Too many failed sign-ins. Try again in a few minutes.");
     fails.set(key, [...(fails.get(key) ?? []), now()]);
     // The page says the same thing for every failure; the hub log says why.
     console.error(`browser door: sign-in refused${agent ? ` for ${agent}` : ""}: ${no.why}`);

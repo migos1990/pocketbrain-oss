@@ -30,7 +30,7 @@ Every page sends `no-store`, `X-Frame-Options: DENY` and a CSP that allows nothi
 - **A token's role holds here too.** A reader token (`token --role reader`) signs in with its cap: nothing private. A resolver token is refused at sign-in, since its routes aren't on this door; sign in with the reader token.
 - **No key in a URL.** The key is accepted only in the sign-in form's POST body (`GET /b/login` is 405).
 - **Kill switches act at once.** Every request re-checks the token behind the session: `pocketbrain token --revoke <agent>` and `status: paused` end sessions on the next click.
-- Failed sign-ins all get the same page; the hub log says why (unknown key, door off, wrong agent name). After 20 failures in 10 minutes from one client (Cloudflare's `cf-connecting-ip`), the form answers 429 to that client only, so junk from one place can't lock the agent out. The agent name is checked for shape before it reaches the log.
+- Failed sign-ins all get the same page; the hub log says why (unknown key, door off, wrong agent name). After 20 failures in 10 minutes from one client (Cloudflare's `cf-connecting-ip`; behind any other proxy every caller is one client), a wrong key from that client gets 429. The right key always signs in, so no one else's junk can lock the agent out (G633). The agent name is checked for shape before it reaches the log.
 - Sessions live in the hub's memory: a hub restart signs everyone out.
 
 ## Turning it on

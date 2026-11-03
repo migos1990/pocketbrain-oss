@@ -47,7 +47,7 @@ import { sha256 } from "./util";
 import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -87,6 +87,7 @@ import { startJobs, hubPlists } from "./start";
 import { uninstallPlan, runUninstall, planText } from "./uninstall";
 import { formatProblem, migrate, renderMigrate } from "./format";
 import { menuState, menuTitle, installedBrain, installHub, restartHub, setupBrain, openDashboard, type Run } from "./menubar";
+import { pairPhone } from "./phone";
 import { runAction } from "./dashboard/actions";
 import * as consent from "./consent";
 import type { Model } from "./model";
@@ -250,6 +251,8 @@ const USAGE = `pocketbrain <command>
   serve [--port 8787] [--host 127.0.0.1] [--dashboard] [--no-cells]   live server: MCP at /mcp, JSON API at /v1, spec at /openapi.json
   dashboard [--port 8788] [--agentmail] [--tailnet]   your control panel on localhost (and, with --tailnet or dashboard_tailnet, on your Tailscale address); prints a login link
   dashboard tailnet on --device <100.x> [--device …] | off   open the dashboard to your own devices on your tailnet (docs/dashboard-tailnet.md)
+  phone [--device <name>] [--yes] [--no-restart]   pair your phone in one command: picks it from Tailscale, opens the
+                                     dashboard to it (shows the rules lines first), tailscale serve, then a QR for the app
   dashboard phone-link [--port n]    a sign-in link for your phone: works once, for a day, on your tailnet
   dashboard phones [remove <name>|all]   the phones paired with the pocketBrain app; remove ends one's Face ID sign-in (docs/phone-app.md)
   filing now                           the hub's filing step by hand, only when no hub runs here: file what captures and sources found, expire what is past its deadline
@@ -306,6 +309,7 @@ const USAGE = `pocketbrain <command>
                                      graded against the brain now; fix one fact in every assistant at once
   beliefs plan [--per-week 10] [--ask] [--json]   quiz budget: the facts each assistant would be asked
                                      next, at most N a week; --ask asks them (docs/memory-sync.md)
+  gardener describe-orgs [--yes]     add describe_orgs: true to rules/gardener.yaml (asks first; refuses if set)
   gardener setup [--profile p] [--lock <claude-lock.json>] [--agent g] [--mcp-url u] [--vault <id>]
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
@@ -1067,6 +1071,24 @@ ${p.text}`);
     for (const p of phones) console.log(`${p.name}: paired ${p.at.slice(0, 10)}${p.last ? `, last signed in with Face ID ${p.last.slice(0, 10)}` : ""}`);
     return 0;
   }
+  // Pair the owner's phone in one command (src/phone.ts, docs/phone-app.md): the tailnet settings
+  // shown and written only on a yes, tailscale serve, a hub restart, then the pair link as a QR.
+  if (cmd === "phone") {
+    const home = process.env.HOME ?? homedir();
+    const mac = process.platform === "darwin" && !!installedBrain(home);
+    const run: Run = (c) => { const r = Bun.spawnSync(c, { stdout: "pipe", stderr: "pipe" }); return { code: r.exitCode ?? 1, out: `${r.stdout}${r.stderr}` }; };
+    try {
+      return pairPhone({
+        device: arg(args, "--device"), yes: args.includes("--yes"),
+        ask: process.stdin.isTTY ? (q) => prompt(q) : undefined,
+        port: Number(arg(args, "--port") ?? tailnetSettings(root).dashboard_port ?? 8788),
+        restart: mac && !args.includes("--no-restart") ? () => restartHub({ home, uid: process.getuid?.() ?? 501, run }) : undefined,
+        mint: () => mintPhoneLink(root), setTailnet: (devices, login) => setDashboardTailnet(root, true, devices, login),
+        settings: () => tailnetSettings(root), rulesFile: hub.loadHub(root) ? "rules/hub.yaml" : "rules/policy.yaml",
+        say: (t) => console.log(t),
+      });
+    } catch (e) { console.error((e as Error).message); return 1; }
+  }
   // A sign-in link for the phone that outlives a restart: once, for a day, on the tailnet only.
   if (cmd === "dashboard" && args[0] === "phone-link") {
     const t = tailnetSelf();
@@ -1490,6 +1512,12 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       const min = Number(args[1] && /^\d+$/.test(args[1]) ? args[1] : 60);
       console.log(openWindow(root, agent, min));
       return 0;
+    }
+    if (sub === "describe-orgs") {
+      console.log(`This adds one line to rules/gardener.yaml:\n  ${DESCRIBE_LINE}\nThe Gardener's web-only run may then look up org names below private (docs/gardener.md, "What an org is").`);
+      const yes = args.includes("--yes") || (process.stdin.isTTY && /^y(es)?$/i.test(String(prompt("Add it? [y/N]") ?? "").trim()));
+      if (!yes) { console.log("Nothing changed. To add it, answer y, or run the same command with --yes."); return 0; }
+      return ownerSet(() => setDescribeOrgs(root));
     }
     if (sub === "cleanup") { const r = cleanup(root); console.log(r.message); return r.ok ? 0 : 1; }
     // G240: from a terminal, rotation needs the owner's one-time code from the gardener's page.

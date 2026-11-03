@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- `pocketbrain phone` pairs your phone in one command: it picks the phone from your Tailscale account, shows the lines it would set in `rules/` and writes them only on your yes, puts the dashboard on https with `tailscale serve`, restarts the hub, and prints a QR the iPhone camera opens in the pocketBrain app. Before, that was eight steps by hand. On a hub already set up it only prints the QR. See docs/phone-app.md.
 - The Gardener can say what a thin org is: on an org page, "Is this it?" shows one line from the web, the org's site and the site's own sentence, with Yes and Not it, and each comes back with Undo. Off until you put `describe_orgs: true` in `rules/gardener.yaml`; only org names below private are searched (docs/gardener.md "What an org is"). An org's page no longer shows the Notion import's "Created by…" line, and an approval no longer counts as a source.
 - Settling ends the question. A pick on Settle (or Not sure, keep both) takes you back to On your mind, where the question is gone and the number is one less, and one quiet line says what you settled ("Settled: Course C's room is C-305. Nothing else to settle.") with **Undo**, which opens it again. Before, a pick landed on the page with a line added above it. Letting a held value out gets the same line with Undo (G631).
 - A private value an assistant saved is now read before it goes anywhere. Its card on On your mind says the value itself once you've signed in within the last 10 minutes (Face ID in the phone app), then offers **Keep it private** and **Let them have it** as two separate choices; on an older sign-in it says **Read it**, which only signs you in again. Before, **Show it** was the only way to see the value, and tapping it already gave it to your assistants. Keep it private leaves it held from every assistant and off your count. The line after you let one out names the fact in a sentence with one full stop ("Harbour Mutual is filed under insurance."), not "Harbour Mutual's kind is insurance.." (G630).
@@ -49,6 +50,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- The browser door's limit on failed sign-ins only refuses wrong keys: an agent's right key always signs in. Behind a proxy other than Cloudflare's tunnel every caller counted as one client, so a stranger's junk keys could lock the agent out for ten minutes (G633).
 - A source an assistant cites must be one line: a ref or its via with a line break is refused, so it can never write its own lines into a commit message, and only your own commits say who you forgot (G602).
 - What an assistant sends is quoted in one line in its commit message, so a line break in a list item can't add lines that the history, the digest or undo trust (G605).
 - An assistant that can't see one fact on a page still reads the page's other sentences, even when they come from the same email; the references on a page still show one number per email (G596).

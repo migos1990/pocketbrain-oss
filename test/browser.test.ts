@@ -181,6 +181,19 @@ test("review: junk sign-ins from one client don't lock out another", async () =>
   expect(other.status).toBe(303);
 });
 
+// Behind a proxy that sets no cf-connecting-ip (tailscale serve, another reverse proxy), every
+// stranger shares one bucket: their junk must not lock the agent's own key out. A wrong key past
+// the limit is still refused (G633).
+test("junk sign-ins in a shared bucket never lock out the right key", async () => {
+  const { req, tok } = setup();
+  for (let i = 0; i < 25; i++) await req("POST", "/b/login", { form: { agent: "steward", password: `pb_steward_junk${i}` } });
+  expect((await req("POST", "/b/login", { form: { agent: "steward", password: "pb_x" } })).status).toBe(429);
+  expect((await req("POST", "/b/login", { form: { agent: "steward", password: tok.steward } })).status).toBe(303);
+  // The same behind Cloudflare, from the address the junk came from.
+  for (let i = 0; i < 25; i++) await req("POST", "/b/login", { form: { agent: "steward", password: `pb_steward_junk${i}` }, headers: { "cf-connecting-ip": "203.0.113.7" } });
+  expect((await req("POST", "/b/login", { form: { agent: "steward", password: tok.steward }, headers: { "cf-connecting-ip": "203.0.113.7" } })).status).toBe(303);
+});
+
 test("review: a malformed note id is a 404 page, not a 500", async () => {
   const { req, login } = setup();
   const s = (await login("steward")).cookie!;

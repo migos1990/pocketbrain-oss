@@ -4,6 +4,8 @@ The owner dashboard listens on the hub machine's loopback address only (`127.0.0
 
 ## Turn it on
 
+`pocketbrain phone` does all of this section and the https one below in one command, for a phone ([phone-app.md](phone-app.md#pairing)). By hand:
+
 On the hub machine, run this with your phone's Tailscale address (the Tailscale app shows it under the phone's name):
 
 ```

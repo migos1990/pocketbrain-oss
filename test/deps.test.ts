@@ -67,10 +67,12 @@ test("a CI install that isn't frozen to bun.lock is caught", () => {
 test("this repo passes: its licenses, its lockfile, and its runtime closure in the SBOM", () => {
   expect(licenseProblems(installed(ROOT))).toEqual([]);
   expect(lockProblems(ROOT)).toEqual([]);
-  // yaml, and the optional local embedder for semantic search (docs/semantic-search.md) with what it pulls in
+  // yaml, qrcode-generator (MIT, no dependencies of its own: `pocketbrain phone`'s QR, src/phone.ts),
+  // and the optional local embedder for semantic search (docs/semantic-search.md) with what it pulls in
   const top = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  expect(Object.keys({ ...top.dependencies, ...top.optionalDependencies })).toEqual(["yaml", "@huggingface/transformers"]);
-  expect(runtime(ROOT).map((p) => p.name)).toEqual(expect.arrayContaining(["yaml", "@huggingface/transformers", "onnxruntime-node"]));
+  expect(Object.keys({ ...top.dependencies, ...top.optionalDependencies })).toEqual(["qrcode-generator", "yaml", "@huggingface/transformers"]);
+  expect(top.dependencies["qrcode-generator"]).toBe("2.0.4"); // pinned exact: a new version is read first
+  expect(runtime(ROOT).map((p) => p.name)).toEqual(expect.arrayContaining(["yaml", "qrcode-generator", "@huggingface/transformers", "onnxruntime-node"]));
 });
 
 test("CI runs the license, lock and advisory checks, and each release carries its SBOM", () => {

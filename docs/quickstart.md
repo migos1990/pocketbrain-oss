@@ -113,6 +113,7 @@ You can also start from a Google Takeout export. Add `--from-mbox "All mail.mbox
 - To add another assistant: `pocketbrain add <name> --slices area:work,contacts-basic`, then `--yes`. [add-an-agent.md](add-an-agent.md) says which door to pick and how to test it.
 - If a token leaks, `pocketbrain token --revoke claude` cuts that assistant off at once.
 - Every per-day rule (the nightly pass and the digest, the request-budget alert, the handoff and source-check caps, and the dates the brain writes) counts your day in `owner.timezone` in `rules/policy.yaml`. `init` sets it to this computer's time zone, unless the computer says only UTC or is already in the default zone, America/Toronto; to change it, edit that line (for example `owner: { timezone: Europe/Paris }`), so a late evening is still today. The dashboard shows its dates and times in that zone too (stored times stay UTC; the full stamp is on hover where a page shows one).
+- Your pages on your phone: with Tailscale on the computer and the phone, `pocketbrain phone` pairs the pocketBrain app in one command and prints a QR for the phone's camera ([phone-app.md](phone-app.md#pairing)).
 - `pocketbrain help` lists the few commands you need. `pocketbrain help --all` lists all of them.
 - Your brain is a plain folder of Markdown files under git. Back it up to a *private* place, or run `pocketbrain backup --init`.
 
