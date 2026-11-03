@@ -37,7 +37,7 @@ import { ownerDay } from "./clock";
 import { isList, type FactRecord } from "./brain";
 import { hubGate } from "./hub";
 import { captureAgent, MAIL_FOOTER, ownerOf } from "./capture";
-import { records } from "./carve";
+import { records, carve, grantFor } from "./carve";
 
 // commits: every commit of one decision, newest first, when there is more than one (a saved fact).
 export interface AutoDone { key: string; question: string; picked: string; why: string; at: string; commit: string; commits?: string[]; undone?: boolean }
@@ -340,7 +340,22 @@ const SAVED = "saved it";
 const HELD_RUN = "held as a conflict";
 // What a conflict plan's run returns when the write updated the value instead.
 const UPDATED_RUN = "updated it";
+// What a run returns when the write handed the yes back as a new proposal (a write check it fails):
+// nothing was filed, so the row never says it was (audit v11 finding 8; G650).
+const HANDED_BACK = "handed back";
+// An accept's outcome as a run says it: refused throws (logged as a failed save), a conflict is
+// held, a proposal handed back is said as one; anything else is what the plan says it did.
+function accepted(res: { outcome: string; message?: string }, ok: string): string {
+  if (res.outcome === "refused") throw new CoreError(409, res.message ?? "refused");
+  if (res.outcome === "disputed") return HELD_RUN;
+  // A noop is a fact already held word for word (a confirmation), unless it is propose()'s own
+  // "already proposed": the same proposal handed back again.
+  if (res.outcome === "inbox" || (res.outcome === "noop" && /^already proposed: /.test(res.message ?? ""))) return HANDED_BACK;
+  return ok;
+}
 export const CONFLICT = "held it as a conflict";
+// What the row says when the hub's yes came back as a proposal (HANDED_BACK).
+const LEFT = "left it for you";
 // What the hub did with a source older than the owner's word: history, the owner's value stays.
 const KEPT = "kept your word";
 // The pulls whose facts the hub may save: what the owner's calendar and mailboxes say about his
@@ -367,8 +382,7 @@ function saveRun(root: string, ref: string): string {
     if (drop.outcome === "refused") throw new CoreError(409, drop.message);
     return `dropped ${ref}: the owner is alerted`;
   }
-  if (res.outcome === "refused") throw new CoreError(409, res.message);
-  return res.outcome === "disputed" ? HELD_RUN : `saved ${ref}`;
+  return accepted(res, `saved ${ref}`);
 }
 
 // Facts saved today, the owner's day: the cap counts them, undone or not.
@@ -448,6 +462,9 @@ const OWNER_CHECKS: Record<string, string> = {
   injection_shapes: "It reads like an instruction to an assistant, so only you decide it.",
   link_only_source: "Its only source is a link the hub can't open, so only you decide it.",
   approval_needs_message_id: "It claims your approval without your message on record, so only you decide it.",
+  // A hub yes is weighed as the assistant's write, and it is never given this category: the same
+  // check hands it back each time (G650).
+  withheld_category: "It names something this assistant isn't given, so only you decide it.",
 };
 function ownerChecks(root: string, file: string): string | undefined {
   try {
@@ -477,6 +494,12 @@ function importedBy(root: string, file: string, by: string): boolean {
 // when it isn't simply a new fact: a different value for one the brain holds (unless it is a newer
 // one from the same kind of source, which is an update), a value the owner confirmed, a fact
 // already in conflict, or a retirement. Never a value in a reason: these show on the overview.
+// The notes a writer's by-title write resolves over (write(): its carve copies, or every note for an
+// agent inside the wall).
+function writerShown(rules: Rules, notes: Note[], agent: string): Note[] {
+  if (rules.policy.agents[agent]?.inside_wall) return notes;
+  return [...carve(notes, rules, grantFor(rules, agent), { flags: false }).visible.values()].map((v) => v.note);
+}
 function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[number], notes: Note[], now: Date): Verdict {
   const rules = rulesOf(root);
   const r = pr.request as { id?: string; title?: string; type?: string; attribute?: string; value?: unknown; retract?: boolean; sources?: unknown[]; as_of?: string };
@@ -492,7 +515,9 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   } } };
   // A new page is saved by name: a note that now has that name is where it would land (the write
   // path resolves it the same way), so it is weighed against that note.
-  const named = !r.id && r.title && r.type ? resolveEntity(notes, r.type, String((r as { title?: string }).title)) : undefined;
+  // Only the notes the writer is shown, as write() resolves a by-title write for the hub's yes: a
+  // namesake it can't see is not where the fact lands (audit v11 finding 8; G650).
+  const named = !r.id && r.title && r.type ? resolveEntity(writerShown(rules, notes, String((r as { agent?: string }).agent ?? pr.by)), r.type, String((r as { title?: string }).title)) : undefined;
   if (named?.ambiguous) return wait(AMBIGUOUS);
   const id = r.id ?? named?.id;
   const note = id ? notes.find((n) => n.fm.id === id) : undefined;
@@ -513,9 +538,7 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   const ownerWords = live.filter((x) => differs(x) && (isOwnerConfirmed(normVerification(x.verification)) || (note && isOwnerWord(rules, note.fm.area, x))));
   const older = ownerWords.length > 0 && ownerWords.every((x) => x.as_of && r.as_of && String(r.as_of).slice(0, 10) < String(x.as_of).slice(0, 10));
   if (older) return { plan: { choice: "accept", label: KEPT, why: "an older source than your word: kept as history, your value stays; Undo takes it back out", at: now.toISOString(), run: () => {
-    const res = decideProposal(root, it.ref, "accept", AUTO);
-    if (res.outcome === "refused") throw new CoreError(409, res.message);
-    return res.outcome === "disputed" ? HELD_RUN : `kept ${it.ref}`;
+    return accepted(decideProposal(root, it.ref, "accept", AUTO), `kept ${it.ref}`);
   } } };
   const askOwner = ownerWords.length > 0;
   // A sender no person page holds files a private or money fact under the serving hold (G420,
@@ -530,11 +553,9 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // (north-star replay, 2026-10-26: logged "held it as a conflict", then lost; G431).
   const privateRec = Object.values(note?.fm.facts ?? {}).some((f) => records(f as never).some((x) => x?.sensitivity && sensitivityRank(x.sensitivity) >= sensitivityRank("private")));
   const conflict: Verdict = privateRec ? wait("Two sources disagree about a page that holds a private fact, so you decide it.") : { plan: { choice: "accept", label: CONFLICT, why: "two sources disagree; the Gardener weighs it tonight, then you decide; Undo takes it back out", at: now.toISOString(), run: () => {
-    const res = decideProposal(root, it.ref, "accept", AUTO, [], { contest: true });
-    if (res.outcome === "refused") throw new CoreError(409, res.message);
     // The write decides, and the row says what it did: a newer value from as strong a source is
     // an update by its rule, never logged as a conflict nobody holds (outside review v3; G438).
-    return res.outcome === "disputed" ? HELD_RUN : UPDATED_RUN;
+    return accepted(decideProposal(root, it.ref, "accept", AUTO, [], { contest: true }), UPDATED_RUN);
   } } };
   if (askOwner) return conflict;
   // A conflict already waits beside the live value (G425): a different value joins it.
@@ -667,6 +688,7 @@ function decideNow(root: string, now: Date, skip: ReadonlySet<string>, filingOnl
     // A save is two commits (the fact, then the answered proposal); Undo reverts both.
     const all = git(root, ["log", "--format=%H", `--author=${AUTO}@pocketbrain.local`, ...(before ? [`${before}..HEAD`] : [])]).split("\n").filter(Boolean);
     const said = ran === HELD_RUN ? (v.plan.label === CONFLICT ? { picked: CONFLICT, why: v.plan.why } : { picked: CONFLICT, why: "the fact changed before it was saved, so it waits as a conflict for the Gardener; Undo takes it back out" })
+      : ran === HANDED_BACK ? { picked: LEFT, why: "the write's checks handed it back, so it waits for you; Undo takes the hub's yes back out" }
       : ran === UPDATED_RUN ? { picked: SAVED, why: "a newer value from as strong a source, so the write updated it; Undo takes it back out" } : { picked: v.plan.label, why: v.plan.why };
     const row: AutoDone = { key: it.key, question: it.title, ...said, at: now.toISOString(), commit, ...(all.length > 1 ? { commits: all } : {}) };
     append(root, AUTO_LOG, row as unknown as Record<string, unknown>);

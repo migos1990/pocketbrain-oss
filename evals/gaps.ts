@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G650: {
+    closed: "claude/audit11-filing",
+    title: "Filing weighed a by-name proposal against pages its writer can't see, and logged a handed-back yes as saved",
+    severity: "medium",
+    finding: "Audit v11 finding 8 (v10 items 7 and 8), reproduced on 15dd56e6: fileVerdict in src/filing.ts resolved a by-title proposal over every note, while the hub's yes runs write(), which resolves it over the writer's carve. A core assistant's proposal named like a page it can't see was planned as a conflict against that page, then the write made a new page and the row said the write updated it. A hub yes the write handed back as a new proposal (withheld_category) was logged \"saved it\", and the handed-back proposal failed with \"already proposed\" on every tick.",
+    fix: "src/filing.ts: fileVerdict resolves the name over writerShown (the writer's carve copies, every note inside the wall); accepted() turns a write's inbox outcome, or propose()'s \"already proposed\" noop, into HANDED_BACK, logged \"left it for you\"; withheld_category joins OWNER_CHECKS so the handed-back proposal waits for the owner. Test: test/audit11-filing-writer-view.test.ts.",
+  },
   G651: {
-    closed: "claude/app-door-log",
+    closed: "cc62f190",
     title: "The phone app kept \"Couldn't reach your hub\" on every page after one Face ID try, for any answer it didn't expect, and the hub kept no line of what it answered",
     severity: "medium",
     finding: "Owner's phone, 2026-11-03 16:22Z, right after the Face ID update (G642): the pink banner stayed on page after page that loaded fine. mobile/App.tsx set the message on a failed Face ID call and cleared it only on the next successful one; mobile/src/hub.ts read every status but 200, 401, 403 and 429 (a 409 when the phone list was busy, a 5xx) as unreachable; and the dashboard logged nothing for /app/pair, /app/nonce or /app/fresh, so the hub, healthy, could not say what the phone was answered.",
@@ -27,7 +34,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/pull.ts records the hash of each read item's sender beside its ref (src/louis.ts recordCheckedRefs, senderHash in src/sameperson.ts; a hash, never the address in plain text). trustedAddresses with found counts a source-verified address only when a ref it cites was read from that very address (checkedSenders), or a contact card's ref on a record the hub filed. A ref read before has no sender and vouches for nothing. Tests: test/audit11-read-mail-vouch.test.ts, test/audit10-planted-sender.test.ts.",
   },
   G646: {
-    closed: "claude/audit11-box-stale",
+    closed: "13feca32",
     title: "The text box wrote a health value on the 30-day sign-in over a private conflict waiting in the inbox",
     severity: "medium",
     finding: "Audit v11 (2026-11-03): G610 made a typed answer on a private dispute wait for a fresh sign-in, as the settle buttons do, but tell() in src/owner-say.ts looked only at disputes. A conflict waiting in the inbox (src/settle-inbox.ts, a page holding a private record) was written over from the box on the 30-day sign-in, its hidden sides decided without being seen.",
