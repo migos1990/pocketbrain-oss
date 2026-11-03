@@ -401,3 +401,45 @@ test("contract carve: a fact tightened after the family link leaves no ref of it
   saveNote(root, n);
   for (const agent of ["planner", "helper"]) expect(JSON.stringify(core.readNote(root, agent, "people/alain-lake")), agent).not.toContain("later-hidden");
 });
+
+test("contract carve: a by-name exclude hides the page's twins too, same folder, type, title and area (G657)", () => {
+  const root = makeBrain();
+  const page = (id: string, title: string, area: string) => {
+    mkdirSync(join(root, "projects"), { recursive: true });
+    writeFileSync(join(root, `${id}.md`), `---\nid: ${id}\ntype: project\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  place: { value: Quellmoor slipway, ${SRC} }\n---\nAbout ${title}.\n`);
+  };
+  page("projects/harbour-refit", "Harbour refit", "work");
+  page("projects/harbour-refit-2", "Harbour  REFIT ", "work"); // a twin: case and spacing differ
+  page("projects/harbour-refit-3", "Harbour refit", "personal"); // another area: not a twin
+  page("projects/harbour-paint", "Harbour paint", "work");
+  const p = join(root, "rules/policy.yaml");
+  writeFileSync(p, readFileSync(p, "utf8").replace("planner: { tier: core, aliases: [Planbot], slices: [area:work, contacts-basic]", "planner: { tier: core, aliases: [Planbot], slices: [area:work, area:personal, contacts-basic], exclude: [projects/harbour-refit]"));
+  const rules = loadRules(root);
+  // Rows: id -> excluded reason (undefined = visible), cold carve and remembered carve alike.
+  const rows: [string, string | undefined][] = [
+    ["projects/harbour-refit", "excluded by name"],
+    ["projects/harbour-refit-2", "excluded by name"],
+    ["projects/harbour-refit-3", undefined],
+    ["projects/harbour-paint", undefined],
+  ];
+  const frozen = loadBrain(root).map((n) => Object.freeze(n));
+  for (const res of [carve(loadBrain(root), rules, grantFor(rules, "planner")), carve(frozen, rules, grantFor(rules, "planner"), { flags: false })])
+    for (const [id, reason] of rows) expect([id, res.excluded.find((e) => e.id === id)?.reason, res.visible.has(id)]).toEqual([id, reason, !reason]);
+});
+
+test("must never: an agent's own new page tells it whether a same-title page kept from it by name exists (G657, slice audit F1)", () => {
+  const seen = (hidden: boolean) => {
+    const root = makeBrain();
+    const p = join(root, "rules/policy.yaml");
+    writeFileSync(p, readFileSync(p, "utf8").replace("planner: { tier: core, aliases: [Planbot], slices: [area:work, contacts-basic]", "planner: { tier: core, aliases: [Planbot], slices: [area:work, contacts-basic], exclude: [projects/harbour-refit]"));
+    if (hidden) {
+      mkdirSync(join(root, "projects"), { recursive: true });
+      writeFileSync(join(root, "projects/harbour-refit.md"), `---\nid: projects/harbour-refit\ntype: project\ntitle: Harbour refit\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  place: { value: Quellmoor slipway, ${SRC} }\n---\nAbout Harbour refit.\n`);
+    }
+    const r = core.remember(root, "planner", { title: "Harbour refit", type: "project", area: "work", attribute: "budget_note", value: "Ask the yard for a quote", as_of: "2026-10-08", sources: ["gmail:f000000000000044"], verification: "verified-by-source" } as never);
+    const hits = core.search(root, "planner", "Harbour refit").map((h) => h.title);
+    return { outcome: r.outcome, hits };
+  };
+  expect(seen(true)).toEqual(seen(false));
+  expect(seen(false).hits).toEqual(["Harbour refit"]);
+});

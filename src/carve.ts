@@ -182,7 +182,27 @@ function place(note: Note, rules: Rules, grant: Grant): { excluded?: Excluded; v
 // carved values the scrub needs are computed either way.
 // `names: false` skips withholding carved values in visible titles and aliases (the merge backstop
 // compares only what is carved, not the copies).
-export function carve(notes: Note[], rules: Rules, grant: Grant, opts: { flags?: boolean; names?: boolean } = {}): CarveResult {
+// A by-name exclude covers the page's twins too (G657): a page in the same folder, of the same
+// type and area, whose title differs only in case and spacing, is the same thing filed twice
+// (a writer blind to the first files a second, G28), and it would hand the agent what the owner
+// hid. The twin is excluded "by name" like the page, so it answers exactly like a missing one.
+// Two different things that share a title and area are both kept out: it over-holds, never leaks.
+const twinKey = (n: Note) => [folderOf(n), n.fm.type ?? "", String(n.fm.title ?? "").trim().replace(/\s+/g, " ").toLowerCase(), n.fm.area ?? ""].join("\u0000");
+function withTwins(notes: Note[], grant: Grant): Grant {
+  if (!grant.exclude.length) return grant;
+  const named = new Set(grant.exclude);
+  const keys = new Set<string>();
+  for (const n of notes) if (named.has(n.fm.id) && String(n.fm.title ?? "").trim()) keys.add(twinKey(n));
+  if (!keys.size) return grant;
+  // A twin the agent made itself stays in view (slice audit F1): it holds the agent's own values,
+  // and hiding it would tell the agent that a page by that name is kept from it. `by` is set once,
+  // when write() makes the page.
+  const twins = notes.filter((n) => !named.has(n.fm.id) && n.fm.by !== grant.agent && keys.has(twinKey(n))).map((n) => n.fm.id);
+  return twins.length ? { ...grant, exclude: [...grant.exclude, ...twins.sort()] } : grant;
+}
+
+export function carve(notes: Note[], rules: Rules, given: Grant, opts: { flags?: boolean; names?: boolean } = {}): CarveResult {
+  const grant = withTwins(notes, given);
   const visible = new Map<string, Visible>();
   const excluded: Excluded[] = [];
   const hiddenFacts: CarveResult["hiddenFacts"] = [];

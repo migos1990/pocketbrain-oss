@@ -10,13 +10,14 @@ export const GAPS: Record<string, Gap> = {
     severity: "high",
     finding: "Audit v11 carve soak (CARVE_SOAK=1), on the list since audit v7: seeds 7227 and 7299, frozen in test/fixtures/carve-seeds/. After handoff ava -> bex about a note, bex's whats_new (full and reader tokens) carries a money split's amount (\"CAD 1,784.96\", \"CAD 35,275.65\") and a name from a fact on that note that bex's carve hides. G254 covers a handoff naming a note's title or id; this class leaks values.",
     fix: "The relay gate (checkBetween in src/relay.ts), which handoffs go through, kept its own list of hidden values and skipped any value that wasn't a string or a number, so an object fact's fields (a split's amount and who it's with) were never needles and the handoff was delivered. It now uses the shared set, hiddenNeedles in src/needles.ts (object fields field by field, a hidden note's aliases), as the act door already did. Seeds 7227 and 7299 now guard it (meta.json has no gap); a row in test/contracts/relay.contract.test.ts.",
-    closed: "claude/audit11-g656",
+    closed: "754125c2",
   },
   G657: {
     title: "A by-name exclude on a money note doesn't hold in context_pack when the topic is the note's name",
     severity: "high",
     finding: "Audit v11 carve soak, seed 7057, frozen in test/fixtures/carve-seeds/seed-7057: dax excludes money/satinyl-vopun by name, yet context_pack {topic: \"Satinyl Vopun\"} hands dax that note's place and detail values (full token).",
-    fix: "Open. The frozen seed fails until it is fixed (meta.json gap: G657). Look at how a by-name exclude reaches the context_pack path (carve's excludes and core.ts contextPack's topic match).",
+    fix: "Not the context_pack path: read and search handed dax the same values. The seed holds money/satinyl-vopun-dup, the same page filed twice (same folder, type, title and area), and the by-name exclude named only the first, so the twin carried every value the owner hid (the merge code already refused to fold them for that reason). carve() now widens a grant's by-name exclude to the page's twins (withTwins in src/carve.ts), excluded by name like the page, so the twin answers exactly like a missing one. Seed 7057 guards it (meta.json has no gap); a row in test/contracts/carve.contract.test.ts. A twin the agent created itself (by) stays visible, or its own new page would vanish and confirm a guessed hidden title (slice audit F1, a must-never row). Known limits: a slice's own exclude (rules/slices.yaml) doesn't follow twins; two different things sharing a title and area are both held (over-hold); the dashboard's Who sees this (html-page.ts, html-brain.ts) and ask-to-see (asks.ts askable) read the exclude list directly, so they don't name a twin as the hidden page's (slice audit L1, L2).",
+    closed: "claude/audit11-g657",
   },
   G647: {
     closed: "29d97517",

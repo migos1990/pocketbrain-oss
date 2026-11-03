@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // What outbound text must not carry, as needles for the shared matcher (src/match.ts).
 //
-// hiddenNeedles(notes, rules, agent): every value the agent can't see, the union of the relay's
-// set (valuesHiddenFrom in src/relay.ts: hidden notes at any level, hidden facts) and the write
-// tripwire's set (carvedValues in src/write.ts: object fields, aliases, flagged hidden facts).
+// hiddenNeedles(notes, rules, agent): every value the agent can't see: the values of hidden
+// notes at any level and of hidden facts, field by field for an object, and a hidden note's
+// aliases (the write tripwire's carvedValues in src/write.ts keeps its own list).
 // The two choke points each missed what the other caught (act-door red team, M1). The act door
 // and the relay (checkBetween, so handoffs too, G656) use it; the write path keeps its own.
 //
