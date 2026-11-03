@@ -7,7 +7,7 @@ import { kindLabel } from "../src/dashboard/browse";
 import { plain } from "../src/dashboard/labels";
 
 test("the assistants' folder says it holds their notes", () => {
-  expect(kindLabel("agents")).toBe("Assistants' notes");
+  expect(kindLabel("agents")).toBe("Assistants' routines");
 });
 
 test("the hub's own checks are named by what happened, in plain words", () => {

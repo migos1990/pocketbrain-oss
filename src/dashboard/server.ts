@@ -208,7 +208,8 @@ export function flashOf(loc: string): { ok: string; err: string } {
 
 // How many of Ask's turns a sign-in keeps (owner app step 4).
 export const ASK_TURNS = 20;
-interface AskTurn { said: string; reply: SayReply; fresh: boolean; at: number }
+// privateThen: what of the turn's page or fact was already private or held when it was answered (G637).
+interface AskTurn { said: string; reply: SayReply; fresh: boolean; at: number; privateThen?: string[] }
 
 export function dashboardHandler(root: string, opts: DashboardOptions & { port: number }) {
   const loginKey = opts.loginKey ?? rand();
@@ -263,29 +264,40 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       colours: Object.fromEntries(agents.map((a, i) => [a.agent, colour[i]!])),
     }), { headers: PAGE_HEADERS });
   };
-  // A turn made right after a sign-in may hold a private value: on an older sign-in it isn't shown again.
+  // What of an answer's page or fact is private or held now (G551; a page-wide answer counts every
+  // fact, G582 re-audit: a page with no prose answers with up to three): "" for the page, else attrs.
+  const privateParts = (byId: Map<string, Note>, t: Pick<AskTurn, "reply">): string[] => {
+    const key = t.reply.fact_key, page = t.reply.page ?? key?.slice(0, key.lastIndexOf("#"));
+    if (!page) return [];
+    const n = byId.get(page);
+    if (key) { const a = key.slice(key.lastIndexOf("#") + 1); return privateNow(n, a) ? [a] : []; }
+    return [...(privateNow(n, "") ? [""] : []), ...Object.keys(n?.fm.facts ?? {}).filter((a) => privateNow(n, a) || records(n!.fm.facts![a]!).some((r) => !!r.unseen && !r.valid_to))];
+  };
+  // A read answer built for an older sign-in: owner-say.ts answers a private page or fact with
+  // "sign in again" and scrubs the page's prose for it (answer, about). A write's reply says back
+  // values, so it never counts.
+  const readFor = (r: SayReply) => !r.undo_token && (!!r.signin || r.kind === "say.lookup" || r.kind.startsWith("say.answer"));
+  // A turn made right after a sign-in may hold a private value: on an older sign-in it isn't shown
+  // again. A read answer made on an older sign-in shows, unless something on its page or fact became
+  // private or held only after it was answered. A hidden turn says so in its place, with the tap to
+  // sign in again (G637).
   const ask = (csrf: string, sid: string, flash?: string) => {
     const rules = loadRules(root), fresh = freshSignIn(root, sid, now());
     const day = now().getTime() - 86_400_000;
     const all = (chats.get(sid) ?? []).filter((t) => t.at >= day);
-    // An answer given on an older sign-in hides too once its page or fact is private now (G551).
     const notes = loadBrain(root, { shared: true }), byId = new Map(notes.map((n) => [n.fm.id, n]));
-    const privateTurn = (t: AskTurn) => {
-      const key = t.reply.fact_key, page = t.reply.page ?? key?.slice(0, key.lastIndexOf("#"));
-      if (!page) return false;
-      if (key) return privateNow(byId.get(page), key.slice(key.lastIndexOf("#") + 1));
-      // A turn about the whole page may have said any of its facts (a page with no prose answers
-      // with up to three): it hides once any of them is private or held now (G582 re-audit).
-      const n = byId.get(page);
-      return privateNow(n, "") || Object.keys(n?.fm.facts ?? {}).some((a) => privateNow(n, a) || records(n!.fm.facts![a]!).some((r) => !!r.unseen && !r.valid_to));
+    const visible = (t: AskTurn) => {
+      if (fresh) return true;
+      if (t.fresh) return false;
+      const parts = privateParts(byId, t);
+      return !parts.length || (readFor(t.reply) && parts.every((x) => t.privateThen?.includes(x)));
     };
-    const shown = all.filter((t) => fresh || (!t.fresh && !privateTurn(t)));
     const titles = new Map(notes.map((n) => [n.fm.id, displayName(n.fm.id, n.fm.title)]));
     // An answer about a page shows that page's prose as the page is now (askProse in html-page.ts).
     let st: ReturnType<typeof loadState> | undefined;
     const prose = (t: AskTurn) => { const n = t.reply.kind === "say.lookup" && t.reply.page ? byId.get(t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {}; };
-    const turns = shown.map((t) => ({ ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}), ...prose(t) }));
-    return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, older: all.length - shown.length, flash }), { headers: PAGE_HEADERS });
+    const turns = all.map((t) => visible(t) ? { ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}), ...prose(t) } : { hidden: true as const });
+    return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, flash }), { headers: PAGE_HEADERS });
   };
   // The sheet a dashed mark opens: only for one of the owner's assistants that doesn't get the fact.
   // The area is offered only when sharing it would let that assistant get the fact.
@@ -559,7 +571,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         if (reply.chips?.length) offered.set(sid, new Set(reply.chips.map((c) => c.say))); } catch (e) { return go("/home", { err: fail(e) }); }
         if (form.page && reply.kind !== "say.unknown-name" && reply.kind !== "say.forgotten") { const r = pageScreen(csrf, reply.page ?? form.page, { said, reply, fresh }); if (r) return r; }
         if (form.from === "ask") {
-          const turns = [...(chats.get(sid) ?? []), { said, reply, fresh, at: now().getTime() }].slice(-ASK_TURNS);
+          const byId = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n]));
+          const turns = [...(chats.get(sid) ?? []), { said, reply, fresh, at: now().getTime(), privateThen: privateParts(byId, { reply }) }].slice(-ASK_TURNS);
           chats.set(sid, turns);
           return ask(csrf, sid);
         }

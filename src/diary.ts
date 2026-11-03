@@ -122,9 +122,12 @@ export function sayDay(text: string): string {
 }
 // Every day inside a text, the same way; a date joined to a time or a range is left alone.
 export const sayDays = (text: string) => text.replace(/(?<![\w/-])\d{4}-\d{2}-\d{2}(?![\w-])/g, sayDay);
+// A Markdown link in a title ("[site.example](http://site.example)", an import's auto-link) reads
+// as its words (G639).
+const MD_LINK = /\[([^\]\n]+)\]\((?:https?:|mailto:)[^)\s]*\)/g;
 export function displayName(id: string, title?: unknown): string {
   const slug = id.split("/").pop() ?? id;
-  const t = typeof title === "string" ? title.trim() : "";
+  const t = typeof title === "string" ? title.replace(MD_LINK, "$1").trim() : "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(t || slug)) return sayDay(t || slug);
   if (t && t !== slug && t !== id && !SLUG_LIKE.test(t)) return sayDays(t);
   // No title, or a title that is itself a slug (a page renamed or gone): its words, a day in it as a day.

@@ -3,18 +3,18 @@
     - text: Thu 8 Oct
     - link "Robin":
       - /url: /who
-  - heading "Ask" [level=1]
-  - paragraph: Ask about anyone or anything in your memory, or tell it what changed. It answers here.
+  - heading "Ask Braniac" [level=1]
+  - paragraph: Ask Braniac about anyone or anything in your memory, or tell it what changed. It answers here.
   - text: Tell your memory something
   - textbox "Tell your memory something":
-    - /placeholder: Ask your memory anything…
+    - /placeholder: Ask Braniac anything…
   - button "Send"
 - navigation "Tabs":
   - link "On your mind":
     - /url: /home
   - link "Memory":
     - /url: /memory
-  - link "Ask":
+  - link "Ask Braniac":
     - /url: /ask
   - link "Who knows":
     - /url: /who

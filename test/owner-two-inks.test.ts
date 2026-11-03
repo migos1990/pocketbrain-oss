@@ -69,7 +69,7 @@ test("On your mind: the headline, how many things wait in the marker ink, the va
   const home = await get("/home");
   expect(home).toMatch(/<header class="top"><p class="day"><span>[^<]+<\/span><a class="me" href="\/who">Robin[^<]*<\/a><\/p><h1>On your mind<\/h1><\/header><p class="count"><b>\d+<\/b><span>things? waits? for you<\/span><\/p>/);
   expect(home).toContain("Next for Atlas launch: freeze the beta build on <mark>15 October</mark>. Or <mark>22 October</mark>?");
-  expect(home).toMatch(/<nav class="tabbar" aria-label="Tabs"><a href="\/home" aria-current="page">On your mind<\/a><a href="\/memory">Memory<\/a><a href="\/ask">Ask<\/a><a href="\/who">Who knows<\/a><\/nav>/);
+  expect(home).toMatch(/<nav class="tabbar" aria-label="Tabs"><a href="\/home" aria-current="page">On your mind<\/a><a href="\/memory">Memory<\/a><a href="\/ask">Ask Braniac<\/a><a href="\/who">Who knows<\/a><\/nav>/);
   expect(home).not.toContain("<svg aria-hidden=\"true\" width=\"24\"");
 }), 60_000);
 

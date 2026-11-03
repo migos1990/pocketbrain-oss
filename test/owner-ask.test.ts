@@ -72,6 +72,7 @@ test("past 10 minutes, a turn made right after the sign-in isn't shown again; a 
     await say("who is Maya Chen?");
     const a = (await req("GET", "/ask")).text;
     expect(turns(a)).toEqual(["who is Maya Chen?"]);
-    expect(a).toContain(APP_COPY.askOlder);
+    expect(a).toContain(APP_COPY.askHidden);
+    expect(a).toContain(`action="/action/sign-in-again"`);
   } finally { delete process.env.PB_NOW; }
 }, 60_000);

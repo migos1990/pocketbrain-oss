@@ -13,20 +13,25 @@ import type { SayReply } from "../owner-say";
 import type { Overlap } from "../overlap";
 import { esc, hidden, href, replyHtml, signInAgain, HOME_COPY } from "./html-home";
 
+// The brain's character, named on screen where the owner talks to it (owner, 2026-11-03: "should be
+// ask Braniac"). One place, so the name can change before a public release.
+export const CHARACTER = "Braniac";
+
 export const APP_COPY = {
   tabs: "Tabs",
   tabMind: "On your mind",
   tabMemory: "Memory",
-  tabAsk: "Ask",
+  tabAsk: `Ask ${CHARACTER}`,
   tabWho: "Who knows",
   mind: "On your mind",
   box: "What's on your mind?",
   boxLabel: "Tell your memory something",
-  ask: "Ask",
-  askBox: "Ask your memory anything…",
-  askOlder: "Earlier answers here show again right after you sign in.",
+  ask: `Ask ${CHARACTER}`,
+  askBox: `Ask ${CHARACTER} anything…`,
+  askHidden: "Sign in again to see this answer.",
+  routinesHint: "What your assistants do for you: the routines and jobs they wrote down.",
   open: "Open {title}",
-  askHint: "Ask about anyone or anything in your memory, or tell it what changed. It answers here.",
+  askHint: `Ask ${CHARACTER} about anyone or anything in your memory, or tell it what changed. It answers here.`,
   me: "You and your assistants",
   more: "{n} more on your mind",
   moreAll: "Everything else on your mind",
@@ -257,6 +262,8 @@ form.composer.sending button.send{transform:scale(.88)}
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;height:calc(64px + env(safe-area-inset-bottom));background:var(--paper);border-top:2px solid var(--text);display:flex;justify-content:space-between;align-items:center;gap:4px;padding:0 max(14px,env(safe-area-inset-left)) env(safe-area-inset-bottom)}
 nav.tabbar a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 4px;color:var(--text);font-size:14px;line-height:18px;font-weight:700;white-space:nowrap}
 nav.tabbar a[aria-current]{background:linear-gradient(transparent 24%,var(--marker-ink) 24% 76%,transparent 76%);color:var(--on-marker);mix-blend-mode:var(--blend)}
+@media (max-width:380px){nav.tabbar{padding:0 max(8px,env(safe-area-inset-left)) env(safe-area-inset-bottom)}nav.tabbar a{font-size:13px;padding:0 2px}}
+@media (max-width:340px){nav.tabbar a{font-size:12px;padding:0 1px}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 `;
@@ -392,11 +399,18 @@ ${box(csrf, {}, APP_COPY.box)}`, { wrap: "chat" });
 // Ask (/ask): the box on its own, its answer above it. The same gate as the home's box.
 // Ask (/ask): the conversation so far, oldest first, then the box. Each turn keeps its Undo and,
 // after a write, a link to the page; only the last answer's chips can still be tapped, as only
-// those count as a tap (server.ts). Turns hidden because the sign-in is older say so in one line.
+// those count as a tap (server.ts). A turn hidden because the sign-in is older says so in its place,
+// without what was asked (the owner may have typed the value), and the last one hidden has the tap
+// to sign in again (G637).
 export interface AskTurnView { said: string; reply: SayReply; title?: string; prose?: { html: string; cites: { href: string; label: string }[] } }
-export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { turns?: AskTurnView[]; older?: number; flash?: string } = {}): string {
+export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { turns?: (AskTurnView | { hidden: true })[]; flash?: string } = {}): string {
   const turns = o.turns ?? [];
-  const turn = (t: AskTurnView, last: boolean) => {
+  // One Sign in again on the page: under the newest hidden turn, unless the newest answer has its own.
+  const end = turns.at(-1), lastHidden = end && !("hidden" in end) && end.reply.signin ? -1 : turns.findLastIndex((t) => "hidden" in t);
+  const turn = (x: AskTurnView | { hidden: true }, i: number) => {
+    const last = i === turns.length - 1;
+    if ("hidden" in x) return `<li><p class="bubble quiet"${last ? ' role="status"' : ""}>${APP_COPY.askHidden}</p>${i === lastHidden ? signInAgain(csrf) : ""}</li>`;
+    const t = x;
     const acts = [
       t.reply.undo_token ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: t.reply.undo_token })}<button>${HOME_COPY.undo}</button></form>` : "",
       t.reply.undo_token && t.reply.page && t.title ? `<a class="open" href="${href(t.reply.page)}">${esc(fill(APP_COPY.open, { title: t.title }))}</a>` : "",
@@ -406,12 +420,11 @@ export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { t
     const answer = t.prose ? `<div class="bubble answer"${last ? ' role="status"' : ""}><p>${t.prose.html}</p><p class="cites">${t.prose.cites.map((c) => `<a href="${esc(c.href)}">${esc(c.label)}</a>`).join("")}</p></div>` : `<p class="bubble"${last ? ' role="status"' : ""}>${esc(t.reply.text)}</p>`;
     return `<li><p class="bubble you">${esc(t.said)}</p>${answer}${acts.length ? `<div class="chips">${acts.join("")}</div>` : ""}${last && t.reply.signin ? signInAgain(csrf) : ""}</li>`;
   };
-  const older = o.older ? `<p class="quiet">${APP_COPY.askOlder}</p>` : "";
-  const talk = turns.length ? `<ol class="talk">${turns.map((t, i) => turn(t, i === turns.length - 1)).join("")}</ol>` : older ? "" : `<p class="bubble">${APP_COPY.askHint}</p>`;
+  const talk = turns.length ? `<ol class="talk">${turns.map(turn).join("")}</ol>` : `<p class="bubble">${APP_COPY.askHint}</p>`;
   // The box sits at the bottom, above the tabs, as in any chat (Louis, 2026-10-31), and the page
   // opens on the newest answer.
   return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.ask, v.name)}
-${older}${talk}${o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : ""}
+${talk}${o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : ""}
 ${box(csrf, { from: "ask" }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo(0,document.body.scrollHeight)</script>" : ""}`, { wrap: "chat" });
 }
 
@@ -551,7 +564,7 @@ export function memoryPage(m: MemoryView): string {
   const week = m.week.length ? `${areaKey(weekShown, ranked)}${changed(weekShown)}` : `<p class="quiet">${APP_COPY.nothingWeek}</p>`;
   const below = m.found !== undefined
     ? `<h2>${esc(fill(APP_COPY.found, { q: m.q ?? "" }))}</h2>${m.found.length ? `${areaKey(m.found, ranked)}${rows(m.found)}` : `<p class="quiet">${esc(fill(APP_COPY.nothingFound, { q: m.q ?? "" }))}</p>`}`
-    : m.kind ? `<h2>${esc(m.kind.label)}</h2>${overlapBlock(m.kind.pages)}${sectioned(m.kind.pages, m.kind.folder !== "people")}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
+    : m.kind ? `<h2>${esc(m.kind.label)}</h2>${m.kind.folder === "agents" ? `<p class="quiet">${APP_COPY.routinesHint}</p>` : ""}${overlapBlock(m.kind.pages)}${sectioned(m.kind.pages, m.kind.folder !== "people")}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : m.allWeek ? `${weekHead}${week}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : `${tiles}${weekHead}${week}${m.week.length > WEEK_ROWS ? `<a class="more" href="/memory?changes=week">${APP_COPY.allChanges}</a>` : ""}`;
   return appPage(APP_COPY.memory, "memory", `${header(fill(APP_COPY.holds, { pages: m.pages, people: m.people }), APP_COPY.memory, m.name)}

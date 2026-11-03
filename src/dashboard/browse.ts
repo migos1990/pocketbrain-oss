@@ -13,8 +13,9 @@ import { ownerView } from "./edit-chat";
 import { agentLabel } from "./labels";
 import { keptFor, type State } from "./data";
 
-// Folders in reading order, with the word a beginner uses for each.
-export const KINDS: [string, string][] = [["people", "People"], ["projects", "Projects"], ["orgs", "Organisations"], ["money", "Money"], ["decisions", "Decisions"], ["notes", "Notes"], ["agents", "Assistants' notes"]];
+// Folders in reading order, with the word a beginner uses for each. The agents folder holds the
+// routines and jobs the assistants run, so it says so, apart from the owner's Notes (G639).
+export const KINDS: [string, string][] = [["people", "People"], ["projects", "Projects"], ["orgs", "Organisations"], ["money", "Money"], ["decisions", "Decisions"], ["notes", "Notes"], ["agents", "Assistants' routines"]];
 export const kindLabel = (folder: string) => KINDS.find(([f]) => f === folder)?.[1] ?? folder;
 export const folderOf = (id: string) => id.split("/")[0];
 

@@ -7,5 +7,5 @@ import { kindLabel, sourceWords } from "../src/dashboard/browse";
 test("where a fact came from and the folder of assistants' notes say assistant", () => {
   expect(sourceWords(["agent:helper"])).not.toMatch(/\bagents?\b/i);
   expect(sourceWords(["agent-relay:x"])).not.toMatch(/\bagents?\b/i);
-  expect(kindLabel("agents")).toBe("Assistants' notes");
+  expect(kindLabel("agents")).toBe("Assistants' routines");
 });

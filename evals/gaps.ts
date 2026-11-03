@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G639: {
+    closed: "48419961",
+    title: "Memory showed Notes and Assistants' notes side by side with nothing telling them apart; link titles read as Markdown",
+    severity: "low",
+    finding: "Owner's phone, 2026-11-03 (\"hard to distinguished the diff betweenn noted and assistant notes\"; \"this seems to be routine/tasks agent do\"): the agents folder's 41 pages are the assistants' routines and jobs, listed as \"Assistants' notes\" next to the owner's \"Notes\"; two titles imported as Markdown links read \"[site](http://site) session reporting\".",
+    fix: "src/dashboard/browse.ts KINDS names the agents folder \"Assistants' routines\"; its Memory list opens with APP_COPY.routinesHint (src/dashboard/html-app.ts); displayName (src/diary.ts) reads a Markdown link in a title as its words. test/memory-kinds-words.test.ts.",
+  },
+  G637: {
+    closed: "48419961",
+    title: "Ask on the phone showed no answer: on a sign-in older than 10 minutes every answer about a page with anything private hid at once",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-03 (\"ask doesnt work\"): two questions reached the hub and the model answered both (Mac usage log), but Ask showed only \"Earlier answers here show again right after you sign in.\" The ask handler hid every turn whose page or fact was private or held now, including a turn made on the older sign-in (already built for it: a private page answers \"sign in again\", prose scrubbed) and the very answer that said to sign in again, and offered no tap.",
+    fix: "src/dashboard/server.ts: each Ask turn records privateThen; a turn made on an older sign-in shows unless its page or fact became private only after it was answered or it wrote; a hidden turn says APP_COPY.askHidden in its place with one Sign in again tap (askPage in src/dashboard/html-app.ts). test/ask-stale-answers.test.ts, test/owner-ask.test.ts.",
+  },
   G635: {
     title: "One project became two pages: a writer blind to an area made a new page with each write, and nothing folded them",
     severity: "medium",
