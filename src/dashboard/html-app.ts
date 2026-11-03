@@ -10,6 +10,7 @@ import { faceLines, faceRoom, waitingTotal, SETTINGS_HREF } from "./home";
 import type { Mark } from "./marks";
 import type { WrongLine } from "./home-beliefs";
 import type { SayReply } from "../owner-say";
+import type { Overlap } from "../overlap";
 import { esc, hidden, href, replyHtml, signInAgain, HOME_COPY } from "./html-home";
 
 export const APP_COPY = {
@@ -77,6 +78,8 @@ export const APP_COPY = {
   found: "Found for “{q}”",
   nothingFound: "Nothing in your memory matches “{q}”.",
   sameName: "{n} pages with this name",
+  overlap: "These may do the same job",
+  overlapWhy: "{who} run on their own, read {sources} and send {job}",
   noArea: "No area",
   pagesUnder: "{n} pages",
   allKinds: "All kinds",
@@ -215,6 +218,7 @@ a.mark.not::after{content:"";position:absolute;inset:-10px}
 .week-head{display:flex;justify-content:space-between;align-items:baseline}.week-head span{font-size:13px;font-weight:500;color:var(--muted)}
 .rows li.changed a{gap:12px;font-weight:400}.rows .dot{flex:none;width:12px;height:12px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
 .key{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 8px;font-size:13px;color:var(--muted)}.key>span{display:inline-flex;align-items:center;gap:6px}.key .dot{flex:none;width:10px;height:10px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
+.overlaps p{margin:4px 0 10px;font-size:15px}.overlaps small{display:block;color:var(--muted);font-size:13px}
 h3.section{display:flex;align-items:center;gap:8px;margin:22px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase}.section .dot{flex:none;width:10px;height:10px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
 .dot.a-1{background:var(--headline-ink);box-shadow:none}.dot.a-2{background:var(--marker-ink);box-shadow:none}.dot.a-3{background:var(--text);box-shadow:none}.dot.a-none{box-shadow:none;border:2px dotted var(--muted)}
 .rows .page{flex:1;min-width:0;display:flex;flex-direction:column}.rows .page b{font-weight:700}.rows .page small{font-size:13px;line-height:18px;color:var(--muted)}.rows .when{flex:none;font-size:13px;font-weight:500;color:var(--muted)}
@@ -414,7 +418,7 @@ ${box(csrf, { from: "ask" }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo
 // Memory (/memory): the kinds with their counts, a kind's pages, a search, and this week's pages.
 // Titles only: a page opens on /p, which shuts what is private on its own.
 export interface MemoryPage { id: string; title: string; area?: string; parent?: string }
-export interface MemoryView { pages: number; people: number; name: string; kinds: { folder: string; label: string; count: number }[]; q?: string; kind?: { label: string; pages: MemoryPage[]; folder?: string }; found?: MemoryPage[]; week: ChangedPage[]; allWeek?: boolean; areas?: string[] }
+export interface MemoryView { pages: number; people: number; name: string; kinds: { folder: string; label: string; count: number }[]; q?: string; kind?: { label: string; pages: MemoryPage[]; folder?: string }; found?: MemoryPage[]; week: ChangedPage[]; allWeek?: boolean; areas?: string[]; overlaps?: Overlap[] }
 // The three area tints (brief 2026-10-30); any other area is a grey dot.
 // A dot says a page's area. The owner's own areas, biggest first, get the three inks (blue,
 // pink, black); any further area is a ring and a page with no area a dotted ring. The colour is
@@ -532,6 +536,12 @@ export function memoryPage(m: MemoryView): string {
     const order = [...ranked.filter((a) => groups.has(a)), ...[...groups.keys()].filter((a) => a && !ranked.includes(a)).sort(), ...(groups.has("") ? [""] : [])];
     return order.map((a) => `<h3 class="section"><span class="dot ${dotClass(a || undefined, ranked)}" aria-hidden="true"></span>${esc(a ? areaWord(a) : APP_COPY.noArea)}</h3>${folded(groups.get(a)!, lead)}`).join("");
   };
+  // Routines that may do the same job (G641): one quiet block, each group linking its pages.
+  const overlapBlock = (ps: MemoryPage[]) => {
+    const title = new Map(ps.map((p) => [p.id, p.title]));
+    const gs = (m.overlaps ?? []).filter((g) => g.ids.every((id) => title.has(id)));
+    return gs.length ? `<div class="overlaps">${gs.map((g) => `<p><b>${APP_COPY.overlap}</b>: ${g.ids.map((id) => `<a href="${href(id)}">${esc(title.get(id)!)}</a>`).join(", ")} <small>${esc(fill(APP_COPY.overlapWhy, { who: g.ids.length > 2 ? "all" : "both", sources: g.sources.join(" and "), job: g.job }))}</small></p>`).join("")}</div>` : "";
+  };
   const changed = (ps: ChangedPage[]) => `<ul class="rows">${ps.map((p) => `<li class="changed"><a href="${href(p.id)}">${d(p.area)}<span class="page"><b>${esc(p.title)}</b><small>${esc([p.what.length ? p.what.slice(0, 3).join(", ") : APP_COPY.somethingNew, p.from].join(" · "))}</small></span><span class="when">${esc(p.day)}</span></a></li>`).join("")}</ul>`;
   const search = `<form class="box" method="get" action="/memory"><label class="sr" for="mq">${APP_COPY.search}</label><input type="text" id="mq" name="q" value="${esc(m.q ?? "")}" placeholder="${esc(APP_COPY.searchHint)}" autocomplete="off" enterkeyhint="search" maxlength="200"><button>${APP_COPY.searchGo}</button></form>`;
   const tinted = m.kinds.filter((k) => TINT[k.folder]), rest = m.kinds.filter((k) => !TINT[k.folder]);
@@ -541,7 +551,7 @@ export function memoryPage(m: MemoryView): string {
   const week = m.week.length ? `${areaKey(weekShown, ranked)}${changed(weekShown)}` : `<p class="quiet">${APP_COPY.nothingWeek}</p>`;
   const below = m.found !== undefined
     ? `<h2>${esc(fill(APP_COPY.found, { q: m.q ?? "" }))}</h2>${m.found.length ? `${areaKey(m.found, ranked)}${rows(m.found)}` : `<p class="quiet">${esc(fill(APP_COPY.nothingFound, { q: m.q ?? "" }))}</p>`}`
-    : m.kind ? `<h2>${esc(m.kind.label)}</h2>${sectioned(m.kind.pages, m.kind.folder !== "people")}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
+    : m.kind ? `<h2>${esc(m.kind.label)}</h2>${overlapBlock(m.kind.pages)}${sectioned(m.kind.pages, m.kind.folder !== "people")}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : m.allWeek ? `${weekHead}${week}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : `${tiles}${weekHead}${week}${m.week.length > WEEK_ROWS ? `<a class="more" href="/memory?changes=week">${APP_COPY.allChanges}</a>` : ""}`;
   return appPage(APP_COPY.memory, "memory", `${header(fill(APP_COPY.holds, { pages: m.pages, people: m.people }), APP_COPY.memory, m.name)}

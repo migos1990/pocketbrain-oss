@@ -3738,6 +3738,12 @@ export const GAPS: Record<string, Gap> = {
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
+  G641: {
+    title: "Assistants' routines that do the same job sat apart with nothing saying so",
+    severity: "low",
+    finding: "Owner's phone, 2026-11-03: \"maybe there's a way to flag overlapping things agents do?\" Two assistants each kept a routine that runs on its own, reads the same mailbox and sends the same kind of alert or morning summary; Memory listed them as strangers.",
+    fix: "src/overlap.ts findOverlaps: active capability pages with a schedule that isn't on request, one shared source from tools and one job kind from the title are grouped, code only. The Memory routines list shows \"These may do the same job\" with links, each routine's page lists the others, upkeep step 1c3 gives the Gardener a count under no page id, `pocketbrain overlaps` lists them. Never merged, never an ask. Tests: test/routine-overlap.test.ts.",
+  },
   G638: {
     title: "Projects read as one flat list: a project, its sub-pages and its related pages looked like strangers",
     severity: "medium",

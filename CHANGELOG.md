@@ -10,6 +10,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- Routines that may do the same job are said. On Memory's routines list, "These may do the same job" names two or more assistants' routines that run on their own, read one source and do one kind of job ("both run on their own, read Gmail and send alerts"), and each routine's page lists the others. Nothing is merged or asked; `pocketbrain overlaps` lists them (docs/wiki.md, G641).
 - Projects come in sections. A kind's list on Memory with pages in more than one area is grouped under each area's name, biggest first, so a project sits with the pages around it; "Cabin (rental host)" now gathers "Cabin: rebooking inquiry" and "Cabin: check-in" under it, and a page whose parent is set sits under that parent. Nothing is merged; each page still opens on its own (G638).
 - The Gardener's org-describe run gets the $10 it was meant to have. `tend` wrote its budget as `"10"`, which Managed Agents reads as 10 cents, so the first run stopped after 14 searches. It now writes 1000 cents, and re-running `pocketbrain tend --managed --describe --apply` raises a kept file still at 10. `tend` also finds your door in `rules/gardener.yaml`'s `mcp_url` when `rules/hub.yaml` has no `public_url`, so `--url` isn't needed there (G636).
 - Pulling down in the phone app loads the page again. Before, the spinner stayed up and the page didn't change. A label says when to let go. It reaches the app as an over-the-air update, with no new build (docs/phone-app.md).

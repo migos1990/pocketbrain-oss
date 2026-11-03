@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // SPDX-License-Identifier: AGPL-3.0-only
 // pocketbrain CLI. The brain folder comes from --brain, $PB_BRAIN, or the current directory.
+import { findOverlaps } from "./overlap";
 import { catchUpDiary } from "./diary-catchup";
 import { forgetPerson, planForget, undoForget } from "./forget";
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
@@ -314,6 +315,7 @@ const USAGE = `pocketbrain <command>
   gardener setup [--profile p] [--lock <claude-lock.json>] [--agent g] [--mcp-url u] [--vault <id>]
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
+  overlaps                           assistants' routines that may do the same job, by page id (docs/wiki.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
@@ -1856,6 +1858,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       : `\n    pocketbrain same-person merge ${p.id} --swap   (keeps ${p.drop})`}
     pocketbrain same-person not ${p.id}`);
     for (const m of personMerges(root)) console.log(`merged: ${m.drop} into ${m.keep}  (undo: pocketbrain same-person undo ${m.id})`);
+    return 0;
+  }
+  // Routines that may do the same job (src/overlap.ts, docs/wiki.md, G641): owner only, ids only.
+  if (cmd === "overlaps") {
+    const o = findOverlaps(loadBrain(root));
+    for (const g of o) console.log(`${g.ids.join(", ")}: ${g.ids.length > 2 ? "all" : "both"} run on their own, read ${g.sources.join(" and ")} and send ${g.job}`);
+    console.log(`${o.length} group${o.length === 1 ? "" : "s"} of routines may do the same job.`);
     return 0;
   }
   if (cmd === "fold" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setFoldTwins(root, args[0]!));

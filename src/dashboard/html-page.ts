@@ -3,6 +3,7 @@
 // sources, the prose with its numbered references, Mentioned on, Changed (this page's diary lines,
 // with Undo), then Details (the facts) and Who sees this, each one row. The box sits at the bottom
 // with the page as its subject. Standalone like the home (html-home.ts); fixed words in PAGE_COPY.
+import { findOverlaps } from "../overlap";
 import type { Note, FactRecord } from "../brain";
 import { isList, isDisputed } from "../brain";
 import type { State } from "./data";
@@ -33,6 +34,7 @@ export const PAGE_COPY = {
   sources: "{n} sources",
   oneSource: "1 source",
   mentioned: "Mentioned on",
+  sameJob: "May do the same job",
   changed: "What changed",
   details: "Details",
   who: "Who sees this",
@@ -294,12 +296,17 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
 <div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
+  // Routines that may do the same job as this one (G641): the others, linked; a secret page only
+  // right after a sign-in, like Memory.
+  const sameJob = closed || n.fm.type !== "capability" ? [] : (findOverlaps(s.notes).find((g) => g.ids.includes(n.fm.id))?.ids ?? [])
+    .filter((id) => id !== n.fm.id).map((id) => s.notes.find((x) => x.fm.id === id)!).filter((x) => x && (fresh || x.fm.sensitivity !== "secret"));
+  const overlapList = sameJob.length ? `<h2 class="sec">${PAGE_COPY.sameJob}</h2><p class="links">${sameJob.map((x) => `<a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a>`).join(", ")}.</p>` : "";
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
   // Undo after an answer to the Gardener's line on an org: only that org's own answer (org-undo).
   const undoOrg = o.flash && o.undo && isOrg(n) ? `<div class="chips"><form method="post" action="/action/org-undo">${hidden(csrf, { id: n.fm.id, hash: o.undo })}<button>${PAGE_COPY.undo}</button></form></div>` : "";
   const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}${undoOrg}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
   return appPage(name, "memory", `${band}
-${closed ? "" : describeCard(s, csrf, n)}${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${mentionedList}
+${closed ? "" : describeCard(s, csrf, n)}${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${overlapList}${mentionedList}
 ${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}
 ${pinned}`, { css: PAGE_CSS, wrap: "page" });
 }

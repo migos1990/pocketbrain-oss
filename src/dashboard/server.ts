@@ -46,6 +46,7 @@ import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
 import { parentOf as wikiParent } from "../wiki";
+import { findOverlaps } from "../overlap";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
@@ -319,6 +320,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       name: firstName(s.rules), kinds: kindCounts(s), areas: rankAreas(all.map((n) => (n.fm.area ? { area: String(n.fm.area) } : {}))), week: changedPages(root, s.rules, s.notes, s.now, shown),
       ...(q.get("changes") === "week" && !query && !kind ? { allWeek: true } : {}),
       ...(query ? { q: query, found: (fresh ? searchNotes(s, query, 20).map((h) => h.note) : byTitle(browsable(s), query)).filter(shown).map(page) } : {}),
+      ...(kind === "agents" && !query ? { overlaps: findOverlaps(all) } : {}),
       ...(kind && !query ? { kind: { label: kindLabel(kind), pages: browsable(s).filter((n) => folderOf(n.fm.id) === kind && shown(n)).sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))).map(page), folder: kind } } : {}),
     }), { headers: PAGE_HEADERS });
   };

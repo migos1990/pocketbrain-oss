@@ -113,6 +113,12 @@ In `whats_new`, a commit reads `by: "owner"` when its author address is the owne
 
 The hub doesn't check a hand edit for instructions or hidden values: it is your own text. It runs one at a time with the hub's other writes, but another process writing a note at that moment (a CLI command) could be committed with it.
 
+## Routines that overlap
+
+An assistant's routine is a `capability` page under `agents/<assistant>/` with `status`, `schedule` and `tools` facts. Two routines may do the same job when both are active, both run on their own (a schedule that isn't "on request"), both read one source (Gmail, Calendar, Discord, Notion, texts…, read from `tools`) and both do one kind of job (summaries, alerts, reminders or bookings, read from the title). Code decides it (`findOverlaps` in `src/overlap.ts`), never a model.
+
+It is a hint, never a question. The routines list on Memory shows "These may do the same job" above the list, one line per group linking each routine and saying what they share, and each routine's own page lists the others under "May do the same job". Nothing is merged, paused or counted on On your mind. Upkeep step 1c3 gives the Gardener one count under the key `routine-overlap`, no page id. `pocketbrain overlaps` lists the groups by page id.
+
 ## What assistants see
 
 An assistant that may read a note's text also reads its summary: in `read`, in its Markdown view (a `Summary:` line) and in `context_pack`. The summary is cleaned the same way as the body. Links to notes outside its slice and values carved from it are withheld (`pageSummary` in `src/view.ts`).

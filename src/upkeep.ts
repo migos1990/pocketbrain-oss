@@ -20,6 +20,7 @@ import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
 import { wikiLint, renderTouchedPages } from "./wiki";
 import { foldTwins } from "./fold";
+import { findOverlaps } from "./overlap";
 import { setAsideReceipts } from "./receipt-pages";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
@@ -186,6 +187,14 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     else if (f.folds.length) add({ rule: "twin-would-fold", key: "twin-would-fold", kind: "review", detail: `${n(f.folds.length, "page has", "pages have")} an older page with the same name to fold into; \`pocketbrain fold\` lists them, \`pocketbrain fold on\` folds them each night` });
     if (f.refused.length) add({ rule: "twin-held", key: "twin-held", kind: "review", detail: `${n(f.refused.length, "page", "pages")} with the same name as an older one couldn't fold yet; \`pocketbrain fold\` says why` });
     if (on && f.folds.length) { notes = loadBrain(root); byId.clear(); for (const x of notes) byId.set(x.fm.id, x); }
+  }
+
+  // 1c3. Routines that may do the same job (src/overlap.ts, G641): a hint for the owner, never a
+  //      change. The finding is a count under a key that is no page's id, so the Gardener learns
+  //      nothing about routines outside its view; the owner sees the groups on Memory.
+  {
+    const o = findOverlaps(notes);
+    if (o.length) add({ rule: "routine-overlap", key: "routine-overlap", kind: "review", detail: `${o.length} group${o.length === 1 ? "" : "s"} of assistants' routines may do the same job; \`pocketbrain overlaps\` lists them` });
   }
 
   // 1d. Page text (src/wiki.ts renderTouchedPages, docs/wiki.md): every page a commit touched in
