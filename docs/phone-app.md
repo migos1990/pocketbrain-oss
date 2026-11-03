@@ -20,7 +20,7 @@ The hub keeps only the device key's hash, with the phone's name, when it paired,
 
 When a page asks for a sign-in from the last 10 minutes, the app asks for Face ID, then asks `POST /app/nonce` for a one-time nonce for its sign-in and posts it with the device key to `POST /app/fresh`. The hub makes the sign-in fresh only when all of these hold: the request is the app's own (the `x-pocketbrain-app: 1` header and no Origin, so no web page can send it, the hub's own included); the cookie is a live sign-in this phone made (at pairing); the nonce was given to that sign-in in the last 2 minutes and not used yet; and the phone has made a sign-in fresh fewer than 12 times this hour (`APP_FRESH_PER_HOUR`). Face ID never makes a sign-in, never sets a cookie and never moves the 30 days: a sign-in still ends 30 days after pairing, and then the phone pairs again with a phone link (audit v11, G642). A key the hub doesn't know, or one used on a sign-in its phone didn't make, answers 401 with nothing set, the same as no key. After 10 such answers in an hour the door waits an hour for every key, the real one too.
 
-Both doors open only where a phone link works: on the tailnet listener and through `tailscale serve`, from the devices you listed. A pairing request from a web page must come from the hub's own address; the Face ID doors (`/app/nonce`, `/app/fresh`) take no web page at all. The app's own requests carry no Origin. Neither key is ever logged, kept in clear or sent back in an answer (`test/phone-app.test.ts`).
+Both doors open only where a phone link works: on the tailnet listener and through `tailscale serve`, from the devices you listed. A pairing request from a web page must come from the hub's own address; the Face ID doors (`/app/nonce`, `/app/fresh`) take no web page at all. The app's own requests carry no Origin. Neither key is ever logged, kept in clear or sent back in an answer (`test/phone-app.test.ts`). Each call to the three doors leaves one line in `.git/pb-app-door.jsonl` (owner only, the last 500): when, which door, the status, whether a sign-in cookie came, and for a refusal the hub's one-line reason; never a key, a nonce or a cookie (`pocketbrain dashboard phones log`). The app says "Couldn't reach your hub" only when the hub didn't answer, twice (a call dropped right after Face ID is tried once more); any other answer is said with its status, and a page that loads clears the message (G651).
 
 ## Removing a phone
 
@@ -28,6 +28,7 @@ Both doors open only where a phone link works: on the tailnet listener and throu
 pocketbrain dashboard phones                 # names, when paired, last Face ID sign-in
 pocketbrain dashboard phones remove "Robin's phone"
 pocketbrain dashboard phones remove all
+pocketbrain dashboard phones log             # the app's last 50 calls and what the hub answered
 ```
 
 A removed phone's key stops working at once, and so does every sign-in it made, on a running hub too: the hub checks each sign-in against its kept list on every request.

@@ -41,7 +41,7 @@ import * as hub from "./hub";
 import { doctor, renderDoctor } from "./doctor";
 import { applyFixes, fixPlan, renderDone, renderPlan } from "./doctor-fix";
 import { useCells, startCells, cellsOn } from "./cell";
-import { serveDashboard, mintPhoneLink } from "./dashboard/server";
+import { serveDashboard, mintPhoneLink, appDoorFile } from "./dashboard/server";
 import { appPhones, removeAppPhones } from "./dashboard/phone-app";
 import { runAutoByHand } from "./filing";
 import { revokeTokens, rotateToken, tokenInfo, retainTokens } from "./auth";
@@ -256,7 +256,7 @@ const USAGE = `pocketbrain <command>
   phone [--device <name>] [--yes] [--no-restart]   pair your phone in one command: picks it from Tailscale, opens the
                                      dashboard to it (shows the rules lines first), tailscale serve, then a QR for the app
   dashboard phone-link [--port n]    a sign-in link for your phone: works once, for a day, on your tailnet
-  dashboard phones [remove <name>|all]   the phones paired with the pocketBrain app; remove ends one's Face ID sign-in (docs/phone-app.md)
+  dashboard phones [log|remove <name>|all]   the phones paired with the pocketBrain app; log: the app's last calls and the hub's answers; remove ends one's Face ID sign-in (docs/phone-app.md)
   filing now                           the hub's filing step by hand, only when no hub runs here: file what captures and sources found, expire what is past its deadline
   filing all on|off                    every fact your captures and sources find files itself, with Undo; only a conflict asks you
   me name [--suggested]                your full name as an alias (asked here, or the one your mail gives most), so facts about you land on your own page
@@ -1071,6 +1071,14 @@ ${p.text}`);
       const gone = removeAppPhones(root, which);
       if (!gone.length) { console.error(`No paired phone is called "${which}" (pocketbrain dashboard phones lists them)`); return 1; }
       console.log(`Removed ${gone.join(", ")}: its Face ID sign-in and its sign-ins end now`);
+      return 0;
+    }
+    // The app's doors, one line per call: when, door, status, the hub's reason (G651). Never a key.
+    if (args[1] === "log") {
+      const f = appDoorFile(root);
+      const lines = existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean).slice(-50) : [];
+      if (!lines.length) { console.log("No call to the app's doors yet."); return 0; }
+      for (const l of lines) { try { const x = JSON.parse(l) as { at: string; door: string; status: number; cookie: boolean; why?: string }; console.log(`${x.at}  ${x.door}  ${x.status}${x.cookie ? "" : "  no sign-in cookie"}${x.why ? `  ${x.why}` : ""}`); } catch { /* a torn line */ } }
       return 0;
     }
     const phones = appPhones(root);

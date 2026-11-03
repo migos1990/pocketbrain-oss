@@ -75,11 +75,16 @@ test("MCP: initialize, list tools, call them; identity comes from the token", as
   expect(author).toBe("planner");
 });
 
-test("Helper writing a carved value through the server is refused and alerted", async () => {
+test("Helper (trial) writing a carved value through the server answers like any proposal, and the owner is alerted (G648)", async () => {
   const { root, call } = setup();
   const r = await call("helper", "POST", "/v1/remember", { id: "projects/course-a", attribute: "funding", value: "Maple Trust Bank", as_of: "2026-10-07", sources: ["gmail:f000000000000006"] });
-  expect(r.status).toBe(422);
+  const plain = await call("helper", "POST", "/v1/remember", { id: "projects/course-a", attribute: "funding", value: "Birch Lane Fund", as_of: "2026-10-07", sources: ["gmail:f000000000000006"] });
+  expect(r.status).toBe(plain.status);
+  expect(r.json.outcome).toBe("inbox");
   expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("helper");
+  // A core writer's write that would commit is still refused.
+  const core = await call("planner", "POST", "/v1/remember", { id: "projects/course-a", attribute: "funding", value: "Maple Trust Bank", as_of: "2026-10-07", sources: ["gmail:f000000000000006"] });
+  expect(core.status).toBe(422);
 });
 
 test("disputes are the resolver's only; weak evidence is refused, an exact newer source settles it", async () => {

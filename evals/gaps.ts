@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G651: {
+    closed: "claude/app-door-log",
+    title: "The phone app kept \"Couldn't reach your hub\" on every page after one Face ID try, for any answer it didn't expect, and the hub kept no line of what it answered",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-03 16:22Z, right after the Face ID update (G642): the pink banner stayed on page after page that loaded fine. mobile/App.tsx set the message on a failed Face ID call and cleared it only on the next successful one; mobile/src/hub.ts read every status but 200, 401, 403 and 429 (a 409 when the phone list was busy, a 5xx) as unreachable; and the dashboard logged nothing for /app/pair, /app/nonce or /app/fresh, so the hub, healthy, could not say what the phone was answered.",
+    fix: "src/dashboard/server.ts appDoorLog: one line per call in .git/pb-app-door.jsonl (when, door, status, cookie or not, the refusal's one-line reason; never a key, nonce or cookie; the last 500), printed by pocketbrain dashboard phones log. mobile/src/hub.ts: fresh tries a dropped call once more, says offline only when the hub didn't answer twice, and any other status as { error } (freshWords); pageClears: a page that loads clears the message (App.tsx). Test: test/app-door-log.test.ts.",
+  },
   G642: {
     closed: "2b0aad2b",
     title: "The phone app's device key alone made any cookie, or none, a fresh owner sign-in, and reset the 30 days",
@@ -13,11 +20,18 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/dashboard/server.ts: /app/fresh takes only the app's own request (x-pocketbrain-app header, no Origin) on a live sign-in, with a one-time nonce from /app/nonce given to that sign-in in the last 2 minutes; it never makes a sign-in or sets a cookie; markFresh moves at, never since, so a sign-in ends 30 days after it began. src/dashboard/phone-app.ts useAppPhone: only a sign-in that phone made, APP_FRESH_PER_HOUR per phone. mobile/src/hub.ts asks for the nonce first. Tests: test/app-fresh-bound.test.ts, test/phone-app.test.ts, test/phone-app-client.test.ts.",
   },
   G643: {
-    closed: "claude/audit11-mail-vouch",
+    closed: "15dd56e6",
     title: "A mail id the hub had read vouched for any address an assistant planted",
     severity: "high",
     finding: "Audit v11 (2026-11-03), reproduced on 303c320f: G615 made a source-verified address count as a known sender only once a ref it cites was checked and found, but found said only that the mail existed. An assistant citing a real mail the hub had read could write any address on a person page as verified-by-source and make it a known sender, so a stranger's private fact filed itself.",
     fix: "src/pull.ts records the hash of each read item's sender beside its ref (src/louis.ts recordCheckedRefs, senderHash in src/sameperson.ts; a hash, never the address in plain text). trustedAddresses with found counts a source-verified address only when a ref it cites was read from that very address (checkedSenders), or a contact card's ref on a record the hub filed. A ref read before has no sender and vouches for nothing. Tests: test/audit11-read-mail-vouch.test.ts, test/audit10-planted-sender.test.ts.",
+  },
+  G646: {
+    closed: "claude/audit11-box-stale",
+    title: "The text box wrote a health value on the 30-day sign-in over a private conflict waiting in the inbox",
+    severity: "medium",
+    finding: "Audit v11 (2026-11-03): G610 made a typed answer on a private dispute wait for a fresh sign-in, as the settle buttons do, but tell() in src/owner-say.ts looked only at disputes. A conflict waiting in the inbox (src/settle-inbox.ts, a page holding a private record) was written over from the box on the 30-day sign-in, its hidden sides decided without being seen.",
+    fix: "src/owner-say.ts tell(): an inbox conflict on the fact is the same ask; a private one returns say.settle-signin on the 30-day sign-in and writes nothing, and right after a sign-in the typed value settles it (settleInbox typed). Per the audit's fix, any value that lands private (privateNow on the page or fact, or thirdPartySensitive) returns say.private-signin on the 30-day sign-in too. Test: test/audit11-box-inbox-fresh.test.ts.",
   },
   G639: {
     closed: "48419961",
@@ -3765,6 +3779,12 @@ export const GAPS: Record<string, Gap> = {
     severity: "medium",
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
+  },
+  G648: {
+    title: "A trial assistant's refused guess confirmed a hidden value; a made-up one went to the inbox",
+    severity: "medium",
+    finding: "Audit v11, receipts row, reproduced on main: a trial assistant's new page whose title shared words with a fact's value hidden from it was refused with leak_tripwire, while the same write with a made-up title went to the inbox. The difference answers a guess one write at a time, against invariant 3 (a hidden note answers like a missing one).",
+    fix: "src/write.ts: for a writer whose write goes to the inbox anyway (trial tier, not the editor, not a journal line), the three leak wires (hidden values, title, withheld parts of a value) alert the owner and mark the write; it goes on to the inbox with the reply any write gets, and the proposal carries an owner-only `leak: true`, which the owner's card states (src/dashboard/data.ts). A core writer's write that would commit is still refused. Left open (slice audit, Low): a trial Gardener's last_run reports the owner's decision on its proposals, and the owner declines a leak proposal; that signal passes through the owner, who has the alert. Tests: test/tripwire-title-oracle.test.ts, test/contracts/write.contract.test.ts.",
   },
   G644: {
     title: "A fold's Undo broke after any later write, and the home's Undo for a fold wasn't the fold's",

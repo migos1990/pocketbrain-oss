@@ -41,7 +41,7 @@ run("Plain words: the owner reads labels, and the code names are one hover away"
   try {
     await r.mcp("helper", "context_pack", {});
     await r.mcp("helper", "search", { query: "course" });
-    expect((await r.remember("helper", "Paid via Maple Trust Bank")).outcome).toBe("refused"); // the leak tripwire
+    expect((await r.remember("planner", "Paid via Maple Trust Bank")).outcome).toBe("refused"); // the leak tripwire (a core writer; a trial one is held quietly, G648)
     expect((await r.remember("steward", "Send the reminder Friday")).outcome).toBeDefined();
     const page = await r.open();
     for (const path of ["/overview", "/agents", "/activity", "/agent/helper", "/brain", "/note/projects/course-a"]) {

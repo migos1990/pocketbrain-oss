@@ -16,6 +16,7 @@ import { records } from "./carve";
 import { write } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
 import { readDiary, sayDay } from "./diary";
+import { inboxConflicts, settleInbox } from "./settle-inbox";
 import { say, type SayId } from "./owner-errors";
 import { renderTouchedPages, MADE } from "./wiki";
 import { clock } from "./clock";
@@ -23,7 +24,7 @@ import { ownerConflicts, ownerDecide } from "./core";
 import { forgetPerson } from "./forget";
 import { forgetNote } from "./dashboard/edit";
 import { plain, attrWords, isVerbAttribute, lineWords, yourToDo, privateNow, shutBody, type LineKey } from "./dashboard/home";
-import { findSecret, SENSITIVE_WORDS } from "./checks";
+import { findSecret, SENSITIVE_WORDS, thirdPartySensitive } from "./checks";
 import { KEY_ENV, logJudgment, modelConfigFor, parseJson, type Model } from "./model";
 import { modelFor } from "./usage";
 
@@ -593,6 +594,16 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   // A conflict waiting on this fact: the owner's typed word outranks every side, so it settles it
   // (Mac use-it 2026-10-27: a plain write replaced the live value and left the conflict asking).
   const open = page.fm.id ? ownerConflicts(root, clock(), { held: true }).find((c) => c.fact_key === `${page.fm.id}#${told.attribute}`) : undefined;
+  // One waiting in the inbox is the same ask (src/settle-inbox.ts): its hidden sides wait for a
+  // fresh sign-in, then the typed word settles it (audit v11, G646: the box wrote over it).
+  const waiting = !open && page.fm.id ? inboxConflicts(root).find((c) => c.fact_key === `${page.fm.id}#${told.attribute}`) : undefined;
+  if (waiting) {
+    if (waiting.private && !fresh) return { kind: "say.settle-signin", page: page.fm.id, signin: true, text: say("say.settle-signin") };
+    settleInbox(root, waiting.id, { typed: told.value as string });
+    const row = readDiary(root).length > before ? readDiary(root).at(-1) : undefined;
+    try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
+    return { kind: "say.settled", page: page.fm.id, fact_key: waiting.fact_key, undo_token: row?.undo_token, text: say("say.settled", { name: String(page.fm.title), attr: attrWords(told.attribute), value: shown(told.value) }) };
+  }
   if (open) {
     // A conflict whose sides the settle screen hides past a fresh sign-in (a private one) settles from
     // the box only on a fresh sign-in too, as its buttons do (STALE_OK settle-pick; audit v10, G610).
@@ -602,6 +613,12 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
     try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
     return { kind: "say.settled", page: page.fm.id, fact_key: open.fact_key, undo_token: row?.undo_token, text: say("say.settled", { name: String(page.fm.title), attr: attrWords(told.attribute), value: shown(told.value) }) };
   }
+  // A value that lands private (a private page or fact, or another person's health, school, legal or
+  // money matter, which write() forces private) is noted only right after a sign-in, like every other
+  // private change the owner screens hold back on the 30-day sign-in (audit v11, G646). A plain to-do
+  // that only sounds like money ("I owe Ben the sample") is still noted.
+  if (!fresh && ((page.fm.id && privateNow(page, told.attribute)) || thirdPartySensitive({ id: page.fm.id || undefined, type: page.fm.type, attribute: told.attribute, value: told.value } as never)))
+    return { kind: "say.private-signin", page: page.fm.id, signin: true, text: say("say.private-signin") };
   const r = write(root, {
     agent: OWNER, ...target, attribute: told.attribute, value: told.value, as_of,
     ...(told.when?.approx ? { as_of_approx: true } : {}),

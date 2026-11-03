@@ -78,7 +78,7 @@ export function proposals(root: string): Proposal[] {
     reg ??= cited.length ? louisMessages(root) : undefined;
     return {
       // No by (reopened before G601): the request's agent, which the server set from the token.
-      file, by: String(p.by ?? request.agent ?? "?"), reason: String(p.reason ?? ""), at: p.at ? String(p.at) : undefined, request, unregistered: cited.filter((r) => !reg!.has(r)),
+      file, by: String(p.by ?? request.agent ?? "?"), reason: `${(p as Row).leak ? "It carried a value this assistant can't see (you were alerted). " : ""}${String(p.reason ?? "")}`, at: p.at ? String(p.at) : undefined, request, unregistered: cited.filter((r) => !reg!.has(r)),
       ...((p as Row).capture ? { capture: true as const } : {}), ...(p.evidence ? { evidence: p.evidence as Evidence } : {}), ...(p.source_check ? { source_check: p.source_check as Proposal["source_check"] } : {}),
       ...(twins.length ? { also: twins.map((t) => ({ file: t.file, by: String(t.doc.by ?? "?"), ...((t.doc as Row).source_check && ((t.doc as Row).source_check as { result?: string }).result !== "match" ? { mismatch: true } : {}), sources: (t.doc.request?.sources ?? []).map((x) => refString(x)), ...levelOf(t.doc.request, p.request) })) } : {}),
     };

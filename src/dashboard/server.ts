@@ -151,6 +151,24 @@ function keepSession(root: string, sid: string, csrf: string, now: Date) {
 }
 // Face ID in the phone app: the sign-in is fresh again for FRESH_MINUTES, and still ends 30 days
 // after it began (audit v11, G642: the app's door reset the 30-day clock at every use).
+// The app's doors, one line per call in .git/ (owner only, never served): when, which door, the
+// status, whether a cookie came, and for a refusal the hub's own one-line reason. Never a key, a
+// nonce or a cookie: an answer with a 200 is never read, since it carries the nonce or the phone key.
+// The last APP_DOOR_KEEP lines are kept. `pocketbrain dashboard phones log` prints them (G651).
+export const appDoorFile = (root: string) => join(root, ".git", "pb-app-door.jsonl");
+const APP_DOOR_KEEP = 500;
+async function appDoorLog(root: string, door: string, req: Request, res: Response, now: Date): Promise<Response> {
+  try {
+    if (!existsSync(join(root, ".git"))) return res;
+    const why = res.status === 200 ? undefined : (await res.clone().text()).split("\n")[0]!.slice(0, 160);
+    const line = JSON.stringify({ at: now.toISOString(), door, status: res.status, cookie: /(?:^|;\s*)pb_owner=/.test(req.headers.get("cookie") ?? ""), ...(why ? { why } : {}) });
+    const f = appDoorFile(root);
+    const old = existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean) : [];
+    writeFileSync(f, [...old.slice(-(APP_DOOR_KEEP - 1)), line].join("\n") + "\n", { mode: 0o600 });
+  } catch (e) { console.error(`dashboard: couldn't log the app's door: ${(e as Error).message}`); }
+  return res;
+}
+
 function markFresh(root: string, sid: string, now: Date) {
   const all = keptSessions(root, now), k = all[sidHash(sid)];
   if (!k) return;
@@ -523,9 +541,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     }
     if (remote && url.pathname === "/send-link" && req.method === "POST") return sendLink(req, hosts, secure);
     // The phone app (docs/phone-app.md): pair with a phone link, then Face ID makes a sign-in fresh.
-    if (remote && url.pathname === "/app/pair" && req.method === "POST") return appPair(req, hosts, secure);
-    if (remote && url.pathname === "/app/nonce" && req.method === "POST") return appNonce(req);
-    if (remote && url.pathname === "/app/fresh" && req.method === "POST") return appFresh(req, hosts);
+    // Each call leaves a line (when, door, status, the hub's reason), so a phone's "Couldn't reach
+    // your hub" can be read against what the hub answered (G651).
+    if (remote && url.pathname === "/app/pair" && req.method === "POST") return appDoorLog(root, "/app/pair", req, await appPair(req, hosts, secure), now());
+    if (remote && url.pathname === "/app/nonce" && req.method === "POST") return appDoorLog(root, "/app/nonce", req, appNonce(req), now());
+    if (remote && url.pathname === "/app/fresh" && req.method === "POST") return appDoorLog(root, "/app/fresh", req, await appFresh(req, hosts), now());
     const sid = session(req);
     if (!sid) return remote ? signedOutPhone(secure) : oops("dash.signed-out");
     const csrf = sessions.get(sid)!;

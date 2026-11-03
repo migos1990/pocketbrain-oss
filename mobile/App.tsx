@@ -9,7 +9,7 @@ import * as SecureStore from "expo-secure-store";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Device from "expo-device";
 import { parsePairLink } from "./src/pair";
-import { pair, fresh } from "./src/hub";
+import { pair, fresh, freshWords, pageClears } from "./src/hub";
 import { inject } from "./src/inject";
 import { Mark } from "./src/Mark";
 import { PairScreen } from "./src/PairScreen";
@@ -91,8 +91,8 @@ export default function App() {
     if (!device) { setFaceId(false); setMsg("Face ID didn't unlock. Tap Text me a sign-in link to get a link instead."); return; }
     const r = await fresh(fetch as never, hub, device);
     if (r === "fresh") { lastFresh.current = Date.now(); setMsg(""); web.current?.reload(); }
-    else if (r === "unpaired") { await SecureStore.deleteItemAsync(HUB); setHub(null); setMsg("This phone needs a new sign-in: it was removed, or its 30 days ended. Open a new sign-in link to pair it again."); }
-    else setMsg(r === "wait" ? "Too many tries this hour. Try again later." : r === "refused" ? "Your hub didn't take that Face ID sign-in. Try again." : "Couldn't reach your hub. Is Tailscale on?");
+    else if (r === "unpaired") { await SecureStore.deleteItemAsync(HUB); setHub(null); setMsg(freshWords(r)); }
+    else setMsg(freshWords(r));
   }, [hub]);
 
   const opening = <View style={s.opening}><StatusBar barStyle="light-content" /><Mark size={160} pose="step" /></View>;
@@ -101,7 +101,7 @@ export default function App() {
     <SafeAreaView style={[s.page, { backgroundColor: shell(phase).background }]}>
       <StatusBar barStyle={shell(phase).bar} />
       <WebView ref={web} source={{ uri: `${hub}/` }} key={`${faceId ? "faceid" : "plain"}-${load}`} injectedJavaScript={inject(faceId)}
-        onMessage={(e) => { const m = e.nativeEvent.data; if (m === "fresh") onFresh(); else if (m === "ready" || m === "blank") step({ kind: "loaded", blank: m === "blank" }); }}
+        onMessage={(e) => { const m = e.nativeEvent.data; if (m === "fresh") onFresh(); else if (m === "ready" || m === "blank") { if (pageClears(m)) setMsg(""); step({ kind: "loaded", blank: m === "blank" }); } }}
         onError={() => step({ kind: "error" })} onHttpError={(e) => step({ kind: "http", status: e.nativeEvent.statusCode })}
         onContentProcessDidTerminate={() => step({ kind: "gone" })} onRenderProcessGone={() => step({ kind: "gone" })}
         sharedCookiesEnabled thirdPartyCookiesEnabled={false} allowsBackForwardNavigationGestures

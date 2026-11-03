@@ -231,7 +231,7 @@ export function inboxCards(root: string): InboxCard[] {
   return cards;
 }
 
-function propose(root: string, req: WriteRequest, reason: string, fails: CheckFail[]): WriteResult {
+function propose(root: string, req: WriteRequest, reason: string, fails: CheckFail[], leak?: boolean): WriteResult {
   // An agent with max_proposals_per_day (the gardener) can't flood the owner's inbox.
   const capped = proposalCap(root, loadRules(root), req.agent);
   if (capped) return { outcome: "refused", message: capped, fails: [{ check: "proposal_cap", outcome: "refuse", reason: capped, fix: "try again tomorrow" }] };
@@ -255,7 +255,7 @@ function propose(root: string, req: WriteRequest, reason: string, fails: CheckFa
   const file = join(root, rel);
   if (existsSync(file)) return { outcome: "noop", message: `already proposed: ${rel}`, file: rel };
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, YAML.stringify({ proposed: d, by: req.agent, reason, checks: fails.map((f) => f.check), evidence: evidenceFor(root, req, loadBrain(root, { shared: true })), request: req }, { lineWidth: 0 }));
+  writeFileSync(file, YAML.stringify({ proposed: d, by: req.agent, reason, checks: fails.map((f) => f.check), evidence: evidenceFor(root, req, loadBrain(root, { shared: true })), ...(leak ? { leak: true } : {}), request: req }, { lineWidth: 0 }));
   const unsaved = commitPaths(root, [rel], `${oneLine(`propose(${req.agent}): ${req.id ?? req.title}#${req.attribute ?? ""}`)}\n\n${oneLine(reason)}`, req.agent);
   if (unsaved) return notSaved(unsaved);
   return { outcome: "inbox", message: `proposed for review: ${reason}`, file: rel, fails };
@@ -447,6 +447,18 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // Not lower-cased: findCarried decodes base64 first and folds case itself, as the relay does (G113).
   const carried = unhide(`${raw} ${req.attribute ?? ""} ${(req.sources ?? []).map(refString).join(" ")}`);
   const common = shownWords(own);
+  // A writer whose write goes to the inbox anyway (a trial assistant, not the editor, not a journal
+  // line) is never told its guess hit a hidden value: the write goes on to the inbox with the reply
+  // a write holding nothing hidden gets, the owner is alerted, and the proposal carries an
+  // owner-only `leak: true` (audit v11, G648; invariant 3). A writer whose write would commit is
+  // still refused: no reply can look like a commit without saving the value where readers see it.
+  const proposesAnyway = !opts.acceptedBy && !editor && (req.kind ?? "fact") !== "journal" && tierOf(rules, req.agent).writes === "propose";
+  let leak = false;
+  const tripped = (r: WriteResult, from: string): WriteResult | undefined => {
+    alert(root, { agent: req.agent, check: "leak_tripwire", from });
+    if (proposesAnyway) { leak = true; return undefined; }
+    return done(r);
+  };
   // A canary (src/canary.ts) the writer's carve doesn't show, in any field: a leak, whatever its level.
   // The agent sees an ordinary leak refusal; only the owner's alert says it was a canary.
   const canary = canaryHits(root, unhide(JSON.stringify(req)), new Set(own.visible.keys()))[0];
@@ -461,19 +473,17 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     const from = hit.from;
     // Which hidden note and fact matched goes to the owner's alert only: naming it to the writer
     // would confirm where a guessed value lives (eval gap G165).
-    const r = done({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] });
-    alert(root, { agent: req.agent, check: "leak_tripwire", from });
-    return r;
+    const r = tripped({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] }, from);
+    if (r) return r;
   }
   // A title is every reader's to see and the id is built from it, so a title carrying any value
   // carved from the writer (hidden by attribute, name or slice too, not only flagged facts) is a
   // leak: refused, and a guess can't be read back as "[withheld]" (slice audit of G56).
-  if (req.title && !rules.policy.agents[req.agent]?.inside_wall) {
+  if (!leak && req.title && !rules.policy.agents[req.agent]?.inside_wall) {
     const t = unhide(req.title);
     if (withholdName(t, own.carvedValues, nameNeedles(own)) !== t) {
-      const r = done({ outcome: "refused", alert: true, message: `leak_tripwire: the title contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "title", fix: "don't relay carved-out facts" }] });
-      alert(root, { agent: req.agent, check: "leak_tripwire", from: `title of a ${req.type ?? "note"} write` });
-      return r;
+      const r = tripped({ outcome: "refused", alert: true, message: `leak_tripwire: the title contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "title", fix: "don't relay carved-out facts" }] }, `title of a ${req.type ?? "note"} write`);
+      if (r) return r;
     }
   }
   // A value holding a word the writer's reads show only as [withheld] (a fact carved by name,
@@ -481,10 +491,9 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // ones). Writing it back means the agent knows the word: the same matcher as the title wire and
   // the same refusal, so a guess at the hidden part is never confirmed by replaced_value, dated, or
   // merged as the same value (G188).
-  if (!rules.policy.agents[req.agent]?.inside_wall && scalarStrings(req.value).some((v) => { const u = unhide(v); return withholdName(u, own.carvedValues, nameNeedles(own)) !== u; })) {
-    const r = done({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] });
-    alert(root, { agent: req.agent, check: "leak_tripwire", from: "a withheld part of a value" });
-    return r;
+  if (!leak && !rules.policy.agents[req.agent]?.inside_wall && scalarStrings(req.value).some((v) => { const u = unhide(v); return withholdName(u, own.carvedValues, nameNeedles(own)) !== u; })) {
+    const r = tripped({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] }, "a withheld part of a value");
+    if (r) return r;
   }
 
 
@@ -496,7 +505,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       const [t, w] = hit.split(": ");
       alert(root, { agent: req.agent, check: "withheld_category", from: hit });
       const fail: CheckFail = { check: "withheld_category", outcome: "inbox", reason: `mentions "${w}"; ${t} isn't shared with ${req.agent}`, fix: "The owner decides" };
-      return done({ ...propose(root, req, `${fail.check}: ${fail.reason}`, [fail]), alert: true });
+      return done({ ...propose(root, req, `${fail.check}: ${fail.reason}`, [fail], leak), alert: true });
     }
   }
 
@@ -517,7 +526,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     // at a withheld word in a title can't be confirmed by landing on the existing note.
     const shown = writerCarve ? [...writerCarve.visible.values()].map((v) => v.note) : notes;
     const r = resolveEntity(shown, req.type!, req.title!);
-    if (r.ambiguous) return done(propose(root, req, `new or same as ${r.ambiguous.join(" / ")}?`, []));
+    if (r.ambiguous) return done(propose(root, req, `new or same as ${r.ambiguous.join(" / ")}?`, [], leak));
     if (r.id && writerSees(r.id)) note = mine(notes.find((n) => n.fm.id === r.id));
   }
   if (!note && req.id && !req.title) return done({ outcome: "refused", message: `no note ${req.id}; give title, type and area to create it` });
@@ -559,7 +568,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // where the page is found by id or by title, not before (6ebb09f7 live: two found by title; G522).
   if (note && req.area && req.area !== note.fm.area && opts.acceptedBy) { const { area: _moved, ...rest } = req; req = rest as WriteRequest; }
   else if (note && req.area && req.area !== note.fm.area)
-    return done(propose(root, req, `area change ${note.fm.area} -> ${req.area} needs the owner (area_change_needs_louis)`, []));
+    return done(propose(root, req, `area change ${note.fm.area} -> ${req.area} needs the owner (area_change_needs_louis)`, [], leak));
   const owner = rules.policy.areas[area]?.owner ?? (area === req.agent ? req.agent : undefined);
   const coHere = !!co && co.areas.includes(area);
   if (co && !coHere) return coRefuse(area);
@@ -572,10 +581,12 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     const unknown = claimed.filter((r) => !reg.has(r));
     if (unknown.length || (isOwnerConfirmed(normVerification(req.verification)) && !claimed.length)) {
       const fail: CheckFail = { check: "owner_message_registered", outcome: "inbox", reason: `cites ${unknown.join(", ") || "no message"} as the owner's word, not in the owner's registry`, fix: "The owner accepts it from the inbox, which registers the id" };
-      return done(propose(root, req, `${req.agent} is a trial agent: propose-only; ${fail.check}: ${fail.reason}`, [fail]));
+      return done(propose(root, req, `${req.agent} is a trial agent: propose-only; ${fail.check}: ${fail.reason}`, [fail], leak));
     }
-    return done(propose(root, req, `${req.agent} is a trial agent: propose-only`, []));
+    return done(propose(root, req, `${req.agent} is a trial agent: propose-only`, [], leak));
   }
+  // Past here a write commits: a held guess never gets this far (proposesAnyway is this branch's test).
+  if (leak) return done({ outcome: "refused", message: "leak_tripwire: held", fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "held", fix: "don't relay carved-out facts" }] });
   // "The owner told me" from a co-owner's assistant in her areas is the co-owner's word.
   // Not when the owner accepts it from the inbox: that is his word, and he has read it.
   const coWord = coHere && !opts.acceptedBy && isOwnerConfirmed(normVerification(req.verification));

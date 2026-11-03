@@ -97,7 +97,7 @@ A cloud assistant needs your public address (your named tunnel, see [hub.md](hub
 
 ## 2. Carve its slice
 
-Start small: a new assistant is a **trial** agent. It sees up to `personal` sensitivity, and everything it writes waits for your OK. Pick from the ready-made slices (`area:<area>` for each area, `contacts-basic` for names and roles) and the ones in `rules/slices.yaml`:
+Start small: a new assistant is a **trial** agent. It sees up to `personal` sensitivity, and everything it writes waits for your OK. A trial assistant whose write carries a value it can't see (a guess at something hidden from it, in the title, the value or anywhere else) gets the same reply as any other write: it waits for you. It is never told the guess was right. You get the `leak_tripwire` alert, and its card on Settings starts with "It carried a value this assistant can't see"; the hub's own filing never saves it (G648). A wider assistant's write that would save at once is still refused with `leak_tripwire`, because no reply can look like a save without saving the value where others read it. Pick from the ready-made slices (`area:<area>` for each area, `contacts-basic` for names and roles) and the ones in `rules/slices.yaml`:
 
 ```sh
 pocketbrain carve newbot --slices area:work,contacts-basic --exclude-types money --preview

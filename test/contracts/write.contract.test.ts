@@ -107,6 +107,17 @@ test("contract write: a leak refusal names no hidden note or fact; only the owne
   expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("money/main-bank#bank");
 });
 
+test("contract write: a trial writer's guess at a hidden value answers like a write holding none, and the owner is alerted (G648, invariant 3)", () => {
+  const root = makeBrain();
+  const req = (title: string) => ({ agent: "helper", title, type: "org", area: "work", attribute: "what_it_is", value: "a bank", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" } as WriteRequest);
+  const hit = write(root, req("Maple Trust Bank")), miss = write(root, req("Birch Lane Bank"));
+  const shape = (r: { outcome: string; message?: string; fails?: unknown }) => JSON.stringify({ o: r.outcome, m: (r.message ?? "").replace(/inbox\/\S+/g, "F"), f: r.fails });
+  expect(miss.outcome).toBe("inbox");
+  expect(shape(hit)).toBe(shape(miss));
+  expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("leak_tripwire");
+  expect(loadBrain(root).some((n) => /maple/i.test(String(n.fm.title)))).toBe(false);
+});
+
 test("contract write: every write is a git commit authored by the writer, and log/writes.jsonl is hash-chained (invariant 7)", () => {
   const root = makeBrain();
   const rows: { req: WriteRequest; outcome: WriteOutcome; author?: string }[] = [
