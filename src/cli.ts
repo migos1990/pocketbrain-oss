@@ -69,7 +69,7 @@ import * as share from "./share";
 import { createInvite, mintFromShell, shellMintRefusal, reachRefusal } from "./invite";
 import { initBrain, interview, InitError, AGENT_KINDS, KIND_NAME, type AgentKind, type InitOptions } from "./init";
 import { timezoneOf } from "./clock";
-import { APP_LABEL, INSTRUCTION_PLACE, bridge, configPath, dropAgentKey, isLocalApp, isLoopback, mergeConfig, saveAgentKey, snippet, stdinLines, writeAppConfig } from "./local-apps";
+import { APP_LABEL, INSTRUCTION_PLACE, agentKeyFile, bridge, configPath, dropAgentKey, isLocalApp, isLoopback, mergeConfig, saveAgentKey, snippet, stdinLines, writeAppConfig } from "./local-apps";
 import { tick, watch, watchdog, loadTextState } from "./textline/poll";
 import { ESCALATION_TEMPLATE, loadEscalation, useTransport, TRANSPORTS } from "./textline/policy";
 import { makeTransport, fakeReply } from "./textline/transport";
@@ -598,15 +598,17 @@ function connectKind(root: string, agent: string, kind: Kind, url: string, name?
       mergeConfig(kind, existsSync(path) ? readFileSync(path, "utf8") : undefined, agent);
     }
     const tok = mintFromShell(root, agent, { via: `${via}${write ? " --write" : ""}`, code });
-    const keyFile = saveAgentKey(agent, tok);
+    let keyFile = "";
+    if (!write) keyFile = saveAgentKey(agent, tok);
     const steps: string[] = [];
     if (write) {
       let w: { path: string; backup?: string };
-      try { w = writeAppConfig(kind, agent); } catch (e) {
-        // Nothing points at the new key, so it is taken back: no live key is left behind.
-        revokeTokens(root, agent);
-        dropAgentKey(agent);
-        console.error(`Couldn't write ${label}'s config (${(e as Error).message}), so its new key was revoked and nothing was changed there. Fix: run pocketbrain connect ${agent} --kind ${kind} without --write, and paste what it prints.`);
+      // The config first, then the key file: a failed write leaves a key the app already uses as it was.
+      try { w = writeAppConfig(kind, agent); keyFile = saveAgentKey(agent, tok); } catch (e) {
+        // Nothing points at the new key, so only it is taken back; any key from before keeps working.
+        try { retainTokens(root, agent, (h) => h !== sha256(tok)); }
+        catch (r) { console.error(`The new key couldn't be taken back (${(r as Error).message}). Fix: pocketbrain token --revoke ${agent}, then connect it again.`); }
+        console.error(`Couldn't write ${label}'s config (${(e as Error).message}), so its new key was taken back. Fix: run pocketbrain connect ${agent} --kind ${kind} without --write, and paste what it prints.`);
         return 1;
       }
       console.log(`Added pocketbrain to ${label}'s config, ${w.path}${w.backup ? ` (the file as it was is in ${w.backup})` : ""}.`);
@@ -1274,6 +1276,15 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     let r!: ReturnType<typeof rotateToken>;
     try { mintFromShell(root, agent, { via: `token rotate ${agent}${role ? ` --role ${role}` : ""} --yes`, code: arg(args, "--code"), role, mint: () => (r = rotateToken(root, agent, { role, overlapHours })).token }); } catch (e) { console.error((e as Error).message); return 1; }
     const url = (arg(args, "--url") ?? hub.loadHub(root)?.public_url ?? "http://127.0.0.1:8787").replace(/\/$/, "");
+    // An app on this computer reads its key from its key file (src/local-apps.ts): the new key goes
+    // there, never on screen, so the app keeps working once the old one stops.
+    let hasKeyFile = false;
+    try { hasKeyFile = existsSync(agentKeyFile(agent)); } catch { /* not a plain name: no key file can exist */ }
+    if (!role && hasKeyFile) {
+      const file = saveAgentKey(agent, r.token);
+      console.log(`The new key for ${agent} is in ${file}, readable only by you. Quit the app and open it again so it uses it: ${r.expiring ? `the old key keeps working until ${when(r.expires)}, then stops` : "it had no other key"}.`);
+      return 0;
+    }
     if (role) console.log(`${role} token for ${agent}: ${r.token}`);
     else printConnect(root, agent, a!.transport === "api" ? "api" : "mcp", url, `token rotate ${agent}`, undefined, r.token);
     console.log(`\nPaste the new token into ${agent} now: ${r.expiring ? `the old token keeps working until ${when(r.expires)}, then stops` : "it had no other token"}.`);

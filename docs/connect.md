@@ -30,7 +30,7 @@ Every page has the same four parts: what you need, the command, how to check it 
    Use your app's kind in place of `cursor`: `cursor`, `vscode`, `codex`, `gemini`, `claude-desktop`, `claude-code`, or `mcp` for any other. The app starts as a **trial** assistant: it sees your work notes and the names and roles of your contacts, never your money or anything private, and what it saves waits for your OK on the dashboard. `--write` puts a `pocketbrain` entry into the app's own config file, after a backup of that file, changing nothing else in it; without `--write` it prints the entry for you to paste.
 3. Restart the app, and paste the instruction block the command printed where its page says, so it checks the brain without being asked.
 
-The app's config holds a command, `pocketbrain mcp --agent cursor`, and never a key. The key stays in a file of its own, readable only by you ([hosting.md](hosting.md#keys-at-rest)).
+The app's config holds a command, `pocketbrain mcp --agent cursor`, and never a key. The key stays in a file of its own, readable only by you ([hosting.md](hosting.md#keys-at-rest)). The bridge sends it only to the hub on this computer and never follows a redirect. `pocketbrain token rotate cursor --yes` puts a new key in that file, never on screen; quit the app and open it again. If `--write` can't write the app's config, only the key it just made is taken back: a key the app already had keeps working.
 
 Done with an app, or think its key leaked? One command cuts it off at once and deletes its key file:
 

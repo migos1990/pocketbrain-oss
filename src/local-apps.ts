@@ -193,9 +193,11 @@ export async function bridge(o: { agent: string; url?: string; lines: AsyncItera
     const isRequest = msg.id !== undefined && msg.id !== null;
     let res: Response;
     try {
-      res = await f(`${base}/mcp`, { method: "POST", body: line, headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "application/json, text/event-stream", ...(session ? { "mcp-session-id": session } : {}) } });
+      // Never follow a redirect: the key goes to this machine's hub only (isLoopback above).
+      res = await f(`${base}/mcp`, { method: "POST", body: line, redirect: "manual", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "application/json, text/event-stream", ...(session ? { "mcp-session-id": session } : {}) } });
     } catch (e) { err(`pocketbrain mcp: the hub at ${base} didn't answer (${(e as Error).message}). Is pocketbrain start running?`); fail(msg.id, "pocketBrain's hub isn't running on this computer"); continue; }
     if (res.status === 401 || res.status === 403) { err(`pocketbrain mcp: the hub refused ${o.agent}'s key (revoked, or expired). Connect it again: pocketbrain connect ${o.agent} --kind <app>`); fail(msg.id, "the hub refused this key"); return 1; }
+    if (res.status >= 300 && res.status < 400) { err(`pocketbrain mcp: the hub at ${base} answered with a redirect (${res.status}), which the bridge doesn't follow, so its key stays on this computer.`); fail(msg.id, "the hub answered with a redirect, which the bridge doesn't follow"); continue; }
     session = res.headers.get("mcp-session-id") ?? session;
     const body = await res.text();
     if (!isRequest || !body.trim()) continue;

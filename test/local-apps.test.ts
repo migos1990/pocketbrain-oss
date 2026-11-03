@@ -14,6 +14,7 @@ import { main } from "../src/cli";
 import { handle } from "../src/server";
 import { bridge, agentKeyFile } from "../src/local-apps";
 import { runAction } from "../src/dashboard/actions";
+import { tokenOwner } from "../src/auth";
 
 function run(root: string, ...args: string[]) {
   const out: string[] = [];
@@ -195,4 +196,52 @@ test("the bridge answers a request whose streamed reply isn't JSON with an error
   const replies = out.join("").trim().split("\n").map((l) => JSON.parse(l));
   expect(replies.map((r) => r.id)).toEqual([1, 3]);
   expect(replies[0].error.code).toBe(-32603);
+});
+
+test("token rotate for an app on this computer puts the new key in its key file, never on screen, and the bridge keeps working", async () => {
+  const root = makeBrain();
+  expect(run(root, "add", "cursor", "--kind", "cursor", "--yes").code).toBe(0);
+  const old = readFileSync(agentKeyFile("cursor"), "utf8").trim();
+  const r = run(root, "token", "rotate", "cursor", "--yes");
+  expect(r.code).toBe(0);
+  const next = readFileSync(agentKeyFile("cursor"), "utf8").trim();
+  expect(next).toStartWith("pb_cursor_");
+  expect(next).not.toBe(old);
+  expect(statSync(agentKeyFile("cursor")).mode & 0o777).toBe(0o600);
+  expect(r.out).not.toContain(next);
+  expect(r.out).toContain(agentKeyFile("cursor"));
+  const out: string[] = [];
+  expect(await bridge({ agent: "cursor", lines: lines({ jsonrpc: "2.0", id: 1, method: "tools/list" }), write: (s) => out.push(s), fetch: viaHub(root) })).toBe(0);
+  expect(out.join("")).toContain('"tools"');
+});
+
+test("the bridge never follows a redirect, so its key can't be carried to another address", async () => {
+  const root = makeBrain();
+  expect(run(root, "add", "cursor", "--kind", "cursor", "--yes").code).toBe(0);
+  const inits: (RequestInit | undefined)[] = [];
+  const f = (async (_u: unknown, init?: RequestInit) => { inits.push(init); return new Response("", { status: 307, headers: { location: "https://evil.example/mcp" } }); }) as unknown as typeof fetch;
+  const out: string[] = [];
+  const code = await bridge({ agent: "cursor", lines: lines({ jsonrpc: "2.0", id: 1, method: "tools/list" }), write: (s) => out.push(s), fetch: f, err: () => {} });
+  expect(code).toBe(0);
+  expect(inits.length).toBe(1);
+  expect(inits[0]?.redirect).toBe("manual");
+  const replies = out.join("").trim().split("\n").map((l) => JSON.parse(l));
+  expect(replies[0]).toMatchObject({ id: 1, error: { code: -32603 } });
+});
+
+test("a failed --write takes back only the key it just made: the app already connected keeps its key and its file", () => {
+  const root = makeBrain();
+  expect(run(root, "add", "codex", "--kind", "codex", "--yes").code).toBe(0);
+  const first = readFileSync(agentKeyFile("codex"), "utf8").trim();
+  writeFileSync(join(home, "afile"), "not a folder");
+  const savedCodex = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = join(home, "afile", "codex");
+  try {
+    const r = run(root, "connect", "codex", "--kind", "codex", "--write");
+    expect(r.code).toBe(1);
+  } finally { if (savedCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = savedCodex; }
+  expect(readFileSync(agentKeyFile("codex"), "utf8").trim()).toBe(first);
+  const tokens = YAML.parse(readFileSync(join(root, "rules", "tokens.yaml"), "utf8"));
+  expect(tokens.agents.codex.length).toBe(1);
+  expect(tokenOwner(root, first)?.agent).toBe("codex");
 });
