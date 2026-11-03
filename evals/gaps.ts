@@ -5,6 +5,12 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G634: {
+    title: "Data on the home and Memory read out of context: one line per value, a review paragraph as a fact, one name listed twice",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-03 (\"some data needs to be contextualized more or merged together\"; \"this needs to work for new users to be wowed\"): a held subscription read as three lines (\"…'s amount is CAD 6.20.\" \"…'s due is 9 Nov 2026.\" \"…'s status is will renew.\"); a Gardener sensitivity-review paragraph, pay figures and all, was read out on the home as a fact; Memory listed one name twice, a course as three unrelated rows (\"X\", \"X, Fall 2026\", \"X: exam due…\") and one vendor as four.",
+    fix: "src/dashboard/home.ts pageSentences: held values say one line per page (\"Notes app subscription comes to CAD 6.20, is due 9 Nov 2026 and will renew.\"), on the card and in the done line; an amount, a due day or a state says itself after the name, never \"status is will renew\"; prose (over 140 characters, or several sentences) is \"has a longer … note on its page\", never its words, on the home and in its diary lines; the counting card says how many pages (\"7 new things on 3 pages…\"). src/dashboard/html-app.ts foldRows: Memory's kind list says a name once (\"2 pages with this name\", opening a search), nests \"X, …\" and \"X: …\" under X, and three or more pages that lead with one word under that word (not people). Tests: test/read-in-context.test.ts.",
+  },
   G633: {
     closed: "3d1010df",
     title: "Strangers' junk sign-ins could lock an agent's right key out of the browser door",

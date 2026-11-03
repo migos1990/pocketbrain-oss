@@ -40,11 +40,11 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, settleLeft, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, pageSentences, type HeldValue, settleLeft, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
-import { homePage, askPage, memoryPage, whoPage, letPage, APP_COPY, FONT_PATH } from "./html-app";
+import { homePage, askPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
@@ -315,10 +315,10 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const all = browsable(s).filter(shown);
     return new Response(memoryPage({
       pages: all.length, people: all.filter((n) => folderOf(n.fm.id) === "people").length,
-      name: firstName(s.rules), kinds: kindCounts(s), week: changedPages(root, s.rules, s.notes, s.now, shown),
+      name: firstName(s.rules), kinds: kindCounts(s), areas: rankAreas(all.map((n) => (n.fm.area ? { area: String(n.fm.area) } : {}))), week: changedPages(root, s.rules, s.notes, s.now, shown),
       ...(q.get("changes") === "week" && !query && !kind ? { allWeek: true } : {}),
       ...(query ? { q: query, found: (fresh ? searchNotes(s, query, 20).map((h) => h.note) : byTitle(browsable(s), query)).filter(shown).map(page) } : {}),
-      ...(kind && !query ? { kind: { label: kindLabel(kind), pages: browsable(s).filter((n) => folderOf(n.fm.id) === kind && shown(n)).sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))).map(page) } } : {}),
+      ...(kind && !query ? { kind: { label: kindLabel(kind), pages: browsable(s).filter((n) => folderOf(n.fm.id) === kind && shown(n)).sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))).map(page), folder: kind } } : {}),
     }), { headers: PAGE_HEADERS });
   };
 
@@ -609,7 +609,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         // Show: the owner sees a held value, and from now on their assistants get it (src/seen.ts).
         // A card can hold several values that read the same (home.ts heldName): one key per line.
         const keys = (form.key ?? "").split("\n").map((k) => k.trim()).filter(Boolean).slice(0, 50);
-        const notes = loadBrain(root), said: string[] = [], at = diaryAt();
+        const notes = loadBrain(root), said: HeldValue[] = [], at = diaryAt();
         for (const key of keys) {
           const r = markSeen(root, key);
           if (r.outcome === "not_saved") return go("/home", { err: r.message });
@@ -618,10 +618,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           const n = notes.find((x) => x.fm.id === id);
           // Said as the home says a memory (G625): "Ben Carter prefers tea", never "Ben Carter: prefers is tea".
           const attr = key.slice(hash + 1);
-          said.push(factSentence(id, n?.fm.title, attr, r.value, new Map(notes.map((x) => [x.fm.id, x]))));
+          // One sentence per page, as the card read them (G634).
+          said.push({ page: id, title: n?.fm.title, attr, value: r.value });
         }
         if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
-        return go("/home", { ok: `${said.join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.`, tok: newTokens(at) });
+        return go("/home", { ok: `${pageSentences(said, new Map(notes.map((x) => [x.fm.id, x]))).join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.`, tok: newTokens(at) });
       }
       if (action === "diary-keep") {
         // Keep it private (G630): still held from every assistant, no longer waiting (src/seen.ts).

@@ -20,21 +20,22 @@
     - /url: /memory?kind=decisions
   - heading "Pages that changed" [level=2]
   - text: this week
+  - paragraph: Personal Work Teaching
   - list:
     - listitem:
-      - link "Antoine Lavoie role · you said today":
+      - link "Teaching Antoine Lavoie role · you said today":
         - /url: /p/people/antoine-lavoie
     - listitem:
-      - link "Martin Leclerc last contact · from an email today":
+      - link "Personal Martin Leclerc last contact · from an email today":
         - /url: /p/people/martin-leclerc
     - listitem:
-      - link "Hannah Becker last contact · from an email today":
+      - link "Work Hannah Becker last contact · from an email today":
         - /url: /p/people/hannah-becker
     - listitem:
-      - link "Hélène Lefebvre something new · from an email today":
+      - link "Personal Hélène Lefebvre something new · from an email today":
         - /url: /p/people/helene-lefebvre
     - listitem:
-      - link "Lucas Fontaine last contact · you said Wed":
+      - link "Work Lucas Fontaine last contact · you said Wed":
         - /url: /p/people/lucas-fontaine
   - link "All changes":
     - /url: /memory?changes=week

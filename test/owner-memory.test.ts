@@ -38,7 +38,7 @@ test("Memory: how much it holds, kinds as tiles in the areas' tints, and five ch
     const rows = rowsOf(m);
     expect(rows).toHaveLength(5);
     for (const r of rows) {
-      expect(r.html).toMatch(/<span class="dot (a-work|a-teaching|a-personal|a-none)" aria-hidden="true"><\/span>/);
+      expect(r.html).toMatch(/<span class="dot (a-1|a-2|a-3|a-other|a-none)" aria-hidden="true"><\/span><span class="sr">[^<]+<\/span>/);
       expect(text(r.html)).toMatch(/· (you said|from an email|from calendar|from your \w+).* (today|Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
     }
     expect(m).toContain(`<a class="more" href="/memory?changes=week">${APP_COPY.allChanges}</a>`);

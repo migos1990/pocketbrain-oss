@@ -129,7 +129,8 @@ test("lines use page names, never ids or slugs; a guess is marked in the small l
   const v = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true });
   const q = v.since.find((l) => l.what.includes("open question"))!;
   expect(q.what).toBe("Jane's open question is ask about Bay institute and Gone page.");
-  expect(v.since.find((l) => l.page === "projects/harbour-club")!.what).toStartWith("Harbour club's ");
+  // A state says itself after the name (G634): "Harbour club is open", never "status is open".
+  expect(v.since.find((l) => l.page === "projects/harbour-club")!.what).toBe("Harbour club is open.");
   const html = (await req("GET", "/home?all=1")).text;
   expect(html).not.toContain("Maybe:");
   expect(html).toContain("a guess");

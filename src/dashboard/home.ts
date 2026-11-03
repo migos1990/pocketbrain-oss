@@ -152,9 +152,14 @@ export const LINE_COPY = {
   undone: "You undid the change to {title}'s {attr}",
   confirmed: "Another {source} confirms {title}'s {attr}",
   saidAgain: "{title}'s {attr} was said again; nothing new",
+  pageNew: "{title} {value}",
+  itsNew: "Its {attr} is {value}",
+  proseNew: "{title} has a longer {attr} note on its page",
+  prosePart: "has a longer {attr} note on its page",
   somethingNew: "Something new about {title}",
   somethingUnnamed: "Something new only you can see",
   manyUnnamed: "{value} new things only you can see",
+  manyUnnamedPages: "{value} new things on {a} pages only you can see",
   moreHeld: "{value} more held from your assistants",
   keptPrivate: "Kept private: something about {title}",
   keptUnnamed: "Kept private: something only you can see",
@@ -330,6 +335,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // A web address says its host only ("harbourline.example"), never a bare address in a sentence.
   const site = SITE_ATTRIBUTES.has(attr);
   const val = (v: unknown) => site ? siteHost(say(v)) : say(v);
+  const prose = isProse(val(row.to)) || (row.from !== undefined && isProse(val(row.from)));
   const w = (k: LineKey) => lineWords(k, { title: t, attr: a, value: val(row.to), older: olderSay(row), source: CONFIRMED_BY[row.source_word] ?? "source", ...(row.from !== undefined && !shapeless ? { was: val(row.from) } : {}) });
   // A few attributes have their own sentence: what's next, when the owner was last in touch, a role.
   const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : site ? "site" : KIND_ATTRIBUTES.has(attr) ? "kind" : undefined;
@@ -344,6 +350,9 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
     : verb && row.kind === "kept" && row.source_word !== "you" ? w("verbKept")
     : own === "role" && row.kind === "changed" && row.from !== undefined ? w("roleChangedFrom")
     : own && (row.kind === "new" || row.kind === "changed" || row.kind === "settled") ? w(`${own}${row.kind === "new" ? "New" : row.kind === "changed" ? "Changed" : "Settled"}` as LineKey)
+    // Prose is a note on its page, and a value that says itself reads bare (G634).
+    : (row.kind === "new" || row.kind === "changed") && prose ? lineWords("proseNew", { title: t, attr: a })
+    : row.kind === "new" && clause(attr, val(row.to)) ? lineWords("pageNew", { title: t, value: clause(attr, val(row.to))! })
     : row.kind === "new" ? w("new")
     : row.kind === "changed" ? w("changed")
     : row.kind === "item_added" ? w("itemAdded")
@@ -369,7 +378,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   const same = JSON.stringify(now ?? null) === JSON.stringify(row.kind === "retracted" ? null : row.kind === "item_added" ? undefined : row.to ?? null);
   const itemThere = row.kind === "item_added" && Array.isArray(now) && now.some((v) => JSON.stringify(v) === JSON.stringify(row.to));
   const undo = row.kind === "undone" ? "none" : undone.has(row.undo_token) ? "undone" : (same || itemThere) && !(note?.fm.facts?.[attr] && isDisputed(note.fm.facts[attr])) ? "undo" : "changed";
-  return { token: row.undo_token, page: id, what, from, ...(row.kind === "changed" && !shapeless && row.from !== undefined ? { was: val(row.from) } : {}), undo, maybe: row.confidence === "inferred", shapeless, ...about };
+  return { token: row.undo_token, page: id, what, from, ...(row.kind === "changed" && !shapeless && !prose && row.from !== undefined ? { was: val(row.from) } : {}), undo, maybe: row.confidence === "inferred", shapeless, ...about };
 }
 
 // "3 older emails still say", "An older email still says" (spec §4.6).
@@ -392,14 +401,58 @@ function foldKept(rows: DiaryRow[]): (DiaryRow & { count?: number })[] {
 // still weighs are listed apart, quietly, and open the same settle screen.
 // One fact as a sentence the owner reads: a held value on its card, and the done line after Show
 // (G630). The page by its whole name, the value in words with no stray full stop of its own.
+// A value that says itself (an amount, a status) reads bare, "Notes app subscription: will renew",
+// never "status is will renew"; prose an assistant wrote (a review, a summary) is a note on its page,
+// never read out here (owner's phone, 2026-11-03; G634).
 export function factSentence(id: string, title: unknown, attr: string, value: unknown, notes: Map<string, Note>): string {
   const t = displayName(id, title);
-  const v = plain(value, (x) => { const tt = notes.get(x)?.fm.title; return tt === undefined ? undefined : String(tt); }, slugsOf(notes)).replace(/[\s.]+$/, "");
-  const value_ = SITE_ATTRIBUTES.has(attr) ? siteHost(v) : v;
+  const value_ = valueWords(attr, value, notes);
+  const c = clause(attr, value_);
+  if (c) return lineWords("pageNew", { title: t, value: c });
   // The owner's own to-do says it as they did: "You owe Ben the sample" (G623).
   if (attr === "next_step" && yourToDo(value_)) return `${yourToDo(value_)!}.`;
   const k: LineKey = isVerbAttribute(attr) ? "verbNew" : attr === "next_step" ? "nextNew" : attr === "last_contact" ? "contactNew" : attr === "role" ? "roleNew" : SITE_ATTRIBUTES.has(attr) ? "siteNew" : KIND_ATTRIBUTES.has(attr) ? "kindNew" : "new";
   return lineWords(k, { title: t, attr: words(attr), value: value_ });
+}
+// Prose, not a fact: long, or more than one sentence. Its words stay on its page.
+export const PROSE_CHARS = 140;
+const isProse = (v: string) => v.length > PROSE_CHARS || (v.length > 80 && /[.!?]\s+\p{Lu}/u.test(v));
+// What a thing does or is, said after its name: "comes to CAD 6.20", "is due 9 Nov 2026", "will
+// renew", "is paid". Money first, then dates, the state last; undefined for any other attribute,
+// which keeps its own sentence ("Jane Roy's fee is …").
+const MONEY_ATTRIBUTES = new Set(["amount", "total", "price", "cost"]);
+const DUE_ATTRIBUTES = new Set(["due", "due_date", "due_on"]);
+const STATE_ATTRIBUTES = new Set(["status", "state"]);
+const VERBISH = /^(?:will|won't|was|were|is|are|has|had|have|can|may|must|did|does|needs?|awaits?|expires?|renews?)\b/i;
+function clause(attr: string, v: string): string | undefined {
+  if (isProse(v)) return lineWords("prosePart", { attr: words(attr) }).replace(/\.$/, "").replace(/^./, (x) => x.toLowerCase());
+  if (MONEY_ATTRIBUTES.has(attr)) return `comes to ${v}`;
+  if (DUE_ATTRIBUTES.has(attr)) return `is due ${v}`;
+  if (STATE_ATTRIBUTES.has(attr)) return VERBISH.test(v) ? v : `is ${v}`;
+  return undefined;
+}
+// A longer note goes last, after the state.
+const clauseRank = (attr: string, v: string) => isProse(v) ? 4 : MONEY_ATTRIBUTES.has(attr) ? 0 : DUE_ATTRIBUTES.has(attr) ? 1 : STATE_ATTRIBUTES.has(attr) ? 3 : 2;
+function valueWords(attr: string, value: unknown, notes: Map<string, Note>): string {
+  const v = plain(value, (x) => { const tt = notes.get(x)?.fm.title; return tt === undefined ? undefined : String(tt); }, slugsOf(notes)).replace(/[\s.]+$/, "");
+  return SITE_ATTRIBUTES.has(attr) ? siteHost(v) : v;
+}
+// Several held values, one line per page (owner's phone, 2026-11-03: one subscription was three
+// lines): "Notes app subscription comes to CAD 6.20, is due 9 Nov 2026 and will renew." Any other
+// attribute follows in its own short sentence, "Its plan is Family." Pages keep their first order.
+export interface HeldValue { page: string; title: unknown; attr: string; value: unknown }
+export function pageSentences(values: HeldValue[], notes: Map<string, Note>): string[] {
+  const byPage = new Map<string, HeldValue[]>();
+  for (const v of values) byPage.set(v.page, [...(byPage.get(v.page) ?? []), v]);
+  return [...byPage.values()].map((vs) => {
+    if (vs.length === 1) return factSentence(vs[0]!.page, vs[0]!.title, vs[0]!.attr, vs[0]!.value, notes);
+    const t = displayName(vs[0]!.page, vs[0]!.title);
+    const said = vs.map((x) => ({ ...x, v: valueWords(x.attr, x.value, notes) })).sort((a, b) => clauseRank(a.attr, a.v) - clauseRank(b.attr, b.v)).map((x) => ({ ...x, c: clause(x.attr, x.v) }));
+    const cs = said.filter((x) => x.c).map((x) => x.c!), rest = said.filter((x) => !x.c);
+    const first = cs.length ? [lineWords("pageNew", { title: t, value: cs.length === 1 ? cs[0]! : `${cs.slice(0, -1).join(", ")} and ${cs.at(-1)}` })] : [];
+    const others = rest.map((x, i) => !first.length && i === 0 ? factSentence(x.page, x.title, x.attr, x.value, notes) : lineWords("itsNew", { attr: words(x.attr), value: x.v }));
+    return [...first, ...others].join(" ");
+  });
 }
 
 function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(root, now), fresh = false): { waiting: Waiting[]; gardener: Waiting[] } {
@@ -453,9 +506,9 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   const shown = cards.map(([name, us], i) => {
     if (overflow && i === cards.length - 1) return { n: us.length, what: lineWords("moreHeld", { value: String(us.length) }), verb: `${us.some((u) => u.unknownSender) ? "from an address your pages don't hold · " : ""}only you can see them yet`, href: "/home?all=1", ...(us.some((u) => u.unknownSender) ? { stranger: true } : {}) };
     const one = us.length === 1, page = us[0]!.page, stranger = us.some((u) => u.unknownSender);
-    const what = name ? (one ? lineWords("somethingNew", { title: name }) : lineWords("manyNew", { title: name, value: String(us.length) })) : one ? lineWords("somethingUnnamed", {}) : lineWords("manyUnnamed", { value: String(us.length) });
+    const what = name ? (one ? lineWords("somethingNew", { title: name }) : lineWords("manyNew", { title: name, value: String(us.length) })) : one ? lineWords("somethingUnnamed", {}) : ((pages) => pages > 1 && pages < us.length ? lineWords("manyUnnamedPages", { value: String(us.length), a: String(pages) }) : lineWords("manyUnnamed", { value: String(us.length) }))(new Set(us.map((u) => u.page)).size);
     // The values themselves only on a fresh sign-in (G630): read first, then let out or kept.
-    const look = fresh ? us.map((u) => factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)) : undefined;
+    const look = fresh ? pageSentences(us.map((u) => ({ page: u.page, title: notes.get(u.page)?.fm.title ?? u.title, attr: u.attr, value: u.value })), notes) : undefined;
     return { n: us.length, what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(look ? { look } : {}), ...(stranger ? { stranger: true } : {}) };
   });
   // The full list also shows what the owner kept private, counted nowhere (n: 0), each with Let
