@@ -11,6 +11,7 @@ import type { Mark } from "./marks";
 import type { WrongLine } from "./home-beliefs";
 import type { SayReply } from "../owner-say";
 import type { Overlap } from "../overlap";
+import { whose, byWhose } from "./labels";
 import { esc, hidden, href, replyHtml, signInAgain, HOME_COPY } from "./html-home";
 
 // The brain's character, named on screen where the owner talks to it (owner, 2026-11-03: "should be
@@ -86,6 +87,8 @@ export const APP_COPY = {
   overlap: "These may do the same job",
   overlapWhy: "{who} run on their own, read {sources} and send {job}",
   noArea: "No area",
+  routinesOf: "{who} routines",
+  otherRoutines: "Not one assistant's",
   pagesUnder: "{n} pages",
   allKinds: "All kinds",
   nothingWeek: "Nothing changed this week.",
@@ -430,7 +433,7 @@ ${box(csrf, { from: "ask" }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo
 
 // Memory (/memory): the kinds with their counts, a kind's pages, a search, and this week's pages.
 // Titles only: a page opens on /p, which shuts what is private on its own.
-export interface MemoryPage { id: string; title: string; area?: string; parent?: string }
+export interface MemoryPage { id: string; title: string; area?: string; parent?: string; assistant?: string }
 export interface MemoryView { pages: number; people: number; name: string; kinds: { folder: string; label: string; count: number }[]; q?: string; kind?: { label: string; pages: MemoryPage[]; folder?: string }; found?: MemoryPage[]; week: ChangedPage[]; allWeek?: boolean; areas?: string[]; overlaps?: Overlap[] }
 // The three area tints (brief 2026-10-30); any other area is a grey dot.
 // A dot says a page's area. The owner's own areas, biggest first, get the three inks (blue,
@@ -543,6 +546,16 @@ export function memoryPage(m: MemoryView): string {
   // A kind's list in logical sections, one per area, biggest first (owner, 2026-11-03: "there
   // should be logical section under project"; G638). One area only reads as one list with its key.
   const sectioned = (ps: MemoryPage[], lead: boolean) => {
+    // Routines: one section per assistant they live in (every page under agents/<assistant>/), said
+    // as whose they are; a page in no assistant's folder goes last.
+    if (ps.some((p) => p.assistant)) {
+      const byWho = new Map<string, MemoryPage[]>();
+      for (const p of ps) byWho.set(p.assistant ?? "", [...(byWho.get(p.assistant ?? "") ?? []), p]);
+      const order = [...byWho.keys()].filter(Boolean).sort((a, b) => byWho.get(b)!.length - byWho.get(a)!.length || a.localeCompare(b));
+      if (byWho.has("")) order.push("");
+      // No dot key: the headings already say whose each dot is.
+      return `${order.map((w) => `<h3 class="section">${esc(w ? fill(APP_COPY.routinesOf, { who: whose(w) }) : APP_COPY.otherRoutines)}</h3>${folded(byWho.get(w)!, lead)}`).join("")}`;
+    }
     const groups = new Map<string, MemoryPage[]>();
     for (const p of ps) { const a = p.area ?? ""; groups.set(a, [...(groups.get(a) ?? []), p]); }
     if (groups.size < 2) return `${areaKey(ps, ranked)}${folded(ps, lead)}`;
@@ -551,9 +564,9 @@ export function memoryPage(m: MemoryView): string {
   };
   // Routines that may do the same job (G641): one quiet block, each group linking its pages.
   const overlapBlock = (ps: MemoryPage[]) => {
-    const title = new Map(ps.map((p) => [p.id, p.title]));
-    const gs = (m.overlaps ?? []).filter((g) => g.ids.every((id) => title.has(id)));
-    return gs.length ? `<div class="overlaps">${gs.map((g) => `<p><b>${APP_COPY.overlap}</b>: ${g.ids.map((id) => `<a href="${href(id)}">${esc(title.get(id)!)}</a>`).join(", ")} <small>${esc(fill(APP_COPY.overlapWhy, { who: g.ids.length > 2 ? "all" : "both", sources: g.sources.join(" and "), job: g.job }))}</small></p>`).join("")}</div>` : "";
+    const byId = new Map(ps.map((p) => [p.id, p]));
+    const gs = (m.overlaps ?? []).filter((g) => g.ids.every((id) => byId.has(id)));
+    return gs.length ? `<div class="overlaps">${gs.map((g) => `<p><b>${APP_COPY.overlap}</b>: ${byWhose(g.ids.map((id) => ({ who: byId.get(id)!.assistant, html: `<a href="${href(id)}">${esc(byId.get(id)!.title)}</a>` })), esc)} <small>${esc(fill(APP_COPY.overlapWhy, { who: g.ids.length > 2 ? "all" : "both", sources: g.sources.join(" and "), job: g.job }))}</small></p>`).join("")}</div>` : "";
   };
   const changed = (ps: ChangedPage[]) => `<ul class="rows">${ps.map((p) => `<li class="changed"><a href="${href(p.id)}">${d(p.area)}<span class="page"><b>${esc(p.title)}</b><small>${esc([p.what.length ? p.what.slice(0, 3).join(", ") : APP_COPY.somethingNew, p.from].join(" · "))}</small></span><span class="when">${esc(p.day)}</span></a></li>`).join("")}</ul>`;
   const search = `<form class="box" method="get" action="/memory"><label class="sr" for="mq">${APP_COPY.search}</label><input type="text" id="mq" name="q" value="${esc(m.q ?? "")}" placeholder="${esc(APP_COPY.searchHint)}" autocomplete="off" enterkeyhint="search" maxlength="200"><button>${APP_COPY.searchGo}</button></form>`;

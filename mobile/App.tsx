@@ -2,13 +2,13 @@
 // The pocketBrain phone app (docs/phone-app.md): the hub's own owner pages, full screen, plus
 // pairing and Face ID. One web UI for browser and app; the app adds only what a browser can't.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Linking from "expo-linking";
 import * as SecureStore from "expo-secure-store";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Device from "expo-device";
-import { parsePairLink } from "./src/pair";
+import { parsePairLink, pairQuestion } from "./src/pair";
 import { pair, fresh, freshWords, pageClears } from "./src/hub";
 import { inject } from "./src/inject";
 import { Mark } from "./src/Mark";
@@ -26,6 +26,14 @@ const INK = { paper: "#EEEDE8", ink: "#121212", pink: "#FF48B0" };
 
 async function saveKey(device: string) {
   await SecureStore.setItemAsync(KEY, device, { requireAuthentication: true, authenticationPrompt: "Unlock pocketBrain", keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY });
+}
+// Asked before every pairing (audit v11, G647): which hub, and whether it replaces this one.
+function confirmPair(hub: string, current: string | null): Promise<boolean> {
+  const q = pairQuestion(hub, current);
+  return new Promise((done) => Alert.alert(q.title, q.body, [
+    { text: "Cancel", style: "cancel", onPress: () => done(false) },
+    { text: "Pair", onPress: () => done(true) },
+  ], { cancelable: true, onDismiss: () => done(false) }));
 }
 async function readKey(): Promise<string | null> {
   try { return await SecureStore.getItemAsync(KEY, { requireAuthentication: true, authenticationPrompt: "Unlock pocketBrain" }); }
@@ -69,6 +77,7 @@ export default function App() {
     const p = parsePairLink(raw);
     if ("error" in p) { setMsg(p.error); return; }
     if (!(await LocalAuthentication.hasHardwareAsync()) || !(await LocalAuthentication.isEnrolledAsync())) { setMsg("Set up Face ID or a fingerprint first: the app keeps your key behind it."); return; }
+    if (!(await confirmPair(p.hub, await SecureStore.getItemAsync(HUB).catch(() => null)))) return;
     setBusy(true); setMsg("");
     try {
       const r = await pair(fetch as never, p.hub, p.key, Device.deviceName ?? "phone");

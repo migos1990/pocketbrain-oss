@@ -31,7 +31,10 @@ export function unseenFacts(root: string): Unseen[] {
   return out;
 }
 
-export function markSeen(root: string, factKey: string): { outcome: "seen" | "not_found" | "not_saved"; value?: unknown; message: string } {
+// shareWith: the only assistants the value goes to after Show (another person's health, school,
+// legal or money matter is kept for the resolver alone, src/write.ts), [] for none; undefined: all
+// the assistants whose views reach it (audit v11, G645: the home said "Your assistants get it now").
+export function markSeen(root: string, factKey: string): { outcome: "seen" | "not_found" | "not_saved"; value?: unknown; shareWith?: string[]; message: string } {
   const hash = factKey.lastIndexOf("#");
   if (hash <= 0) return { outcome: "not_found", message: "nothing waiting to be seen there" };
   const id = factKey.slice(0, hash), attr = factKey.slice(hash + 1);
@@ -39,16 +42,18 @@ export function markSeen(root: string, factKey: string): { outcome: "seen" | "no
   const recs = note && existsSync(join(root, note.path)) ? liveUnseen(note.fm.facts?.[attr]) : [];
   if (!note || !recs.length) return { outcome: "not_found", message: "nothing waiting to be seen there" };
   for (const r of recs) { delete r.unseen; delete r.kept_private; }
+  const shares = recs.map((r) => r.share_with).filter((l): l is string[] => Array.isArray(l));
+  const shareWith = shares.length ? shares.reduce((a, l) => a.filter((x) => l.includes(x))) : undefined;
   const d = today(), at = clock().toISOString();
   note.fm.updated = d;
   saveNote(root, note);
   const value = shownValue(note.fm.facts![attr]);
   const rel = appendDiary(root, diaryRow({ at, factKey, title: String(note.fm.title ?? id), kind: "seen", from: undefined, to: value, incoming: { ...recs[0]!, by: OWNER }, rank: 5, sensitivity: recs[0]!.sensitivity ?? note.fm.sensitivity }), d.slice(0, 7));
-  const unsaved = commitPaths(root, [note.path, rel], `owner: seen ${factKey}\n\nWhy: the owner has seen it, so their assistants get it now.\nKind: owner-seen\nFact-Keys: ${factKey}`, OWNER);
+  const unsaved = commitPaths(root, [note.path, rel], `owner: seen ${factKey}\n\nWhy: the owner has seen it, so ${shareWith ? (shareWith.length ? `${shareWith.join(", ")} gets it now` : "it stays with the owner") : "their assistants get it now"}.\nKind: owner-seen\nFact-Keys: ${factKey}`, OWNER);
   if (unsaved) return { outcome: "not_saved", message: `not saved: ${unsaved}` };
   logWrite(root, { at, agent: OWNER, kind: "owner-seen", key: factKey, outcome: "committed" });
   try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
-  return { outcome: "seen", value, message: "Seen" };
+  return { outcome: "seen", value, ...(shareWith ? { shareWith } : {}), message: "Seen" };
 }
 
 // The values the owner read and kept private: still held, waiting for nothing. The home's full list

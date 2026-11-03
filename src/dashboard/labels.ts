@@ -140,6 +140,17 @@ export function agentTitle(rules: Rules, id: unknown): string {
   const k = String(id ?? ""), l = rules.policy.agents[k]?.label;
   return l ?? BRANDS[k.toLowerCase()] ?? k.charAt(0).toUpperCase() + k.slice(1);
 }
+// "Town's", "Jules'": whose a thing is, in words.
+export const whose = (name: string) => /s$/i.test(name) ? `${name}'` : `${name}'s`;
+// Several titles grouped by whose they are, in one readable run: "Town's A, B and C, and Muse's D".
+// Each item is already HTML (a link); names are escaped here.
+export function byWhose(items: { who?: string; html: string }[], esc: (s: string) => string): string {
+  const and = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+  const groups = new Map<string, string[]>();
+  for (const it of items) groups.set(it.who ?? "", [...(groups.get(it.who ?? "") ?? []), it.html]);
+  const parts = [...groups].map(([who, hs]) => who ? `${esc(whose(who))} ${and(hs)}` : and(hs));
+  return parts.length > 2 ? parts.join("; ") : parts.join(", and ");
+}
 // src/write.ts's reason for a write outside the agent's own area, in words (plain text, unescaped).
 export function ownAreaWords(rules: Rules, reason: string): string | undefined {
   const m = reason.match(/^area (.+) is owned by (\S+) \(own_area\)$/);

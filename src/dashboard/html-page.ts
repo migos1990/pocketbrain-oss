@@ -3,7 +3,7 @@
 // sources, the prose with its numbered references, Mentioned on, Changed (this page's diary lines,
 // with Undo), then Details (the facts) and Who sees this, each one row. The box sits at the bottom
 // with the page as its subject. Standalone like the home (html-home.ts); fixed words in PAGE_COPY.
-import { findOverlaps } from "../overlap";
+import { findOverlaps, assistantOf } from "../overlap";
 import type { Note, FactRecord } from "../brain";
 import { isList, isDisputed } from "../brain";
 import type { State } from "./data";
@@ -12,7 +12,7 @@ import type { SayReply } from "../owner-say";
 import { wikiBody, wikiLinks } from "./html-brain";
 import { displayName } from "../diary";
 import { connections, audience, kindLabel, folderOf } from "./browse";
-import { agentLabel } from "./labels";
+import { agentLabel, agentTitle, whose, byWhose } from "./labels";
 import { refString } from "../sources";
 import { keptQuotes, itemRef } from "../quotes";
 import { sensitiveShape } from "../shape";
@@ -35,6 +35,7 @@ export const PAGE_COPY = {
   oneSource: "1 source",
   mentioned: "Mentioned on",
   sameJob: "May do the same job",
+  routine: "routine",
   changed: "What changed",
   details: "Details",
   who: "Who sees this",
@@ -288,7 +289,9 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const body = open + (closed ? `<p class="quiet">${PAGE_COPY.shutPage}</p>${signInAgain(csrf)}` : details.includes(PAGE_COPY.shut) || withheld ? `${proseOrEmpty()}${signInAgain(csrf)}` : proseOrEmpty());
   function proseOrEmpty() { return prose.trim() ? `<div class="prose">${prose}</div>` : `<p class="quiet">${esc(fill(PAGE_COPY.empty, { name: first }))}</p>`; }
   const area = String(n.fm.area ?? "");
-  const kind = String(n.fm.type ?? kindLabel(folderOf(n.fm.id)));
+  // A routine says whose it is: "Town's routine" (owner, 2026-11-03: "which agent does what").
+  const runsIn = (x: Note) => x.fm.type === "capability" && assistantOf(x.fm.id) ? agentTitle(s.rules, assistantOf(x.fm.id)) : undefined;
+  const kind = runsIn(n) ? `${whose(runsIn(n)!)} ${PAGE_COPY.routine}` : String(n.fm.type ?? kindLabel(folderOf(n.fm.id)));
   // A person's name in two lines, the surname in the headline ink; anything else in one.
   const words = name.split(/\s+/);
   const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
@@ -300,7 +303,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   // right after a sign-in, like Memory.
   const sameJob = closed || n.fm.type !== "capability" ? [] : (findOverlaps(s.notes).find((g) => g.ids.includes(n.fm.id))?.ids ?? [])
     .filter((id) => id !== n.fm.id).map((id) => s.notes.find((x) => x.fm.id === id)!).filter((x) => x && (fresh || x.fm.sensitivity !== "secret"));
-  const overlapList = sameJob.length ? `<h2 class="sec">${PAGE_COPY.sameJob}</h2><p class="links">${sameJob.map((x) => `<a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a>`).join(", ")}.</p>` : "";
+  const overlapList = sameJob.length ? `<h2 class="sec">${PAGE_COPY.sameJob}</h2><p class="links">${byWhose(sameJob.map((x) => ({ who: runsIn(x), html: `<a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a>` })), esc)}.</p>` : "";
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
   // Undo after an answer to the Gardener's line on an org: only that org's own answer (org-undo).
   const undoOrg = o.flash && o.undo && isOrg(n) ? `<div class="chips"><form method="post" action="/action/org-undo">${hidden(csrf, { id: n.fm.id, hash: o.undo })}<button>${PAGE_COPY.undo}</button></form></div>` : "";

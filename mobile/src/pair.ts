@@ -35,3 +35,11 @@ export function parsePairLink(raw: string): PairLink {
   if (!hub.startsWith("https://")) return { error: "This link is for your hub's plain address. Use its https one: run `tailscale serve` on the hub, then get a new link there." };
   return { hub, key };
 }
+
+/** What the app asks before it pairs (audit v11, G647): a link from anyone could pair the app with
+ *  their hub, or replace the owner's own pairing, so the owner sees which hub first. */
+export function pairQuestion(hub: string, current: string | null): { title: string; body: string } {
+  const host = (h: string) => { try { return new URL(h).hostname; } catch { return h; } };
+  const replaces = current && current !== hub ? ` This replaces your pairing with ${host(current)}.` : "";
+  return { title: `Pair with ${host(hub)}?`, body: `Only pair with your own hub, from a sign-in link you asked for.${replaces}` };
+}

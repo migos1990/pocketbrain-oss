@@ -27,6 +27,10 @@ const JOBS: [RegExp, string][] = [
 const MANUAL = /\b(on request|on demand|ad hoc|user asks|when asked|any |every .* conversation)/i;
 const RETIRED = /^(retired|inactive|off|paused|disabled|stopped)$/i;
 
+// The assistant a routine lives in: its folder, agents/<assistant>/ (the owner's brain keeps each
+// assistant's routines there; owner, 2026-11-03: "which agent does what").
+export const assistantOf = (id: string): string | undefined => id.match(/^agents\/([^/]+)\//)?.[1];
+
 const valuesOf = (n: Note, attr: string) => liveRecords(n).filter((x) => x.attr === attr).map((x) => String(x.r.value ?? ""));
 
 export function routineOf(n: Note): { id: string; sources: Set<string>; job: string } | undefined {

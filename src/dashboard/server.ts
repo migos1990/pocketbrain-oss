@@ -30,7 +30,7 @@ import { proposeEdit, defaultModelFor, type ModelFor, type EditProposal } from "
 import { editableNote, noteText, saveNoteText, editorCommits } from "./edit";
 import { brainPage, brainResults, notePage, whyPage, proposalPage, editorCard, oauthCard, newAgentPage } from "./html-brain";
 import { previewNewAgent } from "../addagent";
-import { cap, agentLabel, refusalWords } from "./labels";
+import { cap, agentLabel, agentTitle, refusalWords } from "./labels";
 import { audience, kindCounts, kindLabel, folderOf, browsable, searchNotes, byTitle } from "./browse";
 
 const names = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
@@ -46,7 +46,7 @@ import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
 import { parentOf as wikiParent } from "../wiki";
-import { findOverlaps } from "../overlap";
+import { findOverlaps, assistantOf } from "../overlap";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
@@ -131,6 +131,17 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   "org-again": () => true,
   "org-undo": () => true,
 };
+// Who a value goes to after Show, said as carve will serve it (audit v11, G645): another person's
+// private matter goes to the resolver alone, or to no assistant, never "your assistants".
+export function whoGetsIt(only: (string[] | undefined)[]): string {
+  const it = only.length === 1 ? "it" : "them";
+  if (only.every((o) => o === undefined)) return `Your assistants get ${it} now.`;
+  const names = [...new Set(only.flatMap((o) => o ?? []))];
+  const why = only.length === 1 ? "it's another person's private matter" : "some are another person's private matter";
+  if (only.some((o) => o === undefined)) return `Your assistants get ${it} now, except where ${why}: ${names.length ? `only ${names.join(" and ")} gets those` : "no assistant gets those"}.`;
+  if (only.every((o) => o!.length === 0)) return `No assistant gets ${it}: ${why}.`;
+  return `Only ${names.join(" and ")} gets ${it}: ${why}.`;
+}
 export const needsFresh = (action: string, form: Record<string, string>, root?: string): boolean => !STALE_OK[action]?.(form, root);
 // A folder with no .git keeps no sign-in file, so its sign-in times live in this run only.
 const signedInHere = new Map<string, string>();
@@ -358,7 +369,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   const memory = (q: URLSearchParams, fresh: boolean) => {
     const s = loadState(root, clock());
     const shown = (n: Note) => fresh || n.fm.sensitivity !== "secret";
-    const page = (n: Note) => ({ id: n.fm.id, title: displayName(n.fm.id, n.fm.title), ...(n.fm.area ? { area: String(n.fm.area) } : {}), ...(wikiParent(n) ? { parent: wikiParent(n) } : {}) });
+    const page = (n: Note) => ({ id: n.fm.id, title: displayName(n.fm.id, n.fm.title), ...(n.fm.area ? { area: String(n.fm.area) } : {}), ...(wikiParent(n) ? { parent: wikiParent(n) } : {}), ...(assistantOf(n.fm.id) ? { assistant: agentTitle(s.rules, assistantOf(n.fm.id)) } : {}) });
     const kind = q.get("kind") ?? undefined, query = (q.get("q") ?? "").trim().slice(0, 200);
     const all = browsable(s).filter(shown);
     return new Response(memoryPage({
@@ -684,7 +695,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         // Show: the owner sees a held value, and from now on their assistants get it (src/seen.ts).
         // A card can hold several values that read the same (home.ts heldName): one key per line.
         const keys = (form.key ?? "").split("\n").map((k) => k.trim()).filter(Boolean).slice(0, 50);
-        const notes = loadBrain(root), said: HeldValue[] = [], at = diaryAt();
+        const notes = loadBrain(root), said: HeldValue[] = [], at = diaryAt(), only: (string[] | undefined)[] = [];
         for (const key of keys) {
           const r = markSeen(root, key);
           if (r.outcome === "not_saved") return go("/home", { err: r.message });
@@ -695,9 +706,10 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           const attr = key.slice(hash + 1);
           // One sentence per page, as the card read them (G634).
           said.push({ page: id, title: n?.fm.title, attr, value: r.value });
+          only.push(r.shareWith);
         }
         if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
-        return go("/home", { ok: `${pageSentences(said, new Map(notes.map((x) => [x.fm.id, x]))).join(" ")} Your assistants get ${said.length === 1 ? "it" : "them"} now.`, tok: newTokens(at) });
+        return go("/home", { ok: `${pageSentences(said, new Map(notes.map((x) => [x.fm.id, x]))).join(" ")} ${whoGetsIt(only)}`, tok: newTokens(at) });
       }
       if (action === "diary-keep") {
         // Keep it private (G630): still held from every assistant, no longer waiting (src/seen.ts).

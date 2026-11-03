@@ -5,8 +5,22 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G647: {
+    closed: "claude/audit11-pair-confirm",
+    title: "The phone app paired with any link at once, even replacing the owner's own pairing",
+    severity: "medium",
+    finding: "Audit v11 (2026-11-03): a pocketbrain://pair link (or a pasted one) paired the app at once, so a link from anyone could pair it with their hub, whose pages then fill the app, or silently replace the owner's pairing.",
+    fix: "mobile/App.tsx asks before every pairing (confirmPair), with pairQuestion in mobile/src/pair.ts naming the hub and saying when it replaces the current one; Cancel changes nothing. JS only, ships over the air. Test: test/audit11-pair-confirm.test.ts.",
+  },
+  G645: {
+    closed: "539df073",
+    title: "The home said every assistant gets a value that only the resolver gets",
+    severity: "medium",
+    finding: "Audit v11 (2026-11-03): after Show on another person's health value, the done line said \"Your assistants get it now\", but write() keeps such a value private and shared with the resolver only (share_with, thirdPartySensitive), so carve refuses it to every other assistant.",
+    fix: "src/seen.ts markSeen returns the value's share_with; src/dashboard/server.ts whoGetsIt says who gets it: \"Only <resolver> gets it: it's another person's private matter.\", \"No assistant gets it\" with none, the usual line otherwise; the commit message says the same. Test: test/audit11-held-words.test.ts.",
+  },
   G650: {
-    closed: "claude/audit11-filing",
+    closed: "3ce888dc",
     title: "Filing weighed a by-name proposal against pages its writer can't see, and logged a handed-back yes as saved",
     severity: "medium",
     finding: "Audit v11 finding 8 (v10 items 7 and 8), reproduced on 15dd56e6: fileVerdict in src/filing.ts resolved a by-title proposal over every note, while the hub's yes runs write(), which resolves it over the writer's carve. A core assistant's proposal named like a page it can't see was planned as a conflict against that page, then the write made a new page and the row said the write updated it. A hub yes the write handed back as a new proposal (withheld_category) was logged \"saved it\", and the handed-back proposal failed with \"already proposed\" on every tick.",

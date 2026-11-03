@@ -85,3 +85,31 @@ test("three routines that do one job read as all, not both", () => {
   expect(html).toContain("all run on their own");
   expect(html).toContain("both run on their own");
 });
+
+// Which assistant runs each routine (owner, 2026-11-03, on the phone: "which agent does what… which
+// agent that I currently own"). A routine lives under its assistant's folder, agents/<assistant>/.
+test("the overlap line and the sections name the assistant each routine lives in", () => {
+  const pages = SET.map((n) => ({ id: n.fm.id, title: String(n.fm.title), area: "personal", assistant: n.fm.id.split("/")[1] === "scout" ? "Scout" : "Helper" }));
+  const html = memoryPage({ pages: pages.length, people: 0, name: "Sam", kinds: [], week: [], kind: { label: "Routines", pages, folder: "agents" }, overlaps: findOverlaps(SET) });
+  const text = (h: string) => h.replace(/<[^>]+>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const lines = [...html.matchAll(/<div class="overlaps">([\s\S]*?)<\/div>/g)].map((m) => text(m[1]!));
+  expect(lines.join("\n")).toContain("These may do the same job: Helper's Critical email and bill alerts, and Scout's Inbox alert monitor");
+  expect(lines.join("\n")).toContain("Helper's Daily digest, and Scout's Morning brief digest");
+  // One section per assistant, said as whose routines they are, not an area word.
+  const heads = [...html.matchAll(/<h3 class="section">([\s\S]*?)<\/h3>/g)].map((m) => text(m[1]!));
+  expect(heads).toEqual(["Helper's routines", "Scout's routines"]);
+  const loose = memoryPage({ pages: 2, people: 0, name: "Sam", kinds: [], week: [], kind: { label: "Routines", folder: "agents", pages: [pages[0]!, { id: "agents/shared-note", title: "Shared note", area: "personal" }] } });
+  expect([...loose.matchAll(/<h3 class="section">([\s\S]*?)<\/h3>/g)].map((m) => text(m[1]!))).toEqual(["Helper's routines", "Not one assistant's"]);
+});
+
+test("a routine's page says whose routine it is, and whose the others are", async () => {
+  const { loadState } = await import("../src/dashboard/data");
+  const { ownerPage } = await import("../src/dashboard/html-page");
+  const root = makeBrain();
+  for (const n of SET) saveNote(root, n);
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "routines"]);
+  const s = loadState(root);
+  const html = ownerPage(s, "t", s.notes.find((n) => n.fm.id === "agents/helper/bill-alerts")!, []).replace(/<[^>]+>/g, "").replace(/&#39;/g, "'");
+  expect(html).toContain("Helper's routine · ");
+  expect(html).toContain("Scout's Inbox alert monitor.");
+});
