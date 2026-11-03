@@ -130,7 +130,8 @@ test("Memory groups three or more pages that lead with one name under that name"
 });
 
 test("Memory's dots say what they mean: a key names each area shown, and each dot says its area to a screen reader", () => {
-  const html = memoryPage({ ...view([]), kind: { label: "Projects", pages: [{ id: "projects/a", title: "Garden planning", area: "personal" }, { id: "projects/b", title: "Course B12", area: "teaching" }, { id: "projects/c", title: "Loose page" }] } });
+  // A search's list (a kind's list with several areas comes in sections instead, G638).
+  const html = memoryPage({ ...view([]), kind: undefined, q: "a", found: [{ id: "projects/a", title: "Garden planning", area: "personal" }, { id: "projects/b", title: "Course B12", area: "teaching" }, { id: "projects/c", title: "Loose page" }] });
   const key = html.match(/<p class="key">([\s\S]*?)<\/p>/)?.[1] ?? "";
   expect(key).toContain("Personal");
   expect(key).toContain("Teaching");

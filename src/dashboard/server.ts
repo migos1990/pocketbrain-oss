@@ -45,6 +45,7 @@ import type { Note } from "../brain";
 import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
+import { parentOf as wikiParent } from "../wiki";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
@@ -310,7 +311,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   const memory = (q: URLSearchParams, fresh: boolean) => {
     const s = loadState(root, clock());
     const shown = (n: Note) => fresh || n.fm.sensitivity !== "secret";
-    const page = (n: Note) => ({ id: n.fm.id, title: displayName(n.fm.id, n.fm.title), ...(n.fm.area ? { area: String(n.fm.area) } : {}) });
+    const page = (n: Note) => ({ id: n.fm.id, title: displayName(n.fm.id, n.fm.title), ...(n.fm.area ? { area: String(n.fm.area) } : {}), ...(wikiParent(n) ? { parent: wikiParent(n) } : {}) });
     const kind = q.get("kind") ?? undefined, query = (q.get("q") ?? "").trim().slice(0, 200);
     const all = browsable(s).filter(shown);
     return new Response(memoryPage({

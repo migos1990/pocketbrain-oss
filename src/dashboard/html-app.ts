@@ -215,6 +215,7 @@ a.mark.not::after{content:"";position:absolute;inset:-10px}
 .week-head{display:flex;justify-content:space-between;align-items:baseline}.week-head span{font-size:13px;font-weight:500;color:var(--muted)}
 .rows li.changed a{gap:12px;font-weight:400}.rows .dot{flex:none;width:12px;height:12px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
 .key{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 8px;font-size:13px;color:var(--muted)}.key>span{display:inline-flex;align-items:center;gap:6px}.key .dot{flex:none;width:10px;height:10px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
+h3.section{display:flex;align-items:center;gap:8px;margin:22px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase}.section .dot{flex:none;width:10px;height:10px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
 .dot.a-1{background:var(--headline-ink);box-shadow:none}.dot.a-2{background:var(--marker-ink);box-shadow:none}.dot.a-3{background:var(--text);box-shadow:none}.dot.a-none{box-shadow:none;border:2px dotted var(--muted)}
 .rows .page{flex:1;min-width:0;display:flex;flex-direction:column}.rows .page b{font-weight:700}.rows .page small{font-size:13px;line-height:18px;color:var(--muted)}.rows .when{flex:none;font-size:13px;font-weight:500;color:var(--muted)}
 .rows a{display:flex;align-items:center;min-height:44px;padding:10px 0;border-top:2px solid var(--text);color:var(--text);font-weight:600}
@@ -412,7 +413,7 @@ ${box(csrf, { from: "ask" }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo
 
 // Memory (/memory): the kinds with their counts, a kind's pages, a search, and this week's pages.
 // Titles only: a page opens on /p, which shuts what is private on its own.
-export interface MemoryPage { id: string; title: string; area?: string }
+export interface MemoryPage { id: string; title: string; area?: string; parent?: string }
 export interface MemoryView { pages: number; people: number; name: string; kinds: { folder: string; label: string; count: number }[]; q?: string; kind?: { label: string; pages: MemoryPage[]; folder?: string }; found?: MemoryPage[]; week: ChangedPage[]; allWeek?: boolean; areas?: string[] }
 // The three area tints (brief 2026-10-30); any other area is a grey dot.
 // A dot says a page's area. The owner's own areas, biggest first, get the three inks (blue,
@@ -453,6 +454,11 @@ export const WEEK_ROWS = 5;
 export interface MemoryRow { title: string; page?: MemoryPage; same?: number; sub: { page: MemoryPage; rest: string }[] }
 const SEP = /^\s*(?:[,:–—]|\s-)\s*|^\s*(?=\()/;
 const key = (t: string) => t.trim().toLowerCase();
+// "Lakeside cabin (rental host)" is named "Lakeside cabin": a page "Lakeside cabin: check-in" sits
+// under it (G638). Only a ",", ":" or dash after that name counts, so two "X (…)" pages never sit
+// under each other.
+const nameOf = (t: string) => t.replace(/\s*\([^()]*\)\s*$/, "");
+const NAME_SEP = /^\s*(?:[,:–—]|\s-)\s*/;
 export function foldRows(ps: MemoryPage[], lead = true): MemoryRow[] {
   const byName = new Map<string, MemoryRow>();
   for (const p of ps) {
@@ -461,15 +467,34 @@ export function foldRows(ps: MemoryPage[], lead = true): MemoryRow[] {
     byName.set(key(p.title), { title: p.title, page: p, sub: [] });
   }
   const rows = [...byName.values()];
-  // Under the longest other name on the list that this one starts with, then a separator.
-  const parentOf = (r: MemoryRow) => rows.filter((o) => o !== r && !o.same && key(r.title).startsWith(key(o.title)) && SEP.test(r.title.slice(o.title.length))).sort((a, b) => b.title.length - a.title.length)[0];
+  const byId = new Map(rows.filter((r) => !r.same).map((r) => [r.page!.id, r]));
+  // A page's own parent: when that page is on the list; else under the longest other name on the
+  // list that this one starts with, then a separator.
+  const parentOf = (r: MemoryRow): MemoryRow | undefined => {
+    if (r.same) return undefined;
+    const own = r.page?.parent ? byId.get(r.page.parent) : undefined;
+    if (own && own !== r) return own;
+    const t = key(r.title);
+    return rows.filter((o) => o !== r && !o.same && ((t.startsWith(key(o.title)) && SEP.test(r.title.slice(o.title.length)))
+      || (nameOf(o.title) !== o.title && t.startsWith(key(nameOf(o.title))) && NAME_SEP.test(r.title.slice(nameOf(o.title).length)))))
+      .sort((a, b) => b.title.length - a.title.length)[0];
+  };
   const top: MemoryRow[] = [];
   // A page under a page that is itself under one ("X", "X, Fall", "X, Fall: exam") goes to the top
   // one, said by all that follows its name: one level only, so nothing drops out of the list.
-  const rootOf = (r: MemoryRow): MemoryRow | undefined => { let p = r.same ? undefined : parentOf(r), up = p; while (up) { p = up; up = parentOf(up); } return p; };
+  const rootOf = (r: MemoryRow): MemoryRow | undefined => {
+    const seen = new Set([r]);
+    let p = parentOf(r), up = p;
+    while (up && !seen.has(up)) { seen.add(up); p = up; up = parentOf(up); }
+    return p === r ? undefined : p;
+  };
+  const restOf = (r: MemoryRow, parent: MemoryRow) => {
+    const cut = [parent.title, nameOf(parent.title)].find((x) => key(r.title).startsWith(key(x)));
+    return cut ? r.title.slice(cut.length).replace(SEP, "").replace(/^\((.*)\)$/, "$1") : r.title;
+  };
   for (const r of rows) {
     const parent = rootOf(r);
-    if (parent) parent.sub.push({ page: r.page!, rest: r.title.slice(parent.title.length).replace(SEP, "").replace(/^\((.*)\)$/, "$1") });
+    if (parent && parent !== r) parent.sub.push({ page: r.page!, rest: restOf(r, parent) });
     else top.push(r);
   }
   if (!lead) return top;
@@ -498,6 +523,15 @@ export function memoryPage(m: MemoryView): string {
     const sub = r.sub.length ? `<ul class="rows sub">${r.sub.map((x) => `<li class="changed"><a href="${href(x.page.id)}">${d(x.page.area)}<span class="page"><b>${esc(x.rest)}</b></span></a></li>`).join("")}</ul>` : "";
     return `<li class="changed">${head}${sub}</li>`;
   }).join("")}</ul>`;
+  // A kind's list in logical sections, one per area, biggest first (owner, 2026-11-03: "there
+  // should be logical section under project"; G638). One area only reads as one list with its key.
+  const sectioned = (ps: MemoryPage[], lead: boolean) => {
+    const groups = new Map<string, MemoryPage[]>();
+    for (const p of ps) { const a = p.area ?? ""; groups.set(a, [...(groups.get(a) ?? []), p]); }
+    if (groups.size < 2) return `${areaKey(ps, ranked)}${folded(ps, lead)}`;
+    const order = [...ranked.filter((a) => groups.has(a)), ...[...groups.keys()].filter((a) => a && !ranked.includes(a)).sort(), ...(groups.has("") ? [""] : [])];
+    return order.map((a) => `<h3 class="section"><span class="dot ${dotClass(a || undefined, ranked)}" aria-hidden="true"></span>${esc(a ? areaWord(a) : APP_COPY.noArea)}</h3>${folded(groups.get(a)!, lead)}`).join("");
+  };
   const changed = (ps: ChangedPage[]) => `<ul class="rows">${ps.map((p) => `<li class="changed"><a href="${href(p.id)}">${d(p.area)}<span class="page"><b>${esc(p.title)}</b><small>${esc([p.what.length ? p.what.slice(0, 3).join(", ") : APP_COPY.somethingNew, p.from].join(" · "))}</small></span><span class="when">${esc(p.day)}</span></a></li>`).join("")}</ul>`;
   const search = `<form class="box" method="get" action="/memory"><label class="sr" for="mq">${APP_COPY.search}</label><input type="text" id="mq" name="q" value="${esc(m.q ?? "")}" placeholder="${esc(APP_COPY.searchHint)}" autocomplete="off" enterkeyhint="search" maxlength="200"><button>${APP_COPY.searchGo}</button></form>`;
   const tinted = m.kinds.filter((k) => TINT[k.folder]), rest = m.kinds.filter((k) => !TINT[k.folder]);
@@ -507,7 +541,7 @@ export function memoryPage(m: MemoryView): string {
   const week = m.week.length ? `${areaKey(weekShown, ranked)}${changed(weekShown)}` : `<p class="quiet">${APP_COPY.nothingWeek}</p>`;
   const below = m.found !== undefined
     ? `<h2>${esc(fill(APP_COPY.found, { q: m.q ?? "" }))}</h2>${m.found.length ? `${areaKey(m.found, ranked)}${rows(m.found)}` : `<p class="quiet">${esc(fill(APP_COPY.nothingFound, { q: m.q ?? "" }))}</p>`}`
-    : m.kind ? `<h2>${esc(m.kind.label)}</h2>${areaKey(m.kind.pages, ranked)}${folded(m.kind.pages, m.kind.folder !== "people")}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
+    : m.kind ? `<h2>${esc(m.kind.label)}</h2>${sectioned(m.kind.pages, m.kind.folder !== "people")}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : m.allWeek ? `${weekHead}${week}<a class="more" href="/memory">${APP_COPY.allKinds}</a>`
     : `${tiles}${weekHead}${week}${m.week.length > WEEK_ROWS ? `<a class="more" href="/memory?changes=week">${APP_COPY.allChanges}</a>` : ""}`;
   return appPage(APP_COPY.memory, "memory", `${header(fill(APP_COPY.holds, { pages: m.pages, people: m.people }), APP_COPY.memory, m.name)}

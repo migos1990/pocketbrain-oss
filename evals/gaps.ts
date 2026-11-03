@@ -3738,6 +3738,12 @@ export const GAPS: Record<string, Gap> = {
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
+  G638: {
+    title: "Projects read as one flat list: a project, its sub-pages and its related pages looked like strangers",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-03 (\"all of them are related\", \"there should be logical section under project\", \"its like wiki\"): a rental project \"X (host)\" and two pages \"X: rebooking inquiry\", \"X: check-in\" sat as separate rows among unrelated projects; a house-rules page for the same rental sat elsewhere. PR 72 nested \"X: …\" only under a page named exactly X.",
+    fix: "src/dashboard/html-app.ts: a kind's list with more than one area comes in sections, one per area, biggest first, each headed by its area and dot; foldRows nests \"X: …\" under \"X (…)\" (only a comma, colon or dash after the name counts, so two \"X (…)\" pages never nest in each other) and a page under its `parent:` when that page is on the list. Display only. Tests: test/project-sections.test.ts.",
+  },
   G636: {
     closed: "f347ddd4",
     title: "The describe run's $10 cap was 10 cents",
