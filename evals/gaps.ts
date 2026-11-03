@@ -3726,6 +3726,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
+  G636: {
+    closed: "f347ddd4",
+    title: "The describe run's $10 cap was 10 cents",
+    severity: "medium",
+    finding: "Mac, first org-describe run, 2026-11-03: the run stopped at its budget after 14 web searches with list_cost 17. tend wrote the describe deployment's max_list_cost amount as \"10\" meaning $10, but Managed Agents reads the amount in cents. The nightly (25) and weekly (500) amounts were already written as cents on purpose (docs/gardener.md). tend also needed --url on a brain with no hub.yaml public_url though gardener.yaml held the door.",
+    fix: "src/tend.ts: a cents() helper for every deployment budget, describe at 1000; writeTendFiles raises a kept describe deployment still at \"10\" to 1000 and reports it as fixed; tendPlan falls back to gardener.yaml's mcp_url. Tests: test/tend.test.ts.",
+  },
   G629: {
     closed: "70dabd88",
     title: "The phone app's https door was off and nothing said so",

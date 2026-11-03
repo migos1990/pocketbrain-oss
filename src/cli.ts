@@ -1444,6 +1444,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     console.log(`The gardener (${plan.agent}) for ${plan.owner}, at ${plan.mcpUrl}, ${plan.timezone}: nightly "${plan.nightlyCron}", weekly "${plan.weeklyCron}".`);
     for (const f of w.written) console.log(`  wrote ${join(plan.dir, f)}`);
     for (const f of w.kept) console.log(`  kept  ${join(plan.dir, f)} (yours; --force to replace)`);
+    for (const f of w.fixed) console.log(`  fixed ${join(plan.dir, f)}: its budget was 10 cents, now 1000 cents ($10); the next --apply updates the deployment`);
     if (args.includes("--describe")) {
       if (!args.includes("--apply")) { console.log(`\nNothing sent to Anthropic yet. Next: pocketbrain tend --managed --describe --apply, then pocketbrain gardener open 60 and ant --profile ${plan.profile} beta:deployments run --deployment-id <describe id in claude-lock.json>.`); return 0; }
       const d = applyDescribe(root, plan);

@@ -116,7 +116,7 @@ morning digest always runs. The default is `night: local`, where the hub does ev
 ## Setting it up on your own Anthropic account: `pocketbrain tend --managed`
 
 Once the gardener is in `policy.yaml` and your brain has a public door (`public_url` in
-`rules/hub.yaml`, or `--url`), one command writes its Managed Agents files from your own brain:
+`rules/hub.yaml`, the origin of `mcp_url` in `rules/gardener.yaml`, or `--url`), one command writes its Managed Agents files from your own brain:
 
 ```sh
 pocketbrain tend --managed                 # writes ~/pocketbrain-agents/agents/..., sends nothing
@@ -127,7 +127,8 @@ pocketbrain tend --managed --apply --code <code>   # then runs them through ant,
   and weekly agents (`agents/gardener/agent.md`, `agents/gardener-weekly/agent.md`, with your name
   and your door), the environment, the vault, and two deployments. The deployments run five
   minutes after the gardener's daily and weekly `windows` open, in `owner.timezone`, with budgets
-  of 25 and 500 cents. The models default to `claude-haiku-5-5` nightly and `claude-opus-5-5`
+  of 25 and 500 cents (Managed Agents reads `max_list_cost.amount` in cents; the describe run gets 1000,
+  $10). A kept describe deployment still at the earlier `"10"` is raised to 1000 in place. The models default to `claude-haiku-5-5` nightly and `claude-opus-5-5`
   weekly (`--nightly-model`, `--weekly-model`). Files you already have are kept unless `--force`.
 - **What the agents may call**: the gardener tools (`last_run`, `changes_since`, `upkeep_run`,
   `sleep_run`, `verify_source`) plus `orientation`, `context_pack`, `search`, `read`, `remember` and

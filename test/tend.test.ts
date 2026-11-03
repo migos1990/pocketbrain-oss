@@ -109,7 +109,7 @@ test("a run that would start between 01:00 and 03:00 is refused: clocks change i
 test("it refuses, and writes nothing, without a gardener, an https door or windows it can schedule in", () => {
   const root = makeBrain();
   const dir = out();
-  expect(() => tendPlan(root, { dir })).toThrow(/public_url in rules\/hub\.yaml or pass --url/);
+  expect(() => tendPlan(root, { dir })).toThrow(/public_url in rules\/hub\.yaml, mcp_url in rules\/gardener\.yaml, or pass --url/);
   expect(() => tendPlan(root, { dir, url: "http://brain.robin.example" })).toThrow(/https/);
   hub(root);
   setPolicy(root, (p) => { p.agents.gardener.windows = ["mon-fri 03:00-04:00"]; });
@@ -294,4 +294,45 @@ test("both gardener passes say a verify_source match means the fact stands: no p
     const t = readFileSync(join(dir, f), "utf8");
     expect(t).toMatch(/A `match` means the source still supports the fact: propose nothing on that fact/);
   }
+});
+
+// G636: Managed Agents reads max_list_cost.amount in cents. The describe run was written "10" for
+// a $10 cap and stopped after 14 searches at 17 cents.
+test("deployment budgets are cents: 25 nightly, 500 weekly, 1000 for the describe run", () => {
+  const root = makeBrain();
+  hub(root);
+  const dir = out();
+  writeTendFiles(tendPlan(root, { dir }));
+  const amount = (p: string) => YAML.parse(readFileSync(join(dir, p), "utf8")).budget.max_list_cost;
+  expect(amount("agents/gardener/deployment-nightly.yaml")).toEqual({ amount: "25", currency: "USD" });
+  expect(amount("agents/gardener-weekly/deployment-weekly.yaml")).toEqual({ amount: "500", currency: "USD" });
+  expect(amount("agents/gardener-describe/deployment-describe.yaml")).toEqual({ amount: "1000", currency: "USD" });
+});
+
+test("a kept describe deployment with the old 10-cent cap is raised to 1000; any other kept budget is left alone", () => {
+  const root = makeBrain();
+  hub(root);
+  const dir = out();
+  const plan = tendPlan(root, { dir });
+  writeTendFiles(plan);
+  const f = join(dir, "agents/gardener-describe/deployment-describe.yaml");
+  const doc = YAML.parse(readFileSync(f, "utf8"));
+  doc.budget.max_list_cost.amount = "10";
+  doc.vault_ids = ["vlt_mine"];
+  writeFileSync(f, YAML.stringify(doc));
+  const r = writeTendFiles(plan);
+  expect(r.fixed).toEqual(["agents/gardener-describe/deployment-describe.yaml"]);
+  const after = YAML.parse(readFileSync(f, "utf8"));
+  expect(after.budget.max_list_cost.amount).toBe("1000");
+  expect(after.vault_ids).toEqual(["vlt_mine"]);
+  doc.budget.max_list_cost.amount = "300";
+  writeFileSync(f, YAML.stringify(doc));
+  expect(writeTendFiles(plan).fixed).toEqual([]);
+  expect(YAML.parse(readFileSync(f, "utf8")).budget.max_list_cost.amount).toBe("300");
+});
+
+test("with no public_url, the door comes from gardener.yaml's mcp_url", () => {
+  const root = makeBrain();
+  writeFileSync(join(root, "rules/gardener.yaml"), YAML.stringify({ mcp_url: "https://door.robin.example/mcp" }));
+  expect(tendPlan(root, { dir: out() }).mcpUrl).toBe("https://door.robin.example/mcp");
 });
