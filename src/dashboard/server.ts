@@ -87,12 +87,14 @@ const rand = () => randomBytes(24).toString("base64url");
 // notes), owner-only, by the hash of the cookie so the file alone signs nobody in. A sign-in
 // lasts 30 days; the newest 20 are kept. The login link still changes at every start.
 const SESSION_DAYS = 30;
-type Kept = Record<string, { csrf: string; at: string }>;
+// at: when the owner last proved it was them (a link, or Face ID in the app), for FRESH_MINUTES;
+// since: when this sign-in began, for its 30 days. Face ID never moves since (audit v11, G642).
+type Kept = Record<string, { csrf: string; at: string; since?: string }>;
 const sidHash = (sid: string) => createHash("sha256").update(sid).digest("hex");
 function keptSessions(root: string, now: Date): Kept {
   try {
     const all = JSON.parse(readFileSync(sessionFile(root), "utf8")) as Kept;
-    return Object.fromEntries(Object.entries(all).filter(([, v]) => typeof v?.csrf === "string" && now.getTime() - Date.parse(v.at) < SESSION_DAYS * 86_400_000));
+    return Object.fromEntries(Object.entries(all).filter(([, v]) => typeof v?.csrf === "string" && now.getTime() - Date.parse(v.since ?? v.at) < SESSION_DAYS * 86_400_000));
   } catch { return {}; }
 }
 // A sign-in from the last few minutes (phone UI spec §8, the login re-prompt where there is no
@@ -100,6 +102,11 @@ function keptSessions(root: string, now: Date): Kept {
 export const FRESH_MINUTES = 10;
 // Wrong device keys the phone app's fresh door takes in an hour before it waits (docs/phone-app.md).
 const APP_MISSES = 10;
+// The app's own requests to its fresh door carry this header and no Origin (audit v11, G642): a
+// web page, this hub's own included, can't send it without a preflight the hub never answers.
+export const APP_HEADER = "x-pocketbrain-app";
+// A fresh-door nonce lasts this long and is spent by one try.
+const NONCE_MS = 120_000;
 // The rule for every button (re-audit 2026-10-30, G525: Let it through sent a held message on the
 // 30-day sign-in, and /action/mail-release did the same from any old form). Only what the three owner
 // screens (/home, /p, /settle) offer, and only what keeps a thing back or puts one right, runs on the
@@ -138,9 +145,18 @@ function dropSession(root: string, sid: string, now: Date) {
 }
 function keepSession(root: string, sid: string, csrf: string, now: Date) {
   if (!existsSync(join(root, ".git"))) { signedInHere.set(sidHash(sid), now.toISOString()); return; }
-  const all = Object.entries({ ...keptSessions(root, now), [sidHash(sid)]: { csrf, at: now.toISOString() } }).sort((a, b) => b[1].at.localeCompare(a[1].at)).slice(0, 20);
+  const t = now.toISOString(), all = Object.entries({ ...keptSessions(root, now), [sidHash(sid)]: { csrf, at: t, since: t } }).sort((a, b) => b[1].at.localeCompare(a[1].at)).slice(0, 20);
   try { writeFileSync(sessionFile(root), JSON.stringify(Object.fromEntries(all)), { mode: 0o600 }); chmodSync(sessionFile(root), 0o600); }
   catch (e) { console.error(`dashboard: couldn't keep the sign-in across restarts: ${(e as Error).message}`); }
+}
+// Face ID in the phone app: the sign-in is fresh again for FRESH_MINUTES, and still ends 30 days
+// after it began (audit v11, G642: the app's door reset the 30-day clock at every use).
+function markFresh(root: string, sid: string, now: Date) {
+  const all = keptSessions(root, now), k = all[sidHash(sid)];
+  if (!k) return;
+  all[sidHash(sid)] = { csrf: k.csrf, at: now.toISOString(), since: k.since ?? k.at };
+  try { writeFileSync(sessionFile(root), JSON.stringify(all), { mode: 0o600 }); chmodSync(sessionFile(root), 0o600); }
+  catch (e) { console.error(`dashboard: couldn't keep the fresh sign-in: ${(e as Error).message}`); }
 }
 
 // Phone links (owner, 2026-10-24: yesterday's link was dead after a hub restart, and the signed-out
@@ -417,19 +433,41 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   }
   // Wrong keys count against the door, not the key: past APP_MISSES an hour every key waits.
   const misses: number[] = [];
-  async function appFresh(req: Request, hosts: Set<string>, secure: boolean): Promise<Response> {
+  // The fresh door (audit v11, G642): only the app's own request (no Origin, the app's header), on
+  // a live sign-in this phone made, with a one-time nonce the hub gave that sign-in a moment ago,
+  // and at most APP_FRESH_PER_HOUR times an hour per phone. It never makes a sign-in, never moves
+  // the 30 days, and sets no cookie: a lapsed sign-in pairs again with a phone link.
+  const nonces = new Map<string, { h: string; t: number }>();
+  const appOnly = (req: Request) => !req.headers.get("origin") && req.headers.get(APP_HEADER) === "1";
+  function appNonce(req: Request): Response {
+    if (!appOnly(req)) return oopsText("dash.cross-origin");
+    const sid = session(req);
+    if (!sid) return oopsText("dash.app-signed-out");
+    const t0 = now().getTime();
+    for (const [n, v] of nonces) if (t0 - v.t > NONCE_MS || nonces.size > 20) nonces.delete(n);
+    const nonce = rand();
+    nonces.set(nonce, { h: sidHash(sid), t: t0 });
+    return appJson({ nonce });
+  }
+  async function appFresh(req: Request, hosts: Set<string>): Promise<Response> {
+    if (!appOnly(req)) return oopsText("dash.cross-origin");
     const b = await appBody(req, hosts);
     if (b instanceof Response) return b;
     const t0 = now().getTime();
     while (misses.length && t0 - misses[0]! > 3_600_000) misses.shift();
     if (misses.length >= APP_MISSES) return oopsText("dash.app-cap");
+    const sid = session(req);
+    if (!sid) return oopsText("dash.app-signed-out");
+    const nonce = typeof b.nonce === "string" ? b.nonce : "", n = nonces.get(nonce);
+    nonces.delete(nonce);
+    if (!n || n.h !== sidHash(sid) || t0 - n.t > NONCE_MS) return oopsText("dash.app-nonce");
     const device = typeof b.device === "string" ? b.device : "";
-    const sid = session(req) ?? rand();
-    let ok = false;
-    try { ok = useAppPhone(root, device, sidHash(sid), now()); } catch { return oopsText("dash.link-busy"); }
-    if (!ok) { misses.push(t0); return oopsText("dash.app-not-paired"); }
-    signInFor(sid);
-    return appJson({ fresh: true }, 200, { "set-cookie": appCookie(sid, secure) });
+    let r: ReturnType<typeof useAppPhone>;
+    try { r = useAppPhone(root, device, sidHash(sid), now()); } catch { return oopsText("dash.link-busy"); }
+    if (r === "cap") return oopsText("dash.app-phone-cap");
+    if (r !== "ok") { misses.push(t0); return oopsText("dash.app-not-paired"); }
+    markFresh(root, sid, now());
+    return appJson({ fresh: true });
   }
 
   function session(req: Request): string | undefined {
@@ -486,7 +524,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (remote && url.pathname === "/send-link" && req.method === "POST") return sendLink(req, hosts, secure);
     // The phone app (docs/phone-app.md): pair with a phone link, then Face ID makes a sign-in fresh.
     if (remote && url.pathname === "/app/pair" && req.method === "POST") return appPair(req, hosts, secure);
-    if (remote && url.pathname === "/app/fresh" && req.method === "POST") return appFresh(req, hosts, secure);
+    if (remote && url.pathname === "/app/nonce" && req.method === "POST") return appNonce(req);
+    if (remote && url.pathname === "/app/fresh" && req.method === "POST") return appFresh(req, hosts);
     const sid = session(req);
     if (!sid) return remote ? signedOutPhone(secure) : oops("dash.signed-out");
     const csrf = sessions.get(sid)!;

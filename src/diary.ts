@@ -15,7 +15,7 @@ import { readdirSync, existsSync } from "node:fs";
 // held: an assistant's proposal waiting for the day its hold ends (`until`); set_aside: an
 // assistant's open question or take-back the hub set aside, since only a conflict asks (src/filing.ts).
 // confirmed: the hub filed a value the page already held; `added` names the sources it added (G524).
-export type DiaryKind = "new" | "changed" | "retracted" | "item_added" | "conflict" | "settled" | "kept" | "seen" | "undone" | "held" | "set_aside" | "confirmed";
+export type DiaryKind = "new" | "changed" | "retracted" | "item_added" | "conflict" | "settled" | "kept" | "seen" | "undone" | "held" | "set_aside" | "confirmed" | "folded";
 
 export interface DiaryRow {
   at: string;
@@ -39,6 +39,8 @@ export interface DiaryRow {
   undo_token: string;
   undoes?: string; // on an `undone` row: the line it undid (src/undo.ts)
   commit?: string; // a caught-up row: the commit that made the change (src/diary-catchup.ts)
+  fold?: string; // on a `folded` row: the fold commit its Undo undoes (src/fold.ts, audit v11)
+  dropped?: string; // on a `folded` row: the page folded away, whose privacy now the line also follows
   settles?: string; // on a `settled` row: the conflict it answered (its Undo opens it again)
   ref?: string; // on a `held` or `set_aside` row: the proposal's file under inbox/
   until?: string; // on a `held` row: the owner's day the hold ends

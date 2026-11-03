@@ -10,6 +10,7 @@ import { makeBrain } from "./fixture";
 import { write } from "../src/write";
 import { senderStanding } from "../src/sender";
 import { recordCheckedRefs } from "../src/louis";
+import { senderHash } from "../src/sameperson";
 import { loadBrain } from "../src/brain";
 
 const person = (root: string) => loadBrain(root).find((n) => n.fm.type === "person" && n.fm.area === "work")!.fm.id;
@@ -23,8 +24,11 @@ test("an address an assistant planted with an unchecked mail ref is not a known 
   expect(["committed", "inbox", "disputed"]).toContain(r.outcome);
   expect(senderStanding(root, evil)).toBe("unknown");
   expect(senderStanding(root, `Someone <${evil}>`)).toBe("unknown");
-  // Once a pull or the recheck read that mail and found it, the address is known.
-  recordCheckedRefs(root, { "gmail:d00000000000e0e1": true });
+  // Read and found, but from someone else: still unknown (audit v11, G643).
+  recordCheckedRefs(root, { "gmail:d00000000000e0e1": true }, { "gmail:d00000000000e0e1": senderHash("other@example.com") });
+  expect(senderStanding(root, evil)).toBe("unknown");
+  // Once a pull or the recheck read that mail from this very address, the address is known.
+  recordCheckedRefs(root, { "gmail:d00000000000e0e1": true }, { "gmail:d00000000000e0e1": senderHash(evil) });
   if (r.outcome === "committed") expect(senderStanding(root, evil)).toBe("known");
 });
 

@@ -14,7 +14,7 @@ import YAML from "yaml";
 import { loadBrain } from "./brain";
 import { loadRules } from "./rules";
 import { trustedAddresses, normalizeAddress, type AddressKind } from "./sameperson";
-import { checkedRefs } from "./louis";
+import { checkedRefs, checkedSenders } from "./louis";
 
 export type SenderStanding = "known" | "unknown";
 
@@ -27,10 +27,10 @@ export function senderStanding(root: string, from: string | undefined): SenderSt
   // A mail's From line, or a text's phone number or handle, in the form person pages key them by.
   const keys = new Set((["email", "phone", "handle"] as AddressKind[]).map((k) => { const a = normalizeAddress(k, from); return a ? `${k}:${a}` : ""; }).filter(Boolean));
   if (!keys.size) return "unknown";
-  const rules = loadRules(root), checked = checkedRefs(root);
+  const rules = loadRules(root), checked = checkedRefs(root), senders = checkedSenders(root);
   for (const n of loadBrain(root)) {
     if (n.fm.type !== "person" || n.fm.status === "archived") continue;
-    for (const key of trustedAddresses(n, rules, checked, { found: true }).keys()) if (keys.has(key)) return "known";
+    for (const key of trustedAddresses(n, rules, checked, { found: true, senders }).keys()) if (keys.has(key)) return "known";
   }
   return "unknown";
 }

@@ -15,6 +15,8 @@ Every field is optional. A note without them shows exactly as it did before.
 
 A `parent:` that names a missing note, or that loops back to itself, is ignored: the page sits at the top of the tree.
 
+Upkeep sets `parent:` on a project page that is part of another (step 1c4, `parentPlan` in `src/wiki.ts`, G640; owner, 2026-11-03: "all of them are related"), once you turn it on with `pocketbrain wiki parents on` (`page_parents` in policy.yaml; `off` stops it). Off, upkeep only counts the pages it would place (`parent-would-set`, naming none). A page named "X: …", "X, …" or "X – …" goes under the one active project named X or "X (…)" ("Lakeside cabin: check-in" under "Lakeside cabin (rental host)"). A page with no such name whose own live facts link exactly one other active project goes under that one. A parent says the link, so only a fact every reader of the page sees counts: never one an assistant that sees the page has hidden, one more private than the page, or one shared with one person (audit v11). Nor is a parent set that some assistant that sees the page can't see, and a page such an assistant can't see never counts as a candidate, so whether a page gets a parent says nothing about what lies outside a view. A page that already has a parent keeps it, a name two pages share leaves it on its own (a `parent-ambiguous` review line that counts them under no page's id), and a parent whose own chain leads back to the page is never set. Each is one `reflect` commit; the run's Undo takes it back and keeps it from coming back. The `page-parent` line on the page names neither page. Memory and the page tree then show it under its parent.
+
 A reference says what the source is (for example "Email, Oct 2"). It is never a copy of the source.
 
 ## Lint

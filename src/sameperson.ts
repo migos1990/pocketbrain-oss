@@ -73,8 +73,30 @@ export function normalizeAddress(kind: AddressKind, raw: string): string | undef
   return (kind === "email") === a.includes("@") ? a : undefined;
 }
 
-// Every trusted address on a person note, with the refs that vouch for it.
-export function trustedAddresses(note: Note, rules: Rules, checked?: Map<string, boolean>, o: { found?: boolean } = {}): Map<string, { kind: AddressKind; refs: string[]; by: string[] }> {
+// The hash a read item's sender is kept under (log/refs-checked.jsonl): its address in the form
+// person pages key it by, so the log never holds an address in plain text (unsalted: a short one can be guessed back). undefined: no address to read.
+export function senderHash(from: string | undefined): string | undefined {
+  if (!from?.trim()) return undefined;
+  for (const kind of ["email", "phone", "handle"] as AddressKind[]) {
+    const a = normalizeAddress(kind, from);
+    if (a) return sha256(`${kind}:${a}`);
+  }
+  return undefined;
+}
+
+// A ref the hub read vouches for one address: a mail's, the one it came from; a contact card's,
+// any address on it, but only on a record the hub filed from that card (the capture agent or an
+// inside-wall agent, as cardOnly weighs it), so no assistant borrows a card for its own address.
+const hubFiled = (r: FactRecord, rules: Rules) => r.by === captureAgentName(rules.policy) || !!(r.by && rules.policy.agents[r.by]?.inside_wall);
+function vouchesFor(ref: string, key: string, r: FactRecord, rules: Rules, checked?: Map<string, boolean>, senders?: Map<string, string>): boolean {
+  if (ref.startsWith("contacts:")) return checked?.get(ref) === true && hubFiled(r, rules);
+  return senders?.get(ref) === sha256(key);
+}
+
+// Every trusted address on a person note, with the refs that vouch for it. `senders` (with found):
+// a source-verified address counts only when a ref it cites was read from that very address
+// (audit v11, G643: a real mail id the hub had read vouched for any address an assistant planted).
+export function trustedAddresses(note: Note, rules: Rules, checked?: Map<string, boolean>, o: { found?: boolean; senders?: Map<string, string> } = {}): Map<string, { kind: AddressKind; refs: string[]; by: string[] }> {
   const out = new Map<string, { kind: AddressKind; refs: string[]; by: string[] }>();
   for (const [attr, f] of Object.entries(note.fm.facts ?? {})) {
     const kind = kindOf(rules, note.fm.type, attr);
@@ -84,6 +106,7 @@ export function trustedAddresses(note: Note, rules: Rules, checked?: Map<string,
       const a = normalizeAddress(kind, r.value);
       if (!a) continue;
       const key = `${kind}:${a}`;
+      if (o.found && !ownerVouched(r) && !r.sources.some((x) => vouchesFor(refString(x), key, r, rules, checked, o.senders))) continue;
       const e = out.get(key) ?? { kind, refs: [], by: [] };
       e.refs.push(...r.sources.map(refString));
       if (r.by) e.by.push(r.by);

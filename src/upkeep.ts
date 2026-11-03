@@ -18,7 +18,7 @@ import { archiveOldLogs } from "./logs";
 import { git } from "./git";
 import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
-import { wikiLint, renderTouchedPages } from "./wiki";
+import { wikiLint, renderTouchedPages, parentPlan, pageParentsOn } from "./wiki";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
 import { setAsideReceipts } from "./receipt-pages";
@@ -195,6 +195,35 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   {
     const o = findOverlaps(notes);
     if (o.length) add({ rule: "routine-overlap", key: "routine-overlap", kind: "review", detail: `${o.length} group${o.length === 1 ? "" : "s"} of assistants' routines may do the same job; \`pocketbrain overlaps\` lists them` });
+  }
+
+  // 1c4. One thing's pages under it (src/wiki.ts parentPlan, G640): a project page named "X: …", or
+  //      whose own facts link exactly one other project, gets that page as its `parent:`, so Memory
+  //      and the page tree show it under X. One commit per page, taken back by this run's Undo; a
+  //      name two pages share is a review line. No line names a page: the commit says which.
+  {
+    // A fact some assistant that sees the page has hidden never sets its parent (audit v11).
+    const views = Object.keys(rules.policy.agents ?? {}).flatMap((agent) => { try { return [carve(notes, rules, grantFor(rules, agent), { flags: false })]; } catch { return []; } });
+    const hiddenFrom = new Set(views.flatMap((v) => v.hiddenFacts.map((h) => h.key).filter((k) => v.visible.has(k.split("#")[0]))));
+    // A parent some assistant that sees the page can't see is never set, so no line on the page tells
+    // it a page exists outside its view; a shared name is a count under no page's id, for the same
+    // reason (G28, as the fold's held line).
+    const shown = (child: string, parent: string) => views.every((v) => !v.visible.has(child) || v.visible.has(parent));
+    const plan = parentPlan(notes, (k) => hiddenFrom.has(k), shown);
+    const shared = plan.filter((p) => p.ambiguous).length;
+    if (shared) add({ rule: "parent-ambiguous", key: "parent-ambiguous", kind: "review", detail: `${shared} project page${shared === 1 ? "'s name starts" : "s' names start"} with a name two pages share, so ${shared === 1 ? "it sits" : "they sit"} on ${shared === 1 ? "its" : "their"} own; set parent: by hand` });
+    // Off until the owner turns it on (`pocketbrain wiki parents on`, policy page_parents): off, a
+    // count of what it would set, under no page's id.
+    const would = plan.filter((x) => x.parent);
+    if (!pageParentsOn(rules)) {
+      if (would.length) add({ rule: "parent-would-set", key: "parent-would-set", kind: "review", detail: `${would.length} project page${would.length === 1 ? " is" : "s are"} part of another page; \`pocketbrain wiki parents on\` puts ${would.length === 1 ? "it" : "them"} under ${would.length === 1 ? "it" : "those pages"} each night` });
+    } else for (const p of would) {
+      const n = byId.get(p.id)!;
+      if (!add({ rule: "page-parent", key: n.fm.id, kind: "auto-fix", detail: "put under the page it is part of" })) continue;
+      n.fm.parent = p.parent!;
+      saveNote(root, n);
+      commitFix(root, run, [n.path], `put ${n.fm.id} under ${p.parent}`, [n.fm.id]);
+    }
   }
 
   // 1d. Page text (src/wiki.ts renderTouchedPages, docs/wiki.md): every page a commit touched in
@@ -494,7 +523,7 @@ export function undoRun(root: string, run: string): string {
   const findingsFile = [join(root, "inbox", "reflect", `${run}.md`), join(root, "inbox", "sleep", `${run}.md`)].find((f) => existsSync(f)) ?? "";
   const fired = findingsFile ? [...readFileSync(findingsFile, "utf8").matchAll(/^- \[([a-z?-]+)\] `([^`]+)`/gm)] : [];
   const sup = loadSuppressions(root);
-  const autoRules = new Set(["link-repoint", "link-mention", "date-format", "recheck-confirmed", "journal-archive", "stored-recheck", "retire"]);
+  const autoRules = new Set(["page-parent", "link-repoint", "link-mention", "date-format", "recheck-confirmed", "journal-archive", "stored-recheck", "retire"]);
   for (const [, rule, key] of fired) if (autoRules.has(rule) && !sup.some((s) => s.key === key && s.rule === rule)) sup.push({ key, rule, since: today(), why: `reverted ${run}` });
   mkdirSync(join(root, "rules"), { recursive: true });
   writeFileSync(join(root, "rules", "suppressions.yaml"), YAML.stringify({ suppressions: sup }, { lineWidth: 0 }));

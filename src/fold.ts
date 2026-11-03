@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// One thing, one page (docs/fold-twins.md; owner's phone, 2026-11-03, G635). A writer that files a
+// One thing, one page (docs/fold-twins.md; owner's phone, 2026-11-03, G635, G644). A writer that files a
 // page into an area or level it can't see gets a new page each time, with a random suffix, so its
 // reply never says a hidden page exists (G28). The hub sees everything: it folds such a twin into
 // the older page with the same name, so Memory says the thing once. Only pages that are surely one
@@ -9,25 +9,32 @@
 // (src/sameperson.ts); decisions, money and events with one name can be two (a 2025 and a 2026
 // "Pick a bank"). The fold is mergeNotes, which picks no winner (a disagreement becomes a conflict
 // the owner settles) and refuses what would change any assistant's view (mergeBlocked,
-// brainChanges); an open conflict on either page holds the fold until it is settled. Undo reverts
-// the fold while neither page changed since. Nothing here is told to the writer.
+// brainChanges); an open conflict on either page holds the fold until it is settled. Undo takes
+// back what the fold changed and keeps later writes. Nothing here is told to the writer.
 import { join } from "node:path";
+import { rmSync, writeFileSync } from "node:fs";
 import type { Note } from "./brain";
-import { loadBrain, linksIn } from "./brain";
+import { loadBrain, linksIn, parseNote, saveNote } from "./brain";
 import { loadRules } from "./rules";
 import { compareKey } from "./normalize";
 import { mergeBlocked, brainChanges, mergeNotes, planMerge } from "./merge";
 import { derivedSince } from "./sameperson";
-import { git, gitRun, authorEnv } from "./git";
-import { hubGate } from "./hub";
+import { git, commitPaths } from "./git";
 import { CoreError } from "./core";
 import { appendJsonl, readJsonl } from "./util";
+import { appendDiary, diaryRow, readDiary } from "./diary";
+import { clock } from "./clock";
+import { OWNER } from "./owner";
+import { today } from "./brain";
 
 export const FOLD_AUTHOR = "reflect";
 const FOLDABLE = new Set(["project", "org"]);
 const foldsFile = (root: string) => join(root, "log", "folds.jsonl");
 
 export interface Twin { keep: string; drop: string }
+// The fold log, hub state: one line per fold, and one per undo naming the fold and its own commit.
+export interface FoldLine { keep?: string; drop?: string; commit?: string; undone?: string; undo_commit?: string; at: string }
+export const foldLog = (root: string) => readJsonl<FoldLine>(foldsFile(root));
 export interface Fold extends Twin { commit?: string; disputes: number }
 export interface FoldReport { folds: Fold[]; refused: (Twin & { why: string })[]; disputes: number }
 
@@ -89,26 +96,70 @@ export function foldTwins(root: string, opts: { apply: boolean; run?: string }):
   return out;
 }
 
-// Undo a fold while neither page changed since (the same rule as a person merge's Undo): upkeep's
-// own link repoints and the page writer's text go back with it.
+// Undo a fold, even after later writes (audit v11: it used to refuse once either page changed).
+// It is a forward change, one commit: every file only the fold touched (and upkeep's repoints of
+// links to the dropped page, and the page writer's text for these two pages) goes back as it was,
+// a conflict the fold opened and nobody answered goes away, the dropped page comes back, and on
+// the kept page each part the fold changed goes back unless a later write changed it again, which
+// stays. It refuses, plainly, only when the dropped page itself changed since.
 export function undoFold(root: string, commit: string): string {
-  const f = readJsonl<{ keep: string; drop: string; commit: string; undone?: string }>(foldsFile(root));
+  const f = foldLog(root) as { keep: string; drop: string; commit: string; undone?: string }[];
   const m = f.filter((x) => x.commit === commit && !x.undone).at(-1);
   if (!m || f.some((x) => x.undone === commit)) throw new CoreError(404, `no fold ${commit.slice(0, 7)} to undo`);
   const notes = loadBrain(root);
-  const paths = [m.keep, m.drop].map((id) => notes.find((n) => n.fm.id === id)?.path).filter((x): x is string => !!x).map((p) => p.startsWith(root) ? p.slice(root.length + 1) : p);
-  // Only what was derived from this fold: upkeep's repoints of links to the dropped page, and the
-  // page writer's text for these two pages (never another page's text written the same night).
+  const rel = (p: string) => p.startsWith(root) ? p.slice(root.length + 1) : p;
+  const pathOf = (id: string) => { const n = notes.find((x) => x.fm.id === id); return n ? rel(n.path) : undefined; };
+  const keepPath = pathOf(m.keep), dropPath = pathOf(m.drop);
+  if (!keepPath || !dropPath) throw new CoreError(409, `${!keepPath ? m.keep : m.drop} is gone since the fold; nothing changed`);
+  const paths = [keepPath, dropPath];
   const derived = derivedSince(root, { ...m, id: "", evidence: [], at: "" }).filter((c) => /^reflect: repoint links in /.test(git(root, ["show", "-s", "--format=%s", c]))
-    || git(root, ["show", "--name-only", "--format=", c]).split("\n").filter(Boolean).every((f) => paths.includes(f)));
-  const later = git(root, ["log", "--format=%H", `${m.commit}..HEAD`, "--", ...paths]).split("\n").filter((c) => c && !derived.includes(c));
-  if (later.length) throw new CoreError(409, `${m.keep} or ${m.drop} changed since the fold (${later.map((c) => c.slice(0, 7)).join(", ")}); undo those first or fix it by hand`);
-  hubGate(root, ["revert"]);
-  const r = Bun.spawnSync(["git", "revert", "--no-commit", ...derived, m.commit], { cwd: root, env: authorEnv(root, FOLD_AUTHOR) });
-  if (r.exitCode !== 0) { Bun.spawnSync(["git", "revert", "--abort"], { cwd: root }); throw new CoreError(409, "a later change touched the same lines; undo it in git by hand"); }
-  const done = gitRun(root, ["commit", "-q", "-m", `undo fold of ${m.drop} into ${m.keep}\n\nReverts ${m.commit}.`], FOLD_AUTHOR);
-  if (!done.ok) { Bun.spawnSync(["git", "revert", "--abort"], { cwd: root }); Bun.spawnSync(["git", "reset", "-q", "--merge"], { cwd: root }); throw new CoreError(409, `the undo wasn't saved (${done.err || done.out}); nothing changed`); }
-  Bun.spawnSync(["git", "revert", "--quit"], { cwd: root });
-  appendJsonl(foldsFile(root), { undone: m.commit, at: new Date().toISOString() });
+    || git(root, ["show", "--name-only", "--format=", c]).split("\n").filter(Boolean).every((x) => paths.includes(x)));
+  const ours = new Set([m.commit, ...derived]);
+  const filesOf = (c: string) => git(root, ["show", "--name-only", "--no-renames", "--format=", c]).split("\n").filter(Boolean);
+  const touched = [...new Set([...ours].flatMap(filesOf))];
+  const at = (rev: string, file: string): string | undefined => { const r = Bun.spawnSync(["git", "show", `${rev}:${file}`], { cwd: root }); return r.exitCode === 0 ? r.stdout.toString() : undefined; };
+  const others = (file: string) => git(root, ["log", "--format=%H", `${m.commit}^..HEAD`, "--", file]).split("\n").filter((c) => c && !ours.has(c));
+  if (others(dropPath).length) throw new CoreError(409, `the folded page ${m.drop} changed since the fold, so it can't come back as it was; nothing changed`);
+  const changed: string[] = [];
+  for (const file of touched) {
+    const before = at(`${m.commit}^`, file);
+    if (!others(file).length) {
+      if (before === undefined) rmSync(join(root, file), { force: true }); else writeFileSync(join(root, file), before);
+      changed.push(file);
+    } else if (file === keepPath && before !== undefined) {
+      const was = parseNote(before, file), after = parseNote(at(m.commit, file) ?? "", file);
+      const now = structuredClone(notes.find((n) => n.fm.id === m.keep)!);
+      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+      const back = (into: Record<string, unknown>, a: Record<string, unknown>, b: Record<string, unknown>, skip: string[]) => {
+        for (const k of new Set([...Object.keys(a), ...Object.keys(b), ...Object.keys(into)])) {
+          if (skip.includes(k) || !same(into[k], a[k]) || same(a[k], b[k])) continue;
+          if (b[k] === undefined) delete into[k]; else into[k] = structuredClone(b[k]);
+        }
+      };
+      back(now.fm as never, after.fm as never, was.fm as never, ["facts", "history", "updated"]);
+      for (const part of ["facts", "history"] as const) {
+        const into = ((now.fm as Record<string, unknown>)[part] ??= {}) as Record<string, unknown>;
+        back(into, ((after.fm as Record<string, unknown>)[part] ?? {}) as never, ((was.fm as Record<string, unknown>)[part] ?? {}) as never, []);
+        if (!Object.keys(into).length) delete (now.fm as Record<string, unknown>)[part];
+      }
+      // The page writer may have written this page's text since (one of ours): its text from
+      // before the fold comes back unless a person wrote it since.
+      const bodies = [m.commit, ...derived].map((c) => at(c, file)).filter((t): t is string => t !== undefined).map((t) => parseNote(t, file).body);
+      if (bodies.includes(now.body)) now.body = was.body;
+      saveNote(root, now);
+      changed.push(file);
+    }
+    // Any other file a later write changed (a conflict answered since, a page edited since) stays:
+    // its link to the kept page still leads somewhere true.
+  }
+  // The home's line for this fold says Undone, whichever door undid it.
+  const line = readDiary(root).find((r) => r.kind === "folded" && r.fold === m.commit);
+  if (line && !readDiary(root).some((r) => r.undoes === line.undo_token)) {
+    const at = clock().toISOString(), d = today();
+    changed.push(appendDiary(root, { ...diaryRow({ at, factKey: line.fact_key, title: line.title, kind: "undone", from: undefined, to: undefined, incoming: { value: undefined, as_of: d, sources: [], verification: "confirmed-by-owner", by: OWNER, recorded: d } as never, rank: 5, sensitivity: line.sensitivity }), undoes: line.undo_token }, d.slice(0, 7)));
+  }
+  const failed = commitPaths(root, changed, `undo fold of ${m.drop} into ${m.keep}\n\nReverts ${m.commit}, keeping later writes.\nKind: fold-undo`, FOLD_AUTHOR);
+  if (failed) throw new CoreError(409, `the undo wasn't saved (${failed}); nothing changed`);
+  appendJsonl(foldsFile(root), { undone: m.commit, undo_commit: git(root, ["rev-parse", "HEAD"]), at: new Date().toISOString() });
   return `undid the fold of ${m.drop} into ${m.keep}`;
 }

@@ -15,6 +15,7 @@ import { appendDiary, diaryRow, readDiary, shownValue, DIARY_DIR, type DiaryKind
 import { gitRun, commitPaths, gitTime } from "./git";
 import { sourceRank } from "./sources";
 import { isOwnerConfirmed } from "./owner";
+import { foldLog } from "./fold";
 
 export const CATCHUP_DAYS = 7;
 const cursorFile = (root: string) => join(root, ".git", "pb-diary-cursor");
@@ -125,6 +126,11 @@ export function catchUpDiary(root: string, now: Date, o: { days?: number; dryRun
   const backStart = !cur || !valid(cur.head) ? head.out : cur.back && valid(cur.back) ? `${cur.back}^` : undefined;
   const backward = backStart && gitRun(root, ["rev-parse", "--verify", "-q", backStart]).ok ? commitsIn(root, [`--since=${since}`, backStart]) : [];
   const named = new Set(readDiary(root).map((r) => r.commit).filter(Boolean));
+  // A fold is one line whose Undo is the fold's (audit v11), never a line per moved fact; a fold's
+  // own undo makes no lines (its line says Undone).
+  const folds = foldLog(root);
+  const foldAt = new Map(folds.filter((f) => f.commit).map((f) => [f.commit!, f]));
+  const quiet = new Set(folds.map((f) => f.undo_commit).filter(Boolean));
   const rows: DiaryRow[] = [];
   let lastForward = cur?.head ?? head.out, lastBack = cur?.back ?? head.out, budget = MAX_NOTES;
   const read = (c: Commit): boolean => {
@@ -135,6 +141,18 @@ export function catchUpDiary(root: string, now: Date, o: { days?: number; dryRun
     if (c.files.some((p) => p.startsWith(`${DIARY_DIR}/`))) { res.skipped.diary++; return true; } // its rows came with it
     if (!c.parent) { res.skipped.first++; return true; } // the brain's first commit is where it started, not something it learned
     if (!notes.length) { res.skipped.no_notes++; return true; }
+    if (quiet.has(c.sha)) { res.skipped.known++; return true; }
+    const fold = foldAt.get(c.sha);
+    if (fold) {
+      const keep = noteAt(root, c.sha, notes.find((p) => noteAt(root, c.sha, p)?.fm.id === fold.keep) ?? ""), drop = noteAt(root, c.parent, notes.find((p) => noteAt(root, c.parent!, p)?.fm.id === fold.drop) ?? "");
+      if (keep) {
+        const at = new Date(c.at).toISOString(), d = at.slice(0, 10);
+        const sensitivity = [keep.fm.sensitivity, drop?.fm.sensitivity].filter(Boolean).sort((a, b) => sensitivityRank(b!) - sensitivityRank(a!))[0] ?? "personal";
+        rows.push({ ...diaryRow({ at, factKey: `${fold.keep}#`, title: String(keep.fm.title ?? fold.keep), kind: "folded", from: undefined, to: undefined, incoming: { value: undefined, as_of: d, sources: [], verification: "unverified", by: c.author, recorded: d } as never, rank: 0, sensitivity: sensitivity as never }), commit: c.sha, fold: c.sha, dropped: fold.drop });
+      }
+      budget -= notes.length; res.notes += notes.length;
+      return true;
+    }
     for (const p of notes) {
       budget--; res.notes++;
       const after = noteAt(root, c.sha, p);

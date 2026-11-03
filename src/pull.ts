@@ -31,6 +31,7 @@ import { findInjection, redactSecrets } from "./checks";
 import { compareKey } from "./normalize";
 import { logWrite } from "./write";
 import { recordCheckedRefs, checkedRefs } from "./louis";
+import { senderHash } from "./sameperson";
 import { senderStanding } from "./sender";
 import { createHash } from "node:crypto";
 import type { Model } from "./model";
@@ -403,6 +404,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   if (state.day !== day) { state.day = day; state.stored_today = 0; }
   const contacts: Parameters<typeof recordInteraction>[1][] = [];
   const read: Record<string, boolean> = {}; // mail and events this pass read, recorded as checked (G417)
+  const readFrom: Record<string, string | undefined> = {}; // the hash of each read item's sender (G643)
   const echo = cfg.kind === "imessage" ? channelThreads(root) : new Set<string>();
   // Contacts: the people the owner's own card names, the only new pages a card may start.
   const family = card ? ownerRelations(raw, loadRules(root), loadBrain(root)) : new Set<string>();
@@ -455,7 +457,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
     }
     if (prev && prev !== it.version) out.due.push(...markDue(root, refFor(cfg.kind, { id: it.id, version: prev }, cfg.account), "source changed"));
     state.seen[it.id] = it.version;
-    if (cfg.kind === "gmail" || cfg.kind === "gcal" || card) read[refFor(cfg.kind, it, cfg.account)] = true;
+    if (cfg.kind === "gmail" || cfg.kind === "gcal" || card) { const ref = refFor(cfg.kind, it, cfg.account); read[ref] = true; readFrom[ref] = senderHash(it.from); }
     if (it.at && (!state.cursor || it.at > state.cursor)) state.cursor = it.at;
     if (short) { out.skipped++; continue; }
     const ref = refFor(cfg.kind, it, cfg.account);
@@ -488,7 +490,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
     out.proposals = (out.proposals ?? 0) + d.items!.filter((i) => i.proposal).length;
   }
   if (opts.dryRun) return out;
-  if (Object.keys(read).length) recordCheckedRefs(root, read);
+  if (Object.keys(read).length) recordCheckedRefs(root, read, readFrom);
   if (nextLive && !hold) state.live = nextLive;
   if (out.capped) delete out.more;
   mkdirSync(join(root, "log", "sources"), { recursive: true });
@@ -688,7 +690,7 @@ export async function fetchOne(root: string, ref: string): Promise<(SourceItem &
     // calendar event (made up, or old) is left unchecked rather than vouched for.
     const v = parseRef(ref)?.version;
     const ok = typeof out === "object" ? (v && v !== out.version ? undefined : !out.gone) : /not found in the/.test(out) ? false : undefined;
-    if (ok !== undefined) recordCheckedRefs(root, { [ref]: ok });
+    if (ok !== undefined) recordCheckedRefs(root, { [ref]: ok }, { [ref]: typeof out === "object" ? senderHash(out.from) : undefined });
   }
   return out;
 }

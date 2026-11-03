@@ -52,8 +52,22 @@ export function checkedRefs(root: string): Map<string, boolean> {
   return m;
 }
 
-export function recordCheckedRefs(root: string, results: Record<string, boolean>) {
+// `from`: the hash of the address a read item came from (sameperson.ts senderHash), never the
+// address in plain text (an unsalted hash: a phone number could be guessed back from it). A read mail vouches for that one address only (audit v11, G643).
+export function recordCheckedRefs(root: string, results: Record<string, boolean>, from: Record<string, string | undefined> = {}) {
   const f = join(root, "log", "refs-checked.jsonl");
   const at = new Date().toISOString();
-  for (const [ref, ok] of Object.entries(results)) appendJsonl(f, { ref, ok, at });
+  for (const [ref, ok] of Object.entries(results)) appendJsonl(f, { ref, ok, at, ...(ok && from[ref] ? { from: from[ref] } : {}) });
+}
+
+// The sender hash each ref was last read with; a ref whose latest line has none (read before G643,
+// or found missing) has no entry, so it vouches for no address.
+export function checkedSenders(root: string): Map<string, string> {
+  const f = join(root, "log", "refs-checked.jsonl");
+  const m = new Map<string, string>();
+  if (!existsSync(f)) return m;
+  for (const o of readJsonl<{ ref: string; ok?: boolean; from?: unknown }>(f)) {
+    if (o.ok && typeof o.from === "string") m.set(o.ref, o.from); else m.delete(o.ref);
+  }
+  return m;
 }

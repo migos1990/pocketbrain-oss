@@ -65,6 +65,55 @@ export function pageTree(notes: Note[]): PageTree {
   return { children, roots, broken };
 }
 
+// Which project page goes under which (G640, owner's phone 2026-11-03: "all of them are related").
+// A page named "X: …", "X, …" or "X – …" is part of the one active project named X or "X (…)"; a page
+// with no such name whose own live facts link exactly one other active project is part of that one.
+// A page with a parent keeps it; a name two pages share, or a parent whose own chain leads back
+// here, is no parent. A parent says the link, so only a fact every reader of the page sees counts
+// (audit v11): none hidden from an assistant that sees the page (`hidden`), none more private than
+// the page, none shared with one person. Nor is a parent set that some reader of the page can't see
+// (`sees`): its cell would drop it, but the run's line on the page would still say there is one.
+// Upkeep writes what this plans (src/upkeep.ts step 1c4).
+export const pageParentsOn = (rules: Rules) => (rules.policy as { page_parents?: boolean }).page_parents === true;
+export interface ParentPlan { id: string; parent?: string; ambiguous?: boolean }
+const PART_SEP = /^\s*(?:[,:–—]|\s-)\s*\S/;
+const nameOfTitle = (t: string) => t.replace(/\s*\([^()]*\)\s*$/, "").trim().toLowerCase();
+export function parentPlan(notes: Note[], hidden: (key: string) => boolean, sees: (child: string, parent: string) => boolean = () => true): ParentPlan[] {
+  const byId = new Map(notes.map((n) => [n.fm.id, n]));
+  const isProject = (n: Note | undefined): n is Note => !!n && n.fm.type === "project" && n.fm.status === "active" && n.fm.id.startsWith("projects/");
+  const projects = notes.filter(isProject);
+  const named = new Map<string, string[]>();
+  for (const p of projects) { const k = nameOfTitle(String(p.fm.title ?? "")); if (k) named.set(k, [...(named.get(k) ?? []), p.fm.id]); }
+  // Title or alias -> the one note it names, for a fact that links by name.
+  const titles = new Map<string, string | null>();
+  for (const n of notes) for (const t of new Set([n.fm.title, ...(n.fm.aliases ?? [])].map((x) => String(x ?? "").toLowerCase()).filter(Boolean))) titles.set(t, titles.has(t) ? null : n.fm.id);
+  const resolve = (to: string) => byId.has(to) ? to : titles.get(to.toLowerCase()) ?? undefined;
+  const loops = (id: string, to: string) => { const seen = new Set<string>(); for (let p: string | undefined = to; p; p = byId.get(p) && parentOf(byId.get(p)!)) { if (p === id) return true; if (seen.has(p)) return false; seen.add(p); } return false; };
+  const out: ParentPlan[] = [];
+  for (const n of projects) {
+    if (parentOf(n)) continue;
+    const t = String(n.fm.title ?? "").toLowerCase();
+    // Only pages every reader of this one sees are counted, so whether it gets a parent never says
+    // what lies outside a reader's view (builder's slice audit F1).
+    const among = (x: string) => named.get(x)!.filter((id) => id !== n.fm.id && sees(n.fm.id, id));
+    const k = [...named.keys()].filter((x) => t.startsWith(x) && PART_SEP.test(t.slice(x.length)) && !named.get(x)!.includes(n.fm.id) && among(x).length).sort((a, b) => b.length - a.length)[0];
+    if (k) {
+      const ids = among(k);
+      if (ids.length > 1) out.push({ id: n.fm.id, ambiguous: true });
+      else if (!loops(n.fm.id, ids[0])) out.push({ id: n.fm.id, parent: ids[0] });
+      continue;
+    }
+    const to = new Set<string>();
+    for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+      if (NOT_PROSE.test(attr) || isDisputed(f) || hidden(`${n.fm.id}#${attr}`)) continue;
+      const seen = (r: FactRecord) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity));
+      for (const r of records(f).filter(live).filter(seen)) for (const m of shown(r.value).matchAll(/\[\[([^\]|]+)/g)) { const id = resolve(m[1].trim()); if (id && id !== n.fm.id && isProject(byId.get(id)) && sees(n.fm.id, id)) to.add(id); }
+    }
+    if (to.size === 1) { const [p] = [...to]; if (!loops(n.fm.id, p)) out.push({ id: n.fm.id, parent: p }); }
+  }
+  return out;
+}
+
 export interface Section { heading?: string; text: string }
 
 // `## ` starts a section; text before the first one has no heading. Deeper headings stay text.

@@ -17,6 +17,7 @@ import { OWNER } from "./owner";
 import { readDiary, appendDiary, diaryRow, shownValue, type DiaryRow } from "./diary";
 import { logWrite } from "./write";
 import { renderTouchedPages, MADE } from "./wiki";
+import { undoFold } from "./fold";
 import type { Note } from "./brain";
 
 export type UndoOutcome = "undone" | "changed_since" | "already_undone" | "not_found" | "not_undoable" | "not_saved";
@@ -30,6 +31,11 @@ export function undoFact(root: string, token: string): UndoResult {
   if (!row) return { outcome: "not_found", message: "nothing to undo for that line" };
   if (rows.some((r) => r.undoes === token)) return { outcome: "already_undone", fact_key: row.fact_key, row, message: "already undone" };
   if (row.kind === "seen") return rehold(root, row, token);
+  // A fold's line undoes the fold, both pages back, later writes kept (audit v11).
+  if (row.kind === "folded" && row.fold) {
+    try { undoFold(root, row.fold); return { outcome: "undone", fact_key: row.fact_key, row, message: "Undone" }; }
+    catch (e) { const c = (e as { status?: number }).status; return { outcome: c === 404 ? "already_undone" : "changed_since", fact_key: row.fact_key, row, message: (e as Error).message }; }
+  }
   if (row.kind === "conflict" || row.to === undefined && row.kind !== "retracted") return { outcome: "not_undoable", fact_key: row.fact_key, row, message: "this line has nothing to undo" };
   if (row.kind === "settled") return reopen(root, row, token);
   // Only these kinds change a value; any other (kept, held, set_aside) never deletes a fact (audit

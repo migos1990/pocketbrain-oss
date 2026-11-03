@@ -12,7 +12,7 @@ import { withFileLock } from "../filelock";
 export const APP_PHONES_MAX = 5;
 // As many as the dashboard keeps at all (server.ts keeps the newest 20), so a remove ends every one.
 const SIGN_INS_KEPT = 20;
-interface Phone { name: string; at: string; last?: string; sids: string[] }
+interface Phone { name: string; at: string; last?: string; sids: string[]; fresh?: string[] }
 type Phones = Record<string, Phone>; // key hash -> phone
 const phonesFile = (root: string) => join(root, ".git", "pb-app-phones.json");
 // The dashboard's kept sign-ins (server.ts reads and writes it): by the hash of the cookie.
@@ -62,15 +62,24 @@ export function addAppPhone(root: string, key: string, name: string, sidHash: st
   });
 }
 
-/** A paired phone's key: true, and the sign-in it refreshes or makes is recorded as its own. */
-export function useAppPhone(root: string, key: string, sidHash: string, now: Date): boolean {
-  if (!key) return false;
+// Fresh sign-ins one phone makes in an hour before it waits (audit v11, G642): Face ID is a person
+// at the phone, so a key used more often than that is not one.
+export const APP_FRESH_PER_HOUR = 12;
+/** A paired phone's key, and one of the live sign-ins that phone made: "ok" and the time is
+ * recorded. Never a sign-in the phone didn't make, and never a new one (audit v11, G642: the key
+ * alone made any cookie, or none, a fresh owner sign-in). */
+export function useAppPhone(root: string, key: string, sidHash: string, now: Date): "ok" | "unknown" | "not-its-sign-in" | "cap" {
+  if (!key) return "unknown";
   return locked(root, (phones) => {
     const p = phones[keyHash(key)];
-    if (!p) return false;
+    if (!p) return "unknown";
+    if (!p.sids.includes(sidHash)) return "not-its-sign-in";
+    const t = now.getTime();
+    p.fresh = (p.fresh ?? []).filter((at) => t - Date.parse(at) < 3_600_000);
+    if (p.fresh.length >= APP_FRESH_PER_HOUR) return "cap";
+    p.fresh.push(now.toISOString());
     p.last = now.toISOString();
-    p.sids = [sidHash, ...p.sids.filter((s) => s !== sidHash)].slice(0, SIGN_INS_KEPT);
-    return true;
+    return "ok";
   });
 }
 

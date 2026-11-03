@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G642: {
+    closed: "2b0aad2b",
+    title: "The phone app's device key alone made any cookie, or none, a fresh owner sign-in, and reset the 30 days",
+    severity: "high",
+    finding: "Audit v11 (2026-11-03), reproduced on 303c320f: POST /app/fresh with a paired phone's device key made whatever cookie came with it fresh, or signed a new one in when none came, with no nonce, no per-phone cap and no CSRF guard beyond an Origin a page could send from the hub itself; each use rewrote the sign-in's time, so its 30 days never ended. \"Face ID makes a sign-in fresh\" was a hub-side bearer.",
+    fix: "src/dashboard/server.ts: /app/fresh takes only the app's own request (x-pocketbrain-app header, no Origin) on a live sign-in, with a one-time nonce from /app/nonce given to that sign-in in the last 2 minutes; it never makes a sign-in or sets a cookie; markFresh moves at, never since, so a sign-in ends 30 days after it began. src/dashboard/phone-app.ts useAppPhone: only a sign-in that phone made, APP_FRESH_PER_HOUR per phone. mobile/src/hub.ts asks for the nonce first. Tests: test/app-fresh-bound.test.ts, test/phone-app.test.ts, test/phone-app-client.test.ts.",
+  },
+  G643: {
+    closed: "claude/audit11-mail-vouch",
+    title: "A mail id the hub had read vouched for any address an assistant planted",
+    severity: "high",
+    finding: "Audit v11 (2026-11-03), reproduced on 303c320f: G615 made a source-verified address count as a known sender only once a ref it cites was checked and found, but found said only that the mail existed. An assistant citing a real mail the hub had read could write any address on a person page as verified-by-source and make it a known sender, so a stranger's private fact filed itself.",
+    fix: "src/pull.ts records the hash of each read item's sender beside its ref (src/louis.ts recordCheckedRefs, senderHash in src/sameperson.ts; a hash, never the address in plain text). trustedAddresses with found counts a source-verified address only when a ref it cites was read from that very address (checkedSenders), or a contact card's ref on a record the hub filed. A ref read before has no sender and vouches for nothing. Tests: test/audit11-read-mail-vouch.test.ts, test/audit10-planted-sender.test.ts.",
+  },
   G639: {
     closed: "48419961",
     title: "Memory showed Notes and Assistants' notes side by side with nothing telling them apart; link titles read as Markdown",
@@ -3752,6 +3766,12 @@ export const GAPS: Record<string, Gap> = {
     finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
+  G644: {
+    title: "A fold's Undo broke after any later write, and the home's Undo for a fold wasn't the fold's",
+    severity: "medium",
+    finding: "Audit v11: undoFold reverted the fold commit only while neither page had changed since, so any later write to either page (a filing, an owner edit) left the fold with no Undo. The diary catch-up turned the fold commit into one line per moved fact, each with a fact Undo that took back one value and left the two pages folded.",
+    fix: "src/fold.ts undoFold is a forward change: files only the fold touched go back, an unanswered conflict it opened goes away, the dropped page comes back, and on the kept page each part the fold changed goes back unless a later write changed it again; it refuses only when the dropped page changed. src/diary-catchup.ts makes one `folded` line per fold and none for an undo's commit; src/undo.ts sends its Undo to undoFold; src/dashboard/home.ts says it in one sentence and Undone once undone by either door. Tests: test/fold-twins.test.ts, test/fold-undo-home.test.ts.",
+  },
   G641: {
     title: "Assistants' routines that do the same job sat apart with nothing saying so",
     severity: "low",
@@ -3763,6 +3783,13 @@ export const GAPS: Record<string, Gap> = {
     severity: "medium",
     finding: "Owner's phone, 2026-11-03 (\"all of them are related\", \"there should be logical section under project\", \"its like wiki\"): a rental project \"X (host)\" and two pages \"X: rebooking inquiry\", \"X: check-in\" sat as separate rows among unrelated projects; a house-rules page for the same rental sat elsewhere. PR 72 nested \"X: …\" only under a page named exactly X.",
     fix: "src/dashboard/html-app.ts: a kind's list with more than one area comes in sections, one per area, biggest first, each headed by its area and dot; foldRows nests \"X: …\" under \"X (…)\" (only a comma, colon or dash after the name counts, so two \"X (…)\" pages never nest in each other) and a page under its `parent:` when that page is on the list. Display only. Tests: test/project-sections.test.ts.",
+  },
+  G640: {
+    closed: "4a7d2798",
+    title: "Pages that are part of one thing sat apart in Memory",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-03, circling a run of his Memory projects: \"all of them are related\", \"its like wiki\", \"somewhat a lot are connected\". A page named after another (\"X: a check-in\", \"X: a rebooking inquiry\" beside \"X (rental host)\") and a page whose fact named X were separate rows; nothing set the parent: the page tree reads.",
+    fix: "parentPlan (src/wiki.ts), upkeep step 1c4: a project page named \"X: …\", \"X, …\" or \"X – …\" goes under the one active project named X or \"X (…)\"; one whose own live facts link exactly one other active project goes under that one, counting only a fact every reader of the page sees (none an assistant that sees the page has hidden, none more private than the page, none shared with one person; audit v11). No parent is set that an assistant seeing the page can't see. A set parent is kept, a shared name is a parent-ambiguous count under no page id, a loop is never made. A page a reader of the child can't see never counts as a candidate (builder's slice audit F1). Off until the owner's `pocketbrain wiki parents on` (policy page_parents); off, a parent-would-set count. One reflect commit per page; the run's Undo takes it back and suppresses it. Test: test/project-parents.test.ts. Eval: wiki-project-under-its-parent.",
   },
   G636: {
     closed: "f347ddd4",

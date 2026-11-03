@@ -152,3 +152,60 @@ test("the page that stays is the one other pages link to, and a word is never mi
   git(root, ["add", "-A"]); git(root, ["commit", "-qm", "link"]);
   expect(findTwins(loadBrain(root))).toEqual([{ keep: a!.fm.id, drop: b!.fm.id }]);
 });
+
+// Audit v11: the fold's only Undo broke after any later write to either page. Undo is now a forward
+// change: the dropped page comes back as it was, the kept page loses only what the fold brought,
+// and every later write stays.
+test("Undo still works after a later write to the kept page, and keeps that write", () => {
+  const root = makeBrain();
+  blind(root, "status", "active");
+  blind(root, "next_step", "book a session");
+  const factsOf = (id: string) => Object.keys(loadBrain(root).find((n) => n.fm.id === id)!.fm.facts ?? {}).sort();
+  const [t] = findTwins(loadBrain(root));
+  const keepWas = factsOf(t!.keep), dropWas = factsOf(t!.drop);
+  const r = foldTwins(root, { apply: true });
+  const keep = r.folds[0]!.keep, drop = r.folds[0]!.drop;
+  write(root, { agent: "owner", id: keep, attribute: "budget_note", value: "seeds first", as_of: "2026-10-08", sources: ["owner:2026-10-08/home"], verification: "confirmed-by-owner" } as never, { owner: true });
+  const said = undoFold(root, r.folds[0]!.commit!);
+  expect(said).toContain("undid the fold");
+  const ns = loadBrain(root);
+  const k = ns.find((n) => n.fm.id === keep)!, d = ns.find((n) => n.fm.id === drop)!;
+  expect(d.fm.status).toBe("active");
+  expect(d.fm.merged_into).toBeUndefined();
+  const kf = (k.fm.facts ?? {}) as Record<string, unknown>, df = (d.fm.facts ?? {}) as Record<string, unknown>;
+  expect(Object.keys(kf).sort()).toEqual([...keepWas, "budget_note"].sort());
+  expect(Object.keys(df).sort()).toEqual(dropWas);
+  // Twice is once: the same fold can't be undone again.
+  expect(() => undoFold(root, r.folds[0]!.commit!)).toThrow(/no fold/);
+});
+
+test("Undo after a later write to the fact the fold brought keeps the newer value there", () => {
+  const root = makeBrain();
+  blind(root, "status", "active");
+  blind(root, "next_step", "book a session");
+  const [t] = findTwins(loadBrain(root));
+  const brought = Object.keys(loadBrain(root).find((n) => n.fm.id === t!.drop)!.fm.facts ?? {})[0]!;
+  const r = foldTwins(root, { apply: true });
+  const keep = r.folds[0]!.keep, drop = r.folds[0]!.drop;
+  write(root, { agent: "owner", id: keep, attribute: brought, value: "order seeds", as_of: "2026-10-08", sources: ["owner:2026-10-08/home"], verification: "confirmed-by-owner" } as never, { owner: true });
+  undoFold(root, r.folds[0]!.commit!);
+  const ns = loadBrain(root);
+  const facts = (id: string) => (ns.find((n) => n.fm.id === id)!.fm.facts ?? {}) as Record<string, unknown>;
+  expect(JSON.stringify(facts(keep)[brought])).toContain("order seeds");
+  expect(JSON.stringify(facts(drop)[brought])).not.toContain("order seeds");
+  expect(ns.find((n) => n.fm.id === drop)!.fm.status).toBe("active");
+});
+
+test("Undo takes away a conflict the fold opened that nobody answered", () => {
+  const root = makeBrain();
+  blind(root, "status", "active");
+  blind(root, "status", "paused");
+  const r = foldTwins(root, { apply: true });
+  expect(r.disputes).toBe(1);
+  const open = () => loadBrain(root).filter((n) => n.fm.type === "dispute" && n.fm.status === "open").length;
+  expect(open()).toBe(1);
+  write(root, { agent: "owner", id: r.folds[0]!.keep, attribute: "budget_note", value: "seeds first", as_of: "2026-10-08", sources: ["owner:2026-10-08/home"], verification: "confirmed-by-owner" } as never, { owner: true });
+  undoFold(root, r.folds[0]!.commit!);
+  expect(open()).toBe(0);
+  expect(pages(root).filter((n) => n.fm.status === "active")).toHaveLength(2);
+});

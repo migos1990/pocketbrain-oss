@@ -235,6 +235,13 @@ export function setFamilyLinks(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { family_links: mode === "on" }, `family_links ${mode}`);
 }
 
+// `pocketbrain wiki parents on|off`: whether upkeep puts a project page under the page it is part of
+// (src/wiki.ts parentPlan, G640), or only counts them. Off until turned on.
+export function setPageParents(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki parents on | off");
+  return setRulesKeys(root, "policy.yaml", { page_parents: mode === "on" }, `page_parents ${mode}`);
+}
+
 // `pocketbrain aftercheck classify on|off [--cap <dollars>]`: the second-opinion classifier after an
 // agent's write (src/aftercheck.ts, docs/aftercheck.md), off until the owner says so. `--cap` sets
 // that step's own monthly spend cap (usage.cap.steps, docs/usage.md). Off keeps the cap.

@@ -91,8 +91,8 @@ export default function App() {
     if (!device) { setFaceId(false); setMsg("Face ID didn't unlock. Tap Text me a sign-in link to get a link instead."); return; }
     const r = await fresh(fetch as never, hub, device);
     if (r === "fresh") { lastFresh.current = Date.now(); setMsg(""); web.current?.reload(); }
-    else if (r === "unpaired") { await SecureStore.deleteItemAsync(HUB); setHub(null); setMsg("This phone isn't paired any more. Open a new sign-in link to pair it again."); }
-    else setMsg(r === "wait" ? "Too many tries this hour. Try again later." : "Couldn't reach your hub. Is Tailscale on?");
+    else if (r === "unpaired") { await SecureStore.deleteItemAsync(HUB); setHub(null); setMsg("This phone needs a new sign-in: it was removed, or its 30 days ended. Open a new sign-in link to pair it again."); }
+    else setMsg(r === "wait" ? "Too many tries this hour. Try again later." : r === "refused" ? "Your hub didn't take that Face ID sign-in. Try again." : "Couldn't reach your hub. Is Tailscale on?");
   }, [hub]);
 
   const opening = <View style={s.opening}><StatusBar barStyle="light-content" /><Mark size={160} pose="step" /></View>;

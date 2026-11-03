@@ -17,6 +17,9 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `dash.link-busy` (409) | Another sign-in link was being made or used at that moment. Fix: reload the page, and press the button again. |
 | `dash.link-not-sent` (502) | The text with your sign-in link didn't go out ({reason}). Fix: on the Mac, then run pocketbrain dashboard phone-link. |
 | `dash.app-not-paired` (401) | This phone isn't paired with your brain any more, or it was removed. Fix: on the Mac, then run pocketbrain dashboard phone-link, and open the link in the pocketBrain app. |
+| `dash.app-signed-out` (401) | This phone's 30-day sign-in has ended, and Face ID only makes a live sign-in fresh. Fix: on the Mac, then run pocketbrain dashboard phone-link, and open the link in the pocketBrain app. |
+| `dash.app-nonce` (403) | That Face ID sign-in was old or already used, so nothing was done. Fix: reload the page, and try Face ID again. |
+| `dash.app-phone-cap` (429) | This phone made a sign-in fresh too many times in the last hour, so Face ID waits. Fix: on the Mac, then run pocketbrain dashboard phone-link. |
 | `dash.app-cap` (429) | Too many phone keys this hub didn't know in the last hour, so the app's Face ID sign-in waits an hour. Fix: on the Mac, then run pocketbrain dashboard phone-link. |
 | `dash.cross-origin` (403) | Another site's page tried to press a dashboard button, so nothing was done. Fix: run pocketbrain menubar open-dashboard, and press the button there. |
 | `dash.bad-form` (400) | That wasn't one of the dashboard's own forms, so nothing was done. Fix: reload the page, and press the button again. |

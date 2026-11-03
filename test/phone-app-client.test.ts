@@ -37,9 +37,15 @@ test("pair and fresh read the hub's answers; the key goes only in the body, to t
   expect(seen[0]).toEqual({ url: `${HUB}/app/pair`, body: JSON.stringify({ key: K, name: "phone" }) });
   expect(await pair(answer(403, "This sign-in link was already used\nFix: …") as never, HUB, K, "phone")).toEqual({ error: "This sign-in link was already used", status: 403 });
   expect(await pair(answer(200, {}) as never, HUB, K, "phone")).toMatchObject({ status: 502 });
-  expect(await fresh(answer(200, { fresh: true }) as never, HUB, "d")).toBe("fresh");
-  expect(await fresh(answer(401, "no") as never, HUB, "d")).toBe("unpaired");
+  // Face ID: a nonce for this sign-in first, then the key with it, both as the app's own request.
+  const calls: { url: string; body: string; headers: Record<string, string> }[] = [];
+  const two = async (url: string, init: { body: string; headers: Record<string, string> }) => { calls.push({ url, ...init }); return url.endsWith("/app/nonce") ? answer(200, { nonce: "n1" })() : answer(200, { fresh: true })(); };
+  expect(await fresh(two as never, HUB, "d")).toBe("fresh");
+  expect(calls.map((c) => [c.url, c.body, c.headers["x-pocketbrain-app"]])).toEqual([[`${HUB}/app/nonce`, "{}", "1"], [`${HUB}/app/fresh`, JSON.stringify({ device: "d", nonce: "n1" }), "1"]]);
+  expect(await fresh(answer(401, "no") as never, HUB, "d")).toBe("unpaired"); // signed out: no nonce, pair again
   expect(await fresh(answer(429, "wait") as never, HUB, "d")).toBe("wait");
+  // The hub answered and said no (an old or spent nonce): never "Is Tailscale on?" (review of PR 81).
+  expect(await fresh(answer(403, "no") as never, HUB, "d")).toBe("refused");
   expect(await fresh((async () => { throw new Error("offline"); }) as never, HUB, "d")).toBe("offline");
 });
 

@@ -6,10 +6,14 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### Before you update
 
+- The phone app's Face ID now only makes the phone's own live sign-in fresh, and no longer counts its 30 days again: 30 days after pairing, the app asks for a new sign-in link to pair once more. Update the app (it ships over the air) with the hub, or Face ID answers "pair again" until it does (G642).
+- Upkeep can now put a project page under the project it is part of (G640). It is off: each night it only counts the pages it would place. Run `pocketbrain wiki parents on` when you want them placed, and `pocketbrain wiki parents off` to go back to counting.
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
 
+- Undo on a fold now undoes the fold. On your mind shows a fold as one line, "Two pages called X are one page now", where it showed a line per moved fact whose Undo took back one value and left the pages folded. Undo, there or with `pocketbrain fold undo`, also works after later writes: both pages come back and anything written since stays (docs/fold-twins.md, G644).
+- A project that is part of another sits under it. "Lakeside cabin: check-in" goes under "Lakeside cabin (rental host)", and a page whose own fact names one other project goes under that one, on Memory, in the path above its page and in its parent's "Pages under this". Once you turn it on (`pocketbrain wiki parents on`), upkeep sets it overnight, only from what every assistant that sees the page can see, and the run's Undo takes it back for good; a name two pages share is left alone (G640).
 - Ask answers on the phone again, and is now **Ask Braniac**. An answer given more than 10 minutes after you signed in, about a page that holds anything private, was hidden as soon as it was given, even the one saying to sign in again, so Ask showed only "Earlier answers here show again right after you sign in." It now shows, since it was written for that older sign-in and holds nothing private. An answer hidden later says "Sign in again to see this answer." in its place, with the tap to do it (G637). The tab, the title, the box and the opening line name Braniac, the brain's character; on a narrow phone the tab bar's words get a little smaller so all four tabs fit.
 - Memory tells your notes from your assistants': their pages are **Assistants' routines**, the routines and jobs they run, with one line saying so at the top of the list; before, "Notes" and "Assistants' notes" sat side by side with nothing to tell them apart. A title written as a link ("[site](http://…) session reporting") reads as its words (G639).
 - Routines that may do the same job are said. On Memory's routines list, "These may do the same job" names two or more assistants' routines that run on their own, read one source and do one kind of job ("both run on their own, read Gmail and send alerts"), and each routine's page lists the others. Nothing is merged or asked; `pocketbrain overlaps` lists them (docs/wiki.md, G641).
@@ -63,6 +67,8 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- A mail the hub read vouches only for the address it came from: a read keeps the hash of its sender beside the ref (an unsalted hash, so not the address in plain text), so an assistant citing a real mail can't make another address a known sender. Refs read before keep no sender and vouch for no address until read again; your own word counts as before (audit v11, G643).
+- The phone app's Face ID door takes only the app's own request (its header, no Origin), on a live sign-in that phone made, with a one-time nonce from `POST /app/nonce`, at most 12 times an hour per phone. The device key alone never makes a sign-in, and Face ID never moves a sign-in's 30 days (audit v11, G642).
 - The browser door's limit on failed sign-ins only refuses wrong keys: an agent's right key always signs in. Behind a proxy other than Cloudflare's tunnel every caller counted as one client, so a stranger's junk keys could lock the agent out for ten minutes (G633).
 - A source an assistant cites must be one line: a ref or its via with a line break is refused, so it can never write its own lines into a commit message, and only your own commits say who you forgot (G602).
 - What an assistant sends is quoted in one line in its commit message, so a line break in a list item can't add lines that the history, the digest or undo trust (G605).

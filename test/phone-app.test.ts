@@ -9,7 +9,7 @@ import { test, expect, afterEach } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
-import { dashboardHandler, mintPhoneLink, FRESH_MINUTES } from "../src/dashboard/server";
+import { dashboardHandler, mintPhoneLink, FRESH_MINUTES, APP_HEADER } from "../src/dashboard/server";
 import { appPhones, removeAppPhones } from "../src/dashboard/phone-app";
 
 const PORT = 8788;
@@ -24,10 +24,16 @@ function hub(root: string, clock = { t: Date.parse("2026-11-01T12:00:00Z") }) {
     d.handleTailnet(new Request(`http://${H}${path}`, {
       method: o.method ?? (o.json !== undefined || o.form ? "POST" : "GET"),
       body: o.json !== undefined ? JSON.stringify(o.json) : o.form ? new URLSearchParams(o.form) : undefined,
-      headers: { host: H, ...(o.origin ? { origin: o.origin } : {}), ...(o.cookie ? { cookie: o.cookie } : {}), ...(o.json !== undefined ? { "content-type": "application/json" } : {}), ...(o.form ? { "content-type": "application/x-www-form-urlencoded" } : {}) },
+      headers: { host: H, ...(o.origin ? { origin: o.origin } : {}), ...(o.cookie ? { cookie: o.cookie } : {}), ...(o.json !== undefined ? { "content-type": "application/json", [APP_HEADER]: "1" } : {}), ...(o.form ? { "content-type": "application/x-www-form-urlencoded" } : {}) },
     }), o.peer ?? PHONE);
   const local = (path: string, json: unknown) => d.handle(new Request(`http://127.0.0.1:${PORT}${path}`, { method: "POST", body: JSON.stringify(json), headers: { host: `127.0.0.1:${PORT}`, "content-type": "application/json" } }));
-  return { d, call, local, clock };
+  // The app's two steps for Face ID (audit v11, G642): a nonce for this sign-in, then the key with it.
+  const fresh = async (device: string, sid: string) => {
+    const n = await call("/app/nonce", { json: {}, cookie: `pb_owner=${sid}` });
+    const nonce = n.status === 200 ? ((await n.json()) as { nonce: string }).nonce : "";
+    return call("/app/fresh", { json: { device, nonce }, cookie: `pb_owner=${sid}` });
+  };
+  return { d, call, local, clock, fresh };
 }
 const cookieOf = (r: Response) => r.headers.get("set-cookie")?.match(/pb_owner=([A-Za-z0-9_-]+)/)?.[1];
 
@@ -76,42 +82,39 @@ test("pairing refuses another site's page, a bad body, and an unknown link alike
 
 test("Face ID makes a sign-in fresh again: the device key refreshes it past the 10 minutes", async () => {
   const root = makeBrain();
-  const { call, clock } = hub(root);
+  const { call, clock, fresh } = hub(root);
   const pair = await call("/app/pair", { json: { key: mintPhoneLink(root) } });
   const sid = cookieOf(pair)!, { device } = await pair.json() as { device: string };
+  const paired = new Date(clock.t).toISOString();
   clock.t += (FRESH_MINUTES + 5) * 60_000;
   const memory = async () => (await call("/memory", { cookie: `pb_owner=${sid}` })).text();
-  const kept = () => JSON.parse(readFileSync(join(root, ".git", "pb-dashboard-sessions.json"), "utf8")) as Record<string, { at: string }>;
-  const before = Object.values(kept())[0]!.at;
-  const r = await call("/app/fresh", { json: { device }, cookie: `pb_owner=${sid}` });
+  const kept = () => JSON.parse(readFileSync(join(root, ".git", "pb-dashboard-sessions.json"), "utf8")) as Record<string, { at: string; since: string }>;
+  const r = await fresh(device, sid);
   expect(r.status).toBe(200);
-  expect(cookieOf(r)).toBe(sid); // the same sign-in, its 30 days counted again
-  expect(Object.values(kept()).map((v) => v.at)).toEqual([new Date(clock.t).toISOString()]);
-  expect(Date.parse(before)).toBeLessThan(clock.t);
+  expect(r.headers.get("set-cookie")).toBeNull(); // the same sign-in, its 30 days not counted again
+  expect(Object.values(kept()).map((v) => [v.at, v.since])).toEqual([[new Date(clock.t).toISOString(), paired]]);
   expect(await memory()).toBeTruthy();
-  // A lapsed or missing sign-in: the key signs the paired phone in again, freshly.
+  // A lapsed or missing sign-in: the key alone signs nobody in; the phone pairs again with a link.
   const again = await call("/app/fresh", { json: { device } });
-  expect(again.status).toBe(200);
-  const sid2 = cookieOf(again)!;
-  expect(sid2).not.toBe(sid);
-  expect((await call("/home", { cookie: `pb_owner=${sid2}` })).status).toBe(200);
+  expect(again.status).toBe(401);
+  expect(again.headers.get("set-cookie")).toBeNull();
   expect(appPhones(root)[0]!.last).toBe(new Date(clock.t).toISOString());
 });
 
 test("a key the hub doesn't know: no sign-in, one answer, and guessing is capped", async () => {
   const root = makeBrain();
-  const { call } = hub(root);
-  const bad = await call("/app/fresh", { json: { device: "a".repeat(32) } });
+  const { call, fresh } = hub(root);
+  const pair = await call("/app/pair", { json: { key: mintPhoneLink(root) } });
+  const sid = cookieOf(pair)!, { device } = await pair.json() as { device: string };
+  const bad = await fresh("a".repeat(32), sid);
   expect(bad.status).toBe(401);
   expect(bad.headers.get("set-cookie")).toBeNull();
   const words = await bad.text();
-  expect((await (await call("/app/fresh", { json: {} })).text())).toBe(words); // missing reads like wrong
-  for (let i = 0; i < 8; i++) await call("/app/fresh", { json: { device: `b${i}`.repeat(20) } });
-  expect((await call("/app/fresh", { json: { device: "c".repeat(32) } })).status).toBe(429);
+  expect((await (await fresh("", sid)).text())).toBe(words); // missing reads like wrong
+  for (let i = 0; i < 8; i++) await fresh(`b${i}`.repeat(20), sid);
+  expect((await fresh("c".repeat(32), sid)).status).toBe(429);
   // A real key past the cap waits too: the cap is on the door, not the guesser's key.
-  const pair = await call("/app/pair", { json: { key: mintPhoneLink(root) } });
-  const { device } = await pair.json() as { device: string };
-  expect((await call("/app/fresh", { json: { device } })).status).toBe(429);
+  expect((await fresh(device, sid)).status).toBe(429);
   expect((await call("/app/fresh", { json: { device }, origin: "http://evil.example" })).status).toBe(403);
 });
 
@@ -124,19 +127,19 @@ test("removing a phone ends its sign-ins and its key, after a hub restart too", 
   expect(appPhones(root)).toEqual([]);
   const restarted = hub(root);
   expect((await restarted.call("/home", { cookie: `pb_owner=${sid}` })).status).toBe(401);
-  expect((await restarted.call("/app/fresh", { json: { device } })).status).toBe(401);
+  expect((await restarted.fresh(device, sid)).status).toBe(401);
   expect(removeAppPhones(root, "nobody")).toEqual([]);
 });
 
 test("neither the pairing key nor the device key is ever kept in clear, logged or printed", async () => {
   const root = makeBrain();
-  const { call, clock } = hub(root);
+  const { call, clock, fresh } = hub(root);
   const key = mintPhoneLink(root);
   const pair = await call("/app/pair", { json: { key, name: "phone" } });
-  const { device } = await pair.json() as { device: string };
+  const sid = cookieOf(pair)!, { device } = await pair.json() as { device: string };
   clock.t += 20 * 60_000;
-  await call("/app/fresh", { json: { device } });
-  await call("/app/fresh", { json: { device: device.slice(1) } });
+  expect((await fresh(device, sid)).status).toBe(200);
+  await fresh(device.slice(1), sid);
   const kept = readFileSync(join(root, ".git", "pb-app-phones.json"), "utf8");
   expect(statSync(join(root, ".git", "pb-app-phones.json")).mode & 0o777).toBe(0o600);
   for (const f of filesUnder(root)) {
