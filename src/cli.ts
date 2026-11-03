@@ -22,6 +22,7 @@ import { sourceBackfill } from "./backfill";
 import { judgeDuplicates } from "./judge";
 import { sleep, STEP as SLEEP_STEP } from "./sleep";
 import { mergeNotes } from "./merge";
+import { foldTwins, undoFold } from "./fold";
 import { samePersonProposals, mergeSamePerson, notSamePerson, undoPersonMerge, personMerges } from "./sameperson";
 import { explainAgent } from "./explain";
 import { readsByDay, readsReport } from "./whoread";
@@ -47,7 +48,7 @@ import { sha256 } from "./util";
 import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -313,6 +314,7 @@ const USAGE = `pocketbrain <command>
   gardener setup [--profile p] [--lock <claude-lock.json>] [--agent g] [--mcp-url u] [--vault <id>]
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
+  fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
                                      (policy.yaml; docs/sources-pull.md)
@@ -1854,6 +1856,23 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       : `\n    pocketbrain same-person merge ${p.id} --swap   (keeps ${p.drop})`}
     pocketbrain same-person not ${p.id}`);
     for (const m of personMerges(root)) console.log(`merged: ${m.drop} into ${m.keep}  (undo: pocketbrain same-person undo ${m.id})`);
+    return 0;
+  }
+  if (cmd === "fold" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setFoldTwins(root, args[0]!));
+  if (cmd === "fold") {
+    // One thing, one page (src/fold.ts, docs/fold-twins.md): a dry run by default; --apply folds;
+    // undo <commit> puts one back.
+    if (args[0] === "undo") {
+      const c = args[1];
+      if (!c) { console.error("fold undo <commit>"); return 2; }
+      try { console.log(undoFold(root, c)); return 0; } catch (e) { console.error((e as Error).message); return 1; }
+    }
+    const apply = args.includes("--apply");
+    const r = foldTwins(root, { apply });
+    // Counts and ids only: an id is a slug, never a value.
+    for (const f of r.folds) console.log(`${apply ? "folded" : "would fold"} ${f.drop} into ${f.keep}${f.disputes ? ` (${f.disputes} conflict${f.disputes === 1 ? "" : "s"} to settle)` : ""}${f.commit ? ` [${f.commit.slice(0, 8)}]` : ""}`);
+    for (const f of r.refused) console.log(`held: ${f.drop} into ${f.keep}: ${f.why}`);
+    console.log(`${r.folds.length} ${apply ? "folded" : "would fold"}, ${r.refused.length} held, ${r.disputes} new conflict${r.disputes === 1 ? "" : "s"} to settle.${apply || !r.folds.length ? "" : " Run with --apply to fold them."}`);
     return 0;
   }
   if (cmd === "merge") {

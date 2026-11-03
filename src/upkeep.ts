@@ -19,6 +19,7 @@ import { git } from "./git";
 import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
 import { wikiLint, renderTouchedPages } from "./wiki";
+import { foldTwins } from "./fold";
 import { setAsideReceipts } from "./receipt-pages";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
@@ -167,6 +168,24 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const fam = linkFamily(root);
     if (fam.filed.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
     else if (fam.counted) add({ rule: "family-links", key: "family-links", kind: "review", detail: `${fam.counted} person page${fam.counted === 1 ? " has" : "s have"} your surname and may be family; \`pocketbrain wiki family on\` links them to your page` });
+  }
+
+  // 1c2. One thing, one page (src/fold.ts, docs/fold-twins.md, G635): a page a writer made because
+  //      it couldn't see the older one with the same name folds into it, before page text is written
+  //      so the kept page's opening is written once. On by default, by the owner's
+  //      typed word (2026-11-03, "folds yes"); `pocketbrain fold off` (policy.yaml fold.twins: false)
+  //      makes it report-only. What would fold and what is
+  //      held are count-only lines under keys that are no page's id: a held fold means the two pages
+  //      read differently for some viewer, so naming the kept page would tell an assistant that sees
+  //      it that a page with its name exists outside its view (G28; fold-twins slice audit F1).
+  {
+    const on = (rules.policy as { fold?: { twins?: boolean } }).fold?.twins !== false;
+    const f = foldTwins(root, { apply: on, run });
+    const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+    if (on) for (const x of f.folds) add({ rule: "twin-fold", key: x.keep, kind: "auto-fix", detail: `another page with the same name folded into this one${x.disputes ? `; ${x.disputes} fact${x.disputes === 1 ? "" : "s"} disagreed and wait for you` : ""}; \`pocketbrain fold undo ${x.commit?.slice(0, 8) ?? ""}\` puts it back` });
+    else if (f.folds.length) add({ rule: "twin-would-fold", key: "twin-would-fold", kind: "review", detail: `${n(f.folds.length, "page has", "pages have")} an older page with the same name to fold into; \`pocketbrain fold\` lists them, \`pocketbrain fold on\` folds them each night` });
+    if (f.refused.length) add({ rule: "twin-held", key: "twin-held", kind: "review", detail: `${n(f.refused.length, "page", "pages")} with the same name as an older one couldn't fold yet; \`pocketbrain fold\` says why` });
+    if (on && f.folds.length) { notes = loadBrain(root); byId.clear(); for (const x of notes) byId.set(x.fm.id, x); }
   }
 
   // 1d. Page text (src/wiki.ts renderTouchedPages, docs/wiki.md): every page a commit touched in

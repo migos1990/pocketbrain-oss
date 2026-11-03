@@ -319,7 +319,7 @@ function restorePairStanding(root: string, m: PersonMerge): boolean {
 // and the page writer's text (src/wiki.ts renderTouchedPages), which is drawn from the facts and is
 // written again the next night. Only the page writer's own shape counts: authored by hub, its
 // Kind trailer, page files only.
-function derivedSince(root: string, m: PersonMerge): string[] {
+export function derivedSince(root: string, m: PersonMerge): string[] {
   const repoints = new Set(linkRepoints(root, m));
   return git(root, ["log", "--format=%H", `${m.commit}..HEAD`]).split("\n").filter(Boolean).filter((c) => repoints.has(c) || pageText(root, c));
 }

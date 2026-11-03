@@ -113,6 +113,13 @@ export function setWikiSync(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { wiki: { sync: mode === "on" } }, `wiki sync ${mode}`);
 }
 
+// `pocketbrain fold on|off`: whether the nightly pass folds same-name project and org twins or only
+// counts them (src/fold.ts, docs/fold-twins.md). Off until the owner says so.
+export function setFoldTwins(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("fold on | off");
+  return setRulesKeys(root, "policy.yaml", { fold: { twins: mode === "on" } }, `fold ${mode}`);
+}
+
 // `pocketbrain gardener describe-orgs [--yes]` (docs/gardener.md, "What an org is"): adds the one
 // line `describe_orgs: true` to rules/gardener.yaml and nothing else. Refused when the key is there
 // already, whatever its value: changing it back is the owner's own edit.

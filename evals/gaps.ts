@@ -5,6 +5,12 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G635: {
+    title: "One project became two pages: a writer blind to an area made a new page with each write, and nothing folded them",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-03: Memory listed two projects twice. Mac census: both twins of each pair have random hex suffixes and were written by one assistant; reproduced: a writer that files into an area it can't see gets a new page per write (write() matches names only in its view, G28), and upkeep only listed possible-duplicate without folding.",
+    fix: "src/fold.ts: the hub folds an active project or org page into the older page with the same folder, type, name, area and level (mergeNotes as reflect; mergeBlocked and brainChanges refuse a fold that changes any view; an open conflict on either page holds it), in upkeep step 1c2 before page text, on by default by the owner's typed word (2026-11-03), report-only after `pocketbrain fold off`, with `pocketbrain fold` (dry run), --apply and `fold undo <commit>`; a held fold is counted under a key that is no page's id. Tests: test/fold-twins.test.ts.",
+  },
   G634: {
     title: "Data on the home and Memory read out of context: one line per value, a review paragraph as a fact, one name listed twice",
     severity: "medium",
