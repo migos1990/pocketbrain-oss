@@ -186,3 +186,41 @@ test("the brain has two legs and three poses, drawn inside the mark's square, an
   expect(segBox([26, 62, 31, 62], 2)).toEqual({ cx: 28.5, cy: 62, len: 7, deg: 0 });
   expect(iconSvg("icon")).not.toContain("<line"); // icon and splash unchanged
 });
+
+test("pulling the page down from the top loads it again, with a GET, and only past the threshold (owner, 2026-11-03)", async () => {
+  // What the owner saw: the built-in pull to refresh left its spinner up and the page never loaded again.
+  const { chromium } = await import("playwright");
+  const b = await chromium.launch();
+  try {
+    const page = await (await b.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true })).newPage();
+    let gets = 0;
+    await page.route("https://hub.test/**", (r) => { if (r.request().method() === "GET") gets++; r.fulfill({ contentType: "text/html", body: `<main style="height:2000px">page</main><textarea id="t"></textarea>` }); });
+    await page.goto("https://hub.test/home");
+    await page.evaluate(`window.ReactNativeWebView = { postMessage() {} }; ${inject(true)}`);
+    const pull = (dy: number, sel = "main") => page.evaluate(([dy, sel]) => {
+      const el = document.querySelector(sel as string)!;
+      const t = (y: number) => new Touch({ identifier: 1, target: el, clientX: 100, clientY: y });
+      el.dispatchEvent(new TouchEvent("touchstart", { touches: [t(100)], bubbles: true }));
+      el.dispatchEvent(new TouchEvent("touchmove", { touches: [t(100 + (dy as number))], bubbles: true }));
+      el.dispatchEvent(new TouchEvent("touchend", { changedTouches: [t(100 + (dy as number))], bubbles: true }));
+    }, [dy, sel] as const);
+    expect(gets).toBe(1);
+    await pull(40); // a small pull does nothing
+    await page.waitForTimeout(200);
+    expect(gets).toBe(1);
+    await pull(60, "#t"); // nor does a pull inside the text box
+    await page.waitForTimeout(200);
+    expect(gets).toBe(1);
+    await pull(120);
+    await page.waitForLoadState("load");
+    await page.waitForTimeout(200);
+    expect(gets).toBe(2);
+    expect(page.url()).toBe("https://hub.test/home");
+  } finally { await b.close(); }
+}, 30_000);
+
+test("the app's own pull to refresh replaces the built-in one, which left its spinner up", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  expect(readFileSync(join(import.meta.dir, "..", "mobile", "App.tsx"), "utf8")).not.toContain("pullToRefreshEnabled");
+});

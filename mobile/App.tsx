@@ -104,7 +104,7 @@ export default function App() {
         onMessage={(e) => { const m = e.nativeEvent.data; if (m === "fresh") onFresh(); else if (m === "ready" || m === "blank") step({ kind: "loaded", blank: m === "blank" }); }}
         onError={() => step({ kind: "error" })} onHttpError={(e) => step({ kind: "http", status: e.nativeEvent.statusCode })}
         onContentProcessDidTerminate={() => step({ kind: "gone" })} onRenderProcessGone={() => step({ kind: "gone" })}
-        sharedCookiesEnabled thirdPartyCookiesEnabled={false} allowsBackForwardNavigationGestures pullToRefreshEnabled
+        sharedCookiesEnabled thirdPartyCookiesEnabled={false} allowsBackForwardNavigationGestures
         originWhitelist={[hub]} setSupportMultipleWindows={false} startInLoadingState renderLoading={() => opening} style={s.page} />
       {phase === "failed" ? <Trouble onRetry={() => step({ kind: "retry" })} /> : null}
       {msg ? <Text style={s.note}>{msg}</Text> : null}
