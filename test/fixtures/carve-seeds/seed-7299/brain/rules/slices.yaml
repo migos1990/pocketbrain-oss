@@ -1,0 +1,11 @@
+slices:
+  s1:
+    exclude_tags:
+      - alpha
+    max_sensitivity: public
+    only_attributes:
+      - split
+      - code
+      - amount
+    exclude_attributes:
+      - split

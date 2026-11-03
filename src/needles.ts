@@ -4,8 +4,8 @@
 // hiddenNeedles(notes, rules, agent): every value the agent can't see, the union of the relay's
 // set (valuesHiddenFrom in src/relay.ts: hidden notes at any level, hidden facts) and the write
 // tripwire's set (carvedValues in src/write.ts: object fields, aliases, flagged hidden facts).
-// The two choke points each miss what the other catches (act-door red team, M1). The act door
-// uses it now; moving the relay and the write path onto it is the gaps thread's (G113 to G115).
+// The two choke points each missed what the other caught (act-door red team, M1). The act door
+// and the relay (checkBetween, so handoffs too, G656) use it; the write path keeps its own.
 //
 // outwardScreen(notes, rules, ceiling): what only notes or facts above a ceiling hold, with the
 // note each match comes from, for mail leaving the brain (act-door red team, H2). Its hits flag

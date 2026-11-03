@@ -1,0 +1,28 @@
+{
+ "seed": 7299,
+ "why": "after handoff ava -> bex about the org, bex's whats_new carries a money split's amount and name that bex's carve hides (open)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "handoff ava -> bex about orgs/lerux-dodul: ho-20261008182531-e24p"
+ ]
+}

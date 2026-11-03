@@ -12,6 +12,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A handoff from one assistant to another no longer carries a money split, or any fact made of parts, that the receiving assistant can't see. The relay's check looked for hidden values only when they were plain text or a number, so a split's amount and who it's with went through and showed in the other assistant's What's new. It is now held for you like any hidden value, and a hidden page's other names are held too (docs/relay.md, G656).
 - The phone app asks "Pair with <your hub>?" before it pairs from a link, and says when the link would replace the hub it is paired with; before, any link paired it at once (G647).
 - After Show on another person's health, school, legal or money matter, the home no longer says "Your assistants get it now": such a value goes only to the resolver, and the line says so ("Only steward gets it: it's another person's private matter.", G645).
 - Filing for you weighs a proposal that names its page against the pages its assistant can see, as the write does: a page by that name hidden from the assistant no longer makes it "held as a conflict" while a new page is made. When a check hands the hub's yes back, Settings says "left it for you", not "saved it", and that proposal waits for you instead of failing on every tick (G650).

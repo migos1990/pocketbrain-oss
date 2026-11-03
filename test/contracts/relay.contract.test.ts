@@ -237,3 +237,38 @@ test("contract relay: held mail never leaves on a stale sign-in, by any door (G5
     expect(existsSync(join(root, "relay/outgoing/planner@brain.example/a.json")), JSON.stringify(row)).toBe(false);
   }
 });
+
+test("contract relay: a hidden object fact's fields and a hidden note's alias are held like any hidden value (G656)", () => {
+  const root = makeBrain();
+  const ref = `as_of: 2026-10-06, sources: ["gmail:f000000000000032"], verification: verified-by-source, recorded: 2026-10-06`;
+  writeFileSync(join(root, "money", "shared-boat.md"), `---
+id: money/shared-boat
+type: money
+title: Shared boat
+aliases: [Quellwater skiff]
+area: personal
+sensitivity: personal
+status: active
+created: 2026-10-06
+updated: 2026-10-06
+by: steward
+facts:
+  split: { value: { amount: "CAD 1,784.96", with: Ryfyl Pafon }, ${ref}, by: steward }
+---
+The boat costs are split.
+`);
+  const check = checker(root);
+  // Rows: text -> held. The carve property found the first (seeds 7227, 7299): an object value
+  // was skipped by the relay's needles, so a handoff carried its fields.
+  const rows: [string, boolean][] = [
+    [`Pick up the boat: {"amount":"CAD 1,784.96","with":"Ryfyl Pafon"}.`, true],
+    [`It's split with Ryfyl Pafon.`, true],
+    [`We owe CAD 1,784.96 on it.`, true],
+    [`Check the Quellwater skiff.`, true],
+    [`Can you draft the midterm reminder for Course A?`, false],
+  ];
+  for (const [text, held] of rows) {
+    const v = check(msg(`steward@${D}`, `relay+helper@${D}`, text));
+    expect([text, !v.deliver, v.reasons.some((r) => /can't see/.test(r))]).toEqual([text, held, held]);
+  }
+});

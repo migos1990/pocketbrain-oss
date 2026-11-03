@@ -1,0 +1,34 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: core
+    slices:
+      - s1
+      - area:side
+    max_sensitivity: public
+  bex:
+    tier: trial
+    slices:
+      - area:side
+    exclude_types:
+      - orgs
+    exclude:
+      - projects/dubaner-mobamin
+  cyd:
+    tier: core
+    slices:
+      - all
+    exclude_types:
+      - projects
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  home: {}
+  personal: {}
+  side: {}

@@ -1,0 +1,18 @@
+slices:
+  s3:
+    exclude:
+      - decisions/selofuth-vimotur
+  s2:
+    types:
+      - people
+      - notes
+      - people
+    max_sensitivity: personal
+    exclude:
+      - projects/qubofar-sivybeth
+  s1:
+    tags:
+      - gamma
+    max_sensitivity: public
+    exclude:
+      - people/mifyr-fokitul

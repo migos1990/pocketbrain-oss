@@ -7,7 +7,7 @@ A message that reaches the relay (mail to `relay+<agent>@…`, or a bridge calli
 In order, on the subject and text (after undoing spacing tricks, look-alike letters and encodings):
 
 1. **Canaries** from `rules/relay.yaml`: proof of a leak, with an alert.
-2. **Values the recipient can't see**, including reformatted amounts and distinctive fragments: held, with an alert. A value counts only when its note was left out on purpose (a type not shared, excluded by name or tag, above a sensitivity limit) or the fact is hidden; a note merely outside the recipient's areas doesn't count. `carve()` marks this with a `purposeful` flag, never by reading the reason text.
+2. **Values the recipient can't see**, including reformatted amounts and distinctive fragments, each field of a value made of parts (a split's amount and who it's with) and the other names of a page it can't see: held, with an alert. The list is `hiddenNeedles` in `src/needles.ts`, the one the act door uses (G656). A value counts only when its note was left out on purpose (a type not shared, excluded by name or tag, above a sensitivity limit) or the fact is hidden; a note merely outside the recipient's areas doesn't count. `carve()` marks this with a `purposeful` flag, never by reading the reason text.
 3. **Categories withheld from either side** ("bank" when money is withheld), and money questions with no category word: held.
 4. **Secrets**: held, with an alert, whoever the recipient.
 5. **Text that tries to instruct the recipient**: held, with an alert.

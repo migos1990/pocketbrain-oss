@@ -12,10 +12,11 @@ import { loadBrain, today, sensitivityRank, type Sensitivity } from "./brain";
 import type { Rules } from "./rules";
 import { loadRules, ownerName } from "./rules";
 import { ownerDay } from "./clock";
-import { carve, grantFor, records, visibleFacts, shownWords } from "./carve";
+import { grantFor, records } from "./carve";
 import { findSecret, findInjection, categoryWords, moneyAsk, redactSecrets, hardSecretIn } from "./checks";
 import { putHeld, getHeld, dropHeld, listHeld, dropHeldFile } from "./quotes";
-import { needleFor, findCarried, unhide, distinctive, type Needle } from "./match";
+import { needleFor, findCarried, unhide, type Needle } from "./match";
+import { hiddenNeedles } from "./needles";
 import { hasWord, alert, sha256, readJsonl } from "./util";
 import { git } from "./git";
 import { loadCanaries } from "./canary";
@@ -81,28 +82,6 @@ export function recipientFor(cfg: RelayConfig, to: string[]): string | undefined
 
 const has = (text: string, needle: string) => hasWord(text, needle, "\\p{L}\\p{N}");
 
-// Every fact value the recipient can't see in its own view, minus values it can see.
-export function valuesHiddenFrom(notes: Note[], rules: Rules, agent: string): Map<string, string> {
-  const res = carve(notes, rules, grantFor(rules, agent));
-  const shown = new Set<string>();
-  for (const v of res.visible.values()) for (const [, f] of visibleFacts(v, res)) for (const r of records(f)) if (typeof r.value === "string") shown.add(r.value.toLowerCase());
-  const hidden = new Map<string, string>();
-  const add = (val: unknown, from: string) => {
-    if (typeof val !== "string" && typeof val !== "number") return;
-    const s = String(val).trim();
-    if (distinctive(s, shown)) hidden.set(s, from);
-  };
-  const hiddenKeys = new Set(res.hiddenFacts.map((h) => h.key));
-  for (const n of notes) {
-    const visible = res.visible.has(n.fm.id);
-    for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
-      if (visible && !hiddenKeys.has(`${n.fm.id}#${attr}`)) continue;
-      for (const r of records(f)) add(r.value, `${n.fm.id}#${attr}`);
-    }
-  }
-  return hidden;
-}
-
 export function checkMessage(notes: Note[], rules: Rules, cfg: RelayConfig, msg: MailMessage): Verdict {
   const sender = agentForAddress(cfg, msg.from);
   const recipient = recipientFor(cfg, msg.to);
@@ -127,9 +106,9 @@ export function checkBetween(notes: Note[], rules: Rules, cfg: RelayConfig, id: 
   for (const c of cfg.canaries ?? []) if (c && text.toLowerCase().includes(c.toLowerCase())) { reasons.push(`canary "${c}" seen`); alert = true; }
   // 2. Values the recipient isn't allowed to see.
   //    Spacing, encoding, look-alikes, reformatted amounts and distinctive fragments count too.
-  const common = shownWords(carve(notes, rules, grantFor(rules, recipient)));
-  const needles = [...valuesHiddenFrom(notes, rules, recipient)].map(([val, from]) => needleFor(val, from, common)).filter((n): n is Needle => !!n);
-  const hit = findCarried(text, needles);
+  //    The shared set (src/needles.ts): an object fact's fields and a hidden note's aliases
+  //    count too (G656: the relay's own list skipped object values, so a handoff carried them).
+  const hit = findCarried(text, hiddenNeedles(notes, rules, recipient));
   if (hit) { reasons.push(`contains "${hit.value}", which ${recipient} can't see (${hit.from})`); alert = true; }
   // 3. Requests for, or mentions of, categories withheld from either side.
   const categories = categoryWords(rules.checks);

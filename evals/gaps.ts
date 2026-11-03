@@ -5,8 +5,21 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G656: {
+    title: "After a handoff, the recipient's whats_new carries values of a fact its carve hides",
+    severity: "high",
+    finding: "Audit v11 carve soak (CARVE_SOAK=1), on the list since audit v7: seeds 7227 and 7299, frozen in test/fixtures/carve-seeds/. After handoff ava -> bex about a note, bex's whats_new (full and reader tokens) carries a money split's amount (\"CAD 1,784.96\", \"CAD 35,275.65\") and a name from a fact on that note that bex's carve hides. G254 covers a handoff naming a note's title or id; this class leaks values.",
+    fix: "The relay gate (checkBetween in src/relay.ts), which handoffs go through, kept its own list of hidden values and skipped any value that wasn't a string or a number, so an object fact's fields (a split's amount and who it's with) were never needles and the handoff was delivered. It now uses the shared set, hiddenNeedles in src/needles.ts (object fields field by field, a hidden note's aliases), as the act door already did. Seeds 7227 and 7299 now guard it (meta.json has no gap); a row in test/contracts/relay.contract.test.ts.",
+    closed: "claude/audit11-g656",
+  },
+  G657: {
+    title: "A by-name exclude on a money note doesn't hold in context_pack when the topic is the note's name",
+    severity: "high",
+    finding: "Audit v11 carve soak, seed 7057, frozen in test/fixtures/carve-seeds/seed-7057: dax excludes money/satinyl-vopun by name, yet context_pack {topic: \"Satinyl Vopun\"} hands dax that note's place and detail values (full token).",
+    fix: "Open. The frozen seed fails until it is fixed (meta.json gap: G657). Look at how a by-name exclude reaches the context_pack path (carve's excludes and core.ts contextPack's topic match).",
+  },
   G647: {
-    closed: "claude/audit11-pair-confirm",
+    closed: "29d97517",
     title: "The phone app paired with any link at once, even replacing the owner's own pairing",
     severity: "medium",
     finding: "Audit v11 (2026-11-03): a pocketbrain://pair link (or a pasted one) paired the app at once, so a link from anyone could pair it with their hub, whose pages then fill the app, or silently replace the owner's pairing.",

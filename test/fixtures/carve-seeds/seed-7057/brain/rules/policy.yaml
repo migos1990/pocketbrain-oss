@@ -1,0 +1,39 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: core
+    slices:
+      - area:side
+      - all
+      - s1
+    exclude_types:
+      - notes
+  bex:
+    tier: trial
+    slices:
+      - s1
+      - area:client
+  cyd:
+    tier: trial
+    slices:
+      - all
+      - area:client
+  dax:
+    tier: trial
+    slices:
+      - area:client
+      - all
+    exclude:
+      - money/satinyl-vopun
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  personal: {}
+  side: {}
+  client: {}

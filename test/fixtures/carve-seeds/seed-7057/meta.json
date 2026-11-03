@@ -1,0 +1,47 @@
+{
+ "seed": 7057,
+ "gap": "G657",
+ "why": "dax excludes the money note by name, yet context_pack with its name as topic hands dax its place and detail values (open)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "merge money/satinyl-vopun -> money/satinyl-vopun-dup: can't merge: your rules hide Satinyl Vopun or one of its facts by name (dax's exclude in policy.yaml), and a merge would show it under Satinyl Vopun; change the exclude first",
+  "merge money/zipith-nosan -> money/satinyl-vopun: can't merge: the notes are in different areas (client, side); move one first",
+  "merge notes/kodileth-lyzyfyr -> notes/goqakur-lylyn: can't merge: the notes are in different areas (personal, side); move one first",
+  "merge notes/pylunel-ryzil -> notes/goqakur-lylyn: can't merge: cyd, dax see one of these notes but not the other (or not all of it); make their access the same first",
+  "merge notes/kodileth-lyzyfyr -> notes/pylunel-ryzil: can't merge: the notes are in different areas (personal, side); move one first",
+  "merge notes/rynoror-zivovith -> notes/kodileth-lyzyfyr: can't merge: your rules hide Rynoror Zivovith or one of its facts by name (slice s1), and a merge would show it under Kodileth Lyzyfyr; change the exclude first",
+  "merge notes/kodileth-lyzyfyr -> notes/viren-pelynyth: can't merge: the notes are in different areas (personal, side); move one first",
+  "merge notes/rynoror-zivovith -> notes/pylunel-ryzil: can't merge: the notes are in different areas (personal, side); move one first",
+  "merge notes/rynoror-zivovith -> notes/viren-pelynyth: can't merge: the notes are in different areas (personal, side); move one first",
+  "merge orgs/lotukyr-lyqitel -> orgs/qivax-loger: can't merge: bex sees one of these notes but not the other (or not all of it); make their access the same first",
+  "handoff ava -> bex about notes/pylunel-ryzil: ho-20261008182508-ortd"
+ ]
+}

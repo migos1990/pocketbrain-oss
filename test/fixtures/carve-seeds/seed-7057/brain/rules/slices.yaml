@@ -1,0 +1,10 @@
+slices:
+  s1:
+    types:
+      - orgs
+      - projects
+    exclude_tags:
+      - beta
+    max_sensitivity: secret
+    exclude:
+      - notes/rynoror-zivovith
