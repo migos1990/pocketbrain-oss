@@ -1,6 +1,6 @@
 # Releases, CI and the Mac's auto-update
 
-How a change gets from a branch to the hub on the Mac, and who has to do what. Short version: every branch reaches `main` through a pull request that passes CI, the merge gate and a code review ([Pull requests](#pull-requests)), and `main` runs CI on every push. Today the Mac runs a `main` sha: the coordinator says "go <sha>" and the Mac thread runs `bun scripts/deploy.ts go <sha>`, which keeps it only when the restarted hub itself reports that sha, then prints the real brain's north star ([The Mac takes a main sha](#the-mac-takes-a-main-sha)). The release flow below (a dated version cut on `main`, a CI-made tag `vX.Y.Z`, the Mac following the `release` branch by itself) is kept for when tags exist; none has yet, since cloud sessions can't push tags.
+How a change gets from a branch to the hub on the Mac, and who has to do what. Short version: every branch reaches `main` through a pull request that passes CI, the merge gate and a code review ([Pull requests](#pull-requests)), and `main` runs CI on every push. Today the Mac runs a `main` sha: the coordinator says "go <sha>" and the Mac thread runs `bun scripts/deploy.ts go <sha>`, which keeps it only when the restarted hub itself reports that sha, then prints the real brain's north star ([The Mac takes a main sha](#the-mac-takes-a-main-sha)). The release flow below (a dated version cut on `main`, a CI-made tag `vX.Y.Z`, the Mac following the `release` branch by itself) is kept for when the Mac follows tags. CI makes them (cloud sessions can't push tags): v0.2.0 and v0.2.1 exist, and the Mac still takes a main sha.
 
 ```
 branch ──PR (CI + gate + review)──▶ main ──CI──▶ release cut ──CI again──▶ tag vX.Y.Z + GitHub release + `release` branch ──▶ Mac (every 10 min)
@@ -131,7 +131,7 @@ The first time, the Mac's checkout predates `go`, so: `cd ~/pocketbrain && git f
 
 ## The Mac follows releases
 
-Kept for when tags exist (none has yet). `scripts/deploy.ts run` runs every 10 minutes under launchd (`com.pocketbrain.update`). Each pass:
+Kept for when the Mac follows tags. Tags exist since v0.2.0, but the Mac takes a main sha instead ([The Mac takes a main sha](#the-mac-takes-a-main-sha)). `scripts/deploy.ts run` runs every 10 minutes under launchd (`com.pocketbrain.update`). Each pass:
 
 1. fetches `origin/release` and its tags; the tip must carry a `vX.Y.Z` tag;
 2. stops if `~/pocketbrain` is already on that tag, if `~/pocketbrain` has uncommitted changes (it never overwrites them), or if it is on hold;
