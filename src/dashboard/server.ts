@@ -321,6 +321,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // What of an answer's page or fact is private or held now (G551; a page-wide answer counts every
   // fact, G582 re-audit: a page with no prose answers with up to three): "" for the page, else attrs.
   const privateParts = (byId: Map<string, Note>, t: Pick<AskTurn, "reply">): string[] => {
+    // A reply naming several people by their relationship (say.answer-many, G649): each page, and
+    // its relationship fact, checked as it is now; a page gone since (forgotten) counts as changed.
+    if (t.reply.pages) return t.reply.pages.flatMap((id) => { const n = byId.get(id), f = n?.fm.facts?.relationship; return [...(!n || privateNow(n, "") ? [`${id}#`] : []), ...(f && (privateNow(n, "relationship") || records(f).some((r) => !!r.unseen && !r.valid_to)) ? [`${id}#relationship`] : [])]; });
     const key = t.reply.fact_key, page = t.reply.page ?? key?.slice(0, key.lastIndexOf("#"));
     if (!page) return [];
     const n = byId.get(page);
@@ -646,7 +649,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         try { // A chip counts as a tap only when the box offered that exact sentence to this sign-in;
         // anything else posted as a chip is read as typed words (coordinator, 2026-10-27).
         const chip = form.chip === "1" && !!offered.get(sid)?.has(said);
-        reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip }, chip ? undefined : boxModel(root));
+        reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip, ...(form.from === "ask" ? { from: "ask" as const } : {}) }, chip ? undefined : boxModel(root));
         if (reply.chips?.length) offered.set(sid, new Set(reply.chips.map((c) => c.say))); } catch (e) { return go("/home", { err: fail(e) }); }
         if (form.page && reply.kind !== "say.unknown-name" && reply.kind !== "say.forgotten") { const r = pageScreen(csrf, reply.page ?? form.page, { said, reply, fresh }); if (r) return r; }
         if (form.from === "ask") {

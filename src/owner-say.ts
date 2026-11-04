@@ -11,7 +11,7 @@
 // sentence when there is no model, the model fails, or its reading doesn't pass. Forget and send are
 // never read by a model.
 import { loadBrain, today, isList, isDisputed, sensitivityRank, type Note, type Fact, type FactRecord, type Sensitivity } from "./brain";
-import { loadRules, attributeSpec, type Rules } from "./rules";
+import { loadRules, attributeSpec, ownerName, type Rules } from "./rules";
 import { records } from "./carve";
 import { write } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
@@ -25,6 +25,7 @@ import { forgetPerson } from "./forget";
 import { forgetNote } from "./dashboard/edit";
 import { plain, attrWords, isVerbAttribute, lineWords, yourToDo, privateNow, shutBody, type LineKey } from "./dashboard/home";
 import { findSecret, SENSITIVE_WORDS, thirdPartySensitive } from "./checks";
+import { escapeRe } from "./util";
 import { KEY_ENV, logJudgment, modelConfigFor, parseJson, type Model } from "./model";
 import { modelFor } from "./usage";
 
@@ -345,7 +346,9 @@ export async function ownerSayModel(root: string, text: string, o: SayOptions = 
 export type Audience = "your assistants" | "only you";
 export interface Chip { label: string; say: string }
 // signin: the screen offers "Sign in again" (a forget needs a sign-in from the last few minutes).
-export interface SayReply { kind: SayId; text: string; page?: string; fact_key?: string; undo_token?: string; chips?: Chip[]; audience?: Audience; label?: string; signin?: boolean }
+// pages: every page a reply names when it names more than one (say.answer-many), so a screen can
+// re-check each when it draws the reply again (invariant 16).
+export interface SayReply { kind: SayId; text: string; page?: string; pages?: string[]; fact_key?: string; undo_token?: string; chips?: Chip[]; audience?: Audience; label?: string; signin?: boolean }
 
 const shown = (v: unknown): string => (typeof v === "string" ? v.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") : Array.isArray(v) ? v.map(shown).join(", ") : JSON.stringify(v));
 const audienceOf = (sens: Sensitivity): Audience => sensitivityRank(sens) >= sensitivityRank("private") ? "only you" : "your assistants";
@@ -430,9 +433,35 @@ function defaultArea(rules: Rules, notes: Note[], sentence: string, unknown: str
 // files as their word, its ref marked `/chip` so a tap stays told apart from typed words.
 // reading: what the model read the sentence as, already checked (ownerSayModel); without one the
 // fixed patterns read it.
-export interface SayOptions { page?: string; channel?: string; fresh?: boolean; chip?: boolean; reading?: Reading }
+// from: "ask" when the words came from Ask, which answers in its own voice (G649).
+export interface SayOptions { page?: string; channel?: string; fresh?: boolean; chip?: boolean; reading?: Reading; from?: "ask" }
 
 export function ownerSay(root: string, text: string, o: SayOptions = {}): SayReply {
+  const reply = sayOnce(root, text, o);
+  // Ask is for asking: a word it can't place says so there, not the write box's hint (G649).
+  return o.from === "ask" && reply.kind === "say.didnt-catch" ? { kind: "say.ask-nothing", text: say("say.ask-nothing") } : reply;
+}
+
+// The words for a role, as the owner asks ("my kids") and as a relationship fact says it
+// ("Robin's son, 6"). A role not listed matches itself, and its singular.
+const ROLE_WORDS: Record<string, string[]> = {
+  wife: ["wife", "spouse", "partner"], husband: ["husband", "spouse", "partner"], spouse: ["spouse", "wife", "husband", "partner"], partner: ["partner", "spouse", "wife", "husband"],
+  kid: ["child", "son", "daughter", "kid"], kids: ["child", "son", "daughter", "kid"], child: ["child", "son", "daughter", "kid"], children: ["child", "son", "daughter", "kid"],
+  mom: ["mother", "mom", "mum"], mum: ["mother", "mom", "mum"], mother: ["mother", "mom", "mum"], dad: ["father", "dad"], father: ["father", "dad"],
+  parents: ["mother", "father", "mom", "dad", "mum"], boss: ["manager", "boss"], manager: ["manager", "boss"],
+};
+const roleWords = (role: string): string[] => ROLE_WORDS[role] ?? [...new Set([role, role.replace(/(?<=[a-z]{3})(?:ies)$/, "y").replace(/(?<=[a-z]{3})s$/, "")])];
+const ROLE_ASKED = /^(?:who|whos|who['’]s)(?:\s+(?:is|are|was|were))?\s+my\s+([a-z][a-z ]{1,30}?)\s*$/i;
+// The owner's own people by a role: person pages whose relationship fact starts with the owner's
+// name and that role ("Robin's mother", "Robin's son, 6"); "Robin's former manager" is not the manager.
+function byRole(role: string, notes: Note[], rules: Rules): Note[] {
+  const full = ownerName(rules), first = full.split(/\s+/)[0] ?? full;
+  const who = [...new Set([full, first])].map(escapeRe).join("|");
+  const re = new RegExp(`(?:^|[\\s,(])(?:${who})['’]s\\s+(?:${roleWords(role.toLowerCase()).map(escapeRe).join("|")})(?![a-z])`, "i");
+  return notes.filter((n) => n.fm.type === "person" && Object.entries(n.fm.facts ?? {}).some(([a, f]) => a === "relationship" && !isDisputed(f) && records(f).some((r) => !r.valid_to && typeof r.value === "string" && re.test(r.value))));
+}
+
+function sayOnce(root: string, text: string, o: SayOptions = {}): SayReply {
   const t = text.trim();
   // The ref says how the words came: typed, a tapped chip, or typed and read by the model.
   const ch = `${o.channel ?? "home"}${o.chip ? "/chip" : o.reading ? "/read" : ""}`;
@@ -463,6 +492,20 @@ export function ownerSay(root: string, text: string, o: SayOptions = {}): SayRep
   if (intent === "lookup") {
     // One sentence back, and no chip: a question is never noted (Louis, 2026-10-29, G473).
     const q = t.replace(/\?+\s*$/, "").trim();
+    // "Who is my wife": the owner's own people, found by their relationship facts (G649).
+    const role = q.match(ROLE_ASKED)?.[1] ?? (r?.kind === "question" && !r.attribute ? r.name?.match(/^my\s+([a-z][a-z ]{1,30})$/i)?.[1] : undefined);
+    if (role) {
+      const all = byRole(role.trim(), notes, rules);
+      // Before a fresh sign-in, a private page, or a relationship that is private or held, isn't named.
+      const open = o.fresh ? all : all.filter((n) => !closedFact(n, n.fm.facts!.relationship!));
+      if (open.length === 1) return answer(open[0]!, undefined, notes, o.fresh);
+      if (open.length > 1) {
+        const names = open.map((n) => String(n.fm.title)).sort((a, b) => a.localeCompare(b));
+        return { kind: "say.answer-many", pages: open.map((n) => n.fm.id), text: say("say.answer-many", { role: role.trim().toLowerCase(), names: names.length === 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` }) };
+      }
+      if (all.length) return { kind: "say.answer-signin", signin: true, text: say("say.answer-signin") };
+      return { kind: "say.no-match", text: say("say.no-match") };
+    }
     const asked = r?.kind === "question" ? { name: r.name, attr: r.attribute } : (() => { const m = q.match(ASKED); return m ? { name: m[1]!.trim(), attr: m[2]!.trim() } : undefined; })();
     if (asked?.name) {
       const who = whoIs(asked.name, notes, page, { any: true });

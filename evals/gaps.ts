@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G649: {
+    closed: "1a8a9f12",
+    title: "Ask didn't know the owner's people by their role, and answered a stray word with the write box's hint",
+    severity: "low",
+    finding: "Owner's phone, 2026-11-03: \"who is my wife\" answered \"Nothing on that yet. Tell me, and I'll keep it.\" while \"who is julie\" answered \"How you know Julie …: <owner>'s wife.\"; \"test\" answered \"I didn't catch who or what that's about. Try 'Ana works at Bay Institute'.\", the write box's hint, on Ask.",
+    fix: "src/owner-say.ts: a who-is-my-<role> question finds person pages whose relationship fact starts with the owner's name and that role (byRole, ROLE_WORDS), one as its page, several in one line (say.answer-many, carrying the pages it names so Ask re-checks each page and its relationship when drawn again, invariant 16), a private one unnamed before a fresh sign-in; from Ask (SayOptions.from, set by src/dashboard/server.ts) say.didnt-catch becomes say.ask-nothing. test/ask-my-relations.test.ts.",
+  },
   G659: {
     closed: "claude/audit11-app-slow-load",
     title: "The phone app sat on its opening logo with no word while the hub's page was slow to load",

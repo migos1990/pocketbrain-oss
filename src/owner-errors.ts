@@ -264,6 +264,8 @@ export const OWNER_SAY = {
   "say.answer-none": "Nothing on {name}'s {attr} yet. Tell me, and I'll keep it.",
   "say.answer-waiting": "Two answers for {name}'s {attr}; pick one under Waiting on you.",
   "say.answer-signin": "That shows only right after you sign in, so a borrowed phone can't see it.",
+  "say.answer-many": "Your {role}: {names}.",
+  "say.ask-nothing": "I have nothing on that. Ask me about someone or something in your memory.",
   "say.new-page-made": "New page for {name} in {area}; Undo takes it back.",
   "say.only-you": "only you see this",
   "say.left-out": "I left out “{what}”; say it on its own to keep it.",
