@@ -6,7 +6,8 @@ import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Mark } from "./Mark";
 import { MARK } from "./logo";
 
-export function Trouble({ onRetry }: { onRetry: () => void }) {
+// `slow`: the page is still loading (G659), so the heading says the app is waiting, not that it failed.
+export function Trouble({ onRetry, slow = false }: { onRetry: () => void; slow?: boolean }) {
   // The brain sits, looking up at the heading; Try again stands it up, then the page loads again.
   const [up, setUp] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -21,8 +22,8 @@ export function Trouble({ onRetry }: { onRetry: () => void }) {
     <View style={s.page}>
       <StatusBar barStyle="light-content" />
       <Mark size={120} pose={up ? "stand" : "sit"} gaze={up ? { x: 0, y: 0 } : { x: 0, y: -1 }} />
-      <Text style={s.h1} accessibilityRole="header">Couldn't open your brain</Text>
-      <Text style={s.p}>Check that Tailscale is on, on this phone and on your computer, then try again.</Text>
+      <Text style={s.h1} accessibilityRole="header">{slow ? "Still waiting for your hub" : "Couldn't open your brain"}</Text>
+      <Text style={s.p}>{slow ? "It's taking longer than usual. It opens here as soon as your hub answers, or check that Tailscale is on and try again." : "Check that Tailscale is on, on this phone and on your computer, then try again."}</Text>
       <Pressable onPress={retry} accessibilityRole="button" style={({ pressed }) => [s.go, pressed && s.pressed]}>
         <Text style={s.goText}>Try again</Text>
       </Pressable>

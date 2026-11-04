@@ -4,7 +4,7 @@
 // paper). Pure, so the hub's test run checks it (test/phone-app-client.test.ts).
 import { MARK } from "./logo";
 
-export type Phase = "loading" | "shown" | "failed";
+export type Phase = "loading" | "slow" | "shown" | "failed";
 export interface PageState { phase: Phase; tries: number; awayAt?: number }
 export type PageEvent =
   | { kind: "loaded"; blank: boolean }   // the page's script said whether it drew anything
@@ -13,11 +13,15 @@ export type PageEvent =
   | { kind: "gone" }                     // iOS or Android dropped the page's process
   | { kind: "background"; at: number }
   | { kind: "foreground"; at: number }
+  | { kind: "slow" }                     // still loading after SLOW_MS (G659)
   | { kind: "retry" };                   // the owner tapped Try again
 
 export const START: PageState = { phase: "loading", tries: 0 };
 // Away this long and the page loads again on return, so it is never stale or dropped.
 const STALE_MS = 10 * 60_000;
+// Still loading this long and the app says it is still waiting, with Try again, while the load goes
+// on (owner's phone, 2026-11-04: a slow first load looked like a stuck opening screen, G659).
+export const SLOW_MS = 10_000;
 
 export function pageStep(s: PageState, e: PageEvent): { state: PageState; reload: boolean } {
   const reload = (tries = 0) => ({ state: { phase: "loading" as const, tries }, reload: true });
@@ -25,6 +29,7 @@ export function pageStep(s: PageState, e: PageEvent): { state: PageState; reload
     case "gone": return reload();
     case "retry": return reload();
     case "error": return { state: { ...s, phase: "failed" }, reload: false };
+    case "slow": return { state: s.phase === "loading" ? { ...s, phase: "slow" } : s, reload: false };
     // 401 and 403 are the hub's own sign-in pages, which the page script handles.
     case "http": return { state: e.status >= 500 ? { ...s, phase: "failed" } : s, reload: false };
     case "loaded":
@@ -33,7 +38,7 @@ export function pageStep(s: PageState, e: PageEvent): { state: PageState; reload
     case "background": return { state: { ...s, awayAt: e.at }, reload: false };
     case "foreground": {
       const away = s.awayAt === undefined ? 0 : e.at - s.awayAt;
-      if (s.phase === "failed" || away > STALE_MS) return reload();
+      if (s.phase === "failed" || s.phase === "slow" || away > STALE_MS) return reload();
       return { state: { phase: s.phase, tries: s.tries }, reload: false };
     }
   }

@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G659: {
+    closed: "claude/audit11-app-slow-load",
+    title: "The phone app sat on its opening logo with no word while the hub's page was slow to load",
+    severity: "low",
+    finding: "Owner's phone, 2026-11-04 00:01Z, right after the OTA: 'the app is stuck in the slapsh screen', then 'okay now unblocked'. The web view showed the opening logo while it loaded (renderLoading in mobile/App.tsx) with no limit, and a slow load (Tailscale waking, a slow first connection) never fired onError, so nothing said the app was waiting.",
+    fix: "pageStep in mobile/src/page.ts takes a slow event: a page still loading after SLOW_MS (10 s) shows Trouble with 'Still waiting for your hub' and Try again while the load goes on; a page that loads clears it, a late timer never pulls a shown or failed page back, and back from the background a slow page loads again. Test in test/phone-app-client.test.ts. Ships over the air.",
+  },
   G658: {
-    closed: "claude/audit11-app-gate-log",
+    closed: "a7cecf0e",
     title: "An app door call refused before the doors left no line in the app door log",
     severity: "low",
     finding: "Mac, 2026-11-04, reading an empty .git/pb-app-door.jsonl: only calls that reached /app/pair, /app/nonce and /app/fresh were logged (G651). One refused at the tailnet listener's gate or the tailscale serve gate (dashboardHandler's handle and handleTailnet: wrong login, a device not on the list, funnel headers) or by an unknown Host (dash.host) was answered first, so a phone told 'answered 403' or 421 had nothing to read it against.",

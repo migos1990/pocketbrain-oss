@@ -230,3 +230,32 @@ test("the app's own pull to refresh replaces the built-in one, which left its sp
   const { join } = await import("node:path");
   expect(readFileSync(join(import.meta.dir, "..", "mobile", "App.tsx"), "utf8")).not.toContain("pullToRefreshEnabled");
 });
+
+// Owner's phone, 2026-11-04 00:01Z: right after the update the app sat on its opening logo, "stuck
+// in the splash screen", until the hub's page answered. A load that is only slow (Tailscale waking,
+// a slow first connection) never failed, so nothing said so. After SLOW_MS still loading, the app
+// says it is still waiting, with Try again, and keeps the load going; a page that then loads
+// clears it (G659).
+test("a page that takes long to load says the app is still waiting, with Try again, and clears when it loads (G659)", async () => {
+  const page = await import("../mobile/src/page") as Record<string, any>;
+  const { pageStep, START, shell } = page;
+  expect(typeof page.SLOW_MS).toBe("number");
+  expect(page.SLOW_MS).toBeLessThanOrEqual(15_000);
+  let r = pageStep(START, { kind: "slow" });
+  expect(r).toMatchObject({ reload: false, state: { phase: "slow" } });
+  expect(shell("slow").bar).toBe("light-content");
+  // The load was still running: it loads, and the page shows.
+  expect(pageStep(r.state, { kind: "loaded", blank: false })).toMatchObject({ reload: false, state: { phase: "shown" } });
+  // Try again loads it afresh; a real failure still shows Couldn't open.
+  expect(pageStep(r.state, { kind: "retry" })).toMatchObject({ reload: true, state: { phase: "loading" } });
+  expect(pageStep(r.state, { kind: "error" }).state.phase).toBe("failed");
+  // Late timers never pull a shown or failed page back.
+  expect(pageStep({ ...START, phase: "shown" }, { kind: "slow" }).state.phase).toBe("shown");
+  expect(pageStep({ ...START, phase: "failed" }, { kind: "slow" }).state.phase).toBe("failed");
+  // The app starts the timer while a page loads and shows the waiting words.
+  const app = (await import("node:fs")).readFileSync("mobile/App.tsx", "utf8");
+  expect(app).toMatch(/kind: "slow"/);
+  expect(app).toMatch(/SLOW_MS/);
+  const trouble = (await import("node:fs")).readFileSync("mobile/src/Trouble.tsx", "utf8");
+  expect(trouble).toContain("Still waiting for your hub");
+});

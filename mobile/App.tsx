@@ -16,7 +16,7 @@ import { PairScreen } from "./src/PairScreen";
 import { SetUpSteps, Welcome } from "./src/FirstRun";
 import { firstScreen, type Choice } from "./src/first";
 import { Trouble } from "./src/Trouble";
-import { pageStep, shell, START, type PageEvent } from "./src/page";
+import { pageStep, shell, START, SLOW_MS, type PageEvent } from "./src/page";
 import { MARK } from "./src/logo";
 
 const HUB = "pb.hub";       // the hub's https address, not secret
@@ -64,6 +64,12 @@ export default function App() {
   }, [step]);
 
   useEffect(() => { SecureStore.getItemAsync(HUB).then(setHub); }, []);
+  // A page still loading after SLOW_MS says so, with Try again; the load goes on underneath (G659).
+  useEffect(() => {
+    if (phase !== "loading") return;
+    const t = setTimeout(() => step({ kind: "slow" }), SLOW_MS);
+    return () => clearTimeout(t);
+  }, [phase, load, step]);
   // The first screen's answer: "I have it on a computer" is kept, so the question is asked once.
   const [choice, setChoice] = useState<Choice | undefined>(undefined);
   useEffect(() => { SecureStore.getItemAsync(FIRST).then((v) => { if (v === "have") setChoice("have"); }).catch(() => {}); }, []);
@@ -115,7 +121,7 @@ export default function App() {
         onContentProcessDidTerminate={() => step({ kind: "gone" })} onRenderProcessGone={() => step({ kind: "gone" })}
         sharedCookiesEnabled thirdPartyCookiesEnabled={false} allowsBackForwardNavigationGestures
         originWhitelist={[hub]} setSupportMultipleWindows={false} startInLoadingState renderLoading={() => opening} style={s.page} />
-      {phase === "failed" ? <Trouble onRetry={() => step({ kind: "retry" })} /> : null}
+      {phase === "failed" || phase === "slow" ? <Trouble slow={phase === "slow"} onRetry={() => step({ kind: "retry" })} /> : null}
       {msg ? <Text style={s.note}>{msg}</Text> : null}
     </SafeAreaView>
   );
