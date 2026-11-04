@@ -676,7 +676,7 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   const v = plain(told.value);
   // Said as the home says its memories (LINE_COPY), never "Page: attribute is value".
   const title = String(page.fm.title), had = page.fm.facts?.[told.attribute] !== undefined;
-  const own = told.attribute === "next_step" ? "next" : told.attribute === "last_contact" ? "contact" : told.attribute === "role" ? "role" : isVerbAttribute(told.attribute) ? "verb" : undefined;
+  const own = told.attribute === "next_step" ? "next" : told.attribute === "last_contact" ? "contact" : told.attribute === "role" ? "role" : told.attribute === "org" && page.fm.type === "person" ? "org" : isVerbAttribute(told.attribute) ? "verb" : undefined;
   const label = told.attribute === "role" && /^(runs|leads|heads|manages|directs|chairs|teaches|coaches|founded|owns)\b/i.test(v) ? `${title} ${v}`
     : (own === "next" && yourToDo(v)) || lineWords((own ? `${own}${had ? "Changed" : "New"}` : had ? "changed" : "new") as LineKey, { title, attr: attrWords(told.attribute), value: told.attribute === "last_contact" ? sayDay(told.value) : v }).replace(/\.$/, ""); // the reply adds its own full stop
   const guess = told.when?.approx ? ` ${say("say.guessed-date", { day: told.when.as_of, phrase: told.when.phrase })}` : "";

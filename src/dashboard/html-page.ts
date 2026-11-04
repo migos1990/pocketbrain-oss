@@ -10,15 +10,15 @@ import type { State } from "./data";
 import type { HomeLine } from "./home";
 import type { SayReply } from "../owner-say";
 import { wikiBody, wikiLinks } from "./html-brain";
-import { displayName } from "../diary";
+import { displayName, sayDay, sayDays } from "../diary";
 import { connections, audience, kindLabel, folderOf } from "./browse";
-import { agentLabel, agentTitle, whose, byWhose } from "./labels";
+import { agentTitle, whose, byWhose, cap } from "./labels";
 import { refString } from "../sources";
 import { keptQuotes, itemRef } from "../quotes";
 import { sensitiveShape } from "../shape";
 import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
 import { appPage, composer } from "./html-app";
-import { plain, shutBody } from "./home";
+import { plain, shutBody, attrWords } from "./home";
 import { ownerConflicts } from "../core";
 import { inboxConflicts } from "../settle-inbox";
 import { MADE } from "../wiki";
@@ -165,12 +165,15 @@ function facts(s: State, n: Note, fresh: boolean): string {
   const rows = Object.entries(n.fm.facts ?? {}).map(([attr, f]) => {
     const live = isDisputed(f) ? [] : isList(f) ? f.items.filter((i) => !i.valid_to) : [f as FactRecord];
     if (!live.length) return "";
-    if (!fresh && live.some((r) => shut(n, r))) return `<dt>${esc(attr.replace(/_/g, " "))}</dt><dd class="kind">${PAGE_COPY.shut}</dd>`;
-    const v = wikiLinks(s, live.map((r) => linkText(r.value)).join(", ")).replace(/href="\/note\//g, 'href="/p/');
+    // Each attribute in the owner's words and each day as a person writes it (audit v11).
+    const name = esc(cap(attrWords(attr)));
+    if (!fresh && live.some((r) => shut(n, r))) return `<dt>${name}</dt><dd class="kind">${PAGE_COPY.shut}</dd>`;
+    const v = wikiLinks(s, live.map((r) => sayDays(linkText(r.value))).join(", ")).replace(/href="\/note\//g, 'href="/p/');
     // A date said as "last week" stays a guess: "since around".
     const first = [...live].filter((r) => r.as_of).sort((a, b) => String(a.as_of).localeCompare(String(b.as_of)))[0];
-    const since = first ? `since ${first.as_of_approx ? "around " : ""}${first.as_of}` : "";
-    return `<dt>${esc(attr.replace(/_/g, " "))}</dt><dd>${v}${since ? ` <span class="kind">${esc(since)}</span>` : ""}</dd>`;
+    // A value that is itself that day ("last contact 4 Sep 2026") doesn't say it twice.
+    const since = first && !v.includes(sayDay(String(first.as_of))) ? `since ${first.as_of_approx ? "around " : ""}${sayDay(String(first.as_of))}` : "";
+    return `<dt>${name}</dt><dd>${v}${since ? ` <span class="kind">${esc(since)}</span>` : ""}</dd>`;
   }).join("");
   return rows ? `<dl>${rows}</dl>` : "";
 }
@@ -194,7 +197,7 @@ const LEVELS: [string, string][] = [["public", "Public"], ["personal", "Personal
 function whoSees(s: State, csrf: string, n: Note, closed: boolean): string {
   const id = n.fm.id;
   const seen = audience(s, id).seen;
-  const names = seen.map((a) => agentLabel(s.rules, a));
+  const names = seen.map((a) => agentTitle(s.rules, a));
   const first = callName(id, displayName(id, n.fm.title));
   const chips = `<div class="seen"><b>${esc(fill(PAGE_COPY.whoName, { name: first }))}</b>${names.length ? names.map((x) => `<span>${esc(x)}</span>`).join("") : esc(PAGE_COPY.nobody)}</div>`;
   if (closed) return chips;
@@ -202,9 +205,9 @@ function whoSees(s: State, csrf: string, n: Note, closed: boolean): string {
   const rows = s.agents.map((a) => {
     const byName = (s.rules.policy.agents[a.name]?.exclude ?? []).includes(id);
     const state = seen.includes(a.name) ? PAGE_COPY.sees : byName ? PAGE_COPY.hiddenByYou : PAGE_COPY.cant;
-    const btn = seen.includes(a.name) ? act("note-hide", { id, agent: a.name }, fill(PAGE_COPY.hide, { agent: a.label }))
-      : byName ? act("note-show", { id, agent: a.name }, fill(PAGE_COPY.showAgain, { agent: a.label })) : "";
-    return `<li class="line"><div class="t">${esc(a.label)} · ${esc(state)}</div>${btn}</li>`;
+    const btn = seen.includes(a.name) ? act("note-hide", { id, agent: a.name }, fill(PAGE_COPY.hide, { agent: agentTitle(s.rules, a.name) }))
+      : byName ? act("note-show", { id, agent: a.name }, fill(PAGE_COPY.showAgain, { agent: agentTitle(s.rules, a.name) })) : "";
+    return `<li class="line"><div class="t">${esc(agentTitle(s.rules, a.name))} · ${esc(state)}</div>${btn}</li>`;
   }).join("");
   const level = `<details><summary>${PAGE_COPY.level}</summary><p class="quiet">${PAGE_COPY.levelNote}</p><form method="post" action="/action/note-sensitivity">${hidden(csrf, { id })}<select name="sensitivity" aria-label="${PAGE_COPY.level}">${LEVELS.map(([v, l]) => `<option value="${v}"${v === n.fm.sensitivity ? " selected" : ""}>${esc(l)}</option>`).join("")}</select> <button>${PAGE_COPY.save}</button></form></details>`;
   return `${chips}<details id="who"><summary>${PAGE_COPY.change}</summary>${rows ? `<ul>${rows}</ul>` : ""}${level}</details>`;

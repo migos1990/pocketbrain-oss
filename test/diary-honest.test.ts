@@ -34,6 +34,6 @@ test("a date said as 'last week' stays approximate on the page", async () => {
   const r0 = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = r0.headers.get("set-cookie")!.split(";")[0]!;
   const page = await (await d.handle(new Request(`http://${H}/p/people/jane-roy`, { headers: { host: H, cookie } }))).text();
-  expect(page).toMatch(/since around \d{4}-\d{2}-\d{2}/);
+  expect(page).toMatch(/since around \d{1,2} [A-Z][a-z]{2} \d{4}/);
   void write;
 });

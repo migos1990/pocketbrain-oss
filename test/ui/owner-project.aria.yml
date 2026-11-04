@@ -119,7 +119,7 @@
       - /url: /p/people/sofia-marquez
     - text: .
   - group: Details
-  - text: Who sees Atlas launch Claude ChatGPT Gemini gardener
+  - text: Who sees Atlas launch Claude ChatGPT Gemini Gardener
   - group: Change who sees it
   - text: What changed about Atlas launch?
   - textbox "What changed about Atlas launch?"

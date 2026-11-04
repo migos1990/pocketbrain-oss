@@ -25,6 +25,7 @@ import type { WrongLine } from "./home-beliefs";
 import { ownerDay, clock } from "../clock";
 import { sensitiveShape, sensitiveName } from "../shape";
 import type { Mark } from "./marks";
+import { yourToDo } from "../wiki";
 // Settings, where what the home doesn't list itself waits (the dashboard's overview).
 export const SETTINGS_HREF = "/overview";
 
@@ -67,7 +68,7 @@ const dayOf = (iso: string) => ownerLocal(iso).slice(0, 10);
 const weekday = (day: string) => WEEKDAY[new Date(`${day}T12:00:00Z`).getUTCDay()]!;
 const longDay = (day: string) => `${weekday(day)} ${Number(day.slice(8, 10))} ${MONTH[Number(day.slice(5, 7)) - 1]}`;
 // An attribute in the owner's words: its name with spaces, but "next step" is the next thing to do.
-const OWNER_WORDS: Record<string, string> = { next_step: "next thing to do" };
+const OWNER_WORDS: Record<string, string> = { next_step: "next thing to do", org: "workplace" };
 const words = (attr: string) => OWNER_WORDS[attr] ?? attr.replace(/[_-]+/g, " ");
 export const attrWords = words;
 // An attribute that is itself a verb reads as a sentence: "Jane Roy prefers long novels", never
@@ -132,6 +133,9 @@ export const LINE_COPY = {
   contactChanged: "You were last in touch with {title} on {value}",
   contactSettled: "You settled it: you were last in touch with {title} on {value}",
   roleNew: "{title}'s role is {value}",
+  orgNew: "{title} works at {value}",
+  orgChanged: "{title} works at {value} now",
+  orgSettled: "You settled it: {title} works at {value}",
   roleChanged: "{title} is {value} now",
   roleChangedFrom: "{title} is {value} now, not {was}",
   roleSettled: "You settled it: {title} is {value}",
@@ -193,11 +197,9 @@ export const SAID_COPY = {
 } as const;
 export type LineKey = keyof typeof LINE_COPY;
 // Each line is a sentence: capitalised, and ending with a full stop unless it asks.
-// A next step the owner told as their own to-do ("owe Ben the sample", "need to call Jane"),
-// said back to them with "You"; anything else (a reminder's "call Jane") keeps "Next for".
-export function yourToDo(value: string): string | undefined {
-  return /^(owe|promised|need to|have to|must|should|have got to|are going to) /i.test(value) ? `You ${value}` : undefined;
-}
+// A next step the owner told as their own to-do is said back with "You" (src/wiki.ts, one rule
+// for the page and the home).
+export { yourToDo };
 
 export function lineWords(k: LineKey, v: Partial<Record<"title" | "attr" | "value" | "older" | "source" | "until" | "was" | "a" | "b", string>>): string {
   const s = LINE_COPY[k].replace(/\{title\}'s/g, () => /s$/i.test(v.title ?? "") ? `${v.title}'` : `${v.title}'s`).replace(/\{(\w+)\}/g, (_m, x: string) => (v as Record<string, string>)[x] ?? "");
@@ -344,7 +346,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   const prose = isProse(val(row.to)) || (row.from !== undefined && isProse(val(row.from)));
   const w = (k: LineKey) => lineWords(k, { title: t, attr: a, value: val(row.to), older: olderSay(row), source: CONFIRMED_BY[row.source_word] ?? "source", ...(row.from !== undefined && !shapeless ? { was: val(row.from) } : {}) });
   // A few attributes have their own sentence: what's next, when the owner was last in touch, a role.
-  const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : site ? "site" : KIND_ATTRIBUTES.has(attr) ? "kind" : undefined;
+  const own = attr === "next_step" ? "next" : attr === "last_contact" ? "contact" : attr === "role" ? "role" : attr === "org" && notes.get(id)?.fm.type === "person" ? "org" : site ? "site" : KIND_ATTRIBUTES.has(attr) ? "kind" : undefined;
   // What may be said is decided first (owner-canvas re-audit): a receipt says its page only by a
   // name heldName allows, and a family line, like any other, says nothing on a page private now.
   let what = row.why === "receipt" ? (safeName ? w("receipt") : lineWords("receiptUnnamed", {}))
@@ -417,7 +419,7 @@ export function factSentence(id: string, title: unknown, attr: string, value: un
   if (c) return lineWords("pageNew", { title: t, value: c });
   // The owner's own to-do says it as they did: "You owe Ben the sample" (G623).
   if (attr === "next_step" && yourToDo(value_)) return `${yourToDo(value_)!}.`;
-  const k: LineKey = isVerbAttribute(attr) ? "verbNew" : attr === "next_step" ? "nextNew" : attr === "last_contact" ? "contactNew" : attr === "role" ? "roleNew" : SITE_ATTRIBUTES.has(attr) ? "siteNew" : KIND_ATTRIBUTES.has(attr) ? "kindNew" : "new";
+  const k: LineKey = isVerbAttribute(attr) ? "verbNew" : attr === "next_step" ? "nextNew" : attr === "last_contact" ? "contactNew" : attr === "role" ? "roleNew" : attr === "org" && notes.get(id)?.fm.type === "person" ? "orgNew" : SITE_ATTRIBUTES.has(attr) ? "siteNew" : KIND_ATTRIBUTES.has(attr) ? "kindNew" : "new";
   return lineWords(k, { title: t, attr: words(attr), value: value_ });
 }
 // Prose, not a fact: long, or more than one sentence. Its words stay on its page.

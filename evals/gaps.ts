@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G663: {
+    closed: "ecb6a4c7",
+    title: "Owner screens said a role as a verb, attributes by code name, the owner's to-do as Next for, assistants by lowercase id and dates as ISO",
+    severity: "low",
+    finding: "Audit v8, still in v11 (owner screens): a page's prose read \"Hélène Lefebvre retired teacher.\" (a role read as something done), the home and the box \"Maya Chen's org is now Acme\", Ben's page \"Next for Ben: owe Ben the sample\", Who sees chips \"gardener\", Details \"org\" and \"since 2026-08-10\", and Settings' Filed for you \"From gmail: people/martin-leclerc#last_contact = 2026-10-08 (…)\".",
+    fix: "src/wiki.ts: a role, org, city or other noun attribute is never said as a deed (NOUN_ATTRIBUTE), and the owner's to-do on a page says \"You owe Ben the sample.\" (yourToDo, now shared with the home); src/dashboard/home.ts and src/owner-say.ts: a person's org reads \"works at\" (orgNew, orgChanged, orgSettled) and org is \"workplace\" in other lines; src/dashboard/html-page.ts: Who sees and its list name assistants by agentTitle, Details say attributes in words and days as \"10 Aug 2026\"; src/dashboard/html.ts: Filed for you says the decided proposal as a home line with its source (filedWords). test/screens-read-right.test.ts.",
+  },
   G662: {
     closed: "claude/false-conflicts",
     title: "Values that both hold were asked as a conflict, and the cards said too little",

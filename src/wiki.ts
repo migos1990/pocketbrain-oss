@@ -433,6 +433,14 @@ const SOURCE_WORD: Record<string, string> = { gmail: "Email", "gmail-thread": "E
 const shown = (v: unknown): string => Array.isArray(v) ? v.map(shown).join(", ") : typeof v === "object" && v ? JSON.stringify(v) : String(v);
 // A value that already reads as what someone did ("sent Sam a request for feedback on …").
 const DID = /^(?:[a-z]+ed|sent|met|told|gave|made|wrote|took|got|brought|built|taught|led|ran|knew|is|was|has|had|works|leads|runs|manages|knows|reports|teaches|helps|owns|lives|says|wants|needs|plans|uses)\b/;
+// What someone is, where they work or live, is never said as a thing they did, even when it starts
+// like a verb ("retired teacher" is a role, not "Hélène Lefebvre retired teacher.", audit v11).
+const NOUN_ATTRIBUTE = /^(?:role|title|job|occupation|position|org|company|employer|school|city|kind)$/;
+// A next step the owner told as their own to-do ("owe Ben the sample", "need to call Jane"), said
+// back to them with "You", on the page as on the home; anything else keeps "Next for".
+export function yourToDo(value: string): string | undefined {
+  return /^(owe|promised|need to|have to|must|should|have got to|are going to) /i.test(value) ? `You ${value}` : undefined;
+}
 const MONTHS = MONTHS_SHORT;
 // "2026-10-05" reads "5 Oct" in a sentence this year and "5 Oct 2025" from another (the reference
 // under the text keeps the whole date); anything else is left as written.
@@ -459,7 +467,7 @@ function sentence(n: Note, attr: string, values: string[], owner: string[] = [],
   const person = n.fm.type === "person", lab = label(attr).toLowerCase(), many = words.length > 1;
   // On someone else's page the owner is "you", the way a person would write it to them:
   // "Ana Diaz sent you a request for feedback on …", not "Relationship of Ana Diaz: sent Sam …".
-  if (person && !many && DID.test(v) && /\s/.test(v) && !owner.some((o) => o.toLowerCase() === full.toLowerCase())) {
+  if (person && !many && !NOUN_ATTRIBUTE.test(attr) && DID.test(v) && /\s/.test(v) && !owner.some((o) => o.toLowerCase() === full.toLowerCase())) {
     let said = v;
     for (const o of owner) said = said.replace(new RegExp(`\\b${o.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:'s|’s)?\\b`, "g"), (m) => /s$/.test(m) && m !== o ? "your" : "you");
     return `${t} ${said}.`;
@@ -478,6 +486,7 @@ function sentence(n: Note, attr: string, values: string[], owner: string[] = [],
   if (attr === "last_contact") return `You were last in touch with ${t} on ${v}.`;
   if (attr === "status") return `${t} is ${v}.`;
   // A plan or a date something is due: what happens, and on which day if it names one.
+  if (attr === "next_step" && !many && yourToDo(v!)) return `${yourToDo(v!)!}.`;
   if (spec.ends_on_date || spec.shelf_life === "until_date") return `${attr === "next_step" ? "Next" : label(attr)} for ${t}: ${v}.`;
   if (spec.normalize === "date") return `${whose(t)} ${lab} ${many ? "dates are" : "is"} ${v}.`;
   // A short value is said in one breath; a long one is quoted as the source gave it.

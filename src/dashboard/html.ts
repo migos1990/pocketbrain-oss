@@ -18,7 +18,8 @@ import { term, plain, cap, noteName, factName, withNames, agentName, agentLabel,
 import { sourceWords, kindLabel } from "./browse";
 import { autoSaves, autoDecisions, newQueues, CONFLICT, type Queues } from "../filing";
 import { sensitiveShape, reasonText } from "../shape";
-import { waitingCount } from "./home";
+import { waitingCount, factSentence, privateNow } from "./home";
+import { sayDays } from "../diary";
 import { resolveEntity } from "../write";
 import { readCapture } from "../capture";
 import { trustReport, homeTrustLine } from "../trust";
@@ -27,6 +28,7 @@ import { verifyReadLog, type ReadEntry } from "../readlog";
 import { loadRules, gardeners, type Rules } from "../rules";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
+import YAML from "yaml";
 import { lookedFor } from "./html-lookedfor";
 import { consentCard } from "./html-consent";
 import { APP_TOKENS, FONT_PATH } from "./html-app";
@@ -633,11 +635,33 @@ function barTile(s: State): string {
 // The pages behind Settings (outside review v5: no tab bar; the home is the front door).
 const SETTINGS: [string, string, string][] = [["/brain", "Brain", "every note, search, edit"], ["/agents", "Assistants", "who connects, their switches and keys"], ["/map", "Who sees what", "each assistant's view"], ["/people", "Who matters", "the people you hear from"], ["/activity", "Activity", "reads, writes and relayed mail"], ["/history", "History", "every change, with Undo"], ["/digest", "Digest", "the daily summary"], ["/upkeep", "Upkeep", "the nightly checks"], ["/usage", "Spend", "model spend and caps"]];
 
+// What the hub filed, in the owner's words (audit v11). Its row keeps the text channel's title
+// ("From gmail: people/x#last_contact = 2026-10-08 (…)", cut at 40 characters); here it reads as
+// the home says a memory, from the decided proposal, with where it came from, and never a fact
+// key, an ISO date or the quoted words. A title that already withheld its page or value (a private
+// or money note, words that read as instructions) stays as general as it was.
+function filedWords(s: State, r: { key: string; question: string }): string {
+  const src = r.question.match(/^From ([^:]+): /)?.[1]?.trim();
+  const from = src ? `, from ${sourceWords([`${src}:x`]) || src}` : "";
+  const file = r.key.match(/^proposal:([\w.-]+\.yaml)$/)?.[1];
+  if (file && / = /.test(r.question) && !/\(withheld/.test(r.question)) {
+    const req = (() => { for (const dir of ["inbox/decided", "inbox"]) { try { return (YAML.parse(readFileSync(join(s.root, dir, file), "utf8")) as { request?: { id?: unknown; attribute?: unknown; value?: unknown } }).request; } catch { /* next */ } } return undefined; })();
+    if (typeof req?.id === "string" && typeof req.attribute === "string" && req.value !== undefined) {
+      const n = s.notes.find((x) => x.fm.id === req.id);
+      // A page or fact made private since it was filed is not named here (invariant 16).
+      if (privateNow(n, req.attribute)) return `Something was filed on a page only you can see${from}.`;
+      return `${factSentence(req.id, n?.fm.title, req.attribute, req.value, new Map(s.notes.map((x) => [x.fm.id, x]))).replace(/\.$/, "")}${from}.`;
+    }
+  }
+  const rest = r.question.replace(/^From [^:]+: /, "").replace(/ \(".*$/s, "");
+  return / = |#/.test(rest) ? `Something was filed on its page${from}.` : `${cap(sayDays(rest))}${from}.`;
+}
+
 // What the hub filed or let expire on its own this week, each with Undo (src/filing.ts).
 function filedItems(s: State, csrf: string): string {
   // A conflict it filed is asked on the home once the Gardener has been by, never here (G416).
   const rows = autoDecisions(s.root, 7, s.now).filter((r) => !r.undone && r.picked !== CONFLICT).slice(0, 20);
-  return rows.map((r) => `<div class="item"><div class="what">${esc(r.question)}<div class="sub">pocketBrain ${esc(r.picked)}: ${esc(r.why)} · ${ago(r.at, s.now)}</div></div><div class="acts">${button(csrf, "owner-undo-auto", { key: r.key }, "Undo")}</div></div>`).join("");
+  return rows.map((r) => `<div class="item"><div class="what">${esc(filedWords(s, r))}<div class="sub">pocketBrain ${esc(r.picked)}: ${esc(r.why)} · ${ago(r.at, s.now)}</div></div><div class="acts">${button(csrf, "owner-undo-auto", { key: r.key }, "Undo")}</div></div>`).join("");
 }
 
 // Which code is running, on the last line of Settings (use-it check 2026-11-01, G620): the release
