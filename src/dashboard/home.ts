@@ -173,6 +173,8 @@ export const LINE_COPY = {
   takeBackSetAside: "A take-back on {title} was set aside, since only a conflict asks you",
   receipt: "A receipt on {title} was set aside; receipts aren't facts",
   folded: "Two pages called {title} are one page now",
+  moved: "{title}'s page moved from {was} to {value}, with the workplace you named",
+  movedUnnamed: "A page only you can see moved with the workplace you named",
   foldedUnnamed: "Two pages only you can see are one page now",
   receiptUnnamed: "A receipt was set aside; receipts aren't facts",
   family: "{title} may be family: same surname as you",
@@ -337,6 +339,8 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // Either page private now names its page only as a held card would, like every other line
   // (privateNow and heldName, invariant 16).
   if (row.kind === "folded") return { token: row.undo_token, page: id, what: named && (!row.dropped || !privateNow(notes.get(row.dropped), "", row.sensitivity) || heldName(rules, notes.get(row.dropped), { page: row.dropped, title: row.title }) !== undefined) ? lineWords("folded", { title: shortName(id, row.title!, notes) }) : lineWords("foldedUnnamed", {}), from, undo: undone.has(row.undo_token) ? "undone" : "undo", maybe: false, shapeless, ...tag };
+  // A page that moved with the workplace the owner named (G664), from one area to the other.
+  if (row.kind === "moved") { const area = (a: unknown) => String(a ?? "").replace(/^./, (c) => c.toUpperCase()); return { token: row.undo_token, page: id, what: named ? lineWords("moved", { title: shortName(id, row.title!, notes), was: area(row.from), value: area(row.to) }) : lineWords("movedUnnamed", {}), from, undo: undone.has(row.undo_token) ? "undone" : "undo", maybe: false, shapeless, ...tag }; }
   if (row.kind === "set_aside") return { token: row.undo_token, page: id, what: lineWords(attr === "open_question" ? "questionSetAside" : "takeBackSetAside", { title: row.title }), from, undo: "none", maybe: false, shapeless: true, ...tag };
   const verb = isVerbAttribute(attr);
   const t = shortName(id, row.title!, notes);

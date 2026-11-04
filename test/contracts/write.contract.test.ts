@@ -15,6 +15,8 @@ import { setFact } from "../../src/dashboard/edit";
 import { ENCODED_BANK, ORDINARY } from "./leak-rows";
 import { registerLouisMessages } from "../../src/louis";
 import { samePersonProposals, mergeSamePerson } from "../../src/sameperson";
+import { followArea } from "../../src/area-follow";
+import { loadRules } from "../../src/rules";
 
 const base = { agent: "planner", id: "projects/course-a", attribute: "next_step", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" as const };
 const sh = (root: string, ...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: root }).stdout.toString().trim();
@@ -677,4 +679,34 @@ test("contract write: a merged page's name never resolves to a page outside the 
   expect(resolveEntity([pointer], "person", "Sam Ortiz")).toEqual({});
   const kept = { path: "people/samuel-ortiz.md", body: "", fm: { id: "people/samuel-ortiz", type: "person", title: "Samuel Ortiz" } } as never;
   expect(resolveEntity([pointer, kept], "person", "Sam Ortiz")).toEqual({ id: "people/samuel-ortiz" });
+});
+
+test("contract write: no agent's write moves a page's area; only the owner's word on a workplace does (G664, invariant 4)", () => {
+  const org = (root: string) => {
+    writeFileSync(join(root, "orgs", "acme.md"), "---\nid: orgs/acme\ntype: org\ntitle: Acme\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n");
+    sh(root, "add", "-A"); sh(root, "commit", "-qm", "owner: Acme");
+  };
+  const area = (root: string) => String(loadBrain(root).find((n) => n.fm.id === "people/jane-roy")?.fm.area);
+  const rows: { agent: string; editor?: boolean }[] = [
+    { agent: "steward" }, // core, every slice, the resolver
+    { agent: "planner" }, // core, owns the work area
+    { agent: "helper" }, // trial
+    { agent: "helper", editor: true }, // the owner's editor skips routing only
+  ];
+  for (const row of rows) {
+    const root = makeBrain();
+    require("node:fs").mkdirSync(join(root, "orgs"), { recursive: true });
+    org(root);
+    if (row.editor) editPolicy(root, (s) => s + "owner_editor: helper\n");
+    const was = area(root);
+    write(root, { ...base, agent: row.agent, id: "people/jane-roy", attribute: "org", value: "[[orgs/acme]]" } as never);
+    expect(followArea(root, loadRules(root), "people/jane-roy#org")).toBeUndefined();
+    expect(area(root)).toBe(was);
+  }
+  // The control: the owner's own word moves it.
+  const root = makeBrain();
+  require("node:fs").mkdirSync(join(root, "orgs"), { recursive: true });
+  org(root);
+  setFact(root, "people/jane-roy", "org", "[[orgs/acme]]");
+  expect(area(root)).toBe("personal");
 });

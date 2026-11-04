@@ -5,6 +5,7 @@
 // one line in log/writes.jsonl. Secrets never go in, whoever types them; rules/ and conflict
 // packets are not editable here.
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { followArea } from "../area-follow";
 import { join } from "node:path";
 import YAML from "yaml";
 import { loadBrain, parseNote, parseShared, saveNote, serializeNote, today, isList, isDisputed, CONTENT_DIRS, type Note, type FactRecord, type Sensitivity } from "../brain";
@@ -82,6 +83,8 @@ export function setFact(root: string, id: string, attribute: string, raw: string
   const key = `${note.fm.id}#${attr}`;
   commit(root, note.fm.id, `edit ${key}`, [key]);
   logWrite(root, { at: new Date().toISOString(), agent: OWNER, kind: "owner-edit", op: "set", key, outcome: "committed", step: 6 });
+  // The owner's word on where someone works moves their page with it (G664).
+  followArea(root, rules, key);
   return `${key} = ${JSON.stringify(value)}`;
 }
 

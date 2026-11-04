@@ -3,6 +3,7 @@
 // Claude, a plain JSON API for Instinct. Every function takes the agent from the caller's
 // token, never from the request, and sees the brain only through that agent's carve.
 import { verifySource, itemSays, cites, VERIFY_PER_DAY, recheckDue, type Recheck } from "./pull";
+import { followArea } from "./area-follow";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { pendingGardener, gardenerSeen } from "./gardener-hold";
 import { join } from "node:path";
@@ -824,6 +825,8 @@ export function ownerDecide(root: string, id: string, choice: number | string, v
     ? { ...side, value: asRecord(pick, p, rules), sources: [approvedRef(today(), via), ...(side.sources ?? [])], recorded: today(), note: `The side the owner picked for ${id}, from the ${from}` }
     : { value: asRecord(pick, p, rules), as_of: today(), sources: [ref], verification: OWNER_CONFIRMED, by: OWNER, recorded: today(), last_confirmed: today(), note: `The owner's answer to ${id}, from the ${from}` };
   settle(root, p, rec, OWNER, 6, { status: "resolved", resolution: { by: OWNER, at: today(), value: rec.value, sources: [ref] } }, "owner-answer");
+  // Only a value the owner typed is the owner's word, so only it moves a page with its workplace (G664).
+  if (!side) followArea(root, rules, String(p.note.fm.fact_key ?? ""));
   return `${id}: settled; ${p.note.fm.fact_key} = ${JSON.stringify(rec.value)}`;
 }
 

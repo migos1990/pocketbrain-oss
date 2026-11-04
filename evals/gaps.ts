@@ -5,6 +5,34 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G667: {
+    closed: "a62288db",
+    title: "An assistant's org page that the owner accepted or filing saved could choose where a person page moves",
+    severity: "medium",
+    finding: "Builder's slice audit of PR 102 (G664): G665 judged the commit that made the org page by its author, but write() commits an accepted proposal as the owner (acceptedBy) and a filing save as auto-decide, with the area the assistant asked for.",
+    fix: "src/area-follow.ts areaSetByOwnerOrHub: the commit that made the page is judged by the page's own by: (write() sets it to the asking agent); a later area: change is still judged by its author. test/area-follows-org.test.ts.",
+  },
+  G666: {
+    closed: "db935e10",
+    title: "A page that moved with the owner's word on a workplace reached a collaborator's or co-owner's assistant",
+    severity: "medium",
+    finding: "Builder's slice audit of PR 102 (G664): a move from area A to B gives the page to every reader of B, including a collaborator (pocketbrain share) or a co-owner's assistant; sharing with a person is a shown step (share add prints its preview), and the move showed nothing.",
+    fix: "src/area-follow.ts outsiderWouldGain: before a move, each collaborator's and co-owner's assistant is carved with the page in its old and new area; if any would newly see it, the page stays. test/area-follows-org.test.ts.",
+  },
+  G665: {
+    closed: "65629dca",
+    title: "An assistant's org page could decide which area a person page moved into",
+    severity: "medium",
+    finding: "Security review of PR 102 (G664): a core agent may make an org page in any area it names; if the owner then said a person works there, followArea moved the page into that area, so the agent and every reader of the area got the page's facts.",
+    fix: "src/area-follow.ts areaSetByOwnerOrHub: the commit that made the org page or last changed its area must be the owner's or the hub's own (an author that isn't an agent in policy.yaml); otherwise nothing moves. test/area-follows-org.test.ts.",
+  },
+  G664: {
+    closed: "84378a45",
+    title: "A person's page filed in an area by a wrong org link could not move when the owner said where they work",
+    severity: "medium",
+    finding: "Owner, 2026-11-03 (the Oliver case): an import linked a person to the wrong org, so the page sat in that org's area and in the slices that read it; the owner's correction of the workplace changed the fact but no path moved the page (src/write.ts drops an area change from a proposal).",
+    fix: "src/area-follow.ts: followArea, called after a committed owner write of a person's org on the box, the page's box, the editor's set-fact and Settle with a typed value, moves the page to the new org page's area when its area came from the old org (or it had none): one owner commit with Area-Follows: <org commit>, a moved diary line whose Undo (undoMove) puts the area back or answers changed since; never from a source, an assistant or a tapped side; two org pages carrying the named workplace move nothing until one is left, and saying it again then moves the page from the org it had before. test/area-follows-org.test.ts, a write contract row.",
+  },
   G663: {
     closed: "ecb6a4c7",
     title: "Owner screens said a role as a verb, attributes by code name, the owner's to-do as Next for, assistants by lowercase id and dates as ISO",

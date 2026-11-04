@@ -18,6 +18,7 @@ import { readDiary, appendDiary, diaryRow, shownValue, type DiaryRow } from "./d
 import { logWrite } from "./write";
 import { renderTouchedPages, MADE } from "./wiki";
 import { undoFold } from "./fold";
+import { undoMove } from "./area-follow";
 import type { Note } from "./brain";
 
 export type UndoOutcome = "undone" | "changed_since" | "already_undone" | "not_found" | "not_undoable" | "not_saved";
@@ -36,6 +37,8 @@ export function undoFact(root: string, token: string): UndoResult {
     try { undoFold(root, row.fold); return { outcome: "undone", fact_key: row.fact_key, row, message: "Undone" }; }
     catch (e) { const c = (e as { status?: number }).status; return { outcome: c === 404 ? "already_undone" : "changed_since", fact_key: row.fact_key, row, message: (e as Error).message }; }
   }
+  // A page that moved with its workplace goes back to its old area (G664).
+  if (row.kind === "moved") { const o = undoMove(root, row); return { outcome: o, fact_key: row.fact_key, row, message: o === "undone" ? "Undone" : "Changed since" }; }
   if (row.kind === "conflict" || row.to === undefined && row.kind !== "retracted") return { outcome: "not_undoable", fact_key: row.fact_key, row, message: "this line has nothing to undo" };
   if (row.kind === "settled") return reopen(root, row, token);
   // Only these kinds change a value; any other (kept, held, set_aside) never deletes a fact (audit

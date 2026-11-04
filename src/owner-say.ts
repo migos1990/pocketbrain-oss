@@ -11,6 +11,7 @@
 // sentence when there is no model, the model fails, or its reading doesn't pass. Forget and send are
 // never read by a model.
 import { loadBrain, today, isList, isDisputed, sensitivityRank, type Note, type Fact, type FactRecord, type Sensitivity } from "./brain";
+import { followArea } from "./area-follow";
 import { loadRules, attributeSpec, ownerName, type Rules } from "./rules";
 import { records } from "./carve";
 import { write } from "./write";
@@ -670,6 +671,9 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
     ...(told.when?.approx ? { as_of_approx: true } : {}),
     sources: [ownerRef(d, channel)], verification: OWNER_CONFIRMED,
   } as never, { owner: true });
+  // The owner's word on where someone works moves their page with it (G664).
+  // Said again once an import split left one org page by that name, it moves the page then.
+  if (r.outcome === "committed" || r.outcome === "noop") followArea(root, rules, r.fact_key ?? (page.fm.id ? `${page.fm.id}#${told.attribute}` : undefined));
   const fact_key = r.fact_key ?? `${page.fm.id}#${told.attribute}`;
   if (!page.fm.id) page = { ...page, fm: { ...page.fm, id: fact_key.slice(0, fact_key.lastIndexOf("#")) } };
   // In the owner's words: a day as "28 Oct 2026", "runs the new lab" as said, never "next step".

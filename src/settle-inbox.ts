@@ -6,6 +6,7 @@
 // as a dispute (core.ts SettleCase). Picking the live value drops the proposal, picking the new one
 // accepts it (at its source's rank, with the tap recorded), and a typed value is the owner's word.
 import { loadBrain, isDisputed, isList, sensitivityRank, type FactRecord } from "./brain";
+import { followArea } from "./area-follow";
 import { records } from "./carve";
 import { sensitiveShape } from "./shape";
 import { loadRules } from "./rules";
@@ -62,6 +63,8 @@ export function settleInbox(root: string, id: string, choice: { n?: number; type
   if (choice.typed) {
     const r = write(root, { agent: OWNER, id: c.page, attribute: c.attr, value: choice.typed, as_of: today(), sources: [ownerRef(today(), `settle-${id}`)], verification: OWNER_CONFIRMED } as never, { owner: true });
     if (r.outcome !== "committed" && r.outcome !== "noop") throw new CoreError(409, r.message);
+    // A value the owner typed is the owner's word: a workplace moves the page with it (G664).
+    if (r.outcome === "committed") followArea(root, loadRules(root), r.fact_key);
     decideProposal(root, c.file, "reject");
     return;
   }
