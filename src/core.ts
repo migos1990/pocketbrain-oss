@@ -1095,10 +1095,15 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
   }
   const uncited = problems.find((x) => x.rule === "uncited-line");
   if (uncited) throw new CoreError(422, `every line needs a reference ([^1] with a [^1]: definition): ${uncited.detail}`);
-  const drift = problems.find((x) => x.rule === "section-drift");
-  if (drift) throw new CoreError(422, `${drift.detail.replace("which none of this page's facts cite now", "which no current fact of this page cites")}`);
   const used = new Set(sectionsIn.flatMap((x) => [...x.text.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1])));
   const defs = new Map(footnotes(probe.body).notes.map((x) => [x.label, x.text]));
+  // Drift counts only the references this call passes or its sections use: an old one already on
+  // the page that no fact cites now is the nightly lint's to report, not a reason to refuse every
+  // fresh sync of that page (night run 2026-11-03: three pages refused on old references).
+  const cited = new Set(Object.values(shown).flatMap((f) => records(f as Fact)).filter((r) => !r.valid_to && !r.retired && !r.unseen).flatMap((r) => (r.sources ?? []).map((x) => normalizeRef(refString(x)))));
+  for (const [l, text] of [...references.map((x) => [x.label, x.text] as const), ...[...used].map((l) => [l, defs.get(l) ?? ""] as const)])
+    for (const ref of refsIn(text))
+      if (!cited.has(normalizeRef(ref))) throw new CoreError(422, `reference ${l} cites ${ref}, which no current fact of this page cites`);
   for (const l of used) if (!refsIn(defs.get(l) ?? "").length) throw new CoreError(422, `reference ${l} names no source ref; cite one a current fact of this page cites, like (gmail:<id>)`);
   // Nobody who reads this page may meet a value hidden from them, nor the Gardener one hidden from it.
   const readers = Object.keys(hub.policy.agents).filter((a) => a !== agent && carve(notes, hub, grantFor(hub, a), { flags: false }).visible.get(id)?.body);

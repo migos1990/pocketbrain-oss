@@ -47,6 +47,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner's phone, 2026-11-03 16:22Z, right after the Face ID update (G642): the pink banner stayed on page after page that loaded fine. mobile/App.tsx set the message on a failed Face ID call and cleared it only on the next successful one; mobile/src/hub.ts read every status but 200, 401, 403 and 429 (a 409 when the phone list was busy, a 5xx) as unreachable; and the dashboard logged nothing for /app/pair, /app/nonce or /app/fresh, so the hub, healthy, could not say what the phone was answered.",
     fix: "src/dashboard/server.ts appDoorLog: one line per call in .git/pb-app-door.jsonl (when, door, status, cookie or not, the refusal's one-line reason; never a key, nonce or cookie; the last 500), printed by pocketbrain dashboard phones log. mobile/src/hub.ts: fresh tries a dropped call once more, says offline only when the hub didn't answer twice, and any other status as { error } (freshWords); pageClears: a page that loads clears the message (App.tsx). Test: test/app-door-log.test.ts.",
   },
+  G655: {
+    closed: "claude/gardener-session-errors",
+    title: "An old reference on a page blocked every Gardener wiki_sync of that page",
+    severity: "low",
+    finding: "Gardener night run 2026-11-03: wiki_sync on three people pages was refused with \"reference 2 cites gmail:<id>, which no current fact of this page cites\" though the call passed only references the page's facts cite. The drift check ran over every footnote already on the page, so one stale reference refused each retry, and the page never got its summary.",
+    fix: "src/core.ts wikiSync checks drift only for the references the call passes or its sections use; old ones stay upkeep's section-drift finding. Test: test/wiki-sync.test.ts (night run 2026-11-03).",
+  },
   G642: {
     closed: "2b0aad2b",
     title: "The phone app's device key alone made any cookie, or none, a fresh owner sign-in, and reset the 30 days",

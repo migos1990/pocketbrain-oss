@@ -230,3 +230,17 @@ test("a marker with no definition is refused with how to define it, naming the p
   const ok = await tool("gardener", "wiki_sync", GOOD);
   expect(ok.error).toBeUndefined();
 });
+
+test("an old reference already on the page that no fact cites now doesn't block a fresh sync (night run 2026-11-03)", async () => {
+  const { root, tool } = setup();
+  const f = join(root, "projects", "course-a.md");
+  writeFileSync(f, readFileSync(f, "utf8").trimEnd() + "\n\n[^9]: Email, Sep 1 (gmail:f0000000000000ff)\n");
+  git(root, ["add", "projects/course-a.md"]);
+  git(root, ["commit", "-q", "-m", "owner: old reference", "--", "projects/course-a.md"], "owner");
+  const r = await tool("gardener", "wiki_sync", GOOD);
+  expect(r.error).toBeUndefined();
+  expect(r.json).toMatchObject({ applied: true });
+  // A reference the call itself passes is still checked.
+  const bad = await tool("gardener", "wiki_sync", { ...GOOD, references: [{ label: "1", text: "Email, Sep 1 (gmail:f0000000000000ff)" }] });
+  expect(bad.error).toContain("no current fact of this page cites");
+});
