@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G660: {
+    closed: "claude/audit11-installer",
+    title: "The installer checked nothing it installed",
+    severity: "medium",
+    finding: "Audit v11 finding 6: install.sh checked out the newest v* tag with no signature check, fell back to the source's default branch when no tag existed (so whoever could push main chose the code), tried origin/<tag> before the tag (a branch named like a release won), and ran bun install --production without --frozen-lockfile.",
+    fix: "install.sh: no tag and no POCKETBRAIN_REF installs nothing (install.no-release); a tag is checked out as refs/tags/<tag>^{commit}; with PINNED_RELEASE_KEY (or POCKETBRAIN_RELEASE_KEY) set, git verify-tag against that key alone must pass (install.unsigned, install.keygen); bun install --frozen-lockfile. The pin is empty until releases are signed, an owner step (docs/release.md, Signed releases). Tests: test/init.test.ts.",
+  },
   G649: {
     closed: "1a8a9f12",
     title: "Ask didn't know the owner's people by their role, and answered a stray word with the write box's hint",
@@ -13,7 +20,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/owner-say.ts: a who-is-my-<role> question finds person pages whose relationship fact starts with the owner's name and that role (byRole, ROLE_WORDS), one as its page, several in one line (say.answer-many, carrying the pages it names so Ask re-checks each page and its relationship when drawn again, invariant 16), a private one unnamed before a fresh sign-in; from Ask (SayOptions.from, set by src/dashboard/server.ts) say.didnt-catch becomes say.ask-nothing. test/ask-my-relations.test.ts.",
   },
   G659: {
-    closed: "claude/audit11-app-slow-load",
+    closed: "f22cd689",
     title: "The phone app sat on its opening logo with no word while the hub's page was slow to load",
     severity: "low",
     finding: "Owner's phone, 2026-11-04 00:01Z, right after the OTA: 'the app is stuck in the slapsh screen', then 'okay now unblocked'. The web view showed the opening logo while it loaded (renderLoading in mobile/App.tsx) with no limit, and a slow load (Tailscale waking, a slow first connection) never fired onError, so nothing said the app was waiting.",

@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # pocketBrain installer: curl -fsSL <this file's address> | sh
 # Says what it will do, installs Bun if it's missing, then the pocketbrain command from the newest
-# release tag (v*) of the public source (its default branch until there is one), cloned into ~/.pocketbrain/app. Nothing else on the machine changes, and
+# release tag (v*) of the public source, cloned into ~/.pocketbrain/app; with no release it installs nothing
+# unless POCKETBRAIN_REF names a branch. With a release key pinned below, a tag it didn't sign is refused.
+# Libraries come from the release's own lockfile (--frozen-lockfile). Nothing else on the machine changes, and
 # nothing about you is sent anywhere. Run it again to update. To remove it: pocketbrain uninstall,
 # then rm ~/.bun/bin/pocketbrain and the ~/.pocketbrain/app folder (docs/quickstart.md, Leaving)
 #
@@ -10,8 +12,13 @@
 # and POCKETBRAIN_REF which tag or branch is installed (default: the newest v* tag).
 # POCKETBRAIN_PACKAGE installs from a package instead (a version, a tarball, or the npm
 # registry's pocketbrain once it is published) with bun add -g. POCKETBRAIN_BUN_INSTALLER
-# overrides where the Bun installer comes from (tests).
+# overrides where the Bun installer comes from (tests). POCKETBRAIN_RELEASE_KEY is the ssh public key
+# ("ssh-ed25519 AAAA...") a release tag must be signed with; empty means no key, as today.
 set -eu
+
+# The release key this installer trusts. Empty until releases are signed (docs/release.md, "Signed releases").
+PINNED_RELEASE_KEY=""
+RELEASE_KEY="${POCKETBRAIN_RELEASE_KEY-$PINNED_RELEASE_KEY}"
 
 REPO="${POCKETBRAIN_REPO:-https://pocketbrain.dev/git}"
 SRC="${POCKETBRAIN_HOME:-$HOME/.pocketbrain/app}"
@@ -63,14 +70,32 @@ else
   fi
   { if [ -d "$SRC/.git" ]; then git -C "$SRC" fetch -q --tags origin; else mkdir -p "$(dirname "$SRC")" && git clone -q "$REPO" "$SRC"; fi; } || fail "Couldn't fetch pocketBrain from $REPO (no internet?). Fix: check your connection, then run git ls-remote $REPO, to see why, and run this installer again."
   REF="${POCKETBRAIN_REF:-$(git -C "$SRC" tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)}"
-  if [ -z "$REF" ]; then
-    # No release tag yet: the source's own default branch. A later run moves to the newest tag.
-    REF="$(git -C "$SRC" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
-    REF="${REF:-main}"
-    say "$REPO has no release yet, so this installs the newest code on $REF. Run this installer again once there is a release to move to it."
+  # No release tag: nothing is installed unless the owner names a branch, since whoever can push the
+  # default branch would otherwise choose the code.
+  [ -n "$REF" ] || fail "$REPO has no release yet, so nothing is installed. Fix: run git ls-remote --tags $REPO, to see when there is one, or pass POCKETBRAIN_REF=main to install the unreleased code."
+  if git -C "$SRC" rev-parse -q --verify "refs/tags/$REF" >/dev/null; then
+    # A tag, never a branch of the same name. With a release key pinned, only a tag it signed.
+    if [ -n "$RELEASE_KEY" ]; then
+      command -v ssh-keygen >/dev/null 2>&1 || fail "ssh-keygen is missing, so the release's signature can't be checked. Fix: run sudo apt install openssh-client, and run this installer again."
+      signers="$(mktemp)"
+      printf 'pocketbrain-release namespaces="git" %s\n' "$RELEASE_KEY" > "$signers"
+      if git -C "$SRC" -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile="$signers" verify-tag "$REF" >/dev/null 2>&1; then rm -f "$signers"; else rm -f "$signers"; fail "$REF isn't signed by pocketBrain's release key, so it isn't installed. Fix: run git -C $SRC tag -l, to see the releases, and pass a signed one as POCKETBRAIN_REF."; fi
+      say "$REF is signed by pocketBrain's release key."
+    else
+      say "No release key is pinned in this installer, so it can't check $REF's signature; it installs $REF as $REPO serves it."
+    fi
+    AT="refs/tags/$REF^{commit}"
+  elif git -C "$SRC" rev-parse -q --verify "refs/remotes/origin/$REF" >/dev/null; then
+    AT="origin/$REF"
+    say "$REF isn't a release, so nothing checks it: this installs the newest code on $REF as $REPO serves it."
+  elif git -C "$SRC" rev-parse -q --verify "$REF^{commit}" >/dev/null; then
+    AT="$REF"
+    say "$REF isn't a release, so nothing checks it: this installs $REF as $REPO serves it."
+  else
+    AT=""
   fi
-  git -C "$SRC" checkout -q -f "origin/$REF" 2>/dev/null || git -C "$SRC" checkout -q -f "$REF" 2>/dev/null || fail "$REPO has no $REF. Fix: run git -C $SRC tag -l, to see the releases, and pass one as POCKETBRAIN_REF."
-  (cd "$SRC" && bun install --production >/dev/null 2>&1) || (cd "$SRC" && bun install --production) || fail "Couldn't install pocketBrain's libraries (no internet?). Fix: run cd $SRC && bun install --production, to see why."
+  { [ -n "$AT" ] && git -C "$SRC" checkout -q -f "$AT" 2>/dev/null; } || fail "$REPO has no $REF. Fix: run git -C $SRC tag -l, to see the releases, and pass one as POCKETBRAIN_REF."
+  (cd "$SRC" && bun install --production --frozen-lockfile >/dev/null 2>&1) || (cd "$SRC" && bun install --production --frozen-lockfile) || fail "Couldn't install pocketBrain's libraries (no internet?). Fix: run cd $SRC && bun install --production --frozen-lockfile, to see why."
   mkdir -p "$BUN_BIN"
   ln -sf "$SRC/src/cli.ts" "$BUN_BIN/pocketbrain"
   pocketbrain help >/dev/null 2>&1 || fail "pocketbrain installed but doesn't run. Fix: run bun $SRC/src/cli.ts help, to see why."

@@ -79,6 +79,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- The installer (`install.sh`) no longer installs a source's newest unreleased code when it has no release: it installs nothing unless you name a branch with `POCKETBRAIN_REF`. It installs a release tag, never a branch named like one, takes libraries from the release's own lockfile (`--frozen-lockfile`), and refuses a tag the pinned release key didn't sign. No key is pinned yet, so it says it can't check the tag (docs/release.md, "Signed releases", G660).
 - A mail the hub read vouches only for the address it came from: a read keeps the hash of its sender beside the ref (an unsalted hash, so not the address in plain text), so an assistant citing a real mail can't make another address a known sender. Refs read before keep no sender and vouch for no address until read again; your own word counts as before (audit v11, G643).
 - The phone app's Face ID door takes only the app's own request (its header, no Origin), on a live sign-in that phone made, with a one-time nonce from `POST /app/nonce`, at most 12 times an hour per phone. The device key alone never makes a sign-in, and Face ID never moves a sign-in's 30 days (audit v11, G642).
 - The browser door's limit on failed sign-ins only refuses wrong keys: an agent's right key always signs in. Behind a proxy other than Cloudflare's tunnel every caller counted as one client, so a stranger's junk keys could lock the agent out for ten minutes (G633).

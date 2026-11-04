@@ -90,7 +90,7 @@ Then connect your assistant. [docs/connect.md](docs/connect.md) has a page for e
 
 Where the brain runs (a laptop, a home server, a VPS, a container) is up to you; [docs/hosting.md](docs/hosting.md) says what the hub needs from a host.
 
-`bun link` puts the `pocketbrain` command in `~/.bun/bin`; `git pull && bun install` updates it. `install.sh` (Bun if missing, then the newest release tag into `~/.pocketbrain/app`) is meant to be served as `curl -fsSL https://pocketbrain.dev/install.sh | sh`, but the site doesn't serve it yet ([docs/release.md](docs/release.md#the-public-repo-and-the-site)).
+`bun link` puts the `pocketbrain` command in `~/.bun/bin`; `git pull && bun install` updates it. `install.sh` (Bun if missing, then the newest release tag into `~/.pocketbrain/app`, nothing without a release, the tag's signature checked once a release key is pinned) is meant to be served as `curl -fsSL https://pocketbrain.dev/install.sh | sh`, but the site doesn't serve it yet ([docs/release.md](docs/release.md#the-public-repo-and-the-site)).
 
 Working on the code (you need [Bun](https://bun.sh) 1.4 and git):
 

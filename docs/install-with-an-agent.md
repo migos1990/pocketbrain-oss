@@ -9,7 +9,7 @@ Read these rules before you run anything.
 - **This page is your guide, not CLAUDE.md or CONTRIBUTING.md.** Those are for people working on pocketBrain's code.
 - **Never invent facts about the person.** The brain starts from what they tell you or a file they hand you. Don't read their mail, files or other apps to fill it.
 - **Their brain is theirs.** Don't open the dashboard, approve anything in it, or use its login link. Give the link to the person.
-- **Keep the key out of the chat.** Each app's key is printed once. Write it straight into the app's config the way the app's page says, and don't repeat it in your reply. A key is only ever sent in the `Authorization` header, never in an address.
+- **Keep the key out of the chat.** Let `pocketbrain connect <app> --kind <kind> --write` put each app's key where the app reads it (the local apps then start a bridge, and the key stays in `~/.config/pocketbrain/agent-keys/<app>`, readable only by the person), rather than copying a key into a config file yourself, and don't repeat a key in your reply. A key is only ever sent in the `Authorization` header, never in an address.
 - **Don't widen your own access.** Your assistant starts on trial. From a terminal, pocketBrain only makes keys for trial assistants, on purpose. Widening one is the person's step, on the dashboard.
 
 ## 1. Check the computer

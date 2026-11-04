@@ -440,21 +440,92 @@ test("the installer installs the newest release tag from the source, without npm
   expect(first.stdout.toString().split("\n")[0]).toBe("This installs pocketBrain for you alone, on this computer:");
   expect(first.stdout.toString()).toContain(`its code in ${app}`);
 
-  // A source with no release yet installs its default branch, and says so; a later release is picked up.
+  // A source with no release yet installs nothing on its own (G660): whoever can push its default
+  // branch would otherwise choose the code. Naming the branch installs it, and says it isn't a release.
   const other = mkdtempSync(join(tmpdir(), "pb-home-"));
   const bareNoTags = join(other, "plain.git");
   expect(Bun.spawnSync(["git", "clone", "-q", "--bare", "--no-tags", work, bareNoTags]).exitCode).toBe(0);
   Bun.spawnSync(["git", "--git-dir", bareNoTags, "tag", "-d", "v0.9.0", "v0.10.0", "v0.11.0"]);
   const none = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags } });
-  expect(none.stderr.toString()).toBe("");
-  expect(none.exitCode).toBe(0);
-  expect(none.stdout.toString()).toContain("no release yet, so this installs the newest code on main");
-  expect(Bun.spawnSync([join(other, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim()).toBe("pocketbrain v0.11.0");
+  expect(none.exitCode).toBe(1);
+  expect(none.stderr.toString().trim()).toBe(said("install.no-release", join(other, ".pocketbrain", "app"), bareNoTags));
+  expect(existsSync(join(other, ".bun", "bin", "pocketbrain"))).toBe(false);
   const main = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags, POCKETBRAIN_REF: "main" } });
   expect(main.exitCode).toBe(0);
+  expect(main.stdout.toString()).toContain("main isn't a release, so nothing checks it");
   expect(Bun.spawnSync([join(other, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim()).toBe("pocketbrain v0.11.0");
+  // A commit named by the owner installs, and isn't called a release either.
+  const sha = Bun.spawnSync(["git", "rev-parse", "HEAD~1"], { cwd: work }).stdout.toString().trim();
+  const pinned = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags, POCKETBRAIN_REF: sha } });
+  expect(pinned.exitCode).toBe(0);
+  expect(pinned.stdout.toString()).toContain(`${sha} isn't a release, so nothing checks it`);
+  expect(Bun.spawnSync([join(other, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim()).toBe("pocketbrain unreleased");
   const typo = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, HOME: other, POCKETBRAIN_REPO: bareNoTags, POCKETBRAIN_REF: "v9" } });
   expect(typo.stderr.toString().trim()).toBe(said("install.no-ref", join(other, ".pocketbrain", "app"), bareNoTags).replaceAll("$REF", "v9"));
+});
+
+test("the installer installs a release only when the pinned release key signed it, and a branch named like a tag never wins (G660)", () => {
+  const home = mkdtempSync(join(tmpdir(), "pb-home-"));
+  const work = join(home, "work");
+  mkdirSync(join(work, "src"), { recursive: true });
+  const key = join(home, "release"), other = join(home, "stranger");
+  for (const k of [key, other]) expect(Bun.spawnSync(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "t", "-f", k]).exitCode).toBe(0);
+  const pub = readFileSync(`${key}.pub`, "utf8").trim().split(" ").slice(0, 2).join(" ");
+  const git = (...a: string[]) => { const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "gpg.format=ssh", "-c", "gpg.ssh.program=ssh-keygen", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...a], { cwd: work }); expect(r.exitCode).toBe(0); };
+  const commit = (v: string) => {
+    writeFileSync(join(work, "src", "cli.ts"), `#!/usr/bin/env bun\nconsole.log("pocketbrain ${v}");\n`);
+    Bun.spawnSync(["chmod", "+x", join(work, "src", "cli.ts")]);
+    git("add", "-A"); git("commit", "-qm", v);
+  };
+  const signed = (v: string, by: string) => git("-c", `user.signingkey=${by}`, "tag", "-s", v, "-m", v);
+  writeFileSync(join(work, "package.json"), JSON.stringify({ name: "pocketbrain", version: "0.0.0", bin: { pocketbrain: "src/cli.ts" } }));
+  writeFileSync(join(work, ".gitignore"), "node_modules\n");
+  git("init", "-q", "-b", "main");
+  commit("v1.0.0"); signed("v1.0.0", key);
+  const bare = join(home, "source.git");
+  const publish = () => expect(Bun.spawnSync(["git", "push", "-q", "-f", "--tags", bare, "main", "refs/heads/*"], { cwd: work }).exitCode).toBe(0);
+  expect(Bun.spawnSync(["git", "init", "-q", "--bare", "-b", "main", bare]).exitCode).toBe(0);
+  publish();
+
+  const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, POCKETBRAIN_REPO: bare, POCKETBRAIN_RELEASE_KEY: pub };
+  const install = (extra: Record<string, string> = {}) => Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, ...extra } });
+  const app = join(home, ".pocketbrain", "app");
+  const runs = () => Bun.spawnSync([join(home, ".bun", "bin", "pocketbrain")], { env }).stdout.toString().trim();
+  const said = (id: Parameters<typeof ownerError>[0], ref: string) => `pocketBrain install: ${ownerError(id).replaceAll("$SRC", app).replaceAll("$REPO", bare).replaceAll("$REF", ref)}`;
+
+  const first = install();
+  expect(first.stderr.toString()).toBe("");
+  expect(first.exitCode).toBe(0);
+  expect(first.stdout.toString()).toContain("v1.0.0 is signed by pocketBrain's release key.");
+  expect(runs()).toBe("pocketbrain v1.0.0");
+
+  // A newer tag with no signature, or another key's, is never checked out: the signed release stays.
+  commit("v1.1.0"); git("tag", "-a", "v1.1.0", "-m", "v1.1.0"); publish();
+  const unsigned = install();
+  expect(unsigned.exitCode).toBe(1);
+  expect(unsigned.stderr.toString().trim()).toBe(said("install.unsigned", "v1.1.0"));
+  expect(runs()).toBe("pocketbrain v1.0.0");
+  commit("v1.2.0"); signed("v1.2.0", other); publish();
+  expect(install().stderr.toString().trim()).toBe(said("install.unsigned", "v1.2.0"));
+  expect(runs()).toBe("pocketbrain v1.0.0");
+
+  // A branch that has a release's name is not that release.
+  commit("branch"); git("branch", "v1.3.0"); git("checkout", "-q", "HEAD~1"); commit("v1.3.0"); signed("v1.3.0", key); publish();
+  const named = install();
+  expect(named.exitCode).toBe(0);
+  expect(runs()).toBe("pocketbrain v1.3.0");
+
+  // With no key pinned, the installer says it can't check the release rather than say nothing.
+  const plain = install({ POCKETBRAIN_RELEASE_KEY: "" });
+  expect(plain.exitCode).toBe(0);
+  expect(plain.stdout.toString()).toContain("No release key is pinned in this installer, so it can't check v1.3.0's signature");
+});
+
+test("the installer's library step never rewrites the lockfile the release shipped (G660)", () => {
+  const sh = readFileSync(join(REPO, "install.sh"), "utf8");
+  const installs = sh.split("\n").filter((l) => /bun install\b/.test(l) && !l.trim().startsWith("#"));
+  expect(installs.length).toBeGreaterThan(0);
+  for (const l of installs) for (const m of l.matchAll(/bun install[^)|&]*/g)) expect(m[0]).toContain("--frozen-lockfile");
 });
 
 test("an accented money word from the owner's list tags a contact finance (G129)", () => {

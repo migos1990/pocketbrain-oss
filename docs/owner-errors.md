@@ -154,6 +154,9 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `install.no-run` | pocketbrain installed but doesn't run. Fix: run bun add -g $PKG, to reinstall it. |
 | `install.dirty` | $SRC has changes of yours, so it isn't updated. Fix: run git -C $SRC stash, and run this installer again. |
 | `install.fetch` | Couldn't fetch pocketBrain from $REPO (no internet?). Fix: check your connection, then run git ls-remote $REPO, to see why, and run this installer again. |
+| `install.no-release` | $REPO has no release yet, so nothing is installed. Fix: run git ls-remote --tags $REPO, to see when there is one, or pass POCKETBRAIN_REF=main to install the unreleased code. |
+| `install.keygen` | ssh-keygen is missing, so the release's signature can't be checked. Fix: run sudo apt install openssh-client, and run this installer again. |
+| `install.unsigned` | $REF isn't signed by pocketBrain's release key, so it isn't installed. Fix: run git -C $SRC tag -l, to see the releases, and pass a signed one as POCKETBRAIN_REF. |
 | `install.no-ref` | $REPO has no $REF. Fix: run git -C $SRC tag -l, to see the releases, and pass one as POCKETBRAIN_REF. |
-| `install.libraries` | Couldn't install pocketBrain's libraries (no internet?). Fix: run cd $SRC && bun install --production, to see why. |
+| `install.libraries` | Couldn't install pocketBrain's libraries (no internet?). Fix: run cd $SRC && bun install --production --frozen-lockfile, to see why. |
 | `install.no-run-source` | pocketbrain installed but doesn't run. Fix: run bun $SRC/src/cli.ts help, to see why. |

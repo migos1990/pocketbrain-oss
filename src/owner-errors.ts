@@ -162,8 +162,11 @@ export const OWNER_ERRORS = {
   "install.no-run": { where: "install", what: "pocketbrain installed but doesn't run", fix: { run: "bun add -g $PKG", then: "to reinstall it" } },
   "install.dirty": { where: "install", what: "$SRC has changes of yours, so it isn't updated", fix: { run: "git -C $SRC stash", then: "and run this installer again" } },
   "install.fetch": { where: "install", what: "Couldn't fetch pocketBrain from $REPO (no internet?)", fix: { first: "check your connection", run: "git ls-remote $REPO", then: "to see why, and run this installer again" } },
+  "install.no-release": { where: "install", what: "$REPO has no release yet, so nothing is installed", fix: { run: "git ls-remote --tags $REPO", then: "to see when there is one, or pass POCKETBRAIN_REF=main to install the unreleased code" } },
+  "install.keygen": { where: "install", what: "ssh-keygen is missing, so the release's signature can't be checked", fix: { run: "sudo apt install openssh-client", then: "and run this installer again" } },
+  "install.unsigned": { where: "install", what: "$REF isn't signed by pocketBrain's release key, so it isn't installed", fix: { run: "git -C $SRC tag -l", then: "to see the releases, and pass a signed one as POCKETBRAIN_REF" } },
   "install.no-ref": { where: "install", what: "$REPO has no $REF", fix: { run: "git -C $SRC tag -l", then: "to see the releases, and pass one as POCKETBRAIN_REF" } },
-  "install.libraries": { where: "install", what: "Couldn't install pocketBrain's libraries (no internet?)", fix: { run: "cd $SRC && bun install --production", then: "to see why" } },
+  "install.libraries": { where: "install", what: "Couldn't install pocketBrain's libraries (no internet?)", fix: { run: "cd $SRC && bun install --production --frozen-lockfile", then: "to see why" } },
   "install.no-run-source": { where: "install", what: "pocketbrain installed but doesn't run", fix: { run: "bun $SRC/src/cli.ts help", then: "to see why" } },
 } satisfies Record<string, OwnerError>;
 

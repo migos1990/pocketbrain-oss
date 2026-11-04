@@ -14,7 +14,7 @@ git clone <public repository> ~/pocketbrain && cd ~/pocketbrain && bun install &
 
 It puts the `pocketbrain` command in `~/.bun/bin`. To update later: `cd ~/pocketbrain && git pull && bun install`. If Terminal then says it can't find `pocketbrain`, **open a new Terminal window**; if it still can't, your Bun didn't come from its own installer, so add `~/.bun/bin` to your PATH.
 
-A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is written (`install.sh`: it first says what it will do, adds Bun if it's missing, and installs the newest release, or the newest code until there is a release, into `~/.pocketbrain/app`), but the site doesn't serve it yet. You can read it first in the repository; it's short.
+A one-line installer, `curl -fsSL https://pocketbrain.dev/install.sh | sh`, is written (`install.sh`: it first says what it will do, adds Bun if it's missing, and installs the newest release into `~/.pocketbrain/app`; with no release yet it installs nothing unless you name a branch with `POCKETBRAIN_REF=main`, and it checks the release's signature once a release key is pinned in it, [docs/release.md](release.md#signed-releases)), but the site doesn't serve it yet. You can read it first in the repository; it's short.
 
 ## 2. Create your brain (3 minutes)
 
