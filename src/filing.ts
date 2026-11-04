@@ -32,11 +32,11 @@ import { getQuote } from "./quotes";
 import { renderTouchedPages } from "./wiki";
 import { appendDiary, readDiary, sourceKind, type DiaryRow } from "./diary";
 import { sha256 } from "./util";
-import { compareKey } from "./normalize";
+import { compareKey, valueKey } from "./normalize";
 import { ownerDay } from "./clock";
 import { isList, type FactRecord } from "./brain";
 import { hubGate } from "./hub";
-import { captureAgent, MAIL_FOOTER, ownerOf } from "./capture";
+import { captureAgent, MAIL_FOOTER, ownerOf, oneSender } from "./capture";
 import { records, carve, grantFor } from "./carve";
 
 // commits: every commit of one decision, newest first, when there is more than one (a saved fact).
@@ -424,11 +424,11 @@ function saveVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // A newer value from the same kind of source replaces it; over another kind it would be a
   // conflict, which is the owner's to settle.
   const live = recs.filter((x) => x && !x.retired && !x.valid_to);
-  if (live.some((x) => compareKey(x.value) !== compareKey(r.value) && !(x.sources ?? []).length || (x.sources ?? []).some((y) => SAVE_KINDS[schemeOf(refString(y)) ?? ""] !== kind)))
+  if (live.some((x) => valueKey(x.value) !== valueKey(r.value) && !(x.sources ?? []).length || (x.sources ?? []).some((y) => SAVE_KINDS[schemeOf(refString(y)) ?? ""] !== kind)))
     return wait("It changes a value another kind of source gave, so only you decide it.");
   // Only a newer one: two values of the same day are a conflict.
   const asOf = String((r as { as_of?: unknown }).as_of ?? "");
-  if (live.some((x) => compareKey(x.value) !== compareKey(r.value) && !(asOf > String(x.as_of ?? "")))) return wait("It disagrees with a value of the same day or newer, so only you decide it.");
+  if (live.some((x) => valueKey(x.value) !== valueKey(r.value) && !(asOf > String(x.as_of ?? "")))) return wait("It disagrees with a value of the same day or newer, so only you decide it.");
   const why = `a ${kind} fact, not about a person, money or anything private; Undo takes it back out`;
   const run = () => {
     // If the fact changed since this was weighed, the write's conflict waits for the Gardener beside
@@ -530,7 +530,13 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // where the owner gave one waited as an ask that never filed (audit v8, 2026-10-31; G565).
   const listed = cur && isList(cur as never) && (spec.merge === "set" || spec.merge === "append");
   const keyOf = (v: unknown) => spec.item_key && v && typeof v === "object" ? String((v as Record<string, unknown>)[spec.item_key]) : undefined;
-  const differs = (x: FactRecord) => compareKey(x.value) !== compareKey(r.value) && (!listed || (keyOf(x.value) !== undefined && keyOf(x.value) === keyOf(r.value)));
+  const differs = (x: FactRecord) => valueKey(x.value) !== valueKey(r.value) && (!listed || (keyOf(x.value) !== undefined && keyOf(x.value) === keyOf(r.value)));
+  // A value from the same kind of source dated after the live one, or on its day from the same
+  // sender (G662: one sender's later mail of the same day is the fact changing that day, not two
+  // values that can't both hold; the earlier one goes to history). Two senders of one day still
+  // disagree, and money, health and legal of the same day still ask.
+  const sameKindLater = (x: FactRecord, kinds: Set<string>) => !!(x.sources ?? []).length && (x.sources ?? []).every((y) => kinds.has(schemeOf(refString(y)) ?? ""))
+    && (String(r.as_of ?? "") > String(x.as_of ?? "") || (String(r.as_of ?? "") === String(x.as_of ?? "") && !sensitiveShape(rules, r.attribute, r.value, x.value) && oneSender(root, [...(x.sources ?? []), ...(r.sources ?? [])].map((y) => refString(y as never)))));
   // The owner's word, or a co-owner's in their own area (isOwnerWord, as the write path weighs it):
   // the write path decides (audit v4, 2026-10-26: asking here first meant a capture never reached
   // "older sources never re-ask"). A source dated before the owner's word goes to history and asks
@@ -559,7 +565,7 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   } } };
   if (askOwner) return conflict;
   // A conflict already waits beside the live value (G425): a different value joins it.
-  if (cur && typeof cur === "object" && !isList(cur as never) && (cur as FactRecord).contested && compareKey((cur as FactRecord).value) !== compareKey(r.value)) return conflict;
+  if (cur && typeof cur === "object" && !isList(cur as never) && (cur as FactRecord).contested && valueKey((cur as FactRecord).value) !== valueKey(r.value)) return conflict;
   // Dated ahead (a mail saying what changes on 1 December): filed today it would end the current
   // value now (slice audit, G406), so you say when.
   if (merge === "replace" && live.some(differs) && String(r.as_of ?? "").slice(0, 10) > today()) return wait("It says what changes on a later date, so you decide when it takes over.");
@@ -568,7 +574,7 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
     // Only what the hub pulled itself updates this way; an assistant's word for what a mail says is
     // weighed by the write as a conflict side (G536).
     // An assistant's imported memory is its word, never an update of what a source said (G587 F2).
-    const update = captured(root, pr.file) && !importedBy(root, pr.file, pr.by) && live.filter(differs).every((x) => (x.sources ?? []).length && (x.sources ?? []).every((y) => kinds.has(schemeOf(refString(y)) ?? "")) && String(r.as_of ?? "") > String(x.as_of ?? ""));
+    const update = captured(root, pr.file) && !importedBy(root, pr.file, pr.by) && live.filter(differs).every((x) => sameKindLater(x, kinds));
     if (!update) return conflict;
   }
   // A run of values (merge: latest): the write keeps the newer one and moves the other to history,
@@ -576,7 +582,11 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // other different value opens a conflict there, so it waits here instead of being called saved.
   if (merge === "latest" && live.some(differs)) {
     const mine = sourceRank({ sources: (importedBy(root, pr.file, pr.by) ? asAgentWord(r.sources ?? [], pr.by) : r.sources ?? []) as FactRecord["sources"], verification: (r as { verification?: FactRecord["verification"] }).verification ?? "self-reported", confidence: (r as { confidence?: FactRecord["confidence"] }).confidence });
-    const steps = live.filter(differs).every((x) => sourceRank(x) <= mine && (String(r.as_of ?? "") !== String(x.as_of ?? "") || versionOrder(String(r.value), String(x.value)) !== 0));
+    const kinds = new Set((r.sources ?? []).map((y) => schemeOf(refString(y as never)) ?? ""));
+    // A newer mail the hub pulled over a value its mail gave is the next one in the run, whatever
+    // the older one's check lifted it to (G513 for a run; G662: a newer mail's next step asked).
+    const pulledNewer = captured(root, pr.file) && !importedBy(root, pr.file, pr.by);
+    const steps = live.filter(differs).every((x) => (sourceRank(x) <= mine && (String(r.as_of ?? "") !== String(x.as_of ?? "") || versionOrder(String(r.value), String(x.value)) !== 0)) || (pulledNewer && sameKindLater(x, kinds)));
     if (!steps) return conflict;
   }
   const why = `${note ? "filed on its page" : "filed as a new page"}; Undo takes it back out`;

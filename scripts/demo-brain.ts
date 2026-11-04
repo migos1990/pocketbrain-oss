@@ -261,6 +261,10 @@ export function weekMail(): Mail[] {
     m(5, "Priya Shah", "Grace Liu", "person", "role", "head of customer experience", "Grace Liu is now the head of customer experience for Atlas"),
     m(5, "Luc Gauthier", "Kitchen renovation", "project", "next_step", "take the tile delivery on 12 October", "For the Kitchen renovation the next step is to take the tile delivery on 12 October"),
     m(5, "Simone Laurent", "Kitchen renovation", "project", "next_step", "take the tile delivery on 19 October", "For the Kitchen renovation the next step is to take the tile delivery on 19 October"),
+    // One sender, two mails the same day: the second moves the first along. Both hold (the fact
+    // changed that day), so the later one updates and the earlier is history, no conflict (G662).
+    m(5, "Zoe Harper", "Guest lectures", "project", "next_step", "confirm the projector for 17 November", "For the Guest lectures the next step is to confirm the projector for 17 November"),
+    m(5, "Zoe Harper", "Guest lectures", "project", "next_step", "send Zoe the slides for 17 November", "For the Guest lectures the next step is to send Zoe the slides for 17 November"),
     // This morning. Hélène's note names her surgery: private, held from every assistant until the owner sees it.
     m(6, "Hélène Lefebvre", "Hélène Lefebvre", "person", "prefers", "visits in the morning until the hip surgery on 20 November", "Hélène Lefebvre prefers visits in the morning until the hip surgery on 20 November"),
     m(6, "Hannah Becker", "Hannah Becker", "person", "last_contact", "2026-10-08", "Robin met Hannah Becker on 2026-10-08 to walk through the release checklist"),

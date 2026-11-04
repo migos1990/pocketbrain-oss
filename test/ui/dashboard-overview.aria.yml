@@ -59,6 +59,10 @@
   - button "Undo"
   - text: "From gmail: a change to a private note pocketBrain saved it: filed on its page; Undo takes it back out · 60 min ago"
   - button "Undo"
+  - text: "From gmail: projects/guest-lecture-series#next_step = send Zoe the slides for 17 November (\"For the Guest lectures the next step is to send Zoe the slides for 17…\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
+  - text: "From gmail: projects/guest-lecture-series#next_step = confirm the projector for 17 November (\"For the Guest lectures the next step is to confirm the projector for …\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
+  - button "Undo"
   - text: "From gmail: projects/kitchen-renovation#next_step = take the tile delivery on 12 October (\"For the Kitchen renovation the next step is to take the tile delivery…\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
   - button "Undo"
   - text: "From gmail: people/grace-liu#role = customer success director (\"Grace Liu is now the customer success director for Atlas\") pocketBrain saved it: filed on its page; Undo takes it back out · 17 h ago"
@@ -88,10 +92,6 @@
   - text: "From gmail: projects/q1-roadmap#next_step = share the first draft with Priya by 16 … (\"For the Q1 roadmap the next step is to share the first draft with Pri…\") pocketBrain saved it: filed on its page; Undo takes it back out · 3 days ago"
   - button "Undo"
   - text: "From gmail: people/emma-wilson#last_contact = 2026-10-04 (\"Robin called Emma Wilson on 2026-10-04 to plan her visit next summer\") pocketBrain saved it: filed on its page; Undo takes it back out · 4 days ago"
-  - button "Undo"
-  - text: "From gmail: projects/book-club-november#next_step = finish the book before the 25th (\"For the Book club, November the next step is to finish the book befor…\") pocketBrain saved it: filed on its page; Undo takes it back out · 4 days ago"
-  - button "Undo"
-  - text: "From gmail: projects/red-river-trip#next_step = book the cabin for 9 to 16 April (\"For the Red River climbing trip the next step is to book the cabin fo…\") pocketBrain saved it: filed on its page; Undo takes it back out · 5 days ago"
   - button "Undo"
   - group: Your assistants, activity and weekly numbers
   - paragraph: pocketBrain VERSION

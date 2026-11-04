@@ -135,6 +135,36 @@ function prepare(input: CaptureInput): { text: string; found: string[]; hash: st
 }
 
 export const CAPDIRS = ["inbox/captures", "inbox/decided/captures"];
+
+// Who sent an item, as a key and never the address (G662): a hash of the mail address, stored on a
+// pulled item's capture record, so the write can tell one sender saying two things on one day (an
+// update that day) from two senders disagreeing (a conflict). Nothing reads an address back from it.
+export function senderKey(from: string | undefined): string | undefined {
+  const a = (from?.match(/<([^>]+)>/)?.[1] ?? from ?? "").trim().toLowerCase();
+  return /\S+@\S+/.test(a) ? createHash("sha256").update(a).digest("hex").slice(0, 12) : undefined;
+}
+// Every ref names a pulled item from one and the same sender (all keyed, one key).
+export function oneSender(root: string, refs: string[]): boolean {
+  if (refs.length < 2) return false;
+  const k = senderKeys(root, refs);
+  return refs.every((r) => k.has(r)) && new Set(refs.map((r) => k.get(r))).size === 1;
+}
+// The sender key of the pulled item each of these refs names, from the capture records; a ref with
+// no record or no key is missing from the map.
+export function senderKeys(root: string, refs: string[]): Map<string, string> {
+  const want = new Set(refs), out = new Map<string, string>();
+  if (!want.size) return out;
+  for (const d of CAPDIRS) {
+    if (!existsSync(join(root, d))) continue;
+    for (const f of readdirSync(join(root, d)).filter((x) => x.endsWith(".md"))) {
+      const head = readFileSync(join(root, d, f), "utf8").match(/^---\n([\s\S]*?)\n---/)?.[1];
+      if (!head || !head.includes("sender_key:")) continue;
+      const ref = head.match(/^source_ref: "?([^"\n]+)"?$/m)?.[1]?.trim(), key = head.match(/^sender_key: "?([0-9a-f]+)"?$/m)?.[1];
+      if (ref && key && want.has(ref)) out.set(ref, key);
+    }
+  }
+  return out;
+}
 export function findCapture(root: string, hash: string): string | undefined {
   for (const d of CAPDIRS) {
     if (!existsSync(join(root, d))) continue;

@@ -164,6 +164,16 @@
         - cell "owner"
         - 'cell "· Lucas Fontaine: last contact"'
         - cell "· saved"
+      - 'row "17 h ago capture · Guest lectures: next step · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Guest lectures: next step"'
+        - cell "· saved"
+      - 'row "17 h ago capture · Guest lectures: next step · saved"':
+        - cell "17 h ago"
+        - cell "capture"
+        - 'cell "· Guest lectures: next step"'
+        - cell "· saved"
       - 'row "17 h ago capture · Kitchen renovation: next step · disputed"':
         - cell "17 h ago"
         - cell "capture"

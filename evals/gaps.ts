@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G662: {
+    closed: "claude/false-conflicts",
+    title: "Values that both hold were asked as a conflict, and the cards said too little",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-03: \"this is not 1 or the other\". A project's status from two mails of one sender on the same day (\"beta testing\", then \"build 5 is ready to test\") was a step 7 conflict, since a same-day value never counted as newer; the same sentence from two mails ten days apart, a capital letter and \"retain\" against \"be retained\" apart, was a conflict, since only the exact key counted as the same value and a run of next steps never let a newer mail replace one its mail had verified; that sentence was boilerplate from a developer notice sent by a \"<product>-noreply\" address, which the machine-sender check missed (it matched no-reply only at the start); and two of three conflict cards on the home had no \"Two emails disagree\" line, since the line came only with values short enough to show.",
+    fix: "valueKey/sameValue (src/normalize.ts): a value of five words or more compares by its content words, stemmed, numbers and negations kept; the write path and filing compare values with it. One sender's two pulled items of one day update (src/write.ts, filing.ts sameKindLater), told apart from two senders by a sender_key hash on the capture record (src/capture.ts senderKey/oneSender, src/pull.ts); money, health and legal still ask. filing.ts lets a newer pulled mail step a merge: latest run past a verified value (G513 for runs). machineSender matches a no-reply word anywhere in the address's name. home.ts gives every conflict card its source line. Upkeep's both-hold-conflict lists old conflicts whose sides both hold, report-only. Tests: test/false-conflicts.test.ts, test/bulk-mail-skip.test.ts, test/owner-settle.test.ts, test/demo-brain.test.ts (a one-sender pair in the demo's week files with no card; its three two-sender conflicts still ask).",
+  },
   G661: {
     closed: "claude/audit11-ceilings-rows",
     title: "Hearsay with the verb first filed as the owner's word, and two guards had no ceilings rows",

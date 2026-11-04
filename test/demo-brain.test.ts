@@ -46,6 +46,11 @@ test("the replayed week ends on a day an owner meets: three conflicts, one priva
   const memsync = readFileSync(join(root, "log", "memsync.jsonl"), "utf8");
   expect(memsync).toContain("people/isabelle-roy#role");
   expect(loadBrain(root).length).toBeGreaterThan(100);
+  // One sender's two mails of the same day (G662): the later one is the next step, the earlier is
+  // history, and neither is a conflict.
+  const lectures = loadBrain(root).find((n) => n.fm.id === "projects/guest-lecture-series")!;
+  expect((lectures.fm.facts!.next_step as { value: string }).value).toBe("send Zoe the slides for 17 November");
+  expect(JSON.stringify(lectures.fm.history?.next_step ?? [])).toContain("confirm the projector for 17 November");
 }, 60_000);
 
 test("the UI tests are designed against the demo brain, never the 7-note sample", () => {

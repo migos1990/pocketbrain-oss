@@ -9,7 +9,7 @@
   - link "Brain":
     - /url: /brain
   - heading "What changed this week" [level=1]
-  - text: 96 saves in the last 7 days See the brain on
+  - text: 98 saves in the last 7 days See the brain on
   - textbox "See the brain on"
   - button "Go"
   - heading "Today" [level=2]
@@ -102,6 +102,10 @@
     - /url: /history/people/lucas-fontaine
   - 'link "Lucas Fontaine People You changed last contact Last contact: 2026-09-14 to 2026-10-07 20:30"':
     - /url: /history/people/lucas-fontaine
+  - 'link "Guest lectures Projects auto-decide changed next step Next step: confirm the projector for 17 November to send Zoe the slides for 17 November 17:30"':
+    - /url: /history/projects/guest-lecture-series
+  - 'link "Guest lectures Projects auto-decide changed next step Next step: send Zoe the room details for 17 November to confirm the projector for 17 November 17:30"':
+    - /url: /history/projects/guest-lecture-series
   - 'link "Kitchen renovation Projects auto-decide changed next step Next step: confirm the tile delivery date to take the tile delivery on 12 October 17:30"':
     - /url: /history/projects/kitchen-renovation
   - 'link "Grace Liu People auto-decide changed role Role: customer success lead to customer success director 17:30"':

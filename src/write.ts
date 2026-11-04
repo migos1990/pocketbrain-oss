@@ -13,7 +13,7 @@ import { loadBrain, parseNote, saveNote, isList, isDisputed, slugify, today, sen
 import type { Rules } from "./rules";
 import { loadRules, attributeSpec, tierOf, ownerName, captureAgentName } from "./rules";
 import { runChecks, shapeFails, thirdPartySensitive, findInjection, speaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
-import { normalizeValue, compareKey } from "./normalize";
+import { normalizeValue, compareKey, valueKey } from "./normalize";
 import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath } from "./louis";
 import { tokenRole } from "./tokenrole";
@@ -25,7 +25,7 @@ import { canaryHits } from "./canary";
 import { proposalCap } from "./gardener";
 import { evidenceFor } from "./evidence";
 import { queueIfReplica, queueOp } from "./hub";
-import { decideCapture } from "./capture";
+import { decideCapture, oneSender } from "./capture";
 import { coOwnerOf, isOwnerWord } from "./rules";
 import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, isOwnerEmail, isOwnerId, ownerRef, approvedRef, normVerification } from "./owner";
 import { keepQuote, sweepQuotes } from "./quotes";
@@ -428,7 +428,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       const res = carve(notes, rules, grantFor(rules, req.agent));
       if (!res.visible.has(n!.fm.id) || res.hiddenFacts.some((h) => h.key === `${n!.fm.id}#${req.attribute}`)) return false;
     }
-    return records(f).some((r) => !r.valid_to && compareKey(r.value) === compareKey(req.value));
+    return records(f).some((r) => !r.valid_to && valueKey(r.value) === valueKey(req.value));
   };
   const rest = () => !findInjection(`${req.text ?? ""}\n${req.title ?? ""}\n${(req.sources ?? []).map(refString).join("\n")}`);
   if (agentInId) {
@@ -827,7 +827,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     // The owner's own word on the same value a co-owner set takes the record over (G148), so it
     // stays the owner's word after the note leaves her areas or she stops being a co-owner. Not a
     // vaguer value (step 3): the owner never said her more precise one.
-    if ((ownerWord(incoming) ? rank(incoming) > before : rank(incoming) > rank(r)) || (r.co_owner && !incoming.co_owner && ownerWord(incoming) && compareKey(r.value) === compareKey(incoming.value))) {
+    if ((ownerWord(incoming) ? rank(incoming) > before : rank(incoming) > rank(r)) || (r.co_owner && !incoming.co_owner && ownerWord(incoming) && valueKey(r.value) === valueKey(incoming.value))) {
       r.verification = incoming.verification;
       if (incoming.co_owner) { r.co_owner = incoming.co_owner; r.confirmed_by = incoming.by; } else { delete r.co_owner; delete r.confirmed_by; }
     }
@@ -838,13 +838,13 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     if (!live || isDisputed(live)) return done({ outcome: "refused", fact_key: factKey, message: "nothing live to retract" });
     // An owner's word (or a co-owner's in her area) is taken back only by an owner's word; anyone
     // else's retract waits for the owner, as a value change would open a dispute (step 6).
-    const target = isList(live) ? live.items.find((i) => compareKey(i.value) === compareKey(value) && !i.valid_to) : live as FactRecord;
+    const target = isList(live) ? live.items.find((i) => valueKey(i.value) === valueKey(value) && !i.valid_to) : live as FactRecord;
     if (target && ownerWord(target) && !ownerWord(incoming)) {
       const fail: CheckFail = { check: "owner_word_retract", outcome: "inbox", reason: `${factKey} is the owner's word; only the owner takes it back`, fix: "The owner decides from the inbox" };
       return done(propose(root, req, `${fail.check}: ${fail.reason}`, [fail]));
     }
     if (isList(live)) {
-      const it = live.items.find((i) => compareKey(i.value) === compareKey(value) && !i.valid_to);
+      const it = live.items.find((i) => valueKey(i.value) === valueKey(value) && !i.valid_to);
       if (!it) return done({ outcome: "noop", fact_key: factKey, message: "item not present" });
       it.valid_to = incoming.as_of;
       it.ended_by = { step: 0, at: d, by: req.agent, sources: incoming.sources };
@@ -857,7 +857,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     facts[attr] = merge === "set" || merge === "append" ? { items: [incoming] } : incoming;
     msg = "new fact";
   } else if (isDisputed(live)) {
-    const same = live.candidates.find((c) => compareKey(c.value) === compareKey(value));
+    const same = live.candidates.find((c) => valueKey(c.value) === valueKey(value));
     if (same) mergeSources(same); else live.candidates.push(incoming);
     joinPacket(root, live.dispute, same ?? incoming);
     disputed = true;
@@ -865,9 +865,9 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   } else if (isList(live)) {
     const keyOf = (v: unknown) => spec.item_key && v && typeof v === "object" ? String((v as Record<string, unknown>)[spec.item_key]) : compareKey(v);
     // The same item first: confirming either side of a disputed item merges into that side (G305).
-    const match = live.items.find((i) => compareKey(i.value) === compareKey(value) && !i.valid_to) ?? live.items.find((i) => keyOf(i.value) === keyOf(value) && !i.valid_to);
+    const match = live.items.find((i) => valueKey(i.value) === valueKey(value) && !i.valid_to) ?? live.items.find((i) => keyOf(i.value) === keyOf(value) && !i.valid_to);
     if (match && merge !== "append") {
-      if (compareKey(match.value) === compareKey(value)) {
+      if (valueKey(match.value) === valueKey(value)) {
         if (!mergeSources(match)) return done({ outcome: "noop", fact_key: factKey, message: "item already recorded" });
         step = 1; msg = "same item, sources merged";
         // A side of an open item dispute: its packet carries the merged side too (G305).
@@ -918,7 +918,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       // (a same-day source may be newer than the owner's word).
       if (cur.as_of && incoming.as_of && !incoming.as_of_approx && String(incoming.as_of) < String(cur.as_of)) {
         const hs = (hist[attr] ??= []);
-        const known = hs.find((h) => !h.retired && compareKey(h.value) === compareKey(value) && h.ended_by?.step === 6);
+        const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value) && h.ended_by?.step === 6);
         if (known) mergeSources(known);
         else hs.push({ ...incoming, valid_to: cur.as_of, ended_by: { step: 6, at: d, by: req.agent } });
         keptOwner = true; step = 6; msg = "older than the owner's word: kept as history";
@@ -927,7 +927,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       // The owner's word is never held for the Gardener: it asks at once, and stays live meanwhile.
       beside(6, "contradicts a fact the owner confirmed");
     };
-    if (compareKey(cur.value) === compareKey(value)) {
+    if (valueKey(cur.value) === valueKey(value)) {
       mergeSources(cur); step = 1; msg = "same value: sources merged";
     } else if (cur.contested && packetOpen(root, cur.contested) && !ownerWord(incoming)) {
       // A conflict already waits beside this value: another value joins it; nothing replaces the
@@ -946,7 +946,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         // Same reply whether or not the value was already there: an assistant never learns
         // which earlier values the note holds. Retired records don't count (they are revived
         // by the ladder's usual path, never merged into).
-        const known = hs.find((h) => !h.retired && compareKey(h.value) === compareKey(value));
+        const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value));
         if (known) mergeSources(known);
         else {
           const next = [cur, ...hs.filter((h) => !h.retired)].map((h) => String(h.as_of)).filter((a) => a > incoming.as_of).sort()[0] ?? cur.as_of;
@@ -1000,7 +1000,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         // now. Never a co-owner's or an assistant's write: those keep the ladder below.
         if (cur.as_of && incoming.as_of && String(incoming.as_of) < String(cur.as_of)) {
           const hs = (hist[attr] ??= []);
-          const known = hs.find((h) => !h.retired && compareKey(h.value) === compareKey(value));
+          const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value));
           if (known) mergeSources(known);
           else { hs.push({ ...incoming, valid_to: cur.as_of, ended_by: { step: 4, at: d, by: req.agent } }); hs.sort((x, y) => String(x.as_of).localeCompare(String(y.as_of))); }
           keptOwner = true; step = 4; msg = "the owner's earlier word: kept as history";
@@ -1020,6 +1020,13 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         supersede(4, "The owner accepted a newer value");
       } else if (incoming.as_of > cur.as_of && !incoming.as_of_approx && (rNew >= rOld || sameKindNewer(cur, incoming))) {
         supersede(4, `real change over time: superseded value as of ${cur.as_of}`);
+      } else if (incoming.as_of === cur.as_of && !incoming.as_of_approx && !cur.as_of_approx && sameKindNewer(cur, incoming) && !sensitiveShape(rules, attr, cur.value, value) && oneSender(root, [...cur.sources, ...incoming.sources].map(refString))) {
+        // Two items the hub pulled itself from one sender on one day (two mails from a build service on
+        // 2 November: "beta testing", then "build 5 is ready to test"): the later one is the fact
+        // changing that day, not two values that can't both hold. It updates; the earlier one stays
+        // as history (G662). Two senders the same day still disagree (a conflict), and money,
+        // health and legal of the same day still ask.
+        supersede(4, `changed the same day: superseded value of ${cur.as_of}`);
       } else if (rNew > rOld && (incoming.as_of >= cur.as_of || cur.as_of_approx)) {
         supersede(5, `stronger source (${rNew} > ${rOld})`);
       } else {
@@ -1062,7 +1069,7 @@ function streamStep(cur: FactRecord, incoming: FactRecord, value: unknown, rank:
   if (ownerWord(cur) || ownerWord(incoming) || rank(incoming) < rank(cur)) return undefined;
   if (incoming.sources.length && incoming.sources.every((x) => refString(x).startsWith("agent-relay:"))) return undefined;
   if (incoming.as_of > cur.as_of) return "newer";
-  if (incoming.as_of < cur.as_of) return hs.some((h) => h.retired && compareKey(h.value) === compareKey(value)) ? undefined : "older";
+  if (incoming.as_of < cur.as_of) return hs.some((h) => h.retired && valueKey(h.value) === valueKey(value)) ? undefined : "older";
   const order = versionOrder(String(value), String(cur.value));
   return order > 0 ? "newer" : order < 0 ? "older" : undefined;
 }
@@ -1121,7 +1128,7 @@ function joinPacket(root: string, id: string, side: FactRecord) {
   if (fm.origin === "contradiction" || !["open", "escalated"].includes(String(fm.status))) return;
   const { dispute: _, ...rec } = side as FactRecord & { dispute?: string };
   const cands = (fm.candidates ??= []);
-  const i = cands.findIndex((c) => compareKey(c.value) === compareKey(rec.value));
+  const i = cands.findIndex((c) => valueKey(c.value) === valueKey(rec.value));
   if (i >= 0) {
     cands[i] = rec;
     const at = new RegExp(`^${i + 1}\\. .*$`, "m");
@@ -1150,7 +1157,7 @@ export function withdrawConflictSide(root: string, id: string, file: string): st
   const prop = YAML.parse(readFileSync(join(root, decided), "utf8")) as { request: WriteRequest; decided?: unknown; decision?: unknown; by?: unknown };
   const mine = new Set((prop.request.sources ?? []).map((x) => refString(x as SourceRef)));
   const cands = fm.candidates ?? [];
-  const i = cands.findIndex((c) => compareKey(c.value) === compareKey(prop.request.value) && (c.sources ?? []).some((x) => mine.has(refString(x))));
+  const i = cands.findIndex((c) => valueKey(c.value) === valueKey(prop.request.value) && (c.sources ?? []).some((x) => mine.has(refString(x))));
   if (i < 0) return "its side is no longer in the conflict";
   const [noteId, attr] = String(fm.fact_key).split("#");
   const note = loadBrain(root).find((n) => n.fm.id === noteId);

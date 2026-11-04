@@ -11,8 +11,11 @@ import { loadBrain, saveNote, today, linksIn, isDisputed, isList, sensitivityRan
 import { loadRules, attributeSpec, readYaml } from "./rules";
 import { factFreshness, daysBetween, passedDay } from "./freshness";
 import { records, carve, grantFor } from "./carve";
-import { compareKey } from "./normalize";
-import { refString, sourceRank } from "./sources";
+import { compareKey, valueKey } from "./normalize";
+import { refString, sourceRank, schemeOf } from "./sources";
+import { sensitiveShape } from "./shape";
+import { oneSender } from "./capture";
+import type { Rules } from "./rules";
 import { runChecks } from "./checks";
 import { archiveOldLogs } from "./logs";
 import { git } from "./git";
@@ -466,6 +469,15 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   for (const d of staleMentions(loadBrain(root).filter((n) => !n.fm.id.startsWith("disputes/"))))
     add({ rule: "neighbour-drift", key: d.note, kind: "review", detail: d.note === d.page ? "the text still states an earlier value of one of this note's facts; update it or check it" : "the text still states a value that has since changed on a note it links to; update it or check it" });
 
+  // 8c. Conflicts whose sides both hold (G662): an open conflict opened before the write path knew
+  //     a reworded sentence is the same value, or that a later mail of the same day is a change,
+  //     still asks the owner to pick. Report-only: a review line per conflict, so the night's
+  //     report counts them; nothing is settled or closed until the owner turns that on.
+  for (const d of loadBrain(root).filter((n) => n.fm.id.startsWith("disputes/") && n.fm.status === "open")) {
+    const why = bothHold((d.fm as { candidates?: FactRecord[] }).candidates ?? [], rules, root, String(d.fm.fact_key ?? "").split("#")[1] ?? "");
+    if (why) add({ rule: "both-hold-conflict", key: String(d.fm.fact_key ?? d.fm.id), kind: "review", detail: why });
+  }
+
   // 9. The wiki's lint (src/wiki.ts, docs/wiki.md): page and structure findings for review only.
   for (const f of wikiLint(loadBrain(root).filter((n) => !n.fm.id.startsWith("disputes/")))) add(f);
 
@@ -583,4 +595,18 @@ export function applyUpkeepOp(root: string, by: string, payload: Record<string, 
   const live = (payload.live ?? {}) as Record<string, { value: unknown; ref: string; source?: string }>;
   const r = upkeep(root, { run, live: Object.keys(live).length ? [recordedSource(`recorded on a replica (${[...new Set(Object.values(live).map((x) => x.source ?? "export"))].join(", ")})`, live)] : [] });
   return { outcome: "committed", message: `${run}: ${r.findings.length} findings -> ${r.file}` };
+}
+
+// Why the sides of a conflict both hold, or undefined when they can't (G662): every side says the
+// same thing in other words (valueKey), or every side came from one kind of source the hub pulls
+// (mail, calendar) from one sender on one day, which is the fact changing that day. Money, health and
+// legal never.
+export function bothHold(cands: FactRecord[], rules: Rules, root: string, attr = ""): string | undefined {
+  if (cands.length < 2) return undefined;
+  if (sensitiveShape(rules, attr, ...cands.map((c) => c.value))) return undefined;
+  if (new Set(cands.map((c) => valueKey(c.value))).size === 1) return "its sides say the same thing in other words";
+  const kinds = new Set(cands.flatMap((c) => (c.sources ?? []).map((x) => schemeOf(refString(x)) ?? "")));
+  const days = new Set(cands.map((c) => String(c.as_of ?? "")));
+  if (kinds.size === 1 && ["gmail", "gcal", "mail"].includes([...kinds][0]) && days.size === 1 && !cands.some((c) => c.as_of_approx) && oneSender(root, cands.flatMap((c) => (c.sources ?? []).map(refString)))) return "its sides came from one sender on the same day: a change that day, not a contradiction";
+  return undefined;
 }

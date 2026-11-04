@@ -54,11 +54,11 @@
       - 'button "Undo: Antoine is head TA now, not teaching assistant."': Undo
       - text: Known by ChatGPT, Claude and Gemini
     - listitem:
-      - 'link "Next for Kitchen renovation: take the tile delivery on 12 October."':
-        - /url: /p/projects/kitchen-renovation
+      - 'link "Next for Guest lectures: send Zoe the slides for 17 November."':
+        - /url: /p/projects/guest-lecture-series
       - text: From yesterday's email Known by ChatGPT and Claude; Gemini doesn't get it
       - link "Let Gemini know this?":
-        - /url: /let?key=projects%2Fkitchen-renovation%23next_step&agent=gemini
+        - /url: /let?key=projects%2Fguest-lecture-series%23next_step&agent=gemini
         - text: G
   - link "Everything else on your mind":
     - /url: /home?all=1

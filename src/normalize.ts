@@ -44,3 +44,22 @@ export function compareKey(v: unknown): string {
     .replace(/[^\p{L}\p{N}@+]+/gu, " ")
     .trim();
 }
+
+// Value key (G662): the comparison key, and for a sentence (five words or more) its meaning in
+// plain words: articles and the present forms of "to be" dropped ("to retain" and "to be
+// retained" say one thing) and each word cut to its stem, so "Use each client to retain…" and
+// "use each client to be retained…" are the same value (architecture 0.6 step 1), never a
+// conflict. Numbers, negations, tense ("was", "will"), every preposition and every content word
+// stay: "build 4" and "build 5", "on track" and "not on track", "was paid" and "will be paid",
+// "to Anna by Friday" and "by Anna to Friday" still differ (slice audit). Short values keep the
+// exact key.
+const GRAMMAR = new Set(["a", "an", "the", "be", "is", "are", "am", "been", "being", "le", "la", "les", "un", "une"]);
+const stem = (w: string) => /^\d/.test(w) || w.length <= 4 ? w : w.replace(/(ing|ed|es|s)$/, "").replace(/(.)\1$/, "$1").replace(/e$/, "");
+export function valueKey(v: unknown): string {
+  const k = compareKey(v);
+  if (typeof v !== "string") return k;
+  const words = k.split(" ").filter(Boolean);
+  if (words.length < 5) return k;
+  return "~" + words.filter((w) => !GRAMMAR.has(w)).map(stem).join(" ");
+}
+export const sameValue = (a: unknown, b: unknown) => valueKey(a) === valueKey(b);

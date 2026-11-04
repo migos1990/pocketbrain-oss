@@ -23,7 +23,7 @@ import { verifyLog, claimKey } from "./evidence";
 import { loadEscalation } from "./textline/policy";
 import { clock, ownerDay } from "./clock";
 import { refString, sourceRank } from "./sources";
-import { extractCapture, fileCard, checkCandidate, releaseHeldDaily, captureModel, findCapture, previewExtraction, readCapture, unfinishedPull, type CaptureItem } from "./capture";
+import { extractCapture, fileCard, checkCandidate, releaseHeldDaily, captureModel, findCapture, senderKey, previewExtraction, readCapture, unfinishedPull, type CaptureItem } from "./capture";
 import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchUpcoming, fetchDrive, fetchDriveFile, fetchContacts, fetchContact } from "./google";
 import { cardItem, readCard, cardCandidates, cardAdjust, ownerRelations, fetchVcards, withoutDetails } from "./contacts";
 import { fetchDiscord, fetchDiscordMessage, fetchTexts, fetchText, fetchGranola, fetchGranolaNote } from "./feeds";
@@ -103,10 +103,13 @@ export function consentProblem(c: unknown): string | undefined {
 // address, none of the list headers, filled "Waiting on you"): no-reply, receipts, orders,
 // billing, invoices, payments, notifications, alerts, mailer-daemon, postmaster, bounces.
 const MACHINE_LOCAL = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|notifications?|notify|alerts?|receipts?|orders?|billing|invoices?|payments?|mailer-daemon|postmaster|bounces?)(?:[-_.+].*)?$/i;
+// A no-reply word anywhere in it is a machine too: a developer notice from "cloud-noreply@…" was
+// read and filed a project's next step from its boilerplate (owner's phone, 2026-11-03; G662).
+const NO_REPLY_PART = /(?:^|[-_.+])(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply)(?:[-_.+]|$)/i;
 function machineSender(from: string | undefined): boolean {
   const addr = /<([^>]+)>/.exec(from ?? "")?.[1] ?? from ?? "";
   const local = addr.trim().split("@")[0] ?? "";
-  return addr.includes("@") && MACHINE_LOCAL.test(local);
+  return addr.includes("@") && (MACHINE_LOCAL.test(local) || NO_REPLY_PART.test(local));
 }
 
 export interface SourceItem { id: string; version: string; text: string; at?: string; from?: string; to?: string; delivered?: string; named?: string; subject?: string; where?: string; gone?: boolean; bulk?: boolean }
@@ -467,7 +470,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
       // G420: known/unknown, never the address. A mail or text with no sender to name is unknown,
       // never left without the field: a capture without one is judged as if from before G420.
       const sender = STANDING_KINDS.has(cfg.kind) ? senderStanding(root, it.from) ?? "unknown" : undefined;
-      d = card ? distilCard(root, it, r, ref, { source: name, source_kind: cfg.kind, by, area: area ?? (loadRules(root).policy.areas?.personal ? "personal" : undefined), ...(fl ? { min_sensitivity: fl } : {}) }, family) : await distil(root, it, ref, { source: name, source_kind: cfg.kind, by, ...(sender ? { sender } : {}), ...(fwd ? { forwarded_from: fwd.account } : {}), ...(named ? { addressed_to: named.account } : {}), ...(area ? { area } : {}), ...(fl ? { min_sensitivity: fl } : {}) }, model);
+      d = card ? distilCard(root, it, r, ref, { source: name, source_kind: cfg.kind, by, area: area ?? (loadRules(root).policy.areas?.personal ? "personal" : undefined), ...(fl ? { min_sensitivity: fl } : {}) }, family) : await distil(root, it, ref, { source: name, source_kind: cfg.kind, by, ...(sender ? { sender } : {}), ...(senderKey(it.from) ? { sender_key: senderKey(it.from) } : {}), ...(fwd ? { forwarded_from: fwd.account } : {}), ...(named ? { addressed_to: named.account } : {}), ...(area ? { area } : {}), ...(fl ? { min_sensitivity: fl } : {}) }, model);
     } catch (e) {
       // One item's bad model answer (or any throw) fails that item, not the pass (evals/gaps.ts G42).
       out.failed = (out.failed ?? 0) + 1;

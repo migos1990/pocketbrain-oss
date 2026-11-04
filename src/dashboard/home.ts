@@ -486,7 +486,10 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
     return { what: lineWords(c.attr === "next_step" ? "disagreeNextValues" : c.attr === "role" ? "disagreeRoleValues" : isVerbAttribute(c.attr) ? "disagreeVerbValues" : "disagreeValues", { title: t, attr: words(c.attr), a, b }), parts: [d.rest[0] ?? vals[0]!, b] };
   };
   const meta = (c: SettleCase) => c.sides.every((x) => x.source_word === "email") ? SAID_COPY.twoEmails : SAID_COPY.twoSources;
-  const line = (c: SettleCase, verb: string) => { const v = valued(c); return { what: v?.what ?? disagree(c.page, c.title, c.attr), verb, href: `/settle/${c.id}`, ...(v ? { meta: meta(c), parts: v.parts } : {}) }; };
+  // Every conflict card says where its sides came from, also when its values are too long or too
+  // private for the line (owner's phone, 2026-11-03: only the first of three cards said "Two emails
+  // disagree"; G662). The source line names kinds of source, never a value.
+  const line = (c: SettleCase, verb: string) => { const v = valued(c); return { what: v?.what ?? disagree(c.page, c.title, c.attr), verb, href: `/settle/${c.id}`, meta: meta(c), ...(v ? { parts: v.parts } : {}) }; };
   // What the owner hasn't seen yet is held from every assistant (spec §7): named, never shown here.
   // A held value's card names its page only when that name is safe on any sign-in (owner's phone,
   // 2026-10-31: "Something new about Apple Services payment" twice): never a name a stranger's mail

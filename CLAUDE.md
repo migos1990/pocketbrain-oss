@@ -134,7 +134,7 @@ PB_BRAIN=<brain> bun src/cli.ts help   # every CLI command
 | French-English word map that widens a search query across languages (on unless `PB_LEXICON=0`, gap G172) | `src/lexicon.ts` |
 | Freshness, computed when a view is built, never stored | `src/freshness.ts` |
 | The wiki shape of a note, read-only: `summary:`, `parent:` and the page tree computed from it, `## ` sections, Markdown footnotes; drawn on the dashboard's note page; agents read the summary (scrubbed like the body, `pageSummary` in view.ts) and one section (`read` with `section`); upkeep's wiki lint (step 9); Recent updates; the Gardener's `wiki_sync` (`gardenerWikiSync` in core.ts, report-only until `pocketbrain wiki sync on`). See `docs/wiki.md` | `src/wiki.ts` |
-| Normalizers before any comparison, so formatting differences never become conflicts | `src/normalize.ts` |
+| Normalizers before any comparison, so formatting differences never become conflicts; `valueKey` compares a sentence by its content words, so the same sentence reworded is one value (G662, docs/filing.md) | `src/normalize.ts` |
 | One leak matcher shared by the relay and the write-path tripwire (spacing, case, look-alikes) | `src/match.ts` |
 | The owner's own message registry (rank 5); an unknown message id goes to the owner, not the brain. The dashboard's inbox card says "claimed to be you" for any proposal that cites an unregistered exact owner id, whatever route filed it (`proposals()` in `src/dashboard/data.ts`), since accepting registers it | `src/louis.ts` |
 | OpenFGA as a second lock on slices (`pocketbrain fga`, `rules/fga.yaml`). See `docs/fga.md` | `src/fga.ts` |

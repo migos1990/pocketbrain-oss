@@ -223,3 +223,20 @@ test("a pick's Undo finds the settle's own commit, not a later diary row that na
   expect(room(root).value).toBe("B-201");
   expect(status(root, id)).toBe("open");
 });
+
+// Owner's phone, 2026-11-03 (G662): only the first of three conflict cards said where its sides
+// came from; a card whose values are too long for the line still says it.
+test("a conflict card too long to say its values still says where they came from", () => {
+  const { root, id } = brain();
+  const long = "C-305 in the north building, the one with the wide windows and the projector that works";
+  const p = loadBrain(root).find((n) => n.fm.id === `disputes/${id}`)!;
+  (p.fm.candidates as FactRecord[])[1]!.value = long;
+  saveNote(root, p);
+  const n = loadBrain(root).find((x) => x.fm.id === "projects/course-c")!;
+  sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "long side");
+  lean(root, id);
+  void n;
+  const w = homeView(root, loadRules(root), loadBrain(root), new Date()).waiting;
+  expect(w[0]!.what).toBe("Two sources disagree on Course C's room.");
+  expect(w[0]!.meta).toBe("Two sources disagree");
+});

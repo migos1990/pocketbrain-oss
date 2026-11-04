@@ -56,9 +56,12 @@ test("receipts and other no-reply mail never reach the model", async () => {
     mail("b000000000000004", { From: "receipts@pay.example" }),
     mail("b000000000000005", { From: "Billing <billing+eu@cloud.example>" }, ["INBOX", "CATEGORY_UPDATES"]),
     mail("b000000000000006", { From: "Jane Roy <jane@school.example>" }),
+    // A developer notice: the no-reply word after the product's name (G662).
+    mail("b000000000000007", { From: "The Cloud Team <CloudPlatform-noreply@cloud.example>" }),
+    mail("b000000000000008", { From: "Store <store_no-reply+dev@play.example>" }),
   ]));
   const r = await pullSource(root, "mail", { model });
   expect(sent.length).toBe(1);
   expect(sent[0]).toContain("message b000000000000006");
-  expect(r.skipped).toBeGreaterThanOrEqual(5);
+  expect(r.skipped).toBeGreaterThanOrEqual(7);
 });
