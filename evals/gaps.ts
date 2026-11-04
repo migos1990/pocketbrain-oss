@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G658: {
+    closed: "claude/audit11-app-gate-log",
+    title: "An app door call refused before the doors left no line in the app door log",
+    severity: "low",
+    finding: "Mac, 2026-11-04, reading an empty .git/pb-app-door.jsonl: only calls that reached /app/pair, /app/nonce and /app/fresh were logged (G651). One refused at the tailnet listener's gate or the tailscale serve gate (dashboardHandler's handle and handleTailnet: wrong login, a device not on the list, funnel headers) or by an unknown Host (dash.host) was answered first, so a phone told 'answered 403' or 421 had nothing to read it against.",
+    fix: "refusedAppDoor in src/dashboard/server.ts logs those refusals for the three door paths, with the refusal's error id as the reason and nothing from the request beyond the existing fields; other refused paths log nothing. Test in test/app-door-log.test.ts.",
+  },
   G656: {
     title: "After a handoff, the recipient's whats_new carries values of a fact its carve hides",
     severity: "high",

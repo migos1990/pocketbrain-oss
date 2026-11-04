@@ -12,6 +12,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- `pocketbrain dashboard phones log` also lists the app's calls the hub turned away before they reached it (a phone not on your list, another Tailscale login, an unknown address), each with its reason, so an "answered 403" in the app can be read against it (docs/phone-app.md, G658).
 - A page you keep from an assistant by name also keeps its twin from it: a second page with the same name, kind and area, filed by an assistant that couldn't see the first. Before, the twin showed that assistant everything you had hidden (docs/fold-twins.md, G657).
 - A handoff from one assistant to another no longer carries a money split, or any fact made of parts, that the receiving assistant can't see. The relay's check looked for hidden values only when they were plain text or a number, so a split's amount and who it's with went through and showed in the other assistant's What's new. It is now held for you like any hidden value, and a hidden page's other names are held too (docs/relay.md, G656).
 - The phone app asks "Pair with <your hub>?" before it pairs from a link, and says when the link would replace the hub it is paired with; before, any link paired it at once (G647).

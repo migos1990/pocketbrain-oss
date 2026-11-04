@@ -73,3 +73,27 @@ test("a page that loads clears the last banner: it said the hub couldn't be reac
   const app = (await import("node:fs")).readFileSync("mobile/App.tsx", "utf8");
   expect(app).toMatch(/pageClears\(m\)\) setMsg\(""\)/);
 });
+
+// Coordinator, 2026-11-04 (after the empty log on the Mac): a call refused before it reaches the
+// doors (the tailnet or serve gate, a Host the hub doesn't know) left no line, so a phone told
+// "answered 403" had nothing to read it against. Each now leaves the same line, its reason the
+// refusal's error id, never the device, the login or the Host it came with.
+test("an app door call refused before the doors leaves a line naming the refusal, nothing more", async () => {
+  const root = makeBrain();
+  const d = dashboardHandler(root, { port: PORT, now: () => new Date("2026-11-01T12:00:00Z") });
+  d.setTailnet(TN, PORT);
+  const post = (url: string, headers: Record<string, string>) => new Request(url, { method: "POST", body: "{}", headers: { "content-type": "application/json", [APP_HEADER]: "1", ...headers } });
+  const OTHER = "100.77.7.7", SERVE = `${TN.name}:8443`;
+  // The tailnet listener: a device not on the owner's list.
+  expect((await d.handleTailnet(post(`http://${H}/app/nonce`, { host: H }), OTHER)).status).toBe(403);
+  // tailscale serve: another tailnet user's login.
+  expect((await d.handle(post(`https://${SERVE}/app/fresh`, { host: SERVE, "tailscale-user-login": "someone@else.example", "x-forwarded-for": PHONE }))).status).toBe(403);
+  // A Host the hub doesn't know.
+  expect((await d.handleTailnet(post(`http://evil.example/app/pair`, { host: "evil.example" }), PHONE)).status).toBe(421);
+  // A refused call to anything else is not an app door: no line.
+  await d.handleTailnet(post(`http://${H}/action/x`, { host: H }), OTHER);
+  const raw = logOf(root);
+  const lines = raw.trim().split("\n").map((l) => JSON.parse(l) as { door: string; status: number; why?: string });
+  expect(lines.map((l) => [l.door, l.status, l.why])).toEqual([["/app/nonce", 403, "dash.tailnet-device"], ["/app/fresh", 403, "dash.tailnet-owner-only"], ["/app/pair", 421, "dash.host"]]);
+  for (const s of [OTHER, PHONE, "someone@else.example", "evil.example", TN.name]) expect(raw).not.toContain(s);
+});

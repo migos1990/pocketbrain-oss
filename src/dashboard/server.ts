@@ -168,10 +168,19 @@ function keepSession(root: string, sid: string, csrf: string, now: Date) {
 // The last APP_DOOR_KEEP lines are kept. `pocketbrain dashboard phones log` prints them (G651).
 export const appDoorFile = (root: string) => join(root, ".git", "pb-app-door.jsonl");
 const APP_DOOR_KEEP = 500;
-async function appDoorLog(root: string, door: string, req: Request, res: Response, now: Date): Promise<Response> {
+// The app's doors, by path. A call refused before it reaches them (the tailnet or serve gate, a Host
+// the hub doesn't know) leaves a line too, its reason the refusal's error id, never the device,
+// the login or the Host it came with.
+const APP_DOORS = new Set(["/app/pair", "/app/nonce", "/app/fresh"]);
+function refusedAppDoor(root: string, req: Request, res: Response, id: string, now: Date): Promise<Response> {
+  const path = new URL(req.url).pathname;
+  return req.method === "POST" && APP_DOORS.has(path) ? appDoorLog(root, path, req, res, now, id) : Promise.resolve(res);
+}
+
+async function appDoorLog(root: string, door: string, req: Request, res: Response, now: Date, refused?: string): Promise<Response> {
   try {
     if (!existsSync(join(root, ".git"))) return res;
-    const why = res.status === 200 ? undefined : (await res.clone().text()).split("\n")[0]!.slice(0, 160);
+    const why = refused ?? (res.status === 200 ? undefined : (await res.clone().text()).split("\n")[0]!.slice(0, 160));
     const line = JSON.stringify({ at: now.toISOString(), door, status: res.status, cookie: /(?:^|;\s*)pb_owner=/.test(req.headers.get("cookie") ?? ""), ...(why ? { why } : {}) });
     const f = appDoorFile(root);
     const old = existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean) : [];
@@ -522,7 +531,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   async function handle(req: Request, hosts = allowedHosts, secure = false): Promise<Response> {
     const url = new URL(req.url);
     const host = req.headers.get("host") ?? "";
-    if (!hosts.has(host)) return oops("dash.host");
+    if (!hosts.has(host)) return refusedAppDoor(root, req, oops("dash.host"), "dash.host", now());
     // The owner app's typeface (html-app.ts): a public font file, the same for everyone, no brain in it.
     if (url.pathname === FONT_PATH && req.method === "GET") return new Response(Bun.file(FONT_FILE), { headers: { "content-type": "font/woff2", "cache-control": "public, max-age=31536000, immutable" } });
 
@@ -964,6 +973,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // One of the owner's own devices, by its tailnet address (dashboard_tailnet_devices in
   // rules/hub.yaml). A Tailscale account can hold other machines (a box an assistant runs on), so
   // the owner's login alone is not enough; a list naming none lets no device in.
+  const refused = (req: Request, id: Parameters<typeof oops>[0]) => refusedAppDoor(root, req, oops(id), id, now());
   const ownDevice = (ip: string | undefined) => { const a = ip?.replace(/^::ffff:/i, ""); return !!a && isTailnetIp(a) && !!tn?.devices?.includes(a); };
   return {
     loginKey, setPort, setTailnet,
@@ -978,16 +988,16 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       if (!serveHosts.has(host)) return guarded(req, allowedHosts);
       const who = req.headers.get("tailscale-user-login")?.trim().toLowerCase();
       const viaFunnel = req.headers.has("tailscale-funnel-request") || [...req.headers.keys()].some((k) => k.startsWith("cf-"));
-      if (viaFunnel || !who || !tn?.login || !same(who, tn.login.trim().toLowerCase())) return Promise.resolve(oops("dash.tailnet-owner-only"));
-      if (!ownDevice(req.headers.get("x-forwarded-for")?.trim())) return Promise.resolve(oops("dash.tailnet-device"));
+      if (viaFunnel || !who || !tn?.login || !same(who, tn.login.trim().toLowerCase())) return refused(req, "dash.tailnet-owner-only");
+      if (!ownDevice(req.headers.get("x-forwarded-for")?.trim())) return refused(req, "dash.tailnet-device");
       return guarded(req, serveHosts, true);
     },
     // The tailnet listener: only one of the owner's listed devices, only this machine's tailnet
     // names as Host and Origin. `peer` is the connection's address, never a header.
     handleTailnet: async (req: Request, peer: string | undefined) => {
       if (!tn?.address) return oops("dash.not-found");
-      if (!isTailnetIp(peer)) return oops("dash.tailnet-owner-only");
-      if (!ownDevice(peer)) return oops("dash.tailnet-device");
+      if (!isTailnetIp(peer)) return refused(req, "dash.tailnet-owner-only");
+      if (!ownDevice(peer)) return refused(req, "dash.tailnet-device");
       return guarded(req, tailnetHosts);
     },
   };
