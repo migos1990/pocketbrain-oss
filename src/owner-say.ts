@@ -208,6 +208,9 @@ const SAID_BY: [RegExp, number, number][] = [
   // trailing: "Jane is the dean, Paul says", "… (per Paul)", "… according to Paul", "…, or so Paul says"
   [new RegExp(String.raw`^(.+?)(?:\s*,\s*|\s+\(|\s+)(?:or so\s+)?(?:(?:as\s+)?per|according to|selon|d['’]après)\s+${NAMED}\)?[.!]*$`, "u"), 2, 1],
   [new RegExp(String.raw`^(.+?)\s*,\s*(?:or so\s+)?${NAMED}\s+(?:says|said|tells me|told me|thinks|claims|reckons|swears|dit)[.!]*$`, "u"), 2, 1],
+  // the verb first (G661): "Jane is the dean, says Paul", "… (says Paul)"; and "In Paul's words, …"
+  [new RegExp(String.raw`^(.+?)(?:\s*,\s*|\s+\()(?:or so\s+)?(?:says|said|tells me|told me|claims|reckons|swears|dit)\s+${NAMED}\)?[.!]*$`, "u"), 2, 1],
+  [new RegExp(String.raw`^[Ii]n\s+${NAMED}['’]s?\s+(?:own\s+)?words\s*,\s*(.+)$`, "u"), 1, 2],
 ];
 export function hearsay(text: string): { who: string; rest: string } | undefined {
   const t = text.trim();

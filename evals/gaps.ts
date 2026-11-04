@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G661: {
+    closed: "claude/audit11-ceilings-rows",
+    title: "Hearsay with the verb first filed as the owner's word, and two guards had no ceilings rows",
+    severity: "low",
+    finding: "Audit v8, v10 finding 6 and v11 (Low): \"Jane is the dean, says Paul\" filed as the owner's word, since the trailing hearsay shape wanted the name before the verb; the order guard outside a preference (speaksToReader) and the box's hearsay shapes had no ceilings rows, against the Ceilings law.",
+    fix: "src/owner-say.ts SAID_BY: \"…, says Paul\", \"… (says Paul)\" and \"In Paul's words, …\". test/ceilings.test.ts: catch, ceiling and over-hold tables for speaksToReader and hearsay; test/hearsay-shapes.test.ts runs the new shapes through the box.",
+  },
   G660: {
-    closed: "claude/audit11-installer",
+    closed: "f03abb63",
     title: "The installer checked nothing it installed",
     severity: "medium",
     finding: "Audit v11 finding 6: install.sh checked out the newest v* tag with no signature check, fell back to the source's default branch when no tag existed (so whoever could push main chose the code), tried origin/<tag> before the tag (a branch named like a release won), and ran bun install --production without --frozen-lockfile.",

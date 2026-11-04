@@ -12,6 +12,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- The box takes "Jane is the dean, says Paul", "… (says Paul)" and "In Paul's words, …" as Paul's word, not yours, as it already did "…, Paul says": it notes nothing and offers the fact as yours if you know it's so. What it still misses, and what it takes for hearsay that isn't, is listed in the guards' tables (docs/owner-home.md, G661).
 - Ask Braniac knows your people by who they are to you: "who is my wife", "who are my kids" or "who is my boss" finds them from what their pages say they are to you, where it answered "Nothing on that yet". A word it can't place gets Ask's own answer, not the write box's "Try 'Ana works at Bay Institute'" (G649).
 - The phone app no longer sits on its logo with no word while your hub is slow to answer. After 10 seconds it says "Still waiting for your hub" with Try again, and opens the page as soon as the hub answers. It reaches the app as an over-the-air update (docs/phone-app.md, G659).
 - `pocketbrain dashboard phones log` also lists the app's calls the hub turned away before they reached it (a phone not on your list, another Tailscale login, an unknown address), each with its reason, so an "answered 403" in the app can be read against it (docs/phone-app.md, G658).

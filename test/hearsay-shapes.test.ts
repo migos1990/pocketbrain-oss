@@ -27,6 +27,9 @@ const SHAPES: [string, string][] = [
   ["Jane is the dean (per Paul)", "Paul"],
   ["Jane is the dean per Paul", "Paul"],
   ["Jane is the dean, or so Paul says", "Paul"],
+  ["Jane is the dean, says Paul", "Paul"], // G661: the verb before the name
+  ["Jane is the dean (says Paul)", "Paul"],
+  ["In Paul's words, Jane is the dean", "Paul"],
   ["Supposedly Jane is the dean", "someone else"],
   ["Reportedly, Jane is the dean", "someone else"],
   ["Allegedly Jane is the dean", "someone else"],
