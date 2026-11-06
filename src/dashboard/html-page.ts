@@ -26,6 +26,9 @@ import { sensitivityRank } from "../brain";
 import { scrubExact } from "../carve";
 import { describeCardState, isOrg, whatItIs } from "../describe";
 import { siteHost } from "./home";
+import { ownerOf, ownerTitle } from "../capture";
+import { ownerBook } from "./owner-book";
+import { escapeRe } from "../util";
 
 export const PAGE_COPY = {
   back: "Memory",
@@ -58,6 +61,13 @@ export const PAGE_COPY = {
   shutPage: "This page is private. Sign in again to read it.",
   openPrivate: "Only you see this page. It stays open 10 minutes after you sign in.",
   edit: "Edit this page",
+  bookNew: "What's new",
+  bookNow: "Right now",
+  bookMatters: "Who matters",
+  bookWaiting: "Waiting on you",
+  bookWaits: "{n} things wait for you",
+  bookWaitsOne: "1 thing waits for you",
+  bookNothing: "Nothing waits for you.",
   editShort: "Edit",
   roleAt: "{role} at {org}",
   isThisIt: "Is this it?",
@@ -110,6 +120,11 @@ a.project{margin:18px 0 0;border-top:2px solid var(--text);border-bottom:2px sol
 h2.sec{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:24px 0 6px}
 p.links{margin:0;font-size:16px;line-height:24px}
 p.links a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
+ul.book{margin:0;padding:0;list-style:none}
+ul.book li{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:16px;line-height:22px}
+ul.book li>span:first-child{min-width:0;flex:1;overflow-wrap:anywhere}
+ul.book a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
+ul.book .kind{flex:none;max-width:40%;text-align:right;font-size:13px;line-height:18px;color:var(--muted)}
 details{border-top:2px solid var(--text);margin:18px 0 0}
 details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:800}
 dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:15px;line-height:22px}
@@ -268,6 +283,30 @@ function describeCard(s: State, csrf: string, n: Note): string {
   return `<div class="describe"><p class="q">${PAGE_COPY.isThisIt}</p><p class="said">${esc(waiting.what_it_is)} · <a href="${esc(waiting.website)}" rel="noopener noreferrer nofollow" target="_blank">${esc(siteHost(waiting.website))}</a></p><blockquote>${esc(waiting.quote)}</blockquote><div class="acts">${act("org-yes", PAGE_COPY.yesItIs, "yes")}${act("org-no", PAGE_COPY.notIt, "pill")}</div><p class="kind">${PAGE_COPY.fromWeb}</p></div>`;
 }
 
+// The owner's own page as the front of a book about them (owner-book.ts): what's new, right now,
+// who matters, what waits. A line names its page as a link only where the line already says the
+// page's name, so a line about a page only the owner can see never puts its id in a link.
+function bookSections(s: State, fresh: boolean): string {
+  const b = ownerBook(s, fresh);
+  const title = (n: Note) => displayName(n.fm.id, n.fm.title);
+  const link = (n: Note) => `<a href="${href(n.fm.id)}">${esc(title(n))}</a>`;
+  const news = b.news.map((l) => {
+    // The home says a person by first name ("Antoine is head TA now"): the full name, else that.
+    const n = s.notes.find((x) => x.fm.id === l.page), what = esc(l.what);
+    const at = (x: string) => new RegExp(`(^|[^\\p{L}])(${escapeRe(x)})(?![\\p{L}])`, "u");
+    const name = n ? [esc(title(n)), esc(title(n).split(/\s+/)[0]!)].find((x) => x && at(x).test(what)) : undefined;
+    const said = n && name ? what.replace(at(name), `$1<a href="${href(n.fm.id)}">$2</a>`) : what;
+    return `<li><span>${said}</span><span class="kind">${esc(l.from)}</span></li>`;
+  });
+  const waits = b.waiting === 0 ? esc(PAGE_COPY.bookNothing) : `<a href="/home">${esc(b.waiting === 1 ? PAGE_COPY.bookWaitsOne : fill(PAGE_COPY.bookWaits, { n: b.waiting }))}</a>.`;
+  return [
+    news.length ? `<h2 class="sec">${PAGE_COPY.bookNew}</h2><ul class="book">${news.join("")}</ul>` : "",
+    b.now.length ? `<h2 class="sec">${PAGE_COPY.bookNow}</h2><p class="links">${b.now.map(link).join(" · ")}</p>` : "",
+    b.matters.length ? `<h2 class="sec">${PAGE_COPY.bookMatters}</h2><p class="links">${b.matters.map(link).join(" · ")}</p>` : "",
+    `<h2 class="sec">${PAGE_COPY.bookWaiting}</h2><p class="links">${waits}</p>`,
+  ].join("");
+}
+
 export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; undo?: string; fresh?: boolean } = {}): string {
   const fresh = !!o.fresh, closed = !fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
   const name = displayName(n.fm.id, n.fm.title);
@@ -301,6 +340,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
 <div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+  const book = !closed && n.fm.id === ownerOf(s.rules, s.notes, ownerTitle(s.rules) ?? "")?.page ? bookSections(s, fresh) : "";
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   // Routines that may do the same job as this one (G641): the others, linked; a secret page only
   // right after a sign-in, like Memory.
@@ -312,7 +352,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const undoOrg = o.flash && o.undo && isOrg(n) ? `<div class="chips"><form method="post" action="/action/org-undo">${hidden(csrf, { id: n.fm.id, hash: o.undo })}<button>${PAGE_COPY.undo}</button></form></div>` : "";
   const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}${undoOrg}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
   return appPage(name, "memory", `${band}
-${closed ? "" : describeCard(s, csrf, n)}${body}${closed ? "" : projectCard(s, n, fresh)}${changedList}${overlapList}${mentionedList}
+${closed ? "" : describeCard(s, csrf, n)}${body}${closed ? "" : projectCard(s, n, fresh)}${book}${changedList}${overlapList}${mentionedList}
 ${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}
 ${pinned}`, { css: PAGE_CSS, wrap: "page" });
 }

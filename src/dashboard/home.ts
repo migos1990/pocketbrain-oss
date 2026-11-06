@@ -618,6 +618,20 @@ export function waitingCount(root: string, now = new Date(), asks?: OwnerAsks): 
   return waitingTotal(conflicts(root, now, true, asks ?? ownerAsks(root, now)).waiting);
 }
 
+// The newest diary lines across the brain, as the home says them (the owner's page's What's new).
+export function latestLines(root: string, rules: Rules, notes: Note[], max: number): HomeLine[] {
+  const rows = readDiary(root);
+  const undone = new Set(rows.filter((r) => r.undoes).map((r) => r.undoes!));
+  const byId = new Map(notes.map((n) => [n.fm.id, n]));
+  const out: HomeLine[] = [];
+  for (const r of foldKept(rows).reverse()) {
+    const l = lineOf(r, rules, byId, undone);
+    if (l && !out.some((x) => x.page === l.page && x.what === l.what)) out.push(l);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 // One page's diary lines, newest first (the page screen's Changed list).
 export function pageLines(root: string, rules: Rules, notes: Note[], id: string): HomeLine[] {
   const rows = readDiary(root);

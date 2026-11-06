@@ -13,6 +13,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- Your own page now reads like the front of a book about you. Under what it says about you come what's new, what you're on right now, who matters to you and how many things wait for you, each one a link (docs/owner-home.md).
 - A line for a receipt or no-reply mail fact your brain set aside now says "Your brain set it aside today" under it, where it said "From today's email" though no email came that day (docs/owner-home.md, G673).
 - Conflicts on one page from the same two sources are one card that names each field, instead of a card per field. Settle opens the first, and each answer goes on to the next until the last brings you home (docs/owner-home.md, G669).
 - A receipt or other no-reply mail no longer becomes a page through an assistant reading your inbox. The hub already skipped such mail; now it remembers which mail it skipped, and an assistant's fact whose every source is that mail is refused. Facts filed this way before are counted each night until you turn on setting them aside, each with Undo (docs/owner-home.md, G668).

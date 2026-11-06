@@ -86,6 +86,15 @@ ${orphans.size ? `<div class="item"><div class="what"><span class="kind">no long
   return { title: "Who matters", tab: "people", body };
 }
 
+// Who matters to the owner, closest first (inner, then close), by page id: for the owner's own
+// page (owner-book.ts). Owner-only, like this page. A standing file that doesn't parse names nobody
+// rather than take the page down (the Overview's line below says what is wrong).
+export function whoMatters(root: string): string[] {
+  let people: [string, { tier: string }][];
+  try { people = Object.entries(loadStanding(root).people); } catch { return []; }
+  return (["inner", "close"] as const).flatMap((tier) => people.filter(([, e]) => e.tier === tier).map(([id]) => id));
+}
+
 // One line in Needs you when suggestions wait.
 // A broken standing or checks file must not take the Overview down with it.
 export function peopleNeedsYou(root: string, notes?: Note[]): string | undefined {
