@@ -24,7 +24,7 @@ import type { WriteResult } from "./write";
 import { wikiLint, renderTouchedPages, parentPlan, pageParentsOn } from "./wiki";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
-import { setAsideReceipts } from "./receipt-pages";
+import { setAsideReceipts, setAsideMachineMail } from "./receipt-pages";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
 import { staleMentions } from "./drift";
@@ -165,6 +165,14 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   // 1c2. Receipts held as pages before no-reply mail stopped being read (src/receipt-pages.ts):
   //      set aside once, a diary line each with Undo; one hub commit with a why.
   if (setAsideReceipts(root).length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+  //      Held facts an assistant filed from machine mail (G668): set aside once, a diary line each
+  //      with Undo, an emptied page with them; off until `pocketbrain machine-mail on`, a count then.
+  {
+    const on = (rules.policy as { machine_mail?: { set_aside?: boolean } }).machine_mail?.set_aside === true;
+    const mm = setAsideMachineMail(root, on);
+    if (on && mm.facts) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+    else if (mm.facts) add({ rule: "machine-mail", key: "machine-mail", kind: "review", detail: `${mm.facts} held fact${mm.facts === 1 ? "" : "s"} on ${mm.pages} page${mm.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside, each with Undo` });
+  }
   // 1c3. A person with the owner's surname may be family (src/family.ts): one inferred fact linking
   //      the owner's page, a diary line each with Undo; one hub commit with a why.
   //      Off until the owner turns it on: then a count only, never a name.

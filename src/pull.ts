@@ -30,7 +30,7 @@ import { fetchDiscord, fetchDiscordMessage, fetchTexts, fetchText, fetchGranola,
 import { findInjection, redactSecrets } from "./checks";
 import { compareKey } from "./normalize";
 import { logWrite } from "./write";
-import { recordCheckedRefs, checkedRefs } from "./louis";
+import { recordCheckedRefs, recordMachineMail, checkedRefs } from "./louis";
 import { senderHash } from "./sameperson";
 import { senderStanding } from "./sender";
 import { createHash } from "node:crypto";
@@ -408,6 +408,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   const contacts: Parameters<typeof recordInteraction>[1][] = [];
   const read: Record<string, boolean> = {}; // mail and events this pass read, recorded as checked (G417)
   const readFrom: Record<string, string | undefined> = {}; // the hash of each read item's sender (G643)
+  const machine: string[] = []; // machine-sent mail this pass saw, remembered by ref (G668)
   const echo = cfg.kind === "imessage" ? channelThreads(root) : new Set<string>();
   // Contacts: the people the owner's own card names, the only new pages a card may start.
   const family = card ? ownerRelations(raw, loadRules(root), loadBrain(root)) : new Set<string>();
@@ -428,6 +429,9 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
       }
       continue;
     }
+    // Machine-sent mail is remembered by its ref, wherever it sits, so an assistant can't file it
+    // as facts (G668). Only the ref: never its sender, subject or words.
+    if (it.bulk && !opts.dryRun && (cfg.kind === "gmail" || cfg.kind === "mail") && prev !== it.version) machine.push(refFor(cfg.kind, it, cfg.account));
     if (cfg.where?.length && !(it.where ?? "").split(",").some((w) => cfg.where!.includes(w))) {
       // Mail or an event outside the allowlist is marked seen (its id and version, nothing else),
       // so a flood of it can't hold the cursor or be fetched again (evals/gaps.ts G41).
@@ -494,6 +498,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   }
   if (opts.dryRun) return out;
   if (Object.keys(read).length) recordCheckedRefs(root, read, readFrom);
+  if (machine.length) recordMachineMail(root, machine);
   if (nextLive && !hold) state.live = nextLive;
   if (out.capped) delete out.more;
   mkdirSync(join(root, "log", "sources"), { recursive: true });
@@ -694,6 +699,7 @@ export async function fetchOne(root: string, ref: string): Promise<(SourceItem &
     const v = parseRef(ref)?.version;
     const ok = typeof out === "object" ? (v && v !== out.version ? undefined : !out.gone) : /not found in the/.test(out) ? false : undefined;
     if (ok !== undefined) recordCheckedRefs(root, { [ref]: ok }, { [ref]: typeof out === "object" ? senderHash(out.from) : undefined });
+    if (typeof out === "object" && out.bulk && /^gmail:/.test(ref)) recordMachineMail(root, [ref]);
   }
   return out;
 }

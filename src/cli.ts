@@ -49,7 +49,8 @@ import { sha256 } from "./util";
 import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { setAsideMachineMail } from "./receipt-pages";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -316,6 +317,7 @@ const USAGE = `pocketbrain <command>
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
   overlaps                           assistants' routines that may do the same job, by page id (docs/wiki.md)
+  machine-mail | machine-mail on|off   count the held facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
@@ -1889,6 +1891,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     return 0;
   }
   if (cmd === "fold" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setFoldTwins(root, args[0]!));
+  // Facts assistants filed from machine mail (src/receipt-pages.ts, G668): count, or set aside nightly.
+  if (cmd === "machine-mail" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setMachineMailAside(root, args[0]!));
+  if (cmd === "machine-mail") {
+    const r = setAsideMachineMail(root, false);
+    console.log(`${r.facts} held fact${r.facts === 1 ? "" : "s"} on ${r.pages} page${r.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside each night, each with Undo.`);
+    return 0;
+  }
   if (cmd === "fold") {
     // One thing, one page (src/fold.ts, docs/fold-twins.md): a dry run by default; --apply folds;
     // undo <commit> puts one back.

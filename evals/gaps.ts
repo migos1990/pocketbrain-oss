@@ -12,6 +12,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner's phone 2026-11-03: three conflict cards for one project, all from the same two emails, each opening on much the same content; the owner had to find and settle each one from the home.",
     fix: "src/dashboard/home.ts settleCards: a page's conflicts that share their two sources (or their field) are one card naming each field and counting each question; a pick or keep both on one goes to the next on that card (settleNext, src/dashboard/server.ts), the last home. test/one-card-per-pair.test.ts.",
   },
+  G668: {
+    closed: "eca4eb1f",
+    title: "An assistant reading the inbox filed facts from receipts and other machine mail the hub's own pull skips",
+    severity: "medium",
+    finding: "The owner's phone, 2026-11-03: a ride receipt became an org page named for the payee's legal name, filed under a work area, with two held rows (\"Something new only you can see. from an email\") and nothing else. The pull skips machine mail (G506, G662), but write() took an assistant's fact citing it; G571 (money pages only) never landed.",
+    fix: "src/pull.ts records the refs of machine mail it skips (recordMachineMail, log/machine-mail.jsonl, refs only); src/write.ts refuses an assistant's fact, any type, whose every source is such mail (check machine_mail, before any lookup, so the reply is the same whether the page exists); the owner's word and owner-accepted writes are exempt. Held facts filed before are counted by upkeep and, after `pocketbrain machine-mail on`, set aside with a diary line and Undo (setAsideMachineMail, src/receipt-pages.ts). Tests: test/machine-mail-facts.test.ts, test/contracts/write.contract.test.ts.",
+  },
   G667: {
     closed: "a62288db",
     title: "An assistant's org page that the owner accepted or filing saved could choose where a person page moves",

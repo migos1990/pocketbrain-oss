@@ -46,6 +46,9 @@ export function undoFact(root: string, token: string): UndoResult {
   if (!["new", "changed", "item_added", "confirmed", "retracted"].includes(row.kind)) return { outcome: "not_undoable", fact_key: row.fact_key, row, message: "this line has nothing to undo" };
   const hash = row.fact_key.lastIndexOf("#");
   const id = row.fact_key.slice(0, hash), attr = row.fact_key.slice(hash + 1);
+  // A page upkeep removed when it set aside its last machine-mail fact comes back as it was (G668).
+  // It comes back as it stood before that commit, the fact still on it, live and held.
+  const revived = row.why === "machine" && !loadBrain(root).some((n) => n.fm.id === id) ? restoreRemoved(root, `${id}.md`) : undefined;
   const note = loadBrain(root).find((n) => n.fm.id === id);
   if (!note || !existsSync(join(root, note.path))) return { outcome: "changed_since", fact_key: row.fact_key, row, message: "Changed since" };
   const facts = (note.fm.facts ??= {}), hist = (note.fm.history ??= {});
@@ -80,6 +83,17 @@ export function undoFact(root: string, token: string): UndoResult {
     const left = (cur.sources ?? []).filter((x) => !row.added!.includes(refString(x)));
     if (left.length === (cur.sources ?? []).length || !left.length) return changed();
     cur.sources = left;
+  } else if (row.kind === "retracted" && revived) {
+    if (!live || isList(live) || !same(shownValue(live), row.from)) { rmSync(join(root, revived)); return changed(); }
+    // The page comes back as it was before the set-aside, so the other facts set aside with it are
+    // live again too: they go back to history, each still waiting on its own Undo.
+    for (const r of rows) {
+      if (r.why !== "machine" || r.kind !== "retracted" || r.at !== row.at || r === row || !r.fact_key.startsWith(`${id}#`) || rows.some((u) => u.undoes === r.undo_token)) continue;
+      const a = r.fact_key.slice(id.length + 1), cur = facts[a];
+      if (!cur || isDisputed(cur) || isList(cur) || !same(shownValue(cur), r.from)) continue;
+      (hist[a] ??= []).push({ ...(cur as FactRecord), valid_to: d, ended_by: { step: 0, at: d, by: "hub" } });
+      delete facts[a];
+    }
   } else if (row.kind === "retracted") {
     if (live) return changed();
     const i = replaced(row.from);
@@ -111,6 +125,18 @@ export function undoFact(root: string, token: string): UndoResult {
   return { outcome: "undone", fact_key: row.fact_key, row, message: "Undone" };
 }
 
+// The page file as it stood just before the set-aside commit that removed it, written back (not
+// committed: the undo's own commit takes it). Only that commit: a page the owner forgot or a fold
+// removed later never comes back through an old line (builder's slice audit of PR 104).
+function restoreRemoved(root: string, rel: string): string | undefined {
+  const [sha, ...body] = gitRun(root, ["log", "-1", "--diff-filter=D", "--format=%H%n%B", "--", rel]).out.trim().split("\n");
+  if (!sha || !body.includes("Kind: machine-mail")) return undefined;
+  const r = gitRun(root, ["show", `${sha}^:${rel}`]);
+  if (!r.ok || !r.out) return undefined;
+  writeFileSync(join(root, rel), r.out.endsWith("\n") ? r.out : `${r.out}\n`);
+  return rel;
+}
+
 // Undo of Show (src/seen.ts) is its inverse: the live value the owner saw is held for them again,
 // so no assistant gets it until the next Show. Nothing else moves; only while that value is live.
 function rehold(root: string, row: DiaryRow, token: string): UndoResult {
@@ -137,11 +163,15 @@ function rehold(root: string, row: DiaryRow, token: string): UndoResult {
 function emptied(root: string, note: Note): boolean {
   if (Object.keys(note.fm.facts ?? {}).length) return false;
   if (!Object.values(note.fm.history ?? {}).flat().every((r) => (r as FactRecord).ended_by?.correction)) return false;
+  return noOwnWords(root, note);
+}
+// A page with no words of anyone's but the hub's, and no other page naming it.
+export function noOwnWords(root: string, note: Note, notes: Note[] = loadBrain(root)): boolean {
   // The writer's own text is no one's words: the made-by paragraph and the opening it follows (G559).
   const paras = note.body.split(/\n\s*\n/);
   const words = paras.filter((p, i) => !p.includes(MADE) && paras[i + 1]?.trim() !== MADE).join("\n").split("\n").filter((l) => !/^\[\^[^\]]+\]:/.test(l)).join("").trim();
   if (words) return false;
-  return !loadBrain(root).some((n) => n.fm.id !== note.fm.id && JSON.stringify([n.fm, n.body]).includes(note.fm.id));
+  return !notes.some((n) => n.fm.id !== note.fm.id && JSON.stringify([n.fm, n.body]).includes(note.fm.id));
 }
 
 // Undo of a settled conflict opens it again (spec §5: the inverse write of the settle). The fact and

@@ -113,6 +113,13 @@ export function setWikiSync(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { wiki: { sync: mode === "on" } }, `wiki sync ${mode}`);
 }
 
+// `pocketbrain machine-mail on|off`: whether the nightly pass sets aside the held facts assistants
+// filed from machine mail or only counts them (src/receipt-pages.ts, G668). Off until the owner says so.
+export function setMachineMailAside(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("machine-mail on | off");
+  return setRulesKeys(root, "policy.yaml", { machine_mail: { set_aside: mode === "on" } }, `machine-mail ${mode}`);
+}
+
 // `pocketbrain fold on|off`: whether the nightly pass folds same-name project and org twins or only
 // counts them (src/fold.ts, docs/fold-twins.md). Off until the owner says so.
 export function setFoldTwins(root: string, mode: string): string {

@@ -15,7 +15,7 @@ import { loadRules, attributeSpec, tierOf, ownerName, captureAgentName } from ".
 import { runChecks, shapeFails, thirdPartySensitive, findInjection, speaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
 import { normalizeValue, compareKey, valueKey } from "./normalize";
 import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
-import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath } from "./louis";
+import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath, machineMail, mailKey } from "./louis";
 import { tokenRole } from "./tokenrole";
 import { carve, grantFor, mergedTarget, records, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
 import { needleFor, findCarried, unhide, distinctive, squash, type Needle } from "./match";
@@ -497,6 +497,22 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   }
 
 
+  // Machine mail is never read for facts (the owner's standing rule; G506 and G662 keep the hub's
+  // own pull from it): an assistant's fact whose every source is mail the hub saw was machine-sent
+  // (a no-reply, list or billing sender, src/louis.ts machineMail) is refused in one line, on any
+  // kind of page, before anything is looked up, so the reply says nothing about the brain (G668;
+  // owner's phone, 2026-11-03: a ride receipt became an org page). The owner's word, and a write the
+  // owner accepted, never are. Mail the hub never saw as a machine's isn't refused for this.
+  if (!asOwner && !isOwnerId(opts.acceptedBy) && !req.retract && (req.kind ?? "fact") !== "journal" && (req.sources ?? []).length) {
+    const keys = (req.sources ?? []).map((x) => mailKey(refString(x)));
+    if (keys.every((k) => !!k)) {
+      const machine = machineMail(root);
+      if (keys.every((k) => machine.has(k!))) {
+        const fail: CheckFail = { check: "machine_mail", outcome: "refuse", reason: "every source is mail a machine sent (a no-reply, list or billing sender), and the owner's rule is that machine mail is never read for facts", fix: "don't file receipts or notices from machine mail; a fact a person wrote can cite that person's mail" };
+        return done({ outcome: "refused", message: `${fail.check}: ${fail.reason}. Fix: ${fail.fix}`, fails: [fail] });
+      }
+    }
+  }
   // Withheld categories: an agent that isn't given a type (money) writing its words (TFSA,
   // salary) goes to Louis instead of the brain. Words can be innocent, so this diverts, not refuses.
   if (!opts.acceptedBy || hubYes) {

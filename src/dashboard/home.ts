@@ -177,6 +177,8 @@ export const LINE_COPY = {
   movedUnnamed: "A page only you can see moved with the workplace you named",
   foldedUnnamed: "Two pages only you can see are one page now",
   receiptUnnamed: "A receipt was set aside; receipts aren't facts",
+  machine: "A fact from a no-reply mail on {title} was set aside; machine mail isn't read for facts",
+  machineUnnamed: "A fact from a no-reply mail was set aside; machine mail isn't read for facts",
   family: "{title} may be family: same surname as you",
   disagree: "Two sources disagree on {title}'s {attr}",
   disagreeNext: "Two sources disagree on what's next for {title}",
@@ -355,6 +357,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // What may be said is decided first (owner-canvas re-audit): a receipt says its page only by a
   // name heldName allows, and a family line, like any other, says nothing on a page private now.
   let what = row.why === "receipt" ? (safeName ? w("receipt") : lineWords("receiptUnnamed", {}))
+    : row.why === "machine" ? (safeName ? w("machine") : lineWords("machineUnnamed", {}))
     : shapeless ? (named ? w("somethingNew") : lineWords("somethingUnnamed", {}))
     : row.why === "family" ? w("family")
     : verb && (row.kind === "new" || row.kind === "item_added") ? w("verbNew")
@@ -384,7 +387,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // row that doesn't say who settled it says neither.
   const who = row.kind !== "settled" || isOwnerId(row.settled_by) ? undefined : row.settled_by ? agentTitle(rules, row.settled_by) : "";
   if (who !== undefined) what = what.replace(/^You settled it: /, who ? `${who} settled it: ` : "Settled: ").replace(/^You settled /, who ? `${who} settled ` : "Settled ");
-  const about = { ...tag, ...(row.why === "receipt" ? { kind: "receipt" } : { key: row.fact_key, ...(held ? { held } : {}) }) };
+  const about = { ...tag, ...(row.why === "receipt" || row.why === "machine" ? { kind: "receipt" } : { key: row.fact_key, ...(held ? { held } : {}) }) };
   if (row.kind === "kept" || (row.kind === "confirmed" && !row.added?.length)) return { token: row.undo_token, page: id, what, from, undo: "none", maybe: false, shapeless, ...about };
   const note = notes.get(id);
   const now = note ? shownValue(note.fm.facts?.[attr]) : undefined;

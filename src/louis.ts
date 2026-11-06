@@ -71,3 +71,23 @@ export function checkedSenders(root: string): Map<string, string> {
   }
   return m;
 }
+
+// Mail the hub saw was machine-sent (a no-reply, list or billing sender, or the bulk headers; see
+// machineSender in src/pull.ts): its ref only, one JSON line each in log/machine-mail.jsonl. A pull
+// marks what it skips, and a read of one item (verify_source, a recheck) marks what it finds. Never
+// in refs-checked.jsonl, where a line says the hub read the mail and found it. write() refuses an
+// assistant's fact whose every source is such mail (G668).
+const MACHINE_FILE = ["log", "machine-mail.jsonl"] as const;
+export function recordMachineMail(root: string, refs: string[]) {
+  const at = new Date().toISOString();
+  for (const ref of refs) appendJsonl(join(root, ...MACHINE_FILE), { ref, at });
+}
+// One mail by its scheme and message id, whichever account the ref names ("gmail:acct/id" = "gmail:id").
+export const mailKey = (ref: string) => { const m = /^(gmail|mail):(?:[^\s]*\/)?([^/\s]+)$/.exec(ref.trim()); return m ? `${m[1]}:${m[2]}` : undefined; };
+export function machineMail(root: string): Set<string> {
+  const f = join(root, ...MACHINE_FILE);
+  const out = new Set<string>();
+  if (!existsSync(f)) return out;
+  for (const o of readJsonl<{ ref: string }>(f)) { const k = mailKey(String(o.ref ?? "")); if (k) out.add(k); }
+  return out;
+}

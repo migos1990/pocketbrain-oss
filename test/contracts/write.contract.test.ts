@@ -13,7 +13,7 @@ import type { WriteRequest } from "../../src/checks";
 import { sha256 } from "../../src/util";
 import { setFact } from "../../src/dashboard/edit";
 import { ENCODED_BANK, ORDINARY } from "./leak-rows";
-import { registerLouisMessages } from "../../src/louis";
+import { registerLouisMessages, recordMachineMail } from "../../src/louis";
 import { samePersonProposals, mergeSamePerson } from "../../src/sameperson";
 import { followArea } from "../../src/area-follow";
 import { loadRules } from "../../src/rules";
@@ -709,4 +709,30 @@ test("contract write: no agent's write moves a page's area; only the owner's wor
   org(root);
   setFact(root, "people/jane-roy", "org", "[[orgs/acme]]");
   expect(area(root)).toBe("personal");
+});
+
+test("contract write: no assistant files a fact from mail the hub saw as a machine's, and the reply never says whether the page exists (G668, invariant 3)", () => {
+  const ride = "gmail:f0000000000000a1";
+  const rows: { agent: string; id?: string; title?: string; editor?: boolean }[] = [
+    { agent: "steward", id: "projects/course-a" }, // core, every slice
+    { agent: "planner", id: "projects/course-a" }, // core, owns the work area
+    { agent: "helper", id: "projects/course-a" }, // trial
+    { agent: "helper", id: "projects/course-a", editor: true }, // the owner's editor skips routing only
+    { agent: "planner", title: "Ride Co Canada Inc." }, // a new page
+    { agent: "planner", id: "projects/no-such-page" }, // a missing page answers the same
+  ];
+  const replies = new Set<string>();
+  for (const row of rows) {
+    const root = makeBrain();
+    recordMachineMail(root, [ride]);
+    if (row.editor) editPolicy(root, (s) => s + "owner_editor: helper\n");
+    const before = head(root);
+    const r = write(root, { ...base, agent: row.agent, ...(row.id ? { id: row.id } : { type: "org", title: row.title, area: "work" }), value: "a ride on 3 Nov", sources: [ride] } as never);
+    expect(r.outcome).toBe("refused");
+    replies.add(r.message);
+    expect(head(root)).toBe(before);
+    expect(dirty(root).filter((l) => !l.endsWith("rules/policy.yaml"))).toEqual([]);
+    expect(inbox(root)).toEqual([]);
+  }
+  expect(replies.size).toBe(1);
 });
