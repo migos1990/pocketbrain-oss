@@ -146,6 +146,8 @@ export function senderKey(from: string | undefined): string | undefined {
 // Every ref names a pulled item from one and the same sender (all keyed, one key).
 export function oneSender(root: string, refs: string[]): boolean {
   if (refs.length < 2) return false;
+  // One and the same item has one sender, whether or not its record kept the key (G675).
+  if (new Set(refs).size === 1) return true;
   const k = senderKeys(root, refs);
   return refs.every((r) => k.has(r)) && new Set(refs.map((r) => k.get(r))).size === 1;
 }

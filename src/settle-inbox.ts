@@ -9,11 +9,11 @@ import { loadBrain, isDisputed, isList, sensitivityRank, type FactRecord } from 
 import { followArea } from "./area-follow";
 import { records } from "./carve";
 import { sensitiveShape } from "./shape";
-import { loadRules } from "./rules";
-import { compareKey } from "./normalize";
-import { refString } from "./sources";
+import { loadRules, attributeSpec, isOwnerWord } from "./rules";
+import { compareKey, normalizeValue, nearSame } from "./normalize";
+import { refString, schemeOf, AGENT_MEMORY_SCHEMES } from "./sources";
 import { sourceKind } from "./diary";
-import { inboxCards, decideProposal, resolveEntity, write } from "./write";
+import { inboxCards, decideProposal, resolveEntity, write, pageLink } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
 import { today } from "./brain";
 import { CoreError, type SettleCase } from "./core";
@@ -37,7 +37,14 @@ export function inboxConflicts(root: string): InboxConflict[] {
     const f = note?.fm.facts?.[req.attribute];
     if (!note || !f || isDisputed(f) || isList(f)) continue;
     const live = records(f).find((r) => !r.valid_to && !r.retired);
-    if (!live || compareKey(live.value) === compareKey(req.value)) continue;
+    if (!live) continue;
+    // As the write holds it: a name for a page is that page (G674).
+    const spec = attributeSpec(rules, note.fm.type, req.attribute);
+    let value: unknown = req.value;
+    try { value = normalizeValue(req.value, spec); if (spec.normalize === "link") value = pageLink(notes, value); } catch { /* as written */ }
+    if (compareKey(live.value) === compareKey(value) || nearSame(live.value, value)) continue;
+    // An assistant's own word against the owner's never asks; the filing tick keeps it as history (G677).
+    if (isOwnerWord(rules, note.fm.area, live) && !sensitiveShape(rules, req.attribute, live.value, req.value) && (req.sources ?? []).length > 0 && (req.sources ?? []).every((x) => AGENT_MEMORY_SCHEMES.has(schemeOf(refString(x)) ?? ""))) continue;
     const incoming = { sources: req.sources ?? [], verification: req.verification } as Pick<FactRecord, "sources" | "verification">;
     out.push({
       // Private as the page and the fact are now (G583 and its slice audit): the page, any live

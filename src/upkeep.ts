@@ -11,7 +11,7 @@ import { loadBrain, saveNote, today, linksIn, isDisputed, isList, sensitivityRan
 import { loadRules, attributeSpec, readYaml } from "./rules";
 import { factFreshness, daysBetween, passedDay } from "./freshness";
 import { records, carve, grantFor } from "./carve";
-import { compareKey, valueKey } from "./normalize";
+import { compareKey, valueKey, nearSame } from "./normalize";
 import { refString, sourceRank, schemeOf } from "./sources";
 import { sensitiveShape } from "./shape";
 import { oneSender } from "./capture";
@@ -21,6 +21,7 @@ import { archiveOldLogs } from "./logs";
 import { git } from "./git";
 import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
+import { keptBothWith } from "./write";
 import { wikiLint, renderTouchedPages, parentPlan, pageParentsOn } from "./wiki";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
@@ -485,6 +486,15 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const why = bothHold((d.fm as { candidates?: FactRecord[] }).candidates ?? [], rules, root, String(d.fm.fact_key ?? "").split("#")[1] ?? "");
     if (why) add({ rule: "both-hold-conflict", key: String(d.fm.fact_key ?? d.fm.id), kind: "review", detail: why });
   }
+  // 8d. Asked again after "keep both" (G676): an open conflict on two values the owner already
+  //     answered "Not sure, keep both" on. The write path stops these; a line here means one got
+  //     through some other way. Report-only.
+  for (const d of loadBrain(root).filter((n) => n.fm.id.startsWith("disputes/") && ["open", "escalated"].includes(String(n.fm.status)))) {
+    const vals = ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).map((c) => c.value);
+    const key = String(d.fm.fact_key ?? "");
+    if (vals.length >= 2 && key && vals.slice(1).some((v) => keptBothWith(root, key, vals[0], v)))
+      add({ rule: "asked-again-after-keep-both", key, kind: "review", detail: "a conflict the owner answered with keep both is asking again; check what opened it" });
+  }
 
   // 9. The wiki's lint (src/wiki.ts, docs/wiki.md): page and structure findings for review only.
   for (const f of wikiLint(loadBrain(root).filter((n) => !n.fm.id.startsWith("disputes/")))) add(f);
@@ -612,7 +622,7 @@ export function applyUpkeepOp(root: string, by: string, payload: Record<string, 
 export function bothHold(cands: FactRecord[], rules: Rules, root: string, attr = ""): string | undefined {
   if (cands.length < 2) return undefined;
   if (sensitiveShape(rules, attr, ...cands.map((c) => c.value))) return undefined;
-  if (new Set(cands.map((c) => valueKey(c.value))).size === 1) return "its sides say the same thing in other words";
+  if (new Set(cands.map((c) => valueKey(c.value))).size === 1 || cands.slice(1).every((c) => nearSame(cands[0].value, c.value))) return "its sides say the same thing in other words";
   const kinds = new Set(cands.flatMap((c) => (c.sources ?? []).map((x) => schemeOf(refString(x)) ?? "")));
   const days = new Set(cands.map((c) => String(c.as_of ?? "")));
   if (kinds.size === 1 && ["gmail", "gcal", "mail"].includes([...kinds][0]) && days.size === 1 && !cands.some((c) => c.as_of_approx) && oneSender(root, cands.flatMap((c) => (c.sources ?? []).map(refString)))) return "its sides came from one sender on the same day: a change that day, not a contradiction";

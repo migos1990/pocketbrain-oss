@@ -13,7 +13,7 @@ import { loadBrain, parseNote, saveNote, isList, isDisputed, slugify, today, sen
 import type { Rules } from "./rules";
 import { loadRules, attributeSpec, tierOf, ownerName, captureAgentName } from "./rules";
 import { runChecks, shapeFails, thirdPartySensitive, findInjection, speaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
-import { normalizeValue, compareKey, valueKey } from "./normalize";
+import { normalizeValue, compareKey, valueKey, nearSame } from "./normalize";
 import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath, machineMail, mailKey } from "./louis";
 import { tokenRole } from "./tokenrole";
@@ -166,16 +166,16 @@ const changeKey = (r: Partial<WriteRequest>) => JSON.stringify([r.kind ?? "fact"
 const targetKey = (r: Partial<WriteRequest>) => JSON.stringify([r.kind ?? "fact", r.id ?? r.title ?? "", r.attribute ?? ""]);
 
 // An agent's proposals, waiting (inbox/) and answered (inbox/decided/).
-export interface ProposalFile { file: string; request: WriteRequest; decided?: string; decision?: "accept" | "reject" }
+export interface ProposalFile { file: string; request: WriteRequest; decided?: string; decision?: "accept" | "reject"; by?: string }
 export function gardenerProposals(root: string, agent: string): ProposalFile[] {
   const out: ProposalFile[] = [];
   for (const dir of ["inbox", "inbox/decided"]) {
     const d = join(root, dir);
     if (!existsSync(d)) continue;
     for (const f of readdirSync(d).filter((x) => x.endsWith(".yaml"))) {
-      let p: { request?: WriteRequest; decided?: string; decision?: "accept" | "reject" } = {};
+      let p: { request?: WriteRequest; decided?: string; decision?: "accept" | "reject"; by?: string } = {};
       try { p = YAML.parse(readFileSync(join(d, f), "utf8")) ?? {}; } catch { continue; }
-      if (p.request?.agent === agent) out.push({ file: `${dir}/${f}`, request: p.request, decided: p.decided, decision: p.decision });
+      if (p.request?.agent === agent) out.push({ file: `${dir}/${f}`, request: p.request, decided: p.decided, decision: p.decision, by: p.by });
     }
   }
   return out;
@@ -249,6 +249,19 @@ function propose(root: string, req: WriteRequest, reason: string, fails: CheckFa
       const why = `rejected on ${no} by ${ownerName(loadRules(root))}; don't propose it again before ${addDays(no, REJECT_DAYS)}`;
       return { outcome: "refused", message: why, fails: [{ check: "rejected_before", outcome: "refuse", reason: why, fix: "propose something else, or a different value with new evidence" }] };
     }
+  }
+  // A value the owner already turned down for this fact, proposed again by the same assistant, is not
+  // asked again (G676: "keep both" on a settle card came back about ten times). Only the writer's own
+  // proposals count, so the answer tells it nothing about anyone else's. The Gardener keeps its own
+  // rule above (REJECT_DAYS).
+  if (!req.retract && req.attribute && req.value !== undefined && loadRules(root).policy.agents[req.agent]?.role !== "gardener") {
+    const target = targetKey(req), k = valueKey(req.value);
+    // New evidence (a source the turned-down one didn't cite, other than the assistant's own word)
+    // still goes through (slice audit of G676).
+    const refs = (req.sources ?? []).map((x) => refString(x as SourceRef)).filter((x) => !AGENT_MEMORY_SCHEMES.has(schemeOf(x) ?? ""));
+    const no = gardenerProposals(root, req.agent).find((p) => p.decision === "reject" && isOwnerId(p.by) && targetKey(p.request) === target && !p.request.retract && valueKey(p.request.value) === k
+      && refs.every((x) => (p.request.sources ?? []).map((y) => refString(y as SourceRef)).includes(x)));
+    if (no) return { outcome: "noop", message: `the owner already answered this value on ${no.decided}; not proposed again` };
   }
   const h = sha256(JSON.stringify(req)).slice(0, 8);
   const rel = `inbox/${d}-${req.agent}-${h}.yaml`;
@@ -676,7 +689,9 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     return done(propose(root, req, `the owner decides ${factKey} (not_in_your_view)`, []));
   }
   const spec = attributeSpec(rules, note.fm.type, attr);
-  const value = normalizeValue(req.value, spec);
+  // A name for a linked page ("LAKESHORE College", "[[lakeshore college]]") is that page when it
+  // names exactly one page the writer is shown: the same value as the link, never a conflict (G674).
+  const value = spec.normalize === "link" ? pageLink(writerCarve ? [...writerCarve.visible.values()].map((v) => v.note) : notes, normalizeValue(req.value, spec)) : normalizeValue(req.value, spec);
   if (req.sensitivity && sensitivityRank(req.sensitivity) < sensitivityRank(note.fm.sensitivity))
     return done({ outcome: "refused", fact_key: `${note.fm.id}#${req.attribute}`, message: `sensitivity_only_raises: the file is ${note.fm.sensitivity}; a fact can be raised above it, never lowered`, fails: [{ check: "sensitivity_only_raises", outcome: "refuse", reason: "lowering", fix: "only the owner lowers a level, by editing the file" }] });
   const incoming: FactRecord = {
@@ -932,19 +947,38 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       // more before the owner's word is what the owner already corrected. It goes to history as
       // superseded, no conflict; the diary says it once a day. A same-day or later source still asks
       // (a same-day source may be newer than the owner's word).
-      if (cur.as_of && incoming.as_of && !incoming.as_of_approx && String(incoming.as_of) < String(cur.as_of)) {
+      // An assistant's own word (no source but itself) never asks against the owner's either, whatever
+      // its date: the owner's word comes first in the conflict order, and the owner kept being asked
+      // "You said" against an assistant's guess (owner's phone, 2026-11-06; G677). A source the hub
+      // can check, dated the same day or later, may say the fact changed: that still asks.
+      // Money, health and legal still ask the same day (invariant 6): an owner's correction relayed
+      // through a chat is cited as the assistant's word too (slice audit of G677).
+      const guess = assistantWord(incoming) && !sensitiveShape(rules, attr, cur.value, value);
+      if (guess || (cur.as_of && incoming.as_of && !incoming.as_of_approx && String(incoming.as_of) < String(cur.as_of))) {
         const hs = (hist[attr] ??= []);
         const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value) && h.ended_by?.step === 6);
         if (known) mergeSources(known);
-        else hs.push({ ...incoming, valid_to: cur.as_of, ended_by: { step: 6, at: d, by: req.agent } });
-        keptOwner = true; step = 6; msg = "older than the owner's word: kept as history";
+        else hs.push({ ...incoming, valid_to: guess && String(incoming.as_of) > String(cur.as_of) ? incoming.as_of : cur.as_of, ended_by: { step: 6, at: d, by: req.agent } });
+        keptOwner = true; step = 6; msg = guess ? "an assistant's word against the owner's: kept as history" : "older than the owner's word: kept as history";
         return;
       }
       // The owner's word is never held for the Gardener: it asks at once, and stays live meanwhile.
       beside(6, "contradicts a fact the owner confirmed");
     };
-    if (valueKey(cur.value) === valueKey(value)) {
+    const kept = !ownerWord(incoming) ? keptBothWith(root, factKey, cur.value, value) : undefined;
+    // The same sentence in other words, or with its parts in another order (G662, G678).
+    // Never for the owner's own word: a near-same correction of theirs is a change (slice audit).
+    if (valueKey(cur.value) === valueKey(value) || (!ownerWord(incoming) && nearSame(cur.value, value))) {
       mergeSources(cur); step = 1; msg = "same value: sources merged";
+    } else if (kept) {
+      // The owner answered "Not sure, keep both" on these two values (G676): said again, from any
+      // source, the other one joins history beside the live value and nothing asks.
+      const hs = (hist[attr] ??= []);
+      const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value));
+      // The reply is history's usual one, so it never tells a writer which values were kept (slice audit).
+      if (known) { if (!mergeSources(known)) return done({ outcome: "noop", fact_key: factKey, step: 7, message: "kept as history" }); }
+      else hs.push({ ...incoming, valid_to: incoming.as_of, ended_by: { step: 7, at: d, by: req.agent } });
+      step = 7; msg = "kept as history";
     } else if (cur.contested && packetOpen(root, cur.contested) && !ownerWord(incoming)) {
       // A conflict already waits beside this value: another value joins it; nothing replaces the
       // live one until someone picks (G425).
@@ -1036,6 +1070,16 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         supersede(4, "The owner accepted a newer value");
       } else if (incoming.as_of > cur.as_of && !incoming.as_of_approx && (rNew >= rOld || sameKindNewer(cur, incoming))) {
         supersede(4, `real change over time: superseded value as of ${cur.as_of}`);
+      } else if (incoming.as_of === cur.as_of && !incoming.as_of_approx && !cur.as_of_approx && sameKindNewer(cur, incoming) && !sensitiveShape(rules, attr, cur.value, value) && typeof cur.value === "string" && typeof value === "string" && cur.value.split(/;\s+/).length < 4 && cur.value.length + value.length < 400 && oneItem([...cur.sources, ...incoming.sources].map(refString))) {
+        // One mail of one day giving two values (sign the agreement; the interview on Thursday):
+        // both hold, so both stay, in one value (G675). Said again, a part it holds adds nothing.
+        const parts = cur.value.split(/;\s+/);
+        if (parts.some((x) => valueKey(x) === valueKey(value))) { if (!mergeSources(cur)) return done({ outcome: "noop", fact_key: factKey, step: 1, message: "same value: already recorded" }); step = 1; msg = "same value: sources merged"; }
+        else {
+          (hist[attr] ??= []).push({ ...cur, valid_to: incoming.as_of, ended_by: { step: 4, at: d, by: req.agent } });
+          facts[attr] = { ...incoming, value: `${cur.value}; ${value}`, sources: [...cur.sources, ...incoming.sources.filter((x) => !cur.sources.map(refString).includes(refString(x)))] };
+          step = 4; msg = "the same mail says both: both kept";
+        }
       } else if (incoming.as_of === cur.as_of && !incoming.as_of_approx && !cur.as_of_approx && sameKindNewer(cur, incoming) && !sensitiveShape(rules, attr, cur.value, value) && oneSender(root, [...cur.sources, ...incoming.sources].map(refString))) {
         // Two items the hub pulled itself from one sender on one day (two mails from a build service on
         // 2 November: "beta testing", then "build 5 is ready to test"): the later one is the fact
@@ -1101,6 +1145,46 @@ export function versionOrder(a: string, b: string): number {
   }
   return 0;
 }
+
+// A link written by name ("[[LAKESHORE College]]") to the page whose title or alias that name is,
+// when exactly one of the given notes has it: "[[orgs/lakeshore-college]]" (G674). The caller
+// passes only the notes the writer is shown, so a hidden page never resolves (it stays a name).
+export function pageLink(notes: Note[], v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  const m = /^\[\[([^\]|#]+?)\s*(?:\|[^\]]*)?\]\]$/.exec(v.trim());
+  if (!m) return v;
+  const name = m[1].trim();
+  if (notes.some((n) => n.fm.id === name)) return v;
+  const k = compareKey(name);
+  if (!k) return v;
+  // A page with two names in its title ("Northwind / Brightwell", an import's) carries each: a name
+  // two pages carry stays a name (area-follow's "never picks one", G653).
+  const hits = notes.filter((n) => [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => typeof t === "string" && [t, ...t.split(/\s*[/|]\s*/)].some((x) => compareKey(x) === k)));
+  return hits.length === 1 ? `[[${hits[0].fm.id}]]` : v;
+}
+
+// The owner answered "Not sure, keep both" on a conflict holding these two values of this fact (G676):
+// that packet's id.
+export function keptBothWith(root: string, factKey: string, a: unknown, b: unknown): string | undefined {
+  const dir = join(root, "disputes");
+  if (!existsSync(dir)) return undefined;
+  const ka = valueKey(a), kb = valueKey(b);
+  for (const f of readdirSync(dir).filter((x) => /^c-\d+\.md$/.test(x)).sort().reverse()) {
+    const text = readFileSync(join(dir, f), "utf8");
+    if (!text.includes("status: kept-both")) continue;
+    let p: Note;
+    try { p = parseNote(text, `disputes/${f}`); } catch { continue; }
+    if (p.fm.status !== "kept-both" || p.fm.fact_key !== factKey) continue;
+    const keys = new Set(((p.fm as { candidates?: FactRecord[] }).candidates ?? []).map((c) => valueKey(c.value)));
+    if (keys.has(ka) && keys.has(kb)) return f.replace(/\.md$/, "");
+  }
+  return undefined;
+}
+
+// A record whose only source is an assistant's own word or memory (G677).
+const assistantWord = (r: FactRecord) => (r.sources ?? []).length > 0 && (r.sources ?? []).every((x) => AGENT_MEMORY_SCHEMES.has(schemeOf(refString(x)) ?? ""));
+// Every source is one and the same item (one mail, one event).
+const oneItem = (refs: string[]) => refs.length > 1 && new Set(refs).size === 1;
 
 // One numbered side in a packet's body.
 const sideLine = (n: number, c: FactRecord) => `${n}. ${typeof c.value === "object" ? JSON.stringify(c.value) : c.value} (as of ${c.as_of}, ${c.verification}, by ${c.by}, ${c.sources.map(refString).join(", ")})`;

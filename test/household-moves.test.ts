@@ -53,8 +53,9 @@ test("the owner's own confirmation of a value she confirmed first survives a mov
   expect(r.outcome).toBe("committed");
   // The owner moves the note to his personal area.
   moveTo(root, "personal");
-  // An assistant's value must not replace the owner's word: it should dispute (step 6).
-  const r2 = write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["agent:steward"], verification: "self-reported" });
+  // A later mail's value must not replace the owner's word: it should dispute (step 6). (An
+  // assistant's own word never asks against the owner's at all, G677.)
+  const r2 = write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["gmail:f000000000000077"], verification: "self-reported" });
   expect(r2.outcome).toBe("disputed");
   expect(fact(root).value).not.toBe("17:00");
 });
@@ -75,6 +76,6 @@ test("the owner's own confirmation of a value she confirmed first survives remov
   const f = join(root, "rules", "policy.yaml");
   const p = YAML.parse(readFileSync(f, "utf8")); delete p.co_owners; delete p.agents["sam-assistant"]; writeFileSync(f, YAML.stringify(p));
   Bun.spawnSync(["git", "commit", "-qam", "owner removes the co-owner"], { cwd: root });
-  const r2 = write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["agent:steward"], verification: "self-reported" });
+  const r2 = write(root, { agent: "steward", id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["gmail:f000000000000077"], verification: "self-reported" });
   expect(r2.outcome).toBe("disputed");
 });

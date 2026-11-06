@@ -736,3 +736,31 @@ test("contract write: no assistant files a fact from mail the hub saw as a machi
   }
   expect(replies.size).toBe(1);
 });
+
+test("contract write: a name resolves to a page only when the writer sees it, so the stored value never names a hidden page (G674, invariant 3)", () => {
+  const rows = [
+    { agent: "planner", area: "work", level: "personal", resolves: true }, // a page it reads
+    { agent: "planner", area: "personal", level: "private", resolves: false }, // a page outside its slice
+  ];
+  for (const row of rows) {
+    const root = makeBrain();
+    Bun.spawnSync(["mkdir", "-p", join(root, "orgs")]);
+    writeFileSync(join(root, "orgs", "harbour-trust.md"), `---\nid: orgs/harbour-trust\ntype: org\ntitle: Harbour Trust\narea: ${row.area}\nsensitivity: ${row.level}\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\n---\nAn org.\n`);
+    sh(root, "add", "-A"); sh(root, "-c", "user.name=t", "-c", "user.email=t@x", "commit", "-qm", "org");
+    const r = write(root, { agent: row.agent, id: "people/jane-roy", attribute: "org", value: "HARBOUR trust", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "self-reported" } as never);
+    expect(r.outcome).toBe("committed");
+    expect(fact(root, "people/jane-roy", "org")?.value).toBe(row.resolves ? "[[orgs/harbour-trust]]" : "[[HARBOUR trust]]");
+  }
+});
+
+test("contract write: \"not proposed again\" answers only for the writer's own turned-down proposal (G676, invariant 3)", () => {
+  const root = makeBrain();
+  const ask = (agent: string) => write(root, { agent, id: "people/jane-roy", attribute: "relationship", value: "met once at a conference", as_of: "2026-10-06", sources: ["gmail:f000000000000051"], verification: "self-reported" } as never);
+  const first = ask("helper");
+  expect(first.outcome).toBe("inbox");
+  decideProposal(root, first.file!, "reject");
+  expect(ask("helper").outcome).toBe("noop");
+  // Another assistant proposing the same value learns nothing from the first one's answer.
+  editPolicy(root, (s) => s.replace("helper: { tier: trial", "helper2: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }\n  helper: { tier: trial"));
+  expect(ask("helper2").outcome).toBe("inbox");
+});

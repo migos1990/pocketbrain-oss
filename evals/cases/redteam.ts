@@ -1605,8 +1605,9 @@ const householdCases: Case[] = [
     const f = join(root, "projects", "kids-pickup.md");
     writeFileSync(f, readFileSync(f, "utf8").replace("area: home", "area: personal"));
     Bun.spawnSync(["git", "commit", "-qam", "owner moves it"], { cwd: root });
-    const r = W("steward", { id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["agent:steward"], verification: "self-reported" });
-    return [[`an assistant's newer value opens a dispute (${r.outcome})`, r.outcome === "disputed"], ["17:00 never replaces 16:00: the owner's value stays live, both held for the owner", (() => { const f = pb.brain.loadBrain(root).find((n: any) => n.fm.id === "projects/kids-pickup").fm.facts.pickup_time as any; const c = f.contested ? pb.brain.loadBrain(root).find((n: any) => n.fm.id === `disputes/${f.contested}`)?.fm.candidates : f.candidates; return f.value === "16:00" && (c ?? []).some((x: any) => x.value === "16:00" && x.verification === "confirmed-by-owner") && (c ?? []).some((x: any) => x.value === "17:00"); })()]];
+    // A later mail, not the assistant's own word: that never asks against the owner's word (G677).
+    const r = W("steward", { id: "projects/kids-pickup", attribute: "pickup_time", value: "17:00", as_of: "2026-10-07", sources: ["gmail:f000000000000077"], verification: "self-reported" });
+    return [[`a later mail's value opens a dispute (${r.outcome})`, r.outcome === "disputed"], ["17:00 never replaces 16:00: the owner's value stays live, both held for the owner", (() => { const f = pb.brain.loadBrain(root).find((n: any) => n.fm.id === "projects/kids-pickup").fm.facts.pickup_time as any; const c = f.contested ? pb.brain.loadBrain(root).find((n: any) => n.fm.id === `disputes/${f.contested}`)?.fm.candidates : f.candidates; return f.value === "16:00" && (c ?? []).some((x: any) => x.value === "16:00" && x.verification === "confirmed-by-owner") && (c ?? []).some((x: any) => x.value === "17:00"); })()]];
   }, "G148"),
   householdCase("rt-household-vaguer-no-takeover", "the owner's vaguer date never turns her more precise one into his word", (root) => {
     W("sam-assistant", { id: "projects/kids-pickup", attribute: "school_trip", value: "2026-11-05", as_of: "2026-10-05", sources: ["owner:2026-10-05/chat"], verification: "confirmed-by-owner" });

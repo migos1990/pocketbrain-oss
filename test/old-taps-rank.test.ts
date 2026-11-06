@@ -58,7 +58,9 @@ test("an old Yes tap ranks as its source; typed words stay the owner's", () => {
 test("a newer claim from as strong a source updates an old tapped assistant claim once it ranks as one", () => {
   const newer = { kind: "fact", agent: "planner", id: "people/kai-moss", attribute: "role", value: "Head coach", as_of: "2026-10-24", sources: ["agent:planner/2026-10-24"] } as never;
   const before = brain();
-  expect(write(before, newer, {}).outcome).not.toBe("committed");
+  // Before, the old tap reads as the owner's word: the assistant's claim never replaces it (it goes
+  // to history since G677, where it used to ask).
+  write(before, newer, {});
   expect(fact(before, "people/kai-moss", "role").value).toBe("Coach");
   const root = brain();
   rankOldTaps(root);

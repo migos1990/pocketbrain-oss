@@ -5,6 +5,41 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G678: {
+    closed: "claude/false-conflicts-2",
+    title: "The same notice from two mails, its parts in another order, was asked as a conflict",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-06: \"What's next\" between two long paraphrases of one service notice (22 Oct and 3 Nov), the same words with the parts in another order and \"you want\" added. G662's valueKey keeps word order, so a clause moved to the end made two values.",
+    fix: "nearSame (src/normalize.ts): ten words or more, one side's stemmed words all in the other, the other adding at most three words that only address the reader (no quantifier or modal), 75% of the shorter in the same order, the same numbers and negations; a pure reorder (who does what) never folds. Never for the owner's own word. The write's same-value check, filing's differs, the inbox's conflict list and upkeep's both-hold report use it. Tests: test/false-conflicts-2.test.ts.",
+  },
+  G674: {
+    closed: "claude/false-conflicts-2",
+    title: "An org's name in another case was asked as a conflict against the link to its page",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-06: \"What is <person>'s org?\" between a lower-case school name (an assistant's link to the org page it made, titled in lower case) and the same name in its usual case from a mail. The mail's side was a name written as a link to no page, so its comparison key was not the page's id and a case difference became a conflict.",
+    fix: "pageLink (src/write.ts): a field with normalize: link takes a name the way it takes the link, the page whose title or alias that name is when exactly one page the writer is shown has it; the write, filing (differs) and the inbox's conflict list compare that. A hidden page never resolves (contract row). Tests: test/false-conflicts-2.test.ts, test/contracts/write.contract.test.ts.",
+  },
+  G675: {
+    closed: "claude/false-conflicts-2",
+    title: "Two next steps from one mail of one day were asked as a conflict",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-06: \"What's next for <project>?\" between an agreement to sign and an interview date, both from one mail of the same day. Both hold; the one-sender rule (G662) needed a sender key the older capture records lack.",
+    fix: "oneSender is true when every ref is the same item; the write keeps both values of one item of one day in one value joined by \"; \" (step 4), and a part it holds said again adds nothing. Money, health and legal still ask. Tests: test/false-conflicts-2.test.ts.",
+  },
+  G676: {
+    closed: "claude/false-conflicts-2",
+    title: "\"Not sure, keep both\" didn't stick",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-06: the card on a person's relationship came back about ten times after keep both. Keep both only cleared the conflict beside the live value, so the same value said again opened a new one; and a proposal the owner turned down was proposed again the next day as a new file and a new card.",
+    fix: "keptBothWith (src/write.ts): two values the owner kept both of never open a conflict again on that fact, from any source; the other joins history. propose(): an assistant's own turned-down value for the same fact is a noop. Upkeep step 8d lists any open conflict on a kept pair (asked-again-after-keep-both, report-only). Tests: test/false-conflicts-2.test.ts, test/contracts/write.contract.test.ts.",
+  },
+  G677: {
+    closed: "claude/false-conflicts-2",
+    title: "The owner's own word was asked against an assistant's guess",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-06: \"You said, 2 Nov\" against an assistant's guess at how the owner knows a person. By the conflict order the owner's word comes first; an assistant's own word dated the same day or later still opened a conflict, and its proposal was a card on the settle screen.",
+    fix: "write() ownerDispute: a value whose only sources are an assistant's word or memory (AGENT_MEMORY_SCHEMES) goes to history against the owner's word whatever its date; filing files such a proposal the same way, and the inbox's conflict list leaves it out. A checkable source of the same day or later still asks. Tests: test/false-conflicts-2.test.ts.",
+  },
   G673: {
     closed: "55c5963f",
     title: "A line the hub set aside said \"From today's email\" under it",

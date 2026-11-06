@@ -24,15 +24,15 @@ import { sensitiveShape } from "./shape";
 import type { Rules } from "./rules";
 import { logWrite, inboxCards, forgottenName, forgottenSlugs } from "./write";
 import { loadRules, attributeSpec, isOwnerWord, isGardener, tierOf } from "./rules";
-import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide } from "./write";
+import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide, pageLink } from "./write";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
-import { refString, schemeOf, isExactLouisRef, SCHEMES, sourceRank, asAgentWord } from "./sources";
+import { refString, schemeOf, isExactLouisRef, SCHEMES, sourceRank, asAgentWord, AGENT_MEMORY_SCHEMES } from "./sources";
 import { isOwnerConfirmed, normVerification, isOwnerId } from "./owner";
 import { getQuote } from "./quotes";
 import { renderTouchedPages } from "./wiki";
 import { appendDiary, readDiary, sourceKind, type DiaryRow } from "./diary";
 import { sha256 } from "./util";
-import { compareKey, valueKey } from "./normalize";
+import { compareKey, valueKey, normalizeValue, nearSame } from "./normalize";
 import { ownerDay } from "./clock";
 import { isList, type FactRecord } from "./brain";
 import { hubGate } from "./hub";
@@ -530,7 +530,9 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // where the owner gave one waited as an ask that never filed (audit v8, 2026-10-31; G565).
   const listed = cur && isList(cur as never) && (spec.merge === "set" || spec.merge === "append");
   const keyOf = (v: unknown) => spec.item_key && v && typeof v === "object" ? String((v as Record<string, unknown>)[spec.item_key]) : undefined;
-  const differs = (x: FactRecord) => valueKey(x.value) !== valueKey(r.value) && (!listed || (keyOf(x.value) !== undefined && keyOf(x.value) === keyOf(r.value)));
+  // The value as the write will hold it: a name for a page is that page's link (G674).
+  const rv = spec.normalize === "link" ? (() => { try { return pageLink(writerShown(rules, notes, String((r as { agent?: string }).agent ?? pr.by)), normalizeValue(r.value, spec)); } catch { return r.value; } })() : r.value;
+  const differs = (x: FactRecord) => valueKey(x.value) !== valueKey(rv) && !nearSame(x.value, rv) && (!listed || (keyOf(x.value) !== undefined && keyOf(x.value) === keyOf(r.value)));
   // A value from the same kind of source dated after the live one, or on its day from the same
   // sender (G662: one sender's later mail of the same day is the fact changing that day, not two
   // values that can't both hold; the earlier one goes to history). Two senders of one day still
@@ -542,7 +544,11 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   // "older sources never re-ask"). A source dated before the owner's word goes to history and asks
   // nothing; any other different value is a conflict, asked at once (write(): ownerDispute).
   const ownerWords = live.filter((x) => differs(x) && (isOwnerConfirmed(normVerification(x.verification)) || (note && isOwnerWord(rules, note.fm.area, x))));
-  const older = ownerWords.length > 0 && ownerWords.every((x) => x.as_of && r.as_of && String(r.as_of).slice(0, 10) < String(x.as_of).slice(0, 10));
+  // An assistant's own word against the owner's word is never asked either (G677): the write keeps
+  // the owner's value and puts the assistant's in history.
+  // Money, health and legal still ask the same day, as in the write.
+  const guess = (r.sources ?? []).length > 0 && (r.sources ?? []).every((y) => AGENT_MEMORY_SCHEMES.has(schemeOf(refString(y as never)) ?? "")) && !ownerWords.some((x) => sensitiveShape(rules, r.attribute, x.value, r.value));
+  const older = ownerWords.length > 0 && (guess || ownerWords.every((x) => x.as_of && r.as_of && String(r.as_of).slice(0, 10) < String(x.as_of).slice(0, 10)));
   if (older) return { plan: { choice: "accept", label: KEPT, why: "an older source than your word: kept as history, your value stays; Undo takes it back out", at: now.toISOString(), run: () => {
     return accepted(decideProposal(root, it.ref, "accept", AUTO), `kept ${it.ref}`);
   } } };

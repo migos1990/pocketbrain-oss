@@ -13,6 +13,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- Fewer cards ask you to pick between things that are both true. An org named in another case or with accents ("Lakeview college", "LAKEVIEW Collège") is the same org. The same long notice from two mails, its parts in another order, is one value. Two next steps from one mail both stay. Your own word is never asked against an assistant's guess. "Not sure, keep both" now sticks: the same two values never come back, and an assistant doesn't propose again what you turned down. Cards already on your home stay until you answer them once.
 - Your own page now reads like the front of a book about you. Under what it says about you come what's new, what you're on right now, who matters to you and how many things wait for you, each one a link (docs/owner-home.md).
 - A line for a receipt or no-reply mail fact your brain set aside now says "Your brain set it aside today" under it, where it said "From today's email" though no email came that day (docs/owner-home.md, G673).
 - Conflicts on one page from the same two sources are one card that names each field, instead of a card per field. Settle opens the first, and each answer goes on to the next until the last brings you home (docs/owner-home.md, G669).

@@ -63,3 +63,40 @@ export function valueKey(v: unknown): string {
   return "~" + words.filter((w) => !GRAMMAR.has(w)).map(stem).join(" ");
 }
 export const sameValue = (a: unknown, b: unknown) => valueKey(a) === valueKey(b);
+
+// Near the same sentence (G678): a long value said again with its parts in another order and a
+// filler word or two more ("Use each client to retain in a flow…" and "use the clients in a flow…,
+// for each client you want to retain", a notice's two mails). One side's words, stemmed, are all in
+// the other; what the other adds is only filler ("you", "want", "please"), at most three words; most
+// of the shorter one's words come in the same order; numbers and negations are the same. Only for
+// ten words or more, and never the same words merely reordered (that can swap who does what:
+// "to Anna from Paul" and "to Paul from Anna"), so a short value or a changed name still differs.
+// Only words that address the reader. No quantifier ("all", "any", "each"), no modal ("need"),
+// no pointer ("that"): those change who or what a sentence covers (slice audit of G678). "want"
+// and "wish" count only beside "you" or "we" ("for each client you want to retain").
+const FILLER = new Set(["you", "your", "we", "our", "want", "wish", "please", "kindly", "vous", "nous", "votre", "notre", "veuillez", "vouloir", "voulez", "souhaitez"]);
+const WHO = new Set(["you", "your", "we", "our", "vous", "nous", "votre", "notre"]);
+const NEGATION = new Set(["not", "no", "never", "none", "nor", "without", "ne", "pas", "jamais", "aucun", "aucune", "sans", "non"]);
+const stems = (v: string) => compareKey(v).split(" ").filter((w) => w && !GRAMMAR.has(w)).map(stem);
+function lcs(a: string[], b: string[]): number {
+  const row = new Array(b.length + 1).fill(0);
+  for (const x of a) { let prev = 0; for (let j = 1; j <= b.length; j++) { const t = row[j]; row[j] = x === b[j - 1] ? prev + 1 : Math.max(row[j], row[j - 1]); prev = t; } }
+  return row[b.length];
+}
+export function nearSame(a: unknown, b: unknown): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  if (valueKey(a) === valueKey(b)) return true;
+  let x = stems(a), y = stems(b);
+  if (x.length < 10 || y.length < 10) return false;
+  if (x.length > y.length) [x, y] = [y, x];
+  const nums = (w: string[]) => w.filter((t) => /\d/.test(t)).sort().join(" ");
+  const negs = (w: string[]) => w.filter((t) => NEGATION.has(t)).sort().join(" ");
+  if (nums(x) !== nums(y) || negs(x) !== negs(y)) return false;
+  const sx = new Set(x), sy = new Set(y);
+  if (![...sx].every((t) => sy.has(t))) return false;
+  const extra = [...sy].filter((t) => !sx.has(t));
+  if (!extra.length || extra.length > 3 || !extra.every((t) => FILLER.has(t))) return false;
+  if (extra.some((t) => !WHO.has(t) && !["please", "kindly", "veuillez"].includes(t)) && !extra.some((t) => WHO.has(t))) return false;
+  return lcs(x, y) >= 0.75 * x.length;
+}
+
