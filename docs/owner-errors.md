@@ -93,6 +93,9 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `doctor.backup-config` | {message}. Fix: read docs/backup.md. |
 | `doctor.backup-never` | No backup made yet. Fix: run pocketbrain backup. |
 | `doctor.backup-stale` | Last backup {days} days ago and main has moved since: the hub is asleep or the job is broken. Fix: run pocketbrain backup. |
+| `doctor.job-late` | {job} hasn't run for {ago} (last good run {since}). Fix: run pocketbrain jobs, to see every job; is the hub running start?. |
+| `doctor.job-failed` | {job} failed {ago} ago: {error}. Fix: run pocketbrain jobs. |
+| `doctor.restore-drill` | The Sunday restore test failed {day}: {problem}. Fix: run pocketbrain drill --weekly, to run it again; docs/backup.md "The Sunday restore test". |
 | `doctor.backup-gone` | {file} isn't in {dest} any more (deleted, or the sync moved it). Fix: run pocketbrain backup. |
 | `doctor.setup-door` | No public door in rules/hub.yaml. Fix: run pocketbrain hub url https://brain.<your domain>, once a named Cloudflare tunnel answers there (docs/hub.md). |
 | `doctor.setup-gardener` | The gardener's Anthropic side isn't recorded. Fix: run pocketbrain tend --managed, then run pocketbrain gardener setup --profile pocketbrain --lock ~/pocketbrain-agents/claude-lock.json. |

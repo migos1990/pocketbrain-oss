@@ -21,6 +21,8 @@ import { scoringIndex, foundBy, terms } from "./retrieve";
 import { missedWindows, nightMode, gardenerConfig } from "./gardener";
 import { freeDiskMb } from "./textline/items";
 import { offsiteCheck } from "./offsite";
+import { drillCheck } from "./restore-drill";
+import { beat } from "./heartbeat";
 import { loadUpcoming } from "./upcoming";
 import YAML from "yaml";
 import { tailnetSettings, serveDoorProblem } from "./dashboard/tailnet";
@@ -157,6 +159,8 @@ export function jobChecks(root: string, now = new Date()): Check[] {
   out.push(...selfChecks(root, now));
   const off = offsiteCheck(root, now);
   if (off) out.push(off);
+  const dr = drillCheck(root, now);
+  if (dr) out.push(dr);
   const sends = readJsonl(join(root, "textline", "log.jsonl")).filter((e) => e.sent !== undefined).slice(-3);
   if (sends.length) {
     const failing = sends.length === 3 && sends.every((e) => e.ok === false);
@@ -347,7 +351,12 @@ export function failingChecks(root: string): { name: string; detail: string; sin
 export const failingNow = (root: string): string[] => failingChecks(root).map((c) => c.name);
 
 export async function probeOnce(root: string, localUrl: string, f: Fetch = fetch): Promise<Check[]> {
-  return record(root, [...await runChecks(root, localUrl, f), ...jobChecks(root)]);
+  const t0 = Date.now();
+  try {
+    const fresh = record(root, [...await runChecks(root, localUrl, f), ...jobChecks(root)]);
+    beat(root, "probe", { ok: true, ms: Date.now() - t0 });
+    return fresh;
+  } catch (e) { beat(root, "probe", { ok: false, error: (e as Error).message, ms: Date.now() - t0 }); throw e; }
 }
 
 // The north star on the real brain after every deploy (audit v4: `--brain` only ran with an env var

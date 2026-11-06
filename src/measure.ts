@@ -11,6 +11,7 @@
 //   log/owner-tasks.jsonl {at, ev, id, what?, via?}    pocketbrain task: what waits on the owner's own hands
 // Everything else comes from log/reads.jsonl, log/writes.jsonl, log/alerts.jsonl,
 // textline/log.jsonl, inbox/reflect/*.md and git.
+import { ledger, lateJobs } from "./heartbeat";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { uptime } from "node:os";
@@ -400,6 +401,8 @@ export function week(root: string, end = today(), baseline?: number): { file: st
     row("Hand fixes", (m) => m.fixes),
     row("Hub failures", (m) => m.hubDown), "",
     bar(root, end).text, "",
+    // The heartbeat ledger (src/heartbeat.ts), as it stands when the report is made.
+    ...((): string[] => { const b = ledger(root), l = lateJobs(root); return b.length ? [`Scheduled jobs: ${b.length - l.length} of ${b.length} on time${l.length ? `; behind: ${l.map((x) => `${x.owner} (${x.why} since ${x.since.slice(0, 10)})`).join(", ")}` : ""}`, ""] : []; })(),
     ...gardenerLine(root, ms),
     ...corroborationLine(root, end),
     ...blindSpotLines(root, end),

@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { join, resolve } from "node:path";
 import { loadBackupConfig, destOf } from "./backup";
 import { launchdPlist } from "./start";
+import { beat } from "./heartbeat";
 
 export const OFFSITE_LABEL = "com.pocketbrain.offsite";
 export const OFFSITE_TIMEOUT_MS = 10 * 60_000;
@@ -17,7 +18,7 @@ const EVERY_S = 3600;
 // No successful copy in this long while the job is on fails the check.
 export const OFFSITE_STALE_HOURS = 48;
 
-type Exec = (cmd: string[], ms: number) => Promise<{ code: number; out: string }>;
+export type Exec = (cmd: string[], ms: number) => Promise<{ code: number; out: string }>;
 export type Run = (cmd: string[]) => { code: number; out: string };
 export interface OffsiteState { to?: string; on_at?: string; at?: string; ok_at?: string; error?: string; copied?: number }
 
@@ -27,7 +28,7 @@ export function offsiteState(root: string): OffsiteState | undefined {
 }
 function saveState(root: string, s: OffsiteState) { mkdirSync(join(root, "log"), { recursive: true }); writeFileSync(stateFile(root), JSON.stringify(s) + "\n"); }
 
-const exec: Exec = async (cmd, ms) => {
+export const offsiteExec: Exec = async (cmd, ms) => {
   const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   let late = false;
   const timer = setTimeout(() => { late = true; p.kill(9); }, ms);
@@ -45,7 +46,7 @@ export async function offsiteCopy(root: string, to: string, o: { from?: string; 
   const now = o.now ?? new Date();
   const from = o.from ?? destOf(root, loadBackupConfig(root));
   const ms = o.timeoutMs ?? OFFSITE_TIMEOUT_MS;
-  const run = o.run ?? exec;
+  const run = o.run ?? offsiteExec;
   const prev = offsiteState(root) ?? {};
   const copied: string[] = [];
   let error: string | undefined;
@@ -70,6 +71,7 @@ export async function offsiteCopy(root: string, to: string, o: { from?: string; 
     }
   } catch (e) { error = (e as Error).message; }
   saveState(root, { ...prev, to, at: now.toISOString(), ...(error ? { error } : { ok_at: now.toISOString(), error: undefined }), copied: copied.length });
+  beat(root, "offsite", { ok: !error, error, ms: Date.now() - (deadline - ms), now });
   return { copied, ...(error ? { error } : {}) };
 }
 
@@ -104,4 +106,19 @@ export function offsiteOff(root: string, o: { home: string; uid: number; run: Ru
   if (existsSync(file)) { o.run(["launchctl", "bootout", `gui/${o.uid}/${OFFSITE_LABEL}`]); rmSync(file); }
   rmSync(stateFile(root), { force: true });
   return "offsite copy off: backups stay in the local folder only";
+}
+
+// The Sunday restore test's read of the synced folder (src/restore-drill.ts): one named backup
+// copied out into a scratch folder, in a child process under a time limit, like every other touch
+// of that folder. The hub process itself never opens a file there.
+export async function fetchOffsite(to: string, name: string, into: string, o: { timeoutMs?: number; run?: Exec } = {}): Promise<{ file?: string; error?: string }> {
+  if (!/^brain-[0-9-]+\.tar\.age$/.test(name)) return { error: `not a backup name: ${name}` };
+  const run = o.run ?? offsiteExec, ms = o.timeoutMs ?? OFFSITE_TIMEOUT_MS;
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<{ code: number; out: string }>((done) => { t = setTimeout(() => done({ code: 1, out: `no answer in ${Math.round(ms / 1000)} s` }), ms); });
+  try {
+    const r = await Promise.race([run(["/bin/cp", join(to, name), join(into, name)], ms), late]);
+    if (r.code !== 0) return { error: /No such file|cannot stat|not found/i.test(r.out) ? `${name} isn't in the offsite folder yet` : `couldn't read ${name} from the offsite folder: ${r.out.slice(0, 160)}` };
+    return existsSync(join(into, name)) ? { file: join(into, name) } : { error: `${name} didn't come back from the offsite folder` };
+  } finally { clearTimeout(t); }
 }

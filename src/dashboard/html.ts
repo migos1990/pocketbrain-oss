@@ -38,6 +38,8 @@ import { bar } from "../measure";
 import { ownerLocal, ownerToday } from "../clock";
 import { escapeRe, codeAtStart } from "../util";
 import { paged, pager, withParam } from "./paging";
+import { ledger, lateJobs, agoWords, CADENCE } from "../heartbeat";
+import { drillWords, lastRestoreDrill } from "../restore-drill";
 
 export const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const val = (v: unknown) => (typeof v === "object" ? JSON.stringify(v) : String(v ?? ""));
@@ -679,6 +681,19 @@ function versionLine(): string {
   return release || sha ? `<p class="sub version">pocketBrain ${esc(release)}${sha ? ` · code ${esc(sha)}` : ""}</p>` : "";
 }
 
+// The heartbeat ledger on Settings (src/heartbeat.ts, G691): the Sunday restore test's line, each
+// late or failing job with when it last worked, and how many are on time. The home links here.
+export function jobsSection(root: string, now: Date): string {
+  const beats = ledger(root);
+  const drill = drillWords(lastRestoreDrill(root));
+  if (!beats.length && !drill) return "";
+  const late = lateJobs(root, now);
+  const rows = late.map((l) => `<div class="item"><div class="what">${esc(l.why === "late" ? `${cap(l.owner)} hasn't run for ${agoWords(l.since, now)}` : `${cap(l.owner)} failed ${agoWords(l.since, now)} ago`)}<div class="sub">${esc(l.error ?? `last worked ${ownerLocal(l.since).slice(0, 16).replace("T", " ")}`)}</div></div></div>`).join("");
+  const onTime = beats.length - late.length;
+  const tail = `<p class="sub">${onTime} of ${beats.length} scheduled job${beats.length === 1 ? "" : "s"} on time${beats.length ? `: ${esc(beats.filter((b) => !late.some((l) => l.job === b.job)).map((b) => CADENCE[b.job]?.owner ?? b.job.replace(/_/g, " ")).join(", "))}` : ""}.</p>`;
+  return `<h2 id="jobs">Scheduled jobs</h2>${drill ? `<p class="sub">${esc(drill)}.</p>` : ""}${rows ? `<div class="card">${rows}</div>` : ""}${tail}`;
+}
+
 export function overview(s: State, csrf: string, q = new URLSearchParams()): Page {
   // Settings (the home's link): the pages behind it, everything still open one by one, what the hub
   // filed on its own with Undo, then the assistants and the weekly numbers folded away. Nothing here
@@ -701,6 +716,7 @@ export function overview(s: State, csrf: string, q = new URLSearchParams()): Pag
   const body = `<h1 title="Settings">Settings${paused.length ? `<span class="h1-sub"> · ${paused.join(", ")} paused</span>` : ""}</h1>${memory}<div class="card">${links}</div>
 <h2 id="needs">Still open${needs.length ? ` (${needs.length})` : ""}</h2>${saved}${heldLine}${needs.length ? `<div class="card">${needPage.rows.map(render).join("")}</div>${pager(needPage, (n) => withParam("/overview", q, "page", n), "open")}` : '<div class="card empty">Nothing open. Conflicts wait on your home.</div>'}
 ${filed ? `<h2>Filed for you this week</h2><div class="card">${filed}</div>` : ""}
+${jobsSection(s.root, s.now)}
 <details class="more"><summary>Your assistants, activity and weekly numbers</summary>
 <h2>Your assistants</h2><div class="card who">${s.agents.map((a) => assistantItem(s, csrf, a)).join("")}</div>
 ${barTile(s)}

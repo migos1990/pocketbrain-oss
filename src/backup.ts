@@ -27,6 +27,7 @@ import { git } from "./git";
 import * as hub from "./hub";
 import { doctor, finding, type Finding } from "./doctor";
 import type { OwnerErrorId, Vars } from "./owner-errors";
+import { beat } from "./heartbeat";
 
 export class BackupError extends Error {}
 
@@ -685,6 +686,8 @@ export async function pushOriginApart(root: string, o: { spawn?: (cmd: string[])
   const state: PushState = error ? { at, ...(prev?.ok_at ? { ok_at: prev.ok_at } : {}), error: error.slice(0, 300), fails: (prev?.fails ?? 0) + 1 } : { at, ok_at: at, fails: 0 };
   mkdirSync(join(root, "log"), { recursive: true });
   writeFileSync(join(root, PUSHED), JSON.stringify(state));
+  // One failure can be a blip (the probe waits for two); the ledger keeps the last run as it was.
+  beat(root, "origin_push", { ok: !error, error, now: o.now });
   return state;
 }
 
@@ -707,6 +710,7 @@ export function lastLook(root: string): LookState | undefined {
   try { return JSON.parse(readFileSync(join(root, LOOKED), "utf8")); } catch { return undefined; }
 }
 function noteLook(root: string, error?: string): void {
+  beat(root, "backup_look", { ok: !error, error });
   try {
     mkdirSync(join(root, "log"), { recursive: true });
     writeFileSync(join(root, LOOKED), JSON.stringify({ at: new Date().toISOString(), ...(error ? { error: error.slice(0, 300) } : {}) }));

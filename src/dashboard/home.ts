@@ -26,6 +26,7 @@ import { ownerDay, clock } from "../clock";
 import { sensitiveShape, sensitiveName } from "../shape";
 import type { Mark } from "./marks";
 import { yourToDo } from "../wiki";
+import { lateJobs, lateLine } from "../heartbeat";
 // Settings, where what the home doesn't list itself waits (the dashboard's overview).
 export const SETTINGS_HREF = "/overview";
 
@@ -49,7 +50,7 @@ export interface HomeLine {
 export interface Waiting { what: string; verb: string; href: string; n?: number; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
-export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number }
+export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string }
 
 export const SINCE_CAP = 7;
 // The face of On your mind (canvas "final direction", Louis 2026-10-31: the home was a log): six
@@ -731,6 +732,9 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
     folded: Math.max(0, recent.length - cap),
     earlier: [...older].slice(0, o.all ? undefined : EARLIER_DAYS).map(([day, lines]) => ({ day: longDay(day), lines: o.all ? lines : lines.slice(0, EARLIER_PER_DAY) })),
     earlierFolded: o.all ? 0 : [...older].reduce((n, [, lines], i) => n + (i < EARLIER_DAYS ? Math.max(0, lines.length - EARLIER_PER_DAY) : lines.length), 0),
+    // One line only when a scheduled job is late or failing (src/heartbeat.ts, G691); nothing when all
+    // is well. Not an ask: it adds nothing to the count and has no card.
+    ...((): { late?: string } => { const l = lateLine(lateJobs(root, now), now); return l ? { late: l } : {}; })(),
   };
 }
 

@@ -11,6 +11,7 @@
 // that stopped, an assistant that stopped reading) run here too, and each failing one, like a hung
 // hub, reaches the owner as a Mac notification once a day and as a problem line in the menu bar
 // (log/watchdog.json). The hub's self-check in turn flags a watchdog that stopped running.
+import { beat } from "./heartbeat";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { alert, appendJsonl, readJsonl } from "./util";
@@ -92,6 +93,8 @@ export async function watchdogTick(root: string, o: { url: string; run: Run; uid
     }
   }
   save(root, { ...load(root), last: now.toISOString(), problems, notified, messages_relaunched: relaunched });
+  // The watchdog itself ran: its own heartbeat (src/heartbeat.ts). A hung hub is the hub's problem, not this job's.
+  beat(root, "watchdog", { ok: true, now });
   return r;
 }
 

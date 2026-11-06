@@ -4447,4 +4447,69 @@ const leakTextCases: Case[] = [
     } },
 ];
 
-export const redteamCases: Case[] = [...standingCases, ...samePersonCases, ...householdCases, ...gardenerCases, ...relayCases, ...injectionCases, ...storedRoutineCases, ...forgedCases, ...tokenCases, ...killCases, ...logCases, ...hubCases, ...dashCases, ...sliceCases, ...instinctCases, ...browserCases, ...browserDoorCases, ...fuzzCases, ...canaryCases, ...menubarCases, ...collaboratorCases, ...pullRtCases, ...beliefCases, ...memsyncScrubCases, ...replacedCases, ...accessCases, ...quoteCases, ...tripwireKeyCases, ...backupSecretCases, ...hiddenNameCases, ...edgeRtCases, ...sensitiveRound2Cases, ...matchCases, ...areaAfterAgentCases, ...settleShareCases, ...tightenCases, ...retrieveAgeCases, ...updatedShownCases, ...ownerWordCases, ...deckCases, ...expiryCases, ...restoreCases, ...copyCases, ...bigBodyCases, ...quizBudgetCases, ...batch30AuditCases, ...batch2021Cases, ...tokenAuditCases, ...tokenAudit2Cases, ...tokenAudit3Cases, ...tokenAudit4Cases, ...tokenAudit5Cases, ...leakTextCases];
+// Next-level R1 and R4 (G690 to G692): the Sunday restore test reads the offsite copy back and
+// fails when it isn't the file the hub made; every scheduled job beats into one ledger, and the
+// home says one line, never counted, only when a job is late.
+const beatMod = await opt("heartbeat.ts");
+const drillMod = await opt("restore-drill.ts");
+const startMod = await opt("start.ts");
+const jobsCases: Case[] = [
+  { id: "rt-restore-drill-offsite-copy", dimension: "escalation", kind: "attack", gap: "G690", source: "next-level R1",
+    title: "the Sunday restore test fails when the offsite copy of the newest backup is missing or cut short, and passes when it matches",
+    run: async () => {
+      if (!drillMod?.restoreDrill || !backup?.backup) return na("no Sunday restore test at this commit");
+      if (!Bun.which("age-keygen")) return na("age isn't installed");
+      const keys = mkdtempSync(join(tmpdir(), "pb-ev-rd-"));
+      const k = Bun.spawnSync(["age-keygen"], { stdout: "pipe" }).stdout.toString();
+      const pub = Bun.spawnSync(["age-keygen", "-y"], { stdin: Buffer.from(k), stdout: "pipe" }).stdout.toString().trim();
+      const dest = join(keys, "local"), drive = join(keys, "drive");
+      mkdirSync(dest); mkdirSync(drive);
+      const root = sandbox("synthetic", (r) => { writeFileSync(join(r, "rules", "backup.yaml"), `dest: ${dest}\n`); writeFileSync(join(r, "rules", "backup.pub"), `${pub}\n`); });
+      Bun.spawnSync(["git", "add", "rules"], { cwd: root });
+      Bun.spawnSync(["git", "commit", "-qm", "louis: backups", "--", "rules"], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "x", GIT_AUTHOR_EMAIL: "x@x", GIT_COMMITTER_NAME: "x", GIT_COMMITTER_EMAIL: "x@x" } });
+      const b = backup.backup(root);
+      const name = b.file.split("/").pop();
+      mkdirSync(join(root, "log"), { recursive: true });
+      writeFileSync(join(root, "log", "offsite.json"), JSON.stringify({ to: drive }) + "\n");
+      const keyFile = join(keys, "none.key");
+      const missing = await drillMod.restoreDrill(root, { keyFile });
+      writeFileSync(join(drive, name), readFileSync(b.file).subarray(0, 64));
+      const cut = await drillMod.restoreDrill(root, { keyFile });
+      writeFileSync(join(drive, name), readFileSync(b.file));
+      const good = await drillMod.restoreDrill(root, { keyFile });
+      const steps: [string, boolean][] = [["missing fails", !missing.ok], ["cut short fails", !cut.ok && /differs/.test(cut.problems[0] ?? "")], ["matching passes from offsite", good.ok && good.from === "offsite"]];
+      const bad = steps.filter(([, v]) => !v).map(([x]) => x);
+      return ok(!bad.length, bad.length ? `failed: ${bad.join("; ")}` : "missing and cut-short copies fail, a good one passes");
+    } },
+  { id: "rt-late-job-home-line", dimension: "escalation", kind: "attack", gap: "G691", source: "next-level R4",
+    title: "a night pass two days late is one line on the home, never an ask; nothing when all jobs are on time",
+    run: async () => {
+      if (!beatMod?.beat || !homeMod?.homeView) return na("no heartbeat ledger at this commit");
+      const root = sandbox("synthetic");
+      const now = new Date();
+      const rules = pb.rules.loadRules(root), notes = pb.brain.loadBrain(root);
+      beatMod.beat(root, "night", { ok: true, now: new Date(now.getTime() - 3_600_000) });
+      const calm = homeMod.homeView(root, rules, notes, now);
+      const count = homeMod.waitingCount(root, now);
+      beatMod.beat(root, "night", { ok: true, now: new Date(now.getTime() - 60 * 3_600_000) });
+      const v = homeMod.homeView(root, rules, notes, now);
+      const steps: [string, boolean][] = [["quiet when on time", calm.late === undefined], ["one line when late", /night pass has not run for 2 days/.test(v.late ?? "")], ["not counted", homeMod.waitingCount(root, now) === count]];
+      const bad = steps.filter(([, x]) => !x).map(([x]) => x);
+      return ok(!bad.length, bad.length ? `failed: ${bad.join("; ")}` : (v.late ?? ""));
+    } },
+  { id: "rt-every-job-beats", dimension: "escalation", kind: "attack", gap: "G692", source: "next-level R4",
+    title: "the daily jobs, a failed pull and a hung offsite copy each leave a heartbeat with their outcome",
+    run: async () => {
+      if (!beatMod?.readBeat || !startMod?.runJob) return na("no heartbeat ledger at this commit");
+      const off = await opt("offsite.ts");
+      const root = sandbox("synthetic");
+      await startMod.runJob(root, "digest", () => "ok");
+      startMod.recordJob(root, "pull", new Error("sources.yaml doesn't parse"));
+      await off.offsiteCopy(root, "/nowhere", { from: join(root, "rules"), timeoutMs: 50, run: () => new Promise(() => {}) });
+      const steps: [string, boolean][] = [["digest ok", beatMod.readBeat(root, "digest")?.ok === true], ["pull failed", beatMod.readBeat(root, "pull")?.ok === false], ["offsite failed", beatMod.readBeat(root, "offsite")?.ok === false]];
+      const bad = steps.filter(([, x]) => !x).map(([x]) => x);
+      return ok(!bad.length, bad.length ? `failed: ${bad.join("; ")}` : "3 jobs beat");
+    } },
+];
+
+export const redteamCases: Case[] = [...standingCases, ...samePersonCases, ...householdCases, ...gardenerCases, ...relayCases, ...injectionCases, ...storedRoutineCases, ...forgedCases, ...tokenCases, ...killCases, ...logCases, ...hubCases, ...dashCases, ...sliceCases, ...instinctCases, ...browserCases, ...browserDoorCases, ...fuzzCases, ...canaryCases, ...menubarCases, ...collaboratorCases, ...pullRtCases, ...beliefCases, ...memsyncScrubCases, ...replacedCases, ...accessCases, ...quoteCases, ...tripwireKeyCases, ...backupSecretCases, ...hiddenNameCases, ...edgeRtCases, ...sensitiveRound2Cases, ...matchCases, ...areaAfterAgentCases, ...settleShareCases, ...tightenCases, ...retrieveAgeCases, ...updatedShownCases, ...ownerWordCases, ...deckCases, ...expiryCases, ...restoreCases, ...copyCases, ...bigBodyCases, ...quizBudgetCases, ...batch30AuditCases, ...batch2021Cases, ...tokenAuditCases, ...tokenAudit2Cases, ...tokenAudit3Cases, ...tokenAudit4Cases, ...tokenAudit5Cases, ...leakTextCases, ...jobsCases];

@@ -33,6 +33,8 @@ import { auditCarve } from "./audit";
 import { loadRules } from "./rules";
 import { ownerClock } from "./clock";
 import { adoptHandEdits } from "./wiki";
+import { beat } from "./heartbeat";
+import { loadBackupConfig } from "./backup";
 
 export interface Schedule { night_hour: number; digest_hour: number }
 export const DEFAULT_SCHEDULE: Schedule = { night_hour: 3, digest_hour: 7 };
@@ -56,7 +58,11 @@ function markRun(root: string, job: string, day: string) {
 
 // How a daily job ended: <job>_at on success, <job>_error until the next success. The probe's job
 // checks (src/probe.ts) read these, so a nightly pass that throws or stops running isn't silent.
-export function recordJob(root: string, job: string, err: Error | undefined, now = new Date()) {
+// Each one is also a heartbeat (src/heartbeat.ts), the one ledger the home and doctor read, except
+// the Sunday drill's runner: its child beats restore_drill itself, with the reason it failed.
+const BEATS_ELSEWHERE = new Set(["drill"]);
+export function recordJob(root: string, job: string, err: Error | undefined, now = new Date(), ms?: number) {
+  if (!BEATS_ELSEWHERE.has(job)) beat(root, job, { ok: !err, error: err?.message, ms, now });
   mkdirSync(join(root, "log"), { recursive: true });
   const s: Record<string, string> = { ...lastRuns(root) };
   if (err) s[`${job}_error`] = err.message.slice(0, 200);
@@ -73,14 +79,15 @@ export const JOB_MINUTES = Number(process.env.PB_JOB_MINUTES ?? 45);
 export async function runJob(root: string, job: string, fn: () => Promise<unknown> | unknown, ms = JOB_MINUTES * 60_000): Promise<string> {
   const limit = ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${ms}ms`;
   let late = false;
+  const t0 = Date.now();
   const timer = setTimeout(() => { late = true; recordJob(root, job, new Error(`timed out after ${limit}; still running`)); }, ms);
   try {
     const r = await Promise.resolve().then(fn);
-    if (late) { recordJob(root, job, new Error(`timed out after ${limit}; ended late`)); return `${job} failed: timed out after ${limit} (ended late)`; }
-    recordJob(root, job, undefined);
+    if (late) { recordJob(root, job, new Error(`timed out after ${limit}; ended late`), new Date(), Date.now() - t0); return `${job} failed: timed out after ${limit} (ended late)`; }
+    recordJob(root, job, undefined, new Date(), Date.now() - t0);
     return typeof r === "string" ? r : "ok";
   } catch (e) {
-    recordJob(root, job, e as Error);
+    recordJob(root, job, e as Error, new Date(), Date.now() - t0);
     return `${job} failed: ${late ? `timed out after ${limit}, then ` : ""}${(e as Error).message}`;
   } finally { clearTimeout(timer); }
 }
@@ -104,8 +111,9 @@ export function tendOnce(root: string, log: (s: string) => void, now = new Date(
 }
 
 // Which jobs are due at `now` (local time), each at most once per local day: the nightly pass and
-// the digest every day, the carve audit (src/audit.ts) on Sundays after the nightly pass.
-type Job = "night" | "audit" | "digest";
+// the digest every day, the carve audit (src/audit.ts) and, once backups are set up, the restore
+// test (src/restore-drill.ts) on Sundays after the nightly pass.
+type Job = "night" | "audit" | "drill" | "digest";
 export function dueJobs(root: string, now: Date, s: Schedule = DEFAULT_SCHEDULE): Job[] {
   // The owner's day and hour (owner.timezone), not this machine's: a hub in another zone, or a
   // container on UTC, still runs the night at 03:00 the owner's time, once (src/clock.ts).
@@ -116,6 +124,7 @@ export function dueJobs(root: string, now: Date, s: Schedule = DEFAULT_SCHEDULE)
   const out: Job[] = [];
   if (hour >= s.night_hour && done.night !== day) out.push("night");
   if (dow === 0 && hour >= s.night_hour && done.audit !== day) out.push("audit");
+  if (dow === 0 && hour >= s.night_hour && done.drill !== day && loadBackupConfig(root)) out.push("drill");
   if (hour >= s.digest_hour && done.digest !== day) out.push("digest");
   return out.map((j) => { markRun(root, j, day); return j; });
 }
@@ -176,6 +185,7 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
           if (plan.why !== "night: local") log(`${stamp()} ${plan.why}`);
           log(`${stamp()} night: ${u ? `${u.findings.length} upkeep finding(s)` : "upkeep left to the gardener"}${rc?.checked || rc?.sampled ? `; rechecked ${rc.checked} source item(s) and checked ${rc.sampled} more still exist: ${rc.confirmed.length} confirmed, ${rc.due.length} due` : ""}; ${r.run}${a.checked.length + a.errors.length ? `; ${a.checked.length} write check(s), ${a.errors.length} still failing` : ""}`);
         } else if (job === "audit") log(`${stamp()} ${auditCarve(root).text.split("\n")[0]}`);
+        else if (job === "drill") log(`${stamp()} ${await drillApart(root)}`);
         else {
           // The weekly memory exam goes first, so the digest carries its grades.
           if (examDue(root)) log(`${stamp()} memory exam: ${examRun(root).rows.map((r) => `${r.agent} ${r.grade}`).join(", ")}`);
@@ -241,6 +251,28 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
     }, 60_000);
     log("relay: on (AgentMail)");
   } else log("relay: off (set AGENTMAIL_RELAY_KEY to turn it on)");
+}
+
+// The Sunday restore test in a child process (`pocketbrain drill --weekly`), stopped after 30
+// minutes: it reads the synced folder and boots a hub on a scratch copy, neither of which may hold
+// this process. The child writes its own result and heartbeat; a child that dies or is stopped
+// leaves a failed heartbeat here instead.
+export const DRILL_MINUTES = 30;
+type DrillChild = { exited: Promise<number>; kill: (signal?: string) => void };
+export async function drillApart(root: string, o: { spawn?: (cmd: string[]) => DrillChild; timeoutMs?: number } = {}): Promise<string> {
+  const cmd = [process.execPath, join(import.meta.dir, "cli.ts"), "drill", "--weekly", "--brain", root];
+  const child = (o.spawn ?? ((c) => Bun.spawn(c, { stdout: "inherit", stderr: "inherit" }) as unknown as DrillChild))(cmd);
+  const ms = o.timeoutMs ?? DRILL_MINUTES * 60_000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const code = await Promise.race([child.exited, new Promise<"late">((done) => { timer = setTimeout(() => done("late"), ms); })]);
+  if (timer) clearTimeout(timer);
+  if (code === "late") {
+    try { child.kill("SIGKILL"); } catch { /* gone */ }
+    beat(root, "restore_drill", { ok: false, error: `the restore test didn't finish in ${Math.round(ms / 60_000) || 1} min and was stopped` });
+    throw new Error(`restore test stopped after ${Math.round(ms / 60_000) || 1} min`);
+  }
+  if (code !== 0 && code !== 1) beat(root, "restore_drill", { ok: false, error: `the restore test exited ${code}` });
+  return code === 0 ? "restore test: passed" : `restore test: FAILED (exit ${code}; see pocketbrain doctor)`;
 }
 
 // The minute tick for source pulls. Reading sources.yaml is inside the try: a file mid-edit is

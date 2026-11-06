@@ -81,6 +81,8 @@ import { git, commitPaths } from "./git";
 import { browserInstruction } from "./browser";
 import * as bk from "./backup";
 import { offsiteCopy, offsiteOn, offsiteOff } from "./offsite";
+import { restoreDrill, drillWords, drillKeyOn, drillKeyOff } from "./restore-drill";
+import { ledger, lateJobs, lateLine, CADENCE } from "./heartbeat";
 import { relayTick, fileTransport, agentMailTransport, loadRelayConfig, blockListPlan, decideHeld, relayCheck } from "./relay";
 import { ingestLog, searchLogs, readLog, listLogs, decideLog } from "./logs";
 import { parseExport, type LogFormat } from "./import/logs";
@@ -428,6 +430,13 @@ const USAGE = `pocketbrain <command>
                                      note and fact counts, boot the hub on it; never touches the brain or the
                                      real backup folder
   drill --demo                       the same on the sample brain with a throwaway key; one line, nothing recorded
+  drill --weekly                     the Sunday restore test the hub runs itself: the newest backup, read back from
+                                     the offsite folder and restored with the drill key when there is one
+                                     (log/restore-drill.json; docs/backup.md "The Sunday restore test")
+  backup drill-key [off]             make the drill key (an age key kept in the keys folder, never printed) and add
+                                     its public half to rules/backup.pub, so the Sunday test opens the real file
+  jobs                               the heartbeat ledger: every scheduled job's last run, outcome and time, and
+                                     which are late (docs/real-use-bar.md "One ledger for every job")
   export --out <file> [--agent <agent>]   a Memory Passport bundle (docs/export.md): the whole brain (notes and the
                                      rules a carve reads; no tokens, logs, inbox or secrets), or one agent's slice as its reads answer
   import <bundle> --into <dir>       a brain bundle into a fresh folder: same notes, same carve per agent, one owner commit
@@ -1054,6 +1063,19 @@ ${p.text}`);
       for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { try { noteStop(root, sig); } finally { process.exit(0); } });
     }
     return -1; // keep running
+  }
+  if (cmd === "jobs") {
+    const now = new Date();
+    const late = new Map(lateJobs(root, now).map((l) => [l.job, l]));
+    const rows = ledger(root);
+    if (!rows.length) { console.log("no job has run yet (the hub starts the ledger when it runs start)"); return 0; }
+    for (const b of rows) {
+      const l = late.get(b.job);
+      console.log(`${l ? (l.why === "late" ? "LATE  " : "FAILED") : "ok    "} ${(CADENCE[b.job]?.owner ?? b.job).padEnd(34)} last ${b.at.slice(0, 16)}${b.ms !== undefined ? ` (${b.ms < 1000 ? `${b.ms} ms` : `${Math.round(b.ms / 1000)} s`})` : ""}${l?.why === "late" ? `, last good ${l.since.slice(0, 16)}` : ""}${b.error ? `: ${b.error}` : ""}`);
+    }
+    const line = lateLine([...late.values()], now);
+    if (line) console.log(`\nhome: ${line}`);
+    return late.size ? 1 : 0;
   }
   if (cmd === "watchdog") {
     // One look at the hub from outside it (launchd runs this every 5 minutes; src/watchdog.ts).
@@ -2361,6 +2383,10 @@ function backupCli(cmd: string, args: string[], root: string): number {
       } catch (e) { console.error(`backup offsite: ${(e as Error).message}`); return 1; }
       console.error("backup offsite on <folder> | off"); return 2;
     }
+    if (args[0] === "drill-key") {
+      try { console.log(args[1] === "off" ? drillKeyOff(root) : drillKeyOn(root)); return 0; }
+      catch (e) { console.error(`backup drill-key: ${(e as Error).message}`); return 1; }
+    }
     if (args.includes("--init")) {
       const pub = arg(args, "--pub");
       if (!pub || !/^age1[0-9a-z]{58}$/.test(pub)) { console.error("backup --init --pub <age1...>: the PUBLIC key (age-keygen -y). The private key goes in your password manager"); return 2; }
@@ -2401,6 +2427,14 @@ function backupCli(cmd: string, args: string[], root: string): number {
   if (args.includes("--demo")) {
     bk.demoDrill().then((d) => {
       console.log(d.ok ? bk.demoLine(d) : bk.renderDrill(d));
+      process.exit(d.ok ? 0 : 1);
+    }, fail);
+    return -1;
+  }
+  if (args.includes("--weekly")) {
+    restoreDrill(root).then((d) => {
+      console.log(drillWords(d));
+      for (const p of d.problems) console.log(`  ${p}`);
       process.exit(d.ok ? 0 : 1);
     }, fail);
     return -1;

@@ -50,6 +50,7 @@ import { findOverlaps, assistantOf } from "../overlap";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
 import { lastBackup } from "../backup";
+import { drillWords, lastRestoreDrill } from "../restore-drill";
 import { readDiary, shownValue } from "../diary";
 import { inboxConflict, inboxConflicts, settleInbox } from "../settle-inbox";
 import { ownerSay, ownerSayModel, boxModel, type SayReply } from "../owner-say";
@@ -312,7 +313,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const agents = markAgents(rules), short = shorts(agents.map((a) => a.name)), colour = colours(agents.map((a) => a.name));
     return new Response(whoPage(v, csrf, {
       flash,
-      memory: { pages: pages.length, people: pages.filter((n) => folderOf(n.fm.id) === "people").length, learned: learnedThisWeek(root, clock()), backup: backedUpWords(lastBackup(root)?.at, clock()) },
+      memory: { pages: pages.length, people: pages.filter((n) => folderOf(n.fm.id) === "people").length, learned: learnedThisWeek(root, clock()), backup: backedUpWords(lastBackup(root)?.at, clock()), drill: drillWords(lastRestoreDrill(root)) },
       trial: Object.entries(rules.policy.agents).filter(([, a]) => a.tier === "trial").map(([k]) => k),
       shorts: Object.fromEntries(agents.map((a, i) => [a.agent, short[i]!])),
       colours: Object.fromEntries(agents.map((a, i) => [a.agent, colour[i]!])),

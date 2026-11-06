@@ -5,6 +5,27 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G690: {
+    closed: "claude/backup-heartbeats",
+    title: "No restore was ever proven on a schedule, and the offsite copy was never read back",
+    severity: "high",
+    finding: "Next-level plan R1, 2026-11-06: backups were encrypted and copied to the owner's synced folder, but a restore was only proven when someone ran `pocketbrain drill` by hand, and nothing checked that the offsite copy of the newest backup was whole. A copy cut short in the synced folder would have been found the day it was needed.",
+    fix: "src/restore-drill.ts restoreDrill, run by the hub every Sunday after the night pass in a child it stops after 30 minutes (start.ts drillApart, `pocketbrain drill --weekly`): the newest backup, read back out of the offsite folder in a child process and hash-checked against the local file, restored into a scratch folder with the drill key (`pocketbrain backup drill-key`, an age identity in the keys folder) and checked (hashes, fsck, note and fact counts at that commit, doctor, hub boot); without the key, the mechanics on a copy. One line on Settings and Who knows, a probe check (restore_drill), a heartbeat. Tests: test/restore-drill.test.ts. Eval: rt-restore-drill-offsite-copy.",
+  },
+  G691: {
+    closed: "claude/backup-heartbeats",
+    title: "The owner's home never said a scheduled job was late",
+    severity: "medium",
+    finding: "Next-level plan R4: the nightly pass, pulls, digest, backup look, push, offsite copy and Gardener each kept their last run in a different file (log/start-state.json, log/backup-look.json, log/origin-push.json, log/offsite.json, log/watchdog.json) and only some had a lateness check, read by the probe and doctor; the home, which the owner reads, never said a job had stopped.",
+    fix: "src/heartbeat.ts: one ledger (log/heartbeats/<job>.json) with a cadence per job; lateJobs is the one reader. The home shows one line (lateLine) under the count only when a job is late or failing, never counted as an ask; Settings lists the jobs (html.ts jobsSection), doctor names each, the week report says how many are on time, `pocketbrain jobs` prints the ledger. Tests: test/heartbeat.test.ts. Eval: rt-late-job-home-line.",
+  },
+  G692: {
+    closed: "claude/backup-heartbeats",
+    title: "The probe, watchdog, backup look, origin push and offsite copy left no last-ran in one place",
+    severity: "low",
+    finding: "Same plan: the health probe and the watchdog left no run record a lateness check could read, and the offsite copy and push kept theirs in their own files only.",
+    fix: "Each beats into the ledger as it ends: recordJob and runJob (with duration), noteLook (backup_look), pushOriginApart (origin_push), offsiteCopy (offsite), probeOnce (probe), watchdogTick (watchdog), restoreDrill (restore_drill). Tests: test/heartbeat.test.ts. Eval: rt-every-job-beats.",
+  },
   G693: {
     closed: "e8cca5bf",
     title: "A page asked for by its title came after a page whose title holds it",

@@ -10,7 +10,7 @@ This is the short version of [backup-recovery.md](history/backup-recovery.md) se
 - the state git doesn't carry: the read log, alerts, sleep state, text channel state, each with its sha256 in a manifest;
 - nothing derived (`views/`, `.cells/`) and nothing secret. Nothing inside `.git/` but the bundle goes in either, so the dashboard's login links (`.git/pb-dashboard-login`, G609) and its sign-in sessions never reach a backup or a restored machine. Credential files (`.env`, private keys) and any file holding a private key, an age key, an access token (a plaintext agent token or a JWT), an API key or a credential variable are left out and named in the output. If main itself holds one, no backup is made until you rotate it and scrub history (backup-recovery.md 4.5). The write path refuses the same shapes (`no_secret_shapes`, one list in `src/checks.ts`), so a note an agent writes can't stop your backups: it checks every string a write carries, attribute names, `share_with` and a new note's area included. A pulled item's source ref is read without its all-digit version after `@` (a calendar event's 16-digit etag, a Discord edit time), which is the source's revision number and passes the card-number check one time in ten (G628). The relay's `comms/` records and the `handoffs/` records are committed too: their sender-written fields (subject, text, message id and addresses; task and next step) are redacted before they are written, and if a private key is split across them (BEGIN in one, the body in another) the whole record's sender fields are blanked, so a secret-shaped string in relayed mail or a handoff can't stop them either (G201). The reasons in those records are redacted too, and `alert()` redacts every field of every line it writes to the committed `log/alerts.jsonl` (G280); it is the only writer of that file, the capture mailbox's alerts included (G312). Anything else committed to main by hand is checked as it is. A private key counts only with its key body after the BEGIN line, so a note that merely names the header is kept. Search words and asked-for ids in `log/reads.jsonl`, and agents' answers and notes in `log/memsync.jsonl`, are logged with secret-shaped strings redacted, so those logs always go in. A read log that already holds one from before this change stays out and is named in the output (it is still on disk).
 
-The hub only ever holds the **public** key. Backups can be made unattended and can't be read on the machine that makes them.
+The hub holds only **public** keys, unless you add the [drill key](#the-drill-key) for the Sunday restore test. Backups can be made unattended, and without the drill key they can't be read on the machine that makes them.
 
 Rotation: every file from the last 30 days, then the first file of each month forever (`keep_daily`, `keep_monthly` in `rules/backup.yaml`). The newest file is never deleted, and files the tool didn't name are never touched.
 
@@ -61,6 +61,27 @@ pocketbrain backup offsite off      # stop it; backups stay in the local folder
 `on` installs its own launchd job, `com.pocketbrain.offsite`, beside the hub's (it never touches `com.pocketbrain.start`). Every hour it copies each finished backup the synced folder doesn't have yet (under a partial name, renamed once whole). The listing and every copy run in child processes under one 10-minute limit, so a synced folder that hangs stalls only that copy. Each run leaves its outcome in `log/offsite.json`; a failed run, or no copy for 48 hours, is the probe's `offsite` alert. Turning it on again with another folder replaces the job.
 
 `pocketbrain doctor` warns when there is no `rules/backup.yaml`, when the last backup is more than 3 days old while main moved, or when the last file has gone from the folder, and it FAILs if `rules/backup.pub` holds a private key.
+
+## The Sunday restore test
+
+Every Sunday after the night pass, once backups are set up, the hub tests its newest backup on its own (`src/restore-drill.ts`, `pocketbrain drill --weekly` to run it now). It runs in a child process the hub stops after 30 minutes, reads the brain and the backup folders without writing to them, and works in a scratch folder it deletes after:
+
+1. The newest file in the local backup folder, checked against the hash it was made with (`log/last-backup`).
+2. With the offsite copy on, the same file read back out of the synced folder (in a child process under the offsite copy's 10-minute limit) and compared byte for byte. A file that never arrived, or arrived cut short, fails the test.
+3. With the **drill key**, that file is restored into the scratch folder: every hash, `git fsck`, the same notes and facts as the brain had at that commit, doctor, and the hub boots on it. Without it, the restore runs on a copy of today's brain with a throwaway key: the mechanics are proven, the file itself isn't opened, and the line says so.
+
+The result is one line on Settings ("Scheduled jobs") and Who knows: "Your brain was restored from Sunday's backup in your cloud folder in 40 s", or "The Sunday restore test failed: …" in the warning colour. It is kept in `log/restore-drill.json`, counted in `log/drills.jsonl` like a drill you run by hand (the week report and the real-use bar read it), beats `restore_drill` in the [heartbeat ledger](real-use-bar.md#one-ledger-for-every-job), and a failure, or no test for 8 days, is the probe's `restore_drill` alert.
+
+### The drill key
+
+```sh
+pocketbrain backup drill-key        # make it; the next backup opens with it
+pocketbrain backup drill-key off    # remove it; the test goes back to a stand-in key
+```
+
+`drill-key` makes an age key with `age-keygen` and writes it straight into the keys folder (`~/.config/pocketbrain/keys/backup-drill.key`, mode 600). It is never printed. Its public half goes into `rules/backup.pub` beside your own key, with a comment line saying what it is, so every backup from then on opens with either key. Your own key in 1Password stays the one you restore with.
+
+What this changes: before it, nothing on the hub could open a backup. With it, whoever can read the keys folder on the hub can open the backup files, including the copies in your cloud folder. Whoever can read that folder on the Mac can already read the brain itself there in plain text, so on the Mac it adds no reader. Off the Mac it matters only if the keys folder itself leaves the machine: keep `~/.config/pocketbrain` out of any sync or cloud backup (a backup leaves credential files out; Time Machine to a disk you hold is fine). A key that leaks: `drill-key off`, `drill-key` again, and delete the older backup files once newer ones exist, as for your own key (the table below). A key readable by others is refused and the test fails until you `chmod 600` it.
 
 ## Restore on a new machine
 

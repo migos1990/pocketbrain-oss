@@ -218,6 +218,7 @@ a.mark.not::after{content:"";position:absolute;inset:-10px}
 .state{font-size:13px;color:var(--muted)}
 .more{margin:14px 0 0}
 .quiet{color:var(--muted)}
+.late{display:block;margin:8px 0 4px;padding:8px 0 8px 12px;border-left:4px solid var(--marker-ink);color:var(--text);font-size:15px;line-height:22px;font-weight:500;overflow-wrap:anywhere}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;margin:0 0 4px}
 .tile{border-top:2px solid var(--text);padding:8px 0 14px;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;color:var(--text)}
 .tile b{display:block;font-size:54px;line-height:1;font-weight:900;letter-spacing:-.04em}.tile span{font-size:15px;line-height:20px;font-weight:700}
@@ -240,7 +241,7 @@ h3.section{display:flex;align-items:center;gap:8px;margin:22px 0 4px;font-size:1
 .reads{color:var(--muted);font-size:13px;margin:0}
 .numbers{border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;margin:0 0 6px}
 .numbers h2{margin:0 0 6px;font-size:15px;line-height:20px;font-weight:700;letter-spacing:0}.numbers .nums{display:flex;gap:22px}.numbers .nums p{margin:0;display:flex;flex-direction:column}
-.numbers b{font-size:44px;line-height:1;font-weight:900;letter-spacing:-.03em}.numbers .nums p:first-child b{color:var(--headline-ink);mix-blend-mode:var(--blend)}.numbers span{font-size:13px;line-height:18px;color:var(--muted)}.numbers .backup{margin:10px 0 0;font-size:13px;font-weight:500;color:var(--muted)}
+.numbers b{font-size:44px;line-height:1;font-weight:900;letter-spacing:-.03em}.numbers .nums p:first-child b{color:var(--headline-ink);mix-blend-mode:var(--blend)}.numbers span{font-size:13px;line-height:18px;color:var(--muted)}.numbers .backup{margin:10px 0 0;font-size:13px;font-weight:500;color:var(--muted)}.numbers .backup+.backup{margin-top:2px}.numbers .backup.bad{color:var(--text);font-weight:700;border-left:4px solid var(--marker-ink);padding-left:8px}
 .agents{display:flex;flex-direction:column}.agent{border-top:2px solid var(--text);padding:12px 0}
 .agent:last-child{border-bottom:2px solid var(--text)}
 .who-head{display:flex;align-items:center;gap:12px}.who-head .t{flex:1;min-width:0}.who-head b{font-weight:900;font-size:22px;line-height:26px;letter-spacing:-.02em}.who-head small{display:block;font-size:13px;line-height:18px;color:var(--muted)}
@@ -393,7 +394,9 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
   // What was just done: one quiet line, with Undo when the diary can take it back (G631).
   const reply = o.done && o.flash && !o.reply ? `<div class="done" role="status">${DONE}<span>${esc(o.flash)}</span>${o.undo ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: o.undo })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${o.flash}`)}">${HOME_COPY.undo}</button></form>` : ""}</div>` : replyHtml(csrf, o);
-  return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}
+  // A late or failing job: one quiet line under the count, linking to Settings' list (G691).
+  const late = v.late ? `<a class="late" role="status" href="/overview#jobs">${esc(v.late)}</a>` : "";
+  return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}${late}
 ${reply}
 ${asks}${mems.length ? `${asks ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
 ${box(csrf, {}, APP_COPY.box)}`, { wrap: "chat" });
@@ -586,7 +589,7 @@ ${search}${below}`);
 
 // Who knows (/who): one block per assistant, its reads today and what it asked, how much it gets
 // (See as), what its own memory has wrong with Fix everywhere; then Settings.
-export interface WhoExtras { flash?: string; memory?: { pages: number; people: number; learned: number; backup?: string }; trial?: string[]; shorts?: Record<string, string>; colours?: Record<string, string> }
+export interface WhoExtras { flash?: string; memory?: { pages: number; people: number; learned: number; backup?: string; drill?: string }; trial?: string[]; shorts?: Record<string, string>; colours?: Record<string, string> }
 export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
   const readLine = (r: HomeView["reads"][number]) => r.today === 0 ? APP_COPY.readNot : r.today === 1 ? APP_COPY.readOnce : fill(APP_COPY.readTimes, { n: r.today });
   const wrongLine = (r: HomeView["reads"][number], l: WrongLine) => `<li class="line wrong"><div class="t"><a href="${href(l.page)}">${esc(l.what)}</a><small>${esc(l.said !== undefined ? fill(HOME_COPY.remembers, { name: r.name, said: l.said, now: l.now ?? "" }) : fill(HOME_COPY.remembersQuiet, { name: r.name }))}</small></div>${l.fixing ? `<span class="state">${HOME_COPY.onItsWay}</span>` : `<form method="post" action="/action/fix-everywhere">${hidden(csrf, { key: l.key })}<button aria-label="${esc(`${HOME_COPY.fix}: ${l.what}`)}">${HOME_COPY.fix}</button></form>`}</li>`;
@@ -600,7 +603,7 @@ export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
     return `<li class="agent"><div class="who-head"><span class="av${o.colours?.[r.agent] ? ` ${o.colours[r.agent]}` : ""}" aria-hidden="true">${esc(o.shorts?.[r.agent] ?? r.name.slice(0, 1))}</span><div class="t"><b>${esc(r.name)}</b>${trial.has(r.agent) ? `<span class="badge">${APP_COPY.trial}</span>` : ""}<small>${esc(readLine(r))}</small></div>${r.seeHref ? `<a class="see" href="${esc(r.seeHref)}">${APP_COPY.seeAs}</a>` : ""}</div>${sees || trial.has(r.agent) ? `<p class="sees">${esc([sees, trial.has(r.agent) ? APP_COPY.trialWhy : ""].filter(Boolean).join(" · "))}</p>` : ""}${wrong}${asked}</li><!--agent-->`;
   };
   const m = o.memory;
-  const numbers = m ? `<section class="numbers" aria-labelledby="mem"><h2 id="mem">${APP_COPY.yourMemory}</h2><div class="nums"><p><b>${m.pages}</b><span>pages</span></p><p><b>${m.people}</b><span>people</span></p><p><b>${m.learned}</b><span>learned this week</span></p></div><p class="backup">${esc(m.backup ?? APP_COPY.backupNone)}</p></section>` : "";
+  const numbers = m ? `<section class="numbers" aria-labelledby="mem"><h2 id="mem">${APP_COPY.yourMemory}</h2><div class="nums"><p><b>${m.pages}</b><span>pages</span></p><p><b>${m.people}</b><span>people</span></p><p><b>${m.learned}</b><span>learned this week</span></p></div><p class="backup">${esc(m.backup ?? APP_COPY.backupNone)}</p>${m.drill ? `<p class="backup${/ failed:/.test(m.drill) ? " bad" : ""}">${esc(m.drill)}</p>` : ""}</section>` : "";
   const flash = o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : "";
   return appPage(APP_COPY.who, "who", `<header class="top"><p class="day"><span>${esc(v.date)}</span><a class="top-link" href="/overview">${APP_COPY.settings}</a></p><h1>${APP_COPY.who}</h1></header>
 ${flash}${numbers}${v.reads.length ? `<h2>${APP_COPY.assistants}</h2><ul class="agents">${v.reads.map(card).join("")}</ul>` : ""}

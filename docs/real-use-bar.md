@@ -63,6 +63,7 @@ The health probe in `start` (`src/probe.ts`, every 2 hours) checks the public do
 | `probe` | `log/probe.json` itself can't be read (the hub died mid-write). The next run starts over and re-alerts every failing check; the file is written to a temp file and renamed, so this should not happen again |
 | `model` | a model key the owner put in `~/.config/pocketbrain/keys/` (for the conflict check or the sleep pass) isn't loaded in the hub, so those steps quietly run rule-only. `start` also prints which keys it ignored and why |
 | `disk` | under 1024 MB free on the brain's disk (once the hub has run `start`) |
+| `restore_drill` | once backups are set up and the Sunday restore test has run: its last run failed, or it hasn't run for 8 days ([backup.md](backup.md#the-sunday-restore-test)) |
 | `restarts` | the hub started 5 or more times in 6 hours without a plan (each `start` adds a line to `log/starts.jsonl` with its `kind`): it is crashing and coming back. An update (new build or HEAD moved), a reboot, the updater's or watchdog's `deploy.restart` mark and the menu's Restart hub are `planned` and don't count (G394) |
 
 ### The daily self-check: early warnings
@@ -82,6 +83,20 @@ Tokens don't expire on their own, so there is no expiry date to watch; a connect
 The digest's "Numbers" carry one line for every check the probe last recorded in `log/probe.json` (door, job and self-checks together): `Self-check: all 14 ok`, or `Self-check: 2 of 14 failing (disk, door); see Needs you`, where each failing check is listed until it passes.
 
 A check that turns to failing raises one alert (`agent: hub, check: probe_<name>`), which texts the owner and breaks the streak; while it stays failing the bar can't be met. Job outcomes are kept in `log/start-state.json` (`<job>_at`, `<job>_error`).
+
+### One ledger for every job
+
+Every scheduled job leaves one heartbeat when it ends, in `log/heartbeats/<job>.json` (`src/heartbeat.ts`): when it ran, whether it worked, how long it took, and when it last worked. One file per job, so the hub, the watchdog and the offsite copy (three processes) never lose each other's line. The jobs: `night`, `digest`, `searchable`, `backfill`, `trust`, `housekeeping`, `audit`, `pull` (from `recordJob`), `backup_look`, `origin_push`, `offsite`, `restore_drill`, `probe`, `watchdog`, and the Gardener's `gardener_cleanup`, `gardener_rotate`, `gardener_jobs`. Each has a cadence (`CADENCE`): a job is **late** when its last good run is older than that (36 hours for the nightly ones, 6 for the hourly backup look and push, 48 for the offsite copy, 8 days for the Sunday test and the weekly audit, 12 for the probe, 1 for the watchdog), and **failing** when its last run failed. A job that never ran is neither, so a new brain, or the offsite copy before it is turned on, shows nothing.
+
+| Where | What |
+|---|---|
+| The home | one line under the count, only when a job is late or failing: "Your night pass has not run for 2 days. Settings has the details." It is not an ask: no card, and nothing added to the count (G691) |
+| Settings, "Scheduled jobs" | the Sunday restore test's line, each late or failing job with when it last worked, and how many are on time |
+| `pocketbrain doctor` | a `jobs` warning per late or failing job, or "all N scheduled job(s) on time" |
+| `pocketbrain week` | "Scheduled jobs: N of M on time", and which are behind |
+| `pocketbrain jobs` | the whole ledger, one line per job; exits 1 when any is late |
+
+The probe's job checks above stay as they were (they alert and break the streak); the ledger is what the owner's screens read.
 
 ## Where it shows
 

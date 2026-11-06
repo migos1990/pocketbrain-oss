@@ -12,6 +12,8 @@ import { today } from "./brain";
 import { loadRules, gardeners } from "./rules";
 import { gardenerConfig, withinHours, tokenAgeDays, lastUpkeep, nightMode, SILENT_HOURS, ant, runs } from "./gardener";
 import { backupFindings } from "./backup";
+import { ledger, lateJobs, agoWords } from "./heartbeat";
+import { drillWords, lastRestoreDrill } from "./restore-drill";
 import { loadSources, consentGap, pullRuns } from "./pull";
 import { tokenKey } from "./google";
 import { keysDir } from "./secrets";
@@ -168,6 +170,20 @@ export async function doctor(root: string, opts: { offline?: boolean } = {}): Pr
 
   // Encrypted backups (src/backup.ts): configured, recent, still in the folder.
   if (role.mode !== "replica") out.push(...backupFindings(root));
+  // The heartbeat ledger (src/heartbeat.ts): every late or failing scheduled job, one line each.
+  if (role.mode !== "replica") {
+    const now = new Date();
+    const late = lateJobs(root, now);
+    for (const l of late) {
+      if (l.job === "restore_drill" && l.why === "failed") { const d = lastRestoreDrill(root); bad("jobs", "warn", "doctor.restore-drill", { day: (d?.at ?? l.since).slice(0, 10), problem: d?.problems[0] ?? l.error ?? "see pocketbrain jobs" }); continue; }
+      if (l.why === "late") bad("jobs", "warn", "doctor.job-late", { job: l.owner, ago: agoWords(l.since, now), since: l.since.slice(0, 16) });
+      else bad("jobs", "warn", "doctor.job-failed", { job: l.owner, ago: agoWords(l.since, now), error: l.error ?? "no reason kept" });
+    }
+    const n = ledger(root).length;
+    if (n && !late.length) add("jobs", "ok", `all ${n} scheduled job(s) on time`);
+    const d = drillWords(lastRestoreDrill(root));
+    if (d && lastRestoreDrill(root)?.ok) add("jobs", "ok", d);
+  }
   // Values the owner was told to set by hand, each with the command that sets it (src/ownerset.ts).
   const hostKnown = !!doorHost(cfg);
   for (const m of missingOwnerValues(root)) bad("setup", "warn", m.id, m.vars, m.key === "public_url" ? (hostKnown ? "public-url" : undefined) : m.key === "gardener" ? "gardener-config" : undefined);
