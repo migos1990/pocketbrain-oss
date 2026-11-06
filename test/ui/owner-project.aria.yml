@@ -79,27 +79,48 @@
     - superscript:
       - link "1":
         - /url: "#fn-1"
-    - text: See also
-    - link "Atlas beta scope":
-      - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: ","
+    - link "Maya Chen":
+      - /url: /p/people/maya-chen
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: and
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
+    - text: work at
+    - link "Harbourline Software":
+      - /url: /p/orgs/harbourline
     - text: .
     - superscript:
       - link "3":
         - /url: "#fn-3"
     - text: See also
-    - link "Grace Liu":
-      - /url: /p/people/grace-liu
+    - link "Atlas beta scope":
+      - /url: /p/decisions/2026-09-08-atlas-beta-scope
     - text: .
     - superscript:
       - link "4":
         - /url: "#fn-4"
     - text: See also
-    - link "Weekly Atlas review on Wednesdays":
-      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - link "Grace Liu":
+      - /url: /p/people/grace-liu
     - text: .
     - superscript:
       - link "5":
         - /url: "#fn-5"
+    - text: See also
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "6":
+        - /url: "#fn-6"
   - paragraph: (Written by the hub from this page's facts.)
   - heading "References" [level=2]
   - list:
@@ -107,6 +128,7 @@
     - listitem:
       - text: Email, 7 Oct 2026
       - group: + What the source said
+    - listitem: Email, 12 Sep 2026; Email, 31 Aug 2026; Email, 16 Aug 2026; Email, 10 Aug 2026; Email, 17 Aug 2026; Email, 7 Sep 2026
     - listitem: Email, 8 Sep 2026
     - listitem:
       - text: Email, 7 Oct 2026
@@ -128,6 +150,9 @@
     - text: ","
     - link "Weekly Atlas review on Wednesdays":
       - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: ","
+    - link "Harbourline Software":
+      - /url: /p/orgs/harbourline
     - text: ","
     - link "Daniel Okoro":
       - /url: /p/people/daniel-okoro

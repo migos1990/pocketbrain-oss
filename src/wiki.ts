@@ -626,7 +626,15 @@ export async function backfillNameKeys(root: string, since: string, max = NAME_K
 const FAMILY_ATTRS = new Set(["family", "relationship"]);
 // How many other pages a page's sources tie it to, at most (G624).
 export const TIES = 3;
-export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; attr?: string; rec: FactRecord }[]; said?: string; self?: boolean; ownerPage?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
+// How the pages a page links are tied to each other (G685-G687): "on" an org's people on a project,
+// "at" where a project's people work, "with" who else is on a person's project, "too" who else is
+// at a person's org. `base` are the page's own facts the sentence rests on, each member's `recs`
+// the facts that put that member in it.
+export type Related = { kind: "on" | "at" | "with" | "too"; group: string; base: FactRecord[]; members: { id: string; recs: FactRecord[] }[] };
+// At most this many such sentences on a page; a person's names at most RELATED_NAMES pages, an
+// org's or a project's twice that, and a tie with more says nothing rather than some of them.
+export const RELATED = 4, RELATED_NAMES = 6;
+export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; attr?: string; rec: FactRecord }[]; related?: Related[]; said?: string; self?: boolean; ownerPage?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
   const lines: string[] = [], refs: { label: string; text: string }[] = [];
   const seen = new Map<string, Set<string>>(); // page named -> labels of the facts whose source names it
   // Links in a sentence written by the id they resolve to, so every reader resolves them; one some
@@ -687,6 +695,29 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     }
     const links = members.map((m) => `[[${m.id}|${o.byId.get(m.id)!.fm.title ?? m.id}]]`);
     lines.push(`${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)} work` : `${links[0]} works`} at ${n.fm.title ?? n.fm.id}.${labs.map((l) => `[^${l}]`).join("")}`);
+  }
+  // How the pages it links are tied to each other (G685-G687), each sentence linking every page it
+  // names and cited by every fact behind it (label p-rel-<group>, which a read checks against
+  // each of those pages: view.ts). Never on the owner's own page, which every source names.
+  let rels = RELATED;
+  const titled = (a: string, b: string) => String(o.byId.get(a)!.fm.title ?? a).localeCompare(String(o.byId.get(b)!.fm.title ?? b));
+  const to = (id: string) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`;
+  const order = { with: 0, too: 1, on: 2, at: 3 };
+  for (const r of o.self ? [] : [...(o.related ?? [])].sort((a, b) => order[a.kind] - order[b.kind] || b.members.length - a.members.length || titled(a.group, b.group))) {
+    if (!rels) break;
+    if (r.group === n.fm.id || !o.byId.has(r.group) || o.blind(r.group)) continue;
+    const ms = r.members.filter((m) => m.id !== n.fm.id && m.id !== o.ownerPage && o.byId.has(m.id) && !o.blind(m.id) && m.recs.length).sort((a, b) => titled(a.id, b.id));
+    // Every one of them or none: a list cut by the alphabet would read as all of them. Who else is on
+    // a person's project or at their org stops at RELATED_NAMES (past that, that page lists them);
+    // an org's or a project's own sentence at twice that, as many as an org's member list.
+    if (!ms.length || ms.length > (r.kind === "too" || r.kind === "with" ? RELATED_NAMES : 2 * RELATED_NAMES)) continue;
+    rels--;
+    const lab = `p-rel-${r.group.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+    const text = [...new Set([...r.base, ...ms.flatMap((m) => m.recs)].map(reference))].join("; ");
+    if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
+    const names = ms.map((m) => to(m.id)), list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
+    const one = names.length === 1;
+    lines.push(`${r.kind === "on" ? `${list} ${one ? "is" : "are"} on ${to(r.group)}` : r.kind === "at" ? `${list} ${one ? "works" : "work"} at ${to(r.group)}` : r.kind === "with" ? `${called} is on ${to(r.group)} with ${list}` : `Also at ${to(r.group)}: ${list}`}.[^${lab}]`);
   }
   // A page the text already links isn't named again in the sources line.
   const linked = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
@@ -902,6 +933,39 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
   }
   for (const [id, xs] of bodyLinks) for (const x of xs) if (!(seeAlso.get(id) ?? []).some((y) => y.from === x.from)) seeAlso.set(id, [...(seeAlso.get(id) ?? []), { from: x.from, attr: "", rec: x.rec }]);
   for (const p of [...pages]) for (const [id, xs] of seeAlso) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && active(q)) { pages.push(q); via.add(q.path); } }
+  // How the pages a page links are tied to each other, from the facts that tie them (the owner,
+  // 2026-11-06: "an org as people who are tied to projects"; audit v12, nothing crossed pages):
+  // an org's people on a project (G685), where a project's people work (G686), who else is on a
+  // person's project and at their org (G687). Each sentence keeps the facts behind it, so the
+  // loop below checks every one for every reader, and the page is written again when one changes.
+  type Used = { from: string; attr: string; rec: FactRecord };
+  type Rel = { kind: Related["kind"]; group: string; base: Used[]; members: { id: string; used: Used[] }[] };
+  const isType = (id: string, t: string) => { const q = byId.get(id); return !!q && active(q) && q.fm.type === t; };
+  const orgsOf = new Map<string, { org: string; used: Used[] }[]>();
+  for (const [org, ms] of at) for (const m of ms) if (isType(org, "org")) orgsOf.set(m.id, [...(orgsOf.get(m.id) ?? []), { org, used: m.recs.map((rec) => ({ from: m.id, attr: "org", rec })) }]);
+  const onProject = new Map<string, { id: string; u: Used }[]>(), projectsOf = new Map<string, { project: string; u: Used }[]>();
+  for (const [to, xs] of seeAlso) for (const x of xs) if (x.attr && isType(x.from, "project") && isType(to, "person") && to !== self) {
+    onProject.set(x.from, [...(onProject.get(x.from) ?? []), { id: to, u: x }]);
+    projectsOf.set(to, [...(projectsOf.get(to) ?? []), { project: x.from, u: x }]);
+  }
+  const relOf = new Map<string, Rel[]>();
+  const add = (page: string, kind: Rel["kind"], group: string, base: Used[], id: string, used: Used[]) => {
+    if (page === self || id === page || id === self || group === page) return;
+    const rs = relOf.get(page) ?? relOf.set(page, []).get(page)!;
+    let r = rs.find((x) => x.kind === kind && x.group === group);
+    if (!r) rs.push(r = { kind, group, base, members: [] });
+    const m = r.members.find((x) => x.id === id);
+    if (m) m.used.push(...used.filter((u) => !m.used.includes(u))); else r.members.push({ id, used });
+  };
+  for (const [person, os] of orgsOf) for (const { org, used } of os) {
+    for (const { project, u } of projectsOf.get(person) ?? []) add(org, "on", project, [], person, [...used, u]);
+    for (const m of at.get(org) ?? []) if (m.id !== person) add(person, "too", org, used, m.id, m.recs.map((rec) => ({ from: m.id, attr: "org", rec })));
+  }
+  for (const [project, ps] of onProject) for (const p of ps) {
+    for (const { org, used } of orgsOf.get(p.id) ?? []) add(project, "at", org, [], p.id, [p.u, ...used]);
+    for (const q of ps) if (q.id !== p.id) add(p.id, "with", project, [p.u], q.id, [q.u]);
+  }
+  for (const p of [...pages]) for (const [id, rs] of relOf) if (rs.some((r) => [...r.base, ...r.members.flatMap((m) => m.used)].some((u) => u.from === p.fm.id))) { const q = byId.get(id); if (q && !pages.includes(q) && active(q)) { pages.push(q); via.add(q.path); } }
   // A page named by a touched page's sources is written again with it.
   for (const p of [...pages]) for (const [id, xs] of namedIn) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && PAGE_DIRS.has(id.split("/")[0]) && q.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(q.fm.status))) { pages.push(q); via.add(q.path); } }
   const owner = [ownerTitle(rules), ...[rules.policy.owner?.name, ...(rules.policy.owner?.aliases ?? [])].map((x) => String(x ?? "").trim())].filter((x): x is string => !!x && x !== "the owner");
@@ -923,7 +987,14 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     // ever text the owner typed (src/owner-say.ts); one the writer moved there is Earlier notes.
     const f = footnotes(n.body), secs = sections(f.text);
     const said = plainWords(secs.filter((x) => x.heading !== undefined && !OLD_HEADS.has(x.heading) && x.heading !== EARLIER && x.heading !== YOURS).map((x) => x.text).join("\n"));
-    const lead = pageLead(n, { hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
+    // The ties between pages it links (G685-G687): every fact behind a sentence said to every
+    // reader, and no page in it more private than this one.
+    const okU = (u: Used) => !hiddenKeys.has(`${u.from}#${u.attr}`) && sensitivityRank(byId.get(u.from)!.fm.sensitivity) <= rank && (!u.rec.sensitivity || sensitivityRank(u.rec.sensitivity) <= rank);
+    const okPage = (id: string) => sensitivityRank(byId.get(id)!.fm.sensitivity) <= rank;
+    const related: Related[] = (relOf.get(n.fm.id) ?? []).filter((r) => okPage(r.group) && r.base.every(okU))
+      .map((r) => ({ kind: r.kind, group: r.group, base: r.base.map((u) => u.rec), members: r.members.filter((m) => okPage(m.id) && m.used.every(okU)).map((m) => ({ id: m.id, recs: m.used.map((u) => u.rec) })) }))
+      .filter((r) => r.members.length);
+    const lead = pageLead(n, { related, hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
     if (!lead) {
       // Nothing left to say (an Undo took the last fact out): the writer's own opening goes with its
       // references, so the page never keeps stating a value it no longer holds (UI thread, 2026-10-27).

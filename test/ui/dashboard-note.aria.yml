@@ -130,38 +130,60 @@
     - superscript:
       - link "[1]":
         - /url: "#fn-1"
-    - text: See also
-    - link "Atlas beta scope":
-      - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: ","
+    - link "Maya Chen":
+      - /url: /p/people/maya-chen
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: and
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
+    - text: work at
+    - link "Harbourline Software":
+      - /url: /p/orgs/harbourline
     - text: .
     - superscript:
       - link "[3]":
         - /url: "#fn-3"
     - text: See also
-    - link "Grace Liu":
-      - /url: /p/people/grace-liu
+    - link "Atlas beta scope":
+      - /url: /p/decisions/2026-09-08-atlas-beta-scope
     - text: .
     - superscript:
       - link "[4]":
         - /url: "#fn-4"
     - text: See also
-    - link "Weekly Atlas review on Wednesdays":
-      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - link "Grace Liu":
+      - /url: /p/people/grace-liu
     - text: .
     - superscript:
       - link "[5]":
         - /url: "#fn-5"
+    - text: See also
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "[6]":
+        - /url: "#fn-6"
     - text: (Written by the hub from this page's facts.)
     - heading "References" [level=3]
     - list:
       - listitem: Email, 12 Sep 2026
       - listitem: Email, 7 Oct 2026
+      - listitem: Email, 12 Sep 2026; Email, 31 Aug 2026; Email, 16 Aug 2026; Email, 10 Aug 2026; Email, 17 Aug 2026; Email, 7 Sep 2026
       - listitem: Email, 8 Sep 2026
       - listitem: Email, 7 Oct 2026
       - listitem: Email, 1 Oct 2026
   - group: Edit the From its facts section
   - heading "Recent updates" [level=2]
-  - text: "Edited the From its facts section of Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide Added a From its facts section to Atlas launch 3 days ago by hub New page: Atlas launch 8 days ago by you"
+  - text: Edited the references of Atlas launch today by hub Edited the From its facts section of Atlas launch yesterday by hub Changed the Next step fact on Atlas launch yesterday by auto-decide Edited the From its facts section of Atlas launch 5 days ago by hub Added a From its facts section to Atlas launch 6 days ago by hub
   - heading "Connections" [level=2]
   - heading "Where it came from" [level=3]
   - link "An email":
@@ -188,6 +210,8 @@
     - /url: /p/decisions/2026-09-08-atlas-beta-scope
   - link "Weekly Atlas review on Wednesdays Decisions":
     - /url: /p/decisions/2026-10-01-weekly-team-review
+  - link "Harbourline Software Organisations":
+    - /url: /p/orgs/harbourline
   - link "Daniel Okoro People":
     - /url: /p/people/daniel-okoro
   - link "Grace Liu People":
@@ -219,6 +243,8 @@
     - /url: /p/decisions/2026-09-08-atlas-beta-scope
   - link "Weekly Atlas review on Wednesdays Decisions":
     - /url: /p/decisions/2026-10-01-weekly-team-review
+  - link "Harbourline Software Organisations":
+    - /url: /p/orgs/harbourline
   - group: Earlier values (1)
   - group: Edit file
   - button "Forget"

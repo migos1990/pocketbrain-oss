@@ -280,13 +280,16 @@ function docScore(idx: Index, d: Doc, qt: QueryTerm[]): number {
 
 // For each term, the docs that hold it, and the largest recency boost any doc gets: built once
 // per index, the first time foundBy asks.
-const postingsOf = new WeakMap<Index, { at: Map<string, Doc>; terms: Map<string, Doc[]>; maxBoost: number }>();
+const postingsOf = new WeakMap<Index, { at: Map<string, Doc>; terms: Map<string, Doc[]>; titled: Map<string, Doc[]>; maxBoost: number }>();
+const titleKey = (s: string) => fold(s).replace(/\s+/g, " ").trim();
 function postings(idx: Index) {
   const hit = postingsOf.get(idx);
   if (hit) return hit;
-  const p = { at: new Map<string, Doc>(), terms: new Map<string, Doc[]>(), maxBoost: 1.15 };
+  const p = { at: new Map<string, Doc>(), terms: new Map<string, Doc[]>(), titled: new Map<string, Doc[]>(), maxBoost: 1.15 };
   for (const d of idx.docs) {
     p.at.set(d.id, d);
+    const t = titleKey(String(d.title ?? ""));
+    (p.titled.get(t) ?? p.titled.set(t, []).get(t)!).push(d);
     p.maxBoost = Math.max(p.maxBoost, 1 + 0.15 * Math.pow(0.5, d.age / 180));
     for (const t of d.tf.keys()) (p.terms.get(t) ?? p.terms.set(t, []).get(t)!).push(d);
   }
@@ -307,14 +310,21 @@ export function foundBy(idx: Index, q: string, id: string, limit = 20, opts: { s
   const qt = queryTerms(q, opts.synonyms ?? true);
   const mine = docScore(idx, me, qt);
   if (!mine) return false;
+  // Notes titled as the question come first (G693): one is ahead of this note when it is so titled
+  // and this one isn't, or both are and it scores higher; one not so titled never is when this is.
+  const asked = titleKey(q), named = titleKey(String(me.title ?? "")) === asked;
+  const firsts = (p.titled.get(asked) ?? []).filter((d) => d !== me && docScore(idx, d, qt) > 0);
+  const firstAhead = firsts.filter((d) => !named || (() => { const s = docScore(idx, d, qt); return s > mine || (s === mine && d.id.localeCompare(id) < 0); })()).length;
+  if (named) return firstAhead < limit;
+  if (firstAhead >= limit) return false;
   const N = idx.docs.length;
   const bound = qt.map(({ t, w }) => { const n = idx.df.get(t) ?? 0; return { t, ub: w * Math.log(1 + (N - n + 0.5) / (n + 0.5)) * 2.2 * p.maxBoost * (1 + 1e-9) }; }).sort((a, b) => a.ub - b.ub);
   // The weakest terms whose bounds together stay under the note's score: a doc can't tie or beat
   // it on those alone.
   let weak = 0, sum = 0;
   while (weak < bound.length && sum + bound[weak].ub < mine) sum += bound[weak++].ub;
-  const seen = new Set<Doc>([me]);
-  let ahead = 0;
+  const seen = new Set<Doc>([me, ...firsts]);
+  let ahead = firstAhead;
   for (const { t } of bound.slice(weak)) for (const d of p.terms.get(t) ?? []) {
     if (seen.has(d)) continue;
     seen.add(d);
@@ -364,7 +374,12 @@ export function rank(idx: Index, q: string, limit = 20, opts: { synonyms?: boole
     if (!s) continue;
     scored.push({ d, s });
   }
-  scored.sort((a, b) => b.s - a.s || a.d.id.localeCompare(b.d.id));
+  // A note whose title is the question comes first (G693): asked about "Pinecrest pilot", the page
+  // of that name, not a longer one that says more about it (a decision titled "Three-month
+  // Pinecrest pilot" overtook the project once its page said who of its people works where).
+  const asked = titleKey(q);
+  const named = (d: Doc) => titleKey(String(d.title ?? "")) === asked;
+  scored.sort((a, b) => Number(named(b.d)) - Number(named(a.d)) || b.s - a.s || a.d.id.localeCompare(b.d.id));
   let ranked: { d: Doc; s: number; words: boolean }[] = scored.map((x) => ({ ...x, words: true }));
   if (opts.semantic) {
     // Reciprocal-rank fusion (k=60) of the word ranking and the cosine ranking.

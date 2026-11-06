@@ -22,6 +22,25 @@ const viewOf = (root: string, agent: string) => {
 const G = (id: string) => "gmail:" + id;
 const SRC = { sources: [G("f000000000000004")], source_type: "email", verification: "verified-by-source" };
 const LOUIS = "imsg:phonemsg-01X0EXAMPLEL0VISTEXT0001"; // exists in the fixture
+// A small brain of ties (G685-G687): two orgs, three people, one project, written once.
+async function tiedBrain() {
+  const wiki = await import(join(SRC_DIR, "wiki.ts"));
+  if (!wiki.RELATED) return undefined;
+  const root = sandbox("synthetic");
+  const git = (name: string, ...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: `${name}@pocketbrain.local`, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: `${name}@pocketbrain.local` } });
+  const f = (value: string, mail: string) => `{ value: "${value}", as_of: 2026-10-05, sources: ["gmail:${mail}"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }`;
+  const head = (id: string, type: string, title: string) => `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n`;
+  mkdirSync(join(root, "orgs"), { recursive: true });
+  writeFileSync(join(root, "orgs", "north-college.md"), `${head("orgs/north-college", "org", "North College")}---\n`);
+  writeFileSync(join(root, "orgs", "east-lab.md"), `${head("orgs/east-lab", "org", "East Lab")}---\n`);
+  writeFileSync(join(root, "people", "ana-diaz.md"), `${head("people/ana-diaz", "person", "Ana Diaz")}facts:\n  org: ${f("[[orgs/north-college]]", "f0000000000000a1")}\n---\n`);
+  writeFileSync(join(root, "people", "ben-roy.md"), `${head("people/ben-roy", "person", "Ben Roy")}facts:\n  org: ${f("[[orgs/north-college]]", "f0000000000000a2")}\n---\n`);
+  writeFileSync(join(root, "people", "cara-lee.md"), `${head("people/cara-lee", "person", "Cara Lee")}facts:\n  org: ${f("[[orgs/east-lab]]", "f0000000000000a3")}\n---\n`);
+  writeFileSync(join(root, "projects", "spring-course.md"), `${head("projects/spring-course", "project", "Spring course")}facts:\n  people:\n    items:\n      - ${f("[[people/ana-diaz]]", "f0000000000000a4")}\n      - ${f("[[people/cara-lee]]", "f0000000000000a4")}\n---\n`);
+  git("planner", "add", "-A"); git("planner", "commit", "-qm", "planner: the spring course");
+  wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  return { root, git, body: (id: string) => readFileSync(join(root, `${id}.md`), "utf8").split(/^---$/m).slice(2).join("---") };
+}
 
 // ---------------------------------------------------------------- write quality --------
 interface WCase { id: string; title: string; agent?: string; req: Record<string, unknown>; want: string[]; kind: "benign" | "attack"; gap?: string }
@@ -748,6 +767,53 @@ const pullCases: Case[] = [
     const b = readFileSync(f, "utf8").split(/^---$/m).slice(2).join("---").trim();
     const top = b.startsWith("The Atlas launch is the big one this fall[^e-2c3d4e5f6a7b].\n\n## From its facts\nAtlas launch is in beta.");
     return ok(top && !b.includes("Earlier notes") && !/gmail:[a-z]{1,4}\)/.test(b), `person's text on top with the facts beneath ${top}; no Earlier notes left ${!b.includes("Earlier notes")}`);
+  } },
+  { id: "wiki-org-people-on-projects", dimension: "upkeep", gap: "G685", title: "an org page says which of its people are on which project, cited by the project's fact and the person's org fact", source: "owner 2026-11-06 (an org as people who are tied to projects); audit v12 (nothing crosses pages)", run: async () => {
+    const r = await tiedBrain();
+    if (!r) return na("no tie sentences at this commit");
+    const b = r.body("orgs/north-college");
+    const on = b.includes("[[people/ana-diaz|Ana Diaz]] is on [[projects/spring-course|Spring course]].[^p-rel-projects-spring-course]");
+    const cited = /^\[\^p-rel-projects-spring-course\]: .*f0000000000000a4.*$/m.test(b) && /^\[\^p-rel-projects-spring-course\]: .*f0000000000000a1.*$/m.test(b);
+    return ok(on && cited && !/Ben Roy\]\] (is|are) on/.test(b), `Ana on Spring course ${on}; cited by both facts ${cited}`);
+  } },
+  { id: "wiki-project-people-at-orgs", dimension: "upkeep", gap: "G686", title: "a project page says where its people work, one sentence per org", source: "owner 2026-11-06 (an org as people who are tied to projects)", run: async () => {
+    const r = await tiedBrain();
+    if (!r) return na("no tie sentences at this commit");
+    const b = r.body("projects/spring-course");
+    const both = b.includes("[[people/ana-diaz|Ana Diaz]] works at [[orgs/north-college|North College]].") && b.includes("[[people/cara-lee|Cara Lee]] works at [[orgs/east-lab|East Lab]].");
+    return ok(both, `one sentence per org ${both}`);
+  } },
+  { id: "wiki-person-teammates-and-colleagues", dimension: "upkeep", gap: "G687", title: "a person page says who else is on their project and who else is at their org", source: "owner 2026-11-06 (org, project, people, notes are sometimes related)", run: async () => {
+    const r = await tiedBrain();
+    if (!r) return na("no tie sentences at this commit");
+    const b = r.body("people/ana-diaz");
+    const team = b.includes("is on [[projects/spring-course|Spring course]] with [[people/cara-lee|Cara Lee]].");
+    const org = b.includes("Also at [[orgs/north-college|North College]]: [[people/ben-roy|Ben Roy]].");
+    return ok(team && org, `on the project with Cara ${team}; Ben at the same org ${org}`);
+  } },
+  { id: "wiki-tie-dropped-for-reader", dimension: "access", gap: "G685", title: "a read drops a tie sentence once a fact behind it is kept from that reader, though the writer hasn't run again", source: "G607 shape for the new tie sentences (p-rel-)", run: async () => {
+    const r = await tiedBrain();
+    if (!r) return na("no tie sentences at this commit");
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const before = (core.readNote(r.root, "helper", "orgs/north-college") as { body: string }).body.includes("is on [[projects/spring-course");
+    const n = pb.brain.loadBrain(r.root).find((x: any) => x.fm.id === "projects/spring-course");
+    for (const rec of n.fm.facts.people.items) rec.share_with = ["steward"];
+    pb.brain.saveNote(r.root, n);
+    r.git("louis", "commit", "-qam", "owner: keep the course's people");
+    const helper = (core.readNote(r.root, "helper", "orgs/north-college") as { body: string }).body;
+    const steward = (core.readNote(r.root, "steward", "orgs/north-college") as { body: string }).body;
+    const gone = !helper.includes("Spring course") && !helper.includes("f0000000000000a4");
+    return ok(before && gone && steward.includes("is on [[projects/spring-course"), `shown before ${before}; gone for the reader it's kept from ${gone}; kept for steward ${steward.includes("is on [[projects/spring-course")}`);
+  } },
+  { id: "search-title-first", dimension: "retrieval", gap: "G693", title: "the note titled as the question comes first, ahead of a shorter note whose title holds it", source: "found building G685 (asked \"Pinecrest pilot\", a decision came first)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    const filler = Array.from({ length: 40 }, (_, i) => `Week ${i + 1} went to the reading list, the room and the marking scheme.`).join(" ");
+    const head = (id: string, title: string) => `---\nid: ${id}\ntype: project\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n---\n`;
+    writeFileSync(join(root, "projects", "harbour-walk.md"), `${head("projects/harbour-walk", "Harbour walk")}${filler}\n`);
+    writeFileSync(join(root, "projects", "harbour-walk-length.md"), `${head("projects/harbour-walk-length", "Two-day harbour walk")}The harbour walk is two days, a harbour walk decided.\n`);
+    const first = core.search(root, "steward", "Harbour walk")[0]?.id;
+    return ok(first === "projects/harbour-walk", `first hit ${first}`);
   } },
   { id: "wiki-owner-page-rewritten-untouched", dimension: "upkeep", gap: "G627", title: "the night writer rewrites the owner's own page even when nothing touched it in its window, so an old lead doesn't outlive a rule change", source: "Mac 2026-11-02 (G624 live, his page still said how you know)", run: async () => {
     const wiki = await import(join(SRC_DIR, "wiki.ts"));

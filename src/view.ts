@@ -134,7 +134,7 @@ export function scrubPage(text: string, v: Visible, res: CarveResult): string {
 // a fact of that page hidden from the reader has a reference its definition carries. An older lead
 // reused a label of this page's for such a sentence when the references matched: a sentence with a
 // writer's cross-page shape that links a page is checked against that page the same way.
-const CROSS_LABEL = /^p-(at|in|see)-(.+)$/;
+const CROSS_LABEL = /^p-(at|in|see|rel)-(.+)$/;
 const CROSS_SHAPE = /\bworks? at\b|\balso comes up in the sources of\b|(?:^|\s)See also\b/;
 const slugCache = new WeakMap<CarveResult, Map<string, Visible[]>>();
 function bySlug(res: CarveResult): Map<string, Visible[]> {
@@ -167,6 +167,16 @@ function otherPagesHidden(v: Visible, res: CarveResult, defs: Map<string, string
     // The page the sentence links decides, never a namesake: the label carries only its short name,
     // so a visible page of another kind with that name must not stand in for a hidden one (PR 30 review).
     const cite = `[^${label}]`;
+    // A tie between pages (p-rel-, G685-G687) rests on facts of every page its sentence links, this
+    // one's too: it goes when any of them is out of view or has a fact hidden that its
+    // references carry.
+    if (m[1] === "rel") {
+      const ids = linked.split("\n").filter((l) => !l.startsWith("[^")).flatMap((l) => l.match(/[^\n]*?(?:\[\^[^\]\s]+\])+/g) ?? []).filter((x) => x.includes(cite))
+        .flatMap((x) => [...x.matchAll(/\[\[([^\]|#]+)/g)].map((y) => y[1]!.trim()));
+      const xs = [...new Set([v.note.fm.id, ...ids])].map((id) => linkFor(id, res));
+      if (xs.some((id) => id === undefined) || xs.map((id) => res.visible.get(id!)).some((x) => !x || hiddenThere(x, res, def))) out.add(label);
+      continue;
+    }
     const linkedIds = linked.split("\n").filter((l) => l.includes(cite) && !l.startsWith(`${cite}:`))
       .flatMap((l) => [...l.matchAll(/\[\[([^\]|#]+)/g)].map((x) => x[1]!.trim()))
       .filter((id) => id !== v.note.fm.id && id.split("/").at(-1) === m[2]);

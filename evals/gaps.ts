@@ -5,6 +5,34 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G693: {
+    closed: "e8cca5bf",
+    title: "A page asked for by its title came after a page whose title holds it",
+    severity: "low",
+    finding: "Found building G685, demo brain: asked \"Pinecrest pilot\", context_pack's first note was the decision \"Three-month Pinecrest pilot\", once the project's page said where its people work; BM25 scores a longer page lower on the same words.",
+    fix: "src/retrieve.ts rank: a note whose title is the question (case, accents and spaces aside) comes first; the rest keep their order. Test: test/title-first.test.ts. Eval: search-title-first.",
+  },
+  G687: {
+    closed: "e8cca5bf",
+    title: "A person's page didn't say who else is on their projects or at their org",
+    severity: "medium",
+    finding: "Owner, 2026-11-06: \"org, project, people, notes, all of them are sometimes related\". A person's page said \"See also\" a project and listed a colleague only when a source named them.",
+    fix: "src/wiki.ts renderTouchedPages and pageLead (related, kinds with and too): \"Ana is on [[Spring course]] with [[Cara Lee]].\", \"Also at [[North College]]: [[Ben Roy]].\", each cited by the facts behind it under p-rel-<page>. Test: test/related-across-pages.test.ts. Eval: wiki-person-teammates-and-colleagues.",
+  },
+  G686: {
+    closed: "e8cca5bf",
+    title: "A project page didn't say where its people work",
+    severity: "medium",
+    finding: "Owner, 2026-11-06: \"like an org as people who are tied to projects\". A project listed its people; the orgs they work at were two pages away.",
+    fix: "src/wiki.ts (related, kind at): one sentence per org, \"Ana Diaz works at [[North College]].\", cited by the project's fact and each person's org fact. Test: test/related-across-pages.test.ts. Eval: wiki-project-people-at-orgs.",
+  },
+  G685: {
+    closed: "e8cca5bf",
+    title: "An org page didn't say which of its people are on which project",
+    severity: "medium",
+    finding: "Owner, 2026-11-06 (audit v12, nothing crosses pages): \"like an org as people who are tied to projects\". An org listed who works there; the projects they are on were two pages away.",
+    fix: "src/wiki.ts (related, kind on): \"Ana Diaz and Ben Roy are on [[Spring course]].\", cited by each person's org fact and the project's fact; src/view.ts drops a p-rel- sentence from a read when a page it links is out of view or a fact behind it is hidden from that reader. Tests: test/related-across-pages.test.ts. Evals: wiki-org-people-on-projects, wiki-tie-dropped-for-reader.",
+  },
   G678: {
     closed: "claude/false-conflicts-2",
     title: "The same notice from two mails, its parts in another order, was asked as a conflict",

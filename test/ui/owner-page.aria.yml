@@ -42,27 +42,62 @@
     - superscript:
       - link "3":
         - /url: "#fn-3"
-    - text: See also
+    - text: Maya is on
     - link "Atlas launch":
       - /url: /p/projects/atlas-launch
+    - text: with
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: and
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
     - text: .
     - superscript:
       - link "4":
         - /url: "#fn-4"
-    - text: See also
-    - link "Hire a senior designer, not two juniors":
-      - /url: /p/decisions/2026-09-15-hire-senior-designer
+    - text: Maya is on
+    - link "Senior designer hire":
+      - /url: /p/projects/designer-hire
+    - text: with
+    - link "Felix Moreau":
+      - /url: /p/people/felix-moreau
+    - text: ","
+    - link "Lucas Fontaine":
+      - /url: /p/people/lucas-fontaine
+    - text: and
+    - link "Nina Petrova":
+      - /url: /p/people/nina-petrova
     - text: .
     - superscript:
       - link "5":
         - /url: "#fn-5"
     - text: See also
-    - link "Kenji Watanabe":
-      - /url: /p/people/kenji-watanabe
+    - link "Hire a senior designer, not two juniors":
+      - /url: /p/decisions/2026-09-15-hire-senior-designer
     - text: .
     - superscript:
       - link "6":
         - /url: "#fn-6"
+    - text: See also
+    - link "Kenji Watanabe":
+      - /url: /p/people/kenji-watanabe
+    - text: .
+    - superscript:
+      - link "7":
+        - /url: "#fn-7"
+    - text: See also
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "8":
+        - /url: "#fn-8"
   - paragraph: (Written by the hub from this page's facts.)
   - heading "References" [level=2]
   - list:
@@ -72,10 +107,12 @@
       - text: Email, 7 Oct 2026
       - group: + What the source said
     - listitem: Email, 12 Sep 2026
+    - listitem: Email, 18 Sep 2026
     - listitem: Email, 15 Sep 2026
     - listitem:
       - text: Email, 7 Oct 2026
       - group: + What the source said
+    - listitem: Email, 1 Oct 2026
   - heading "What changed" [level=2]
   - list:
     - listitem:
@@ -94,11 +131,29 @@
     - link "Harbourline Software":
       - /url: /p/orgs/harbourline
     - text: ","
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Felix Moreau":
+      - /url: /p/people/felix-moreau
+    - text: ","
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: ","
     - link "Kenji Watanabe":
       - /url: /p/people/kenji-watanabe
     - text: ","
     - link "Lucas Fontaine":
       - /url: /p/people/lucas-fontaine
+    - text: ","
+    - link "Nina Petrova":
+      - /url: /p/people/nina-petrova
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: ","
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
     - text: ","
     - link "Atlas launch":
       - /url: /p/projects/atlas-launch

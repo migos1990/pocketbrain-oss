@@ -188,7 +188,9 @@ test("page writer: what someone did reads as a sentence to you; a linked page is
   const ana = body(root, "people/ana-diaz");
   expect(ana).toContain("Ana Diaz sent you a request for feedback on your grant plan.[^pf-relationship]");
   expect(ana).not.toContain("Relationship of");
-  expect(ana).toContain("Its sources also name [[people/ben-okafor|Ben Okafor]].");
+  // Ben, whom Ana's mail names, is at her org: the sentence that says so names him, once (G687).
+  expect(ana).toContain("Also at [[orgs/north-college|North College]]: [[people/ben-okafor|Ben Okafor]].");
+  expect(ana).not.toContain("Its sources also name [[people/ben-okafor");
   expect(ana).not.toMatch(/also name[^\n]*North College/);
   expect(body(root, "people/cy-moss")).toContain("How you know Cy Moss: former manager.");
   // The org page wasn't touched by a fact of its own: its people's org facts name it.
