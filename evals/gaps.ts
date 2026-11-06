@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G673: {
+    closed: "55c5963f",
+    title: "A line the hub set aside said \"From today's email\" under it",
+    severity: "low",
+    finding: "Demo brain's home at 390px dark, 2026-11-06 (PR 104's proof): the line for a fact set aside from machine mail read \"From today's email\", though no email came that day; the hub set it aside. Receipt set-aside lines read the same.",
+    fix: "src/dashboard/home.ts: saidWords and fromWords say SAID_COPY.setAside (\"Your brain set it aside today\") and \"set aside by your brain\" for a diary row whose why is receipt or machine. Test: test/set-aside-source.test.ts. Eval: home-set-aside-says-the-brain.",
+  },
   G669: {
     closed: "27511afe",
     title: "One project showed a conflict card per field from the same two emails",

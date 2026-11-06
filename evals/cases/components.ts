@@ -659,6 +659,17 @@ const pullCases: Case[] = [
     const apart = !kim.includes("Lee Park") && !text("lee-park").includes("Kim Roux");
     return ok(facts && apart, `owner's page says only its facts ${facts}; one receipt doesn't tie two pages ${apart}`);
   } },
+  { id: "home-set-aside-says-the-brain", dimension: "upkeep", gap: "G673", title: "a line the hub set aside (machine mail, a receipt) says the brain set it aside, never 'From today's email'", source: "Demo brain home at 390px, 2026-11-06 (set-aside line read From today's email)", run: async () => {
+    const home = await import(join(SRC_DIR, "dashboard", "home.ts"));
+    if (!home.SAID_COPY?.setAside) return na("no set-aside words at this commit");
+    const rules = { policy: { agents: {} } };
+    const row = (why?: string) => ({ source_word: "email", by: "hub", at: "2026-11-06T09:00:00Z", ...(why ? { why } : {}) });
+    const said = ["machine", "receipt"].map((w) => home.saidWords(row(w), rules, "2026-11-06"));
+    const from = ["machine", "receipt"].map((w) => home.fromWords(row(w), rules));
+    const kept = home.saidWords(row(), rules, "2026-11-06") === "From today's email";
+    const good = said.every((x: string) => x === "Your brain set it aside today") && from.every((x: string) => !/email/.test(x));
+    return ok(good && kept, `set-aside lines say the brain did it ${good}; an ordinary email line unchanged ${kept}`);
+  } },
   { id: "wiki-project-under-its-parent", dimension: "upkeep", gap: "G640", title: "upkeep puts a project page named 'X: …' or whose fact names X under X, and leaves a shared name alone", source: "Louis 2026-11-03 (his Memory projects: all of them are related)", run: async () => {
     const wiki = await import(join(SRC_DIR, "wiki.ts"));
     if (!wiki.parentPlan) return na("no parent plan at this commit");

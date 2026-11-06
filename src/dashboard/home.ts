@@ -104,7 +104,9 @@ export function slugMap(notes: Iterable<Note>): Map<string, string> {
   return new Map([...seen].filter((e): e is [string, string] => !!e[1]));
 }
 
-export function fromWords(row: Pick<DiaryRow, "source_word" | "by">, rules: Rules): string {
+export function fromWords(row: Pick<DiaryRow, "source_word" | "by"> & Partial<Pick<DiaryRow, "why">>, rules: Rules): string {
+  // A fact the hub set aside itself says so, never where the fact came from (G673).
+  if (row.why === "receipt" || row.why === "machine") return "set aside by your brain";
   switch (row.source_word) {
     // The owner's own write; an assistant passing on what the owner told it says so (audit v4).
     case "you": return !row.by || isOwnerId(row.by) ? "you said" : `you told your ${rules.policy.agents[row.by]?.label ?? row.by}`;
@@ -199,6 +201,9 @@ export const SAID_COPY = {
   other: "From {source} {when}",
   twoEmails: "Two emails disagree",
   twoSources: "Two sources disagree",
+  // A fact the hub set aside itself (a receipt, machine mail): said for the day it did it, never as
+  // where the fact came from (G673).
+  setAside: "Your brain set it aside {when}",
 } as const;
 export type LineKey = keyof typeof LINE_COPY;
 // Each line is a sentence: capitalised, and ending with a full stop unless it asks.
@@ -260,10 +265,11 @@ function dayName(day: string, today: string): { day: string; when: string } {
   const w = FULL_DAY[new Date(`${day}T12:00:00Z`).getUTCDay()]!;
   return Date.parse(today) - Date.parse(day) < 7 * 86_400_000 ? { day: w, when: `on ${w}` } : { day: longDay(day), when: `on ${longDay(day)}` };
 }
-export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at">, rules: Rules, today = dayOf(clock().toISOString())): string {
+export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at"> & Partial<Pick<DiaryRow, "why">>, rules: Rules, today = dayOf(clock().toISOString())): string {
   const d = dayName(dayOf(row.at), today);
   const label = (by: string) => rules.policy.agents[by]?.label ?? by;
   const f = (s: string, v: Record<string, string>) => { const t = s.replace(/\{(\w+)\}/g, (_m, x: string) => v[x] ?? ""); return t.charAt(0).toUpperCase() + t.slice(1); };
+  if (row.why === "receipt" || row.why === "machine") return f(SAID_COPY.setAside, d);
   switch (row.source_word) {
     case "email": return f(SAID_COPY.email, d);
     case "calendar": return f(SAID_COPY.calendar, d);
