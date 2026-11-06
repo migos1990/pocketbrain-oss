@@ -12,11 +12,11 @@ test("the owner's page puts its text's sections one level under its title, never
   const { root } = await makeDemoBrain();
   const s = loadState(root, new Date(DEMO_NOW));
   const n = s.notes.find((x) => x.fm.id === "projects/atlas-launch")!;
-  expect(n.body).toContain("## Earlier notes");
+  expect(n.body).toContain("## From its facts");
   const html = ownerPage(s, "", n, []);
   const levels = [...html.matchAll(/<h([1-6])[\s>]/g)].map((m) => Number(m[1]));
   expect(levels[0]).toBe(1);
   levels.forEach((l, i) => { if (i) expect(l - levels[i - 1]!).toBeLessThanOrEqual(1); });
-  expect(html).toContain("<h2>Earlier notes</h2>");
+  expect(html).toContain("<h2>From its facts</h2>");
   expect(html).toContain("<h2>References</h2>");
 }, 60_000);

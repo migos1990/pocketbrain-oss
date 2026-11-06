@@ -365,7 +365,9 @@ ${pinned}`, { css: PAGE_CSS, wrap: "page" });
 export interface AskProse { html: string; cites: { href: string; label: string }[] }
 export function askProse(s: State, n: Note, fresh: boolean): AskProse | undefined {
   if (!fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
-  const top = (fresh ? n.body ?? "" : shutInProse(n)).split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).find((x) => x && !x.startsWith("[^"));
+  // The page's opening: someone's own paragraph and the hub's sentences beneath it under "From its
+  // facts" (G682), or the hub's alone; never a later section.
+  const top = (fresh ? n.body ?? "" : shutInProse(n)).replace(/^## From its facts\n/m, "").split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith("[^") && x !== MADE).slice(0, 2).join("\n\n") || undefined;
   if (!top) return undefined;
   const notes = new Set((top.match(/\[\^[^\]\s]+\]/g) ?? []));
   const text = top.replace(/\[\^[^\]\s]+\]/g, "").split(MADE).join(" ").replace(/\s+/g, " ").trim();

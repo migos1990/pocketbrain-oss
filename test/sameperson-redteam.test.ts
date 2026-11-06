@@ -116,9 +116,9 @@ test("RT5 undo: links upkeep repointed to the kept note go back, so a hidden not
   mergeSamePerson(root, p.id);
   upkeep(root);
   expect(readFileSync(c, "utf8")).toContain("[[people/jane-roy]]"); // the repoint happened
-  // and tells helper nothing (the page writer's own opening for the touched page aside; the text
-  // that was there is kept word for word under Earlier notes)
-  expect(seen(root, "helper", "projects/course-a")!.body!).toContain(`## Earlier notes\n${before!.trimEnd()}`);
+  // and tells helper nothing (the page writer's own block for the touched page aside; the text
+  // that was there is kept word for word on top, G682)
+  expect(seen(root, "helper", "projects/course-a")!.body!).toStartWith(`${before!.trimEnd()}\n\n## From its facts\n`);
   undoPersonMerge(root, p.id); // allowed: upkeep's repoint is the only later change
   expect(seen(root, "helper", "projects/course-a")!.body).toBe(before);
   expect(readFileSync(c, "utf8")).toContain("[[people/j-roy]]");

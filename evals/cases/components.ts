@@ -734,6 +734,21 @@ const pullCases: Case[] = [
     const t: Set<string> = ns.touchedSince(root, day.since, day.until);
     return ok(t.has("projects/course-a.md") && !t.has("projects/course-b.md"), `before the night counted ${t.has("projects/course-a.md")}; after it waits ${!t.has("projects/course-b.md")}`);
   } },
+  { id: "wiki-person-text-on-top", dimension: "upkeep", gap: "G682", title: "a person's opening stays on top of the page with the hub's block beneath, text the writer demoted goes back up word for word, and an id in it is one reference", source: "audit v12 (71 of 102 demo pages opened with the template, the person's paragraph under Earlier notes)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.MADE) return na("no page writer at this commit");
+    const root = sandbox("synthetic");
+    const head = `---\nid: projects/atlas\ntype: project\ntitle: Atlas launch\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  status: { value: in beta, as_of: 2026-10-05, sources: ["gmail:f0000000000000a1"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }\n---\n`;
+    const seed = "The Atlas launch is the big one this fall (gmail:1a0b2c3d4e5f6a7b).";
+    const g = (name: string, ...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: `${name}@x`, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: `${name}@x` } });
+    const f = join(root, "projects", "atlas.md");
+    writeFileSync(f, `${head}${seed}\n`); g("planner", "add", "-A"); g("planner", "commit", "-qm", "planner: atlas");
+    writeFileSync(f, `${head}Atlas launch is in beta.[^pf-status]\n\n${wiki.MADE}\n\n## Earlier notes\n${seed}\n\n[^pf-status]: Email, 2026-10-05 (gmail:f0000000000000a1)\n`); g("hub", "commit", "-qam", "hub: page text");
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const b = readFileSync(f, "utf8").split(/^---$/m).slice(2).join("---").trim();
+    const top = b.startsWith("The Atlas launch is the big one this fall[^e-2c3d4e5f6a7b].\n\n## From its facts\nAtlas launch is in beta.");
+    return ok(top && !b.includes("Earlier notes") && !/gmail:[a-z]{1,4}\)/.test(b), `person's text on top with the facts beneath ${top}; no Earlier notes left ${!b.includes("Earlier notes")}`);
+  } },
   { id: "wiki-owner-page-rewritten-untouched", dimension: "upkeep", gap: "G627", title: "the night writer rewrites the owner's own page even when nothing touched it in its window, so an old lead doesn't outlive a rule change", source: "Mac 2026-11-02 (G624 live, his page still said how you know)", run: async () => {
     const wiki = await import(join(SRC_DIR, "wiki.ts"));
     if (!wiki.TIES) return na("no tie rules at this commit");

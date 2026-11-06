@@ -52,17 +52,17 @@ test("Who knows: your memory in numbers, then a card per assistant", async () =>
 test("a page made secret after an assistant read it is named on Who knows only right after a sign-in (builder's audit, low)", async () => {
   process.env.PB_NOW = DEMO_NOW;
   try {
-    const secret = ["people/isabelle-roy", "people/chloe-gagnon"];
+    const secret = ["people/isabelle-roy", "people/ben-carter"];
     const lines = (html: string) => cards(html).join("\n");
     // Fresh: the owner may see the names, as on Memory.
     const fresh = lines(await who({ secret }));
-    expect(fresh).toContain("Chloé Gagnon");
+    expect(fresh).toContain("Ben Carter");
     // Past 10 minutes: the lines stay, the secret pages' names don't.
     const stale = lines(await who({ secret, later: 11 }));
     expect(stale).not.toContain("Isabelle Roy");
-    expect(stale).not.toContain("Chloé Gagnon");
+    expect(stale).not.toContain("Ben Carter");
     expect(stale).not.toContain("isabelle-roy");
-    expect(stale).not.toContain("chloe-gagnon");
+    expect(stale).not.toContain("ben-carter");
     expect(stale).toContain(`Pinecrest pilot, ${ONLY_YOU}`);
     expect(stale).toContain("Three-month Pinecrest pilot");
   } finally { delete process.env.PB_NOW; }
@@ -75,7 +75,7 @@ test("what an assistant typed shows on Who knows only right after a sign-in; lat
     expect(fresh).toContain("asked about “Pinecrest pilot”");
     const stale = cards(await who({ later: 11 })).map((c) => c.slice(c.indexOf("<details>"))).join("\n");
     expect(stale).not.toMatch(/[“”]/);
-    expect(stale).toContain("asked about Three-month Pinecrest pilot");
+    expect(stale).toContain("asked about Pinecrest pilot");
     expect(stale).not.toContain("Mom&#39;s move”");
   } finally { delete process.env.PB_NOW; }
 }, 60_000);

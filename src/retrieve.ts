@@ -129,6 +129,8 @@ export function chunkNote(lines: string[], hasBody: boolean): { head: string; bo
     // The references a page ends with belong to no section: never repeat the last heading over
     // them (demo-moment thread, 2026-10-29: "#### Earlier notes" twice in context_pack).
     if (/^\[\^[^\]\s]+\]:/.test(l) && !cur.length) heading = "";
+    // Nor over the hub's made-by line, which closes its block wherever the block sits (G682).
+    if (l.trim() === "(Written by the hub from this page's facts.)" && !cur.length) heading = "";
     if (/^\s*[-*] |^\s*\d+\. /.test(l)) flush();
     cur.push(l);
   }

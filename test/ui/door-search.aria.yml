@@ -4,35 +4,35 @@
     - listitem:
       - link "Maya Chen":
         - /url: /b/notes/people%2Fmaya-chen
-      - text: people/maya-chen · person Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Maya works with you on Atlas.[^pf-relationship] Maya's city is Mon
+      - text: "people/maya-chen · person #### From its facts Maya Chen is the design lead at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Maya works with you on Atlas.[^pf-relationship"
     - listitem:
       - link "Hire a senior designer, not two juniors":
         - /url: /b/notes/decisions%2F2026-09-15-hire-senior-designer
-      - text: "decisions/2026-09-15-hire-senior-designer · decision #### Earlier notes Decided on 2026-09-15 for the [[projects/designer-hire]], with [[people/maya-chen]] and [[people/priya-shah]].[^1]"
+      - text: "decisions/2026-09-15-hire-senior-designer · decision #### From its facts The chose of Hire a senior designer, not two juniors is one senior designer.[^pf-chose] On Hire a senior designer, not two juniors, the why:"
     - listitem:
       - link "Senior designer hire":
         - /url: /b/notes/projects%2Fdesigner-hire
-      - text: projects/designer-hire · project Senior designer hire is final round.[^pf-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for Senior designer hir
+      - text: "projects/designer-hire · project #### From its facts Senior designer hire is final round.[^pf-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for"
     - listitem:
       - link "Harbourline Software":
         - /url: /b/notes/orgs%2Fharbourline
-      - text: orgs/harbourline · org Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/aisha-rahman|Aisha Rahman]], [[people/dan
+      - text: "orgs/harbourline · org #### From its facts Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/aisha-rahman|Aisha Ra"
     - listitem:
       - link "Kenji Watanabe":
         - /url: /b/notes/people%2Fkenji-watanabe
-      - text: people/kenji-watanabe · person Kenji Watanabe is the senior data analyst at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Kenji works with you.[^pf-relationship] Kenji's city
+      - text: "people/kenji-watanabe · person #### From its facts Kenji Watanabe is the senior data analyst at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Kenji works with you.[^pf-relatio"
     - listitem:
       - link "Atlas launch":
         - /url: /b/notes/projects%2Fatlas-launch
-      - text: "projects/atlas-launch · project Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3 Nov.[^pf-due] Next"
+      - text: "projects/atlas-launch · project #### From its facts Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3"
     - listitem:
       - link "Weekly Atlas review on Wednesdays":
         - /url: /b/notes/decisions%2F2026-10-01-weekly-team-review
-      - text: "decisions/2026-10-01-weekly-team-review · decision #### Earlier notes Decided on 2026-10-01 for the [[projects/atlas-launch]], with [[people/omar-haddad]] and [[people/maya-chen]] and [[people/hannah-becker]].[^"
+      - text: decisions/2026-10-01-weekly-team-review · decision Decided on 2026-10-01 for the [[projects/atlas-launch]], with [[people/omar-haddad]] and [[people/maya-chen]] and [[people/hannah-becker]].[^1]
     - listitem:
       - link "Lucas Fontaine":
         - /url: /b/notes/people%2Flucas-fontaine
-      - text: "people/lucas-fontaine · person #### Earlier notes Lucas is a candidate for the [[projects/designer-hire]]; strong portfolio, did the second panel with [[people/maya-chen]].[^1]"
+      - text: people/lucas-fontaine · person Lucas is a candidate for the [[projects/designer-hire]]; strong portfolio, did the second panel with [[people/maya-chen]].[^1]
   - paragraph:
     - link "Back to the start page":
       - /url: /b

@@ -40,6 +40,27 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner's phone, 2026-11-06: \"You said, 2 Nov\" against an assistant's guess at how the owner knows a person. By the conflict order the owner's word comes first; an assistant's own word dated the same day or later still opened a conflict, and its proposal was a card on the settle screen.",
     fix: "write() ownerDispute: a value whose only sources are an assistant's word or memory (AGENT_MEMORY_SCHEMES) goes to history against the owner's word whatever its date; filing files such a proposal the same way, and the inbox's conflict list leaves it out. A checkable source of the same day or later still asks. Tests: test/false-conflicts-2.test.ts.",
   },
+  G684: {
+    closed: "569b997f",
+    title: "A source id in page text came out as a garbled reference",
+    severity: "low",
+    finding: "Found while building G682: text holding \"(gmail:<16-hex id>)\" came out as \"([^e-an] email[^e-…])\" with a reference to \"gmail:an\", since the rule for a bare 16-hex mail id matched the id inside the ref before the ref rule took it whole.",
+    fix: "src/wiki.ts GMAIL_WORD: a bare id is never one that follows a colon, so \"(gmail:<id>)\" becomes one reference. Test: test/person-text-on-top.test.ts (G684). Eval: wiki-person-text-on-top.",
+  },
+  G683: {
+    closed: "569b997f",
+    title: "Text the writer had already demoted stayed under Earlier notes",
+    severity: "medium",
+    finding: "Audit v12, wiki: on 71 of the demo's 102 pages the writer had already moved the person's opening under Earlier notes; stopping new demotions alone leaves every such page as it was.",
+    fix: "src/wiki.ts renderTouchedPages: an Earlier notes section the writer last wrote goes back on top when its plain words are exactly an opening someone other than the hub or upkeep left at the top of the page in its history (pastOpenings); anything else stays where it is. Test: test/person-text-on-top.test.ts (G683). Eval: wiki-person-text-on-top.",
+  },
+  G682: {
+    closed: "569b997f",
+    title: "The paragraph a person wrote sat under the hub's template block",
+    severity: "medium",
+    finding: "Audit v12, wiki: every demo page opened with the same template block, and on 71 of 102 the paragraph saying why the person or project matters (\"the one to ask before anything ships\") sat beneath it as Earlier notes, so pages read as a list of facts, not an article.",
+    fix: "src/wiki.ts renderTouchedPages and withLead: an opening someone other than the hub wrote stays on top, its source ids made references, and the hub's block follows under From its facts (rewritten each run, dropped when the page has no fact left); with no such opening the hub's block opens the page as before. A From its facts section someone edited stays theirs, and then the opening goes under Earlier notes as before. Tests: test/person-text-on-top.test.ts, test/page-writer.test.ts. Eval: wiki-person-text-on-top.",
+  },
   G672: {
     closed: "c837a994",
     title: "The real brain's pages-ok counted pages before the night wrote them",

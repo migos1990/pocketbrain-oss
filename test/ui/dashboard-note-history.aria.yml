@@ -15,7 +15,7 @@
   - link "Maya Chen":
     - /url: /note/people/maya-chen
   - heading "History" [level=1]
-  - text: 4 saves since 30 Sep 2026 See the note on
+  - text: 6 saves since 30 Sep 2026 See the note on
   - textbox "See the note on"
   - button "Go"
   - heading "Facts over time" [level=2]
@@ -54,16 +54,22 @@
     - listitem:
       - text: 2026-10-07 now since 7 Oct 2026 · from an email · added by capture ·
       - link "As it was":
-        - /url: /history/people/maya-chen?at=v3
+        - /url: /history/people/maya-chen?at=v4
     - listitem:
       - text: 2026-08-25 25 Aug 2026 to 7 Oct 2026 · from your calendar · added by capture ·
       - link "As it was":
         - /url: /history/people/maya-chen?at=v1
   - heading "Every save" [level=2]
+  - text: 7 Oct 2026 20:30 The hub Edited the notes text
+  - link "As it was":
+    - /url: /history/people/maya-chen?at=v6
   - text: 7 Oct 2026 17:30 The hub Edited the notes text
   - link "As it was":
-    - /url: /history/people/maya-chen?at=v4
+    - /url: /history/people/maya-chen?at=v5
   - text: "7 Oct 2026 17:30 auto-decide Last contact: 2026-08-25 to 2026-10-07 from an email"
+  - link "As it was":
+    - /url: /history/people/maya-chen?at=v4
+  - text: 3 Oct 2026 17:30 The hub Edited the notes text
   - link "As it was":
     - /url: /history/people/maya-chen?at=v3
   - text: 2 Oct 2026 17:30 The hub Edited the notes text

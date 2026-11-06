@@ -517,7 +517,7 @@ const plainWords = (t: string) => t.replace(/\[\^[^\]\s]+\]/g, "").replace(/\[\[
 const REF_TOKEN = String.raw`\b(?:gmail|gcal|notion|imsg|imessage|discord|granola|slack|gdoc|zoom|contacts):[A-Za-z0-9._@/-]*[A-Za-z0-9]`;
 // A mail's id the way older assistants wrote it into their text: "Gmail 1a0b…", "an email, 1a0b…",
 // "decline: 1a0b…" (a Gmail message id is 16 hex digits); and "notion: <32 hex>".
-const GMAIL_WORD = /(\b(?:e-?mail|thread|message|reply)\b,?\s+)?\b(?:Gmail\s+)?([0-9a-f]{16})\b/gi;
+const GMAIL_WORD = /(\b(?:e-?mail|thread|message|reply)\b,?\s+)?\b(?:Gmail\s+)?(?<!:)([0-9a-f]{16})\b/gi; // never the id inside "gmail:<id>", which the ref passes below take whole
 const NOTION_SPACED = /\bnotion:\s+([0-9a-f]{32})\b/gi;
 // The same ids as words for a reader, wherever someone wrote them into a page's text (the note page
 // and the phone page): "an email", never the id. The file keeps them; assistants check sources by them.
@@ -742,19 +742,39 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
 
 // The page with `lead` as its opening text: every section kept, the references the sections
 // cite kept, the writer's own (p-*) replaced.
-function withLead(n: Note, lead: { text: string; refs: { label: string; text: string }[] }): string {
+function withLead(n: Note, lead: { text: string; refs: { label: string; text: string }[] }, top = ""): string {
   const f = footnotes(n.body);
   const secs = sections(f.text).filter((x) => x.heading !== undefined);
   const rest = secs.map((x) => `## ${x.heading}\n${x.text}`).join("\n\n");
-  const cited = new Set([...rest.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]));
-  const defs = [...lead.refs.map((r) => `[^${r.label}]: ${r.text}`), ...f.notes.filter((x) => cited.has(x.label) && !/^pf?-/.test(x.label)).map((x) => `[^${x.label}]: ${x.text}`)];
-  return `${lead.text}\n\n${MADE}\n${rest ? `\n${rest}\n` : ""}\n${defs.join("\n")}\n`;
+  const order = [...new Set([...`${top}\n${rest}`.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]))];
+  // The other references in the order the text cites them, so a second run writes the same file.
+  const defs = [...lead.refs.map((r) => `[^${r.label}]: ${r.text}`), ...order.filter((l) => !/^pf?-/.test(l)).flatMap((l) => f.notes.filter((x) => x.label === l).slice(0, 1)).map((x) => `[^${x.label}]: ${x.text}`)];
+  const block = `${lead.text}\n\n${MADE}\n`;
+  return `${top ? `${top}\n\n## ${FACTS}\n` : ""}${block}${rest ? `\n${rest}\n` : ""}\n${defs.join("\n")}\n`;
+}
+
+// The openings someone other than the writer left at the top of a page, as plain words, from the
+// page's history: text the writer once moved under "Earlier notes" goes back up only when it is
+// word for word one of these (G683).
+function pastOpenings(root: string, path: string, commits = 200): Set<string> {
+  const out = new Set<string>();
+  const log = git(root, ["log", `-n${commits}`, "--format=%H%x1f%an", "--", path]).split("\n").filter(Boolean);
+  for (const line of log) {
+    const [hash, by] = line.split("\x1f");
+    if ([WRITER, "reflect"].includes(by)) continue;
+    let n: Note;
+    try { n = parseNote(git(root, ["show", `${hash}:${path}`]), path); } catch { continue; }
+    const top = sections(footnotes(n.body).text).find((x) => x.heading === undefined)?.text.trim();
+    if (top && !top.includes(MADE)) out.add(plainWords(top));
+  }
+  return out;
 }
 
 // Where someone else's opening text goes once the writer's opens the page, and the headings the
 // writer's own text used to sit under (G436 "Related", G442 "From its facts").
 const EARLIER = "Earlier notes", YOURS = "Your notes";
-const OLD_HEADS = new Set(["Related", "From its facts"]);
+const FACTS = "From its facts";
+const OLD_HEADS = new Set(["Related", FACTS]);
 // Said wherever the writer's text is read (dashboard, an assistant's read, the file): no person
 // wrote it, and its facts are where it comes from (outside review v3, 2026-10-26).
 export const MADE = "(Written by the hub from this page's facts.)";
@@ -893,11 +913,14 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     const hiddenKeys = new Set(readers.flatMap((v) => v.hiddenFacts.map((h) => h.key)));
     const rank = sensitivityRank(n.fm.sensitivity);
     const members = (at.get(n.fm.id) ?? []).filter((m) => !hiddenKeys.has(`${m.id}#org`) && sensitivityRank(byId.get(m.id)!.fm.sensitivity) <= rank).map((m) => ({ ...m, recs: m.recs.filter((r) => !r.sensitivity || sensitivityRank(r.sensitivity) <= rank) })).filter((m) => m.recs.length);
-    // One hub-written block per page, and it opens the page (phone check, 2026-10-26): text someone
-    // else left at the top is kept word for word under "Earlier notes", its source ids made
-    // references, and the writer's old sections ("Related", "From its facts") go, unless someone
-    // has since written in one. "Your notes" is only ever text the owner typed (src/owner-say.ts);
-    // one the writer moved there before is Earlier notes too.
+    // One hub-written block per page. Text a person (or an import, an assistant, the Gardener)
+    // left at the top stays on top, its source ids made references, and the hub's block follows it
+    // under "From its facts" (audit v12: on 71 of 102 demo pages the paragraph saying why someone
+    // matters sat under the template as "Earlier notes"; G682). Text the writer moved under
+    // "Earlier notes" before goes back up when it is word for word what someone wrote at the top.
+    // With no such text the hub's block opens the page. The writer's old sections ("Related", a
+    // "From its facts" it wrote) go, unless someone has since written in one. "Your notes" is only
+    // ever text the owner typed (src/owner-say.ts); one the writer moved there is Earlier notes.
     const f = footnotes(n.body), secs = sections(f.text);
     const said = plainWords(secs.filter((x) => x.heading !== undefined && !OLD_HEADS.has(x.heading) && x.heading !== EARLIER && x.heading !== YOURS).map((x) => x.text).join("\n"));
     const lead = pageLead(n, { hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
@@ -905,8 +928,11 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
       // Nothing left to say (an Undo took the last fact out): the writer's own opening goes with its
       // references, so the page never keeps stating a value it no longer holds (UI thread, 2026-10-27).
       const top = secs.find((x) => x.heading === undefined)?.text.trim() ?? "";
-      if (!top.includes(MADE) || !writersOwn(top, partAuthors(root, n.path).get("") ?? "")) continue;
-      const rest = secs.filter((x) => x.heading !== undefined).map((x) => `## ${x.heading}\n${x.text}`).join("\n\n");
+      const auth = partAuthors(root, n.path);
+      const hub = (x: Section) => x.heading !== undefined && OLD_HEADS.has(x.heading) && [WRITER, "reflect"].includes(auth.get(x.heading) ?? "") && x.text.includes(MADE);
+      const topHub = top.includes(MADE) && writersOwn(top, auth.get("") ?? "");
+      if (!topHub && !secs.some(hub)) continue;
+      const rest = secs.filter((x) => (x.heading === undefined ? !topHub && !!x.text.trim() : !hub(x))).map((x) => x.heading === undefined ? x.text.trim() : `## ${x.heading}\n${x.text}`).join("\n\n");
       const cited = new Set([...rest.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]));
       const defs = f.notes.filter((x) => cited.has(x.label)).map((x) => `[^${x.label}]: ${x.text}`).join("\n");
       saveNote(root, { ...n, body: `${rest ? `${rest}\n` : ""}${defs ? `\n${defs}\n` : ""}` });
@@ -920,16 +946,22 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     const theirs = own && !writersOwn(own, by.get("") ?? "") ? own : "";
     const recs = Object.values(n.fm.facts ?? {}).flatMap((x) => records(x)).filter((r) => !r.unseen);
     const extra = new Map<string, string>();
-    const moved = [theirs, ...secs.filter((x) => x.heading === YOURS && mine(YOURS)).map((x) => x.text.trim())].filter(Boolean);
+    // Someone's own "From its facts" section (kept as theirs) leaves no heading for the hub's
+    // block, so then their opening goes under Earlier notes as before.
+    const onTop = !secs.some((x) => x.heading === FACTS && !hubs(x));
+    const earlier = secs.find((x) => x.heading === EARLIER);
+    const back = onTop && !theirs && earlier && mine(EARLIER) && pastOpenings(root, n.path).has(plainWords(earlier.text)) ? earlier.text.trim() : "";
+    const moved = [onTop ? "" : theirs, ...secs.filter((x) => x.heading === YOURS && mine(YOURS)).map((x) => x.text.trim())].filter(Boolean);
     const rest: { heading: string; text: string }[] = [];
     for (const x of secs) {
-      if (x.heading === undefined || hubs(x) || (x.heading === YOURS && mine(YOURS))) continue;
+      if (x.heading === undefined || hubs(x) || (x.heading === YOURS && mine(YOURS)) || (back && x === earlier)) continue;
       rest.push({ heading: x.heading, text: x.heading === EARLIER && (moved.length || mine(EARLIER)) ? inlineRefs([...moved, x.text.trim()].join("\n\n"), recs, extra) : x.text });
     }
     if (moved.length && !rest.some((x) => x.heading === EARLIER)) rest.unshift({ heading: EARLIER, text: inlineRefs(moved.join("\n\n"), recs, extra) });
-    if (theirs) kept.push(n.fm.id);
+    const top = inlineRefs(onTop && theirs ? theirs : back, recs, extra);
+    if (theirs || back) kept.push(n.fm.id);
     const defs = [...f.notes.map((x) => `[^${x.label}]: ${x.text}`), ...[...extra].filter(([l]) => !f.notes.some((x) => x.label === l)).map(([l, t]) => `[^${l}]: ${t}`)].join("\n");
-    const body = withLead({ ...n, body: `${rest.map((x) => `## ${x.heading}\n${x.text}`).join("\n\n")}\n\n${defs}\n` }, lead);
+    const body = withLead({ ...n, body: `${rest.map((x) => `## ${x.heading}\n${x.text}`).join("\n\n")}\n\n${defs}\n` }, lead, top);
     if (body.trim() === n.body.trim()) continue;
     saveNote(root, { ...n, body });
     written.push(n.path);

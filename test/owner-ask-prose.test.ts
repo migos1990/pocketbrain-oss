@@ -31,8 +31,9 @@ test("a question about a page answers with the page's prose, its links and what 
     const a = await req("GET", "/ask");
     const answer = a.match(/<div class="bubble answer"[^>]*>([\s\S]*?)<\/div>/)?.[1];
     expect(answer).toBeDefined();
-    expect(answer).toContain("Maya Chen is the design lead at");
-    expect(answer).toContain('<a href="/p/orgs/harbourline">Harbourline Software</a>');
+    // The page's own opening, the paragraph someone wrote about her (G682), with its links.
+    expect(answer).toContain("Maya leads design for the");
+    expect(answer).toContain('<a href="/p/projects/atlas-launch">Atlas launch</a>');
     expect(answer).not.toMatch(/\[\^|Written by the hub|Here&#39;s what I have/);
     const cites = answer!.match(/<p class="cites">([\s\S]*?)<\/p>/)![1]!;
     expect(cites).toContain('<a href="/p/people/maya-chen">Maya Chen</a>');

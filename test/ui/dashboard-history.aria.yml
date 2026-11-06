@@ -9,12 +9,22 @@
   - link "Brain":
     - /url: /brain
   - heading "What changed this week" [level=1]
-  - text: 131 saves in the last 7 days See the brain on
+  - text: 154 saves in the last 7 days See the brain on
   - textbox "See the brain on"
   - button "Go"
   - heading "Today" [level=2]
+  - link "Final projects in teams of four Decisions The hub edited the notes text 09:40":
+    - /url: /history/decisions/2026-09-10-final-project-format
   - link "Antoine Lavoie People The hub edited the notes text 09:40":
     - /url: /history/people/antoine-lavoie
+  - link "Ethan Brooks People The hub edited the notes text 09:40":
+    - /url: /history/people/ethan-brooks
+  - link "Jacob Stein People The hub edited the notes text 09:40":
+    - /url: /history/people/jacob-stein
+  - link "Lucas Bergeron People The hub edited the notes text 09:40":
+    - /url: /history/people/lucas-bergeron
+  - link "Product Discovery course Projects The hub edited the notes text 09:40":
+    - /url: /history/projects/product-discovery-course
   - 'link "Antoine Lavoie People You changed role Role: teaching assistant to head TA 09:40"':
     - /url: /history/people/antoine-lavoie
   - link "Hannah Becker People The hub edited the notes text 09:00":
@@ -28,14 +38,20 @@
   - heading "Yesterday" [level=2]
   - link "Atelier Boréal for the kitchen Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-08-30-kitchen-contractor
+  - link "Atlas beta scope Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-09-08-atlas-beta-scope
   - link "Hire a senior designer, not two juniors Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-09-15-hire-senior-designer
+  - link "Northgate for the pricing page Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-09-22-pick-northgate
   - link "Three guest speakers this term Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-09-24-three-guest-speakers
+  - link "Red River in April Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-09-25-red-river-dates
+  - link "Mom moves in December Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-09-28-mom-moves-in-december
   - link "Three-month Pinecrest pilot Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-09-29-pinecrest-pilot-length
-  - link "Weekly Atlas review on Wednesdays Decisions The hub edited the notes text 23:30":
-    - /url: /history/decisions/2026-10-01-weekly-team-review
   - link "Fernwood Climbing Gym Organisations The hub edited the notes text 23:30":
     - /url: /history/orgs/fernwood-climbing
   - link "Lakeshore College Organisations The hub edited the notes text 23:30":
@@ -50,6 +66,8 @@
     - /url: /history/people/antoine-lavoie
   - link "Camille Lefebvre People The hub edited the notes text 23:30":
     - /url: /history/people/camille-lefebvre
+  - link "Chloé Gagnon People The hub edited the notes text 23:30":
+    - /url: /history/people/chloe-gagnon
   - link "Claire Dubois People The hub edited the notes text 23:30":
     - /url: /history/people/claire-dubois
   - link "Diego Alvarez People The hub edited the notes text 23:30":
@@ -58,6 +76,8 @@
     - /url: /history/people/ethan-brooks
   - link "Fatima Diallo People The hub edited the notes text 23:30":
     - /url: /history/people/fatima-diallo
+  - link "Hélène Lefebvre People The hub edited the notes text 23:30":
+    - /url: /history/people/helene-lefebvre
   - link "Isabelle Roy People The hub edited the notes text 23:30":
     - /url: /history/people/isabelle-roy
   - link "Jacob Stein People The hub edited the notes text 23:30":
@@ -82,6 +102,8 @@
     - /url: /history/people/sarah-kim
   - link "Simone Laurent People The hub edited the notes text 23:30":
     - /url: /history/people/simone-laurent
+  - link "Valérie Roy People The hub edited the notes text 23:30":
+    - /url: /history/people/valerie-roy
   - link "Zoe Harper People The hub edited the notes text 23:30":
     - /url: /history/people/zoe-harper
   - link "Atlas launch Projects The hub edited the notes text 23:30":
@@ -90,6 +112,8 @@
     - /url: /history/projects/guest-lecture-series
   - link "Kitchen renovation Projects The hub edited the notes text 23:30":
     - /url: /history/projects/kitchen-renovation
+  - link "Mom's move Projects The hub edited the notes text 23:30":
+    - /url: /history/projects/moms-move
   - link "Pinecrest pilot Projects The hub edited the notes text 23:30":
     - /url: /history/projects/pinecrest-partnership
   - link "Product Discovery course Projects The hub edited the notes text 23:30":
@@ -98,8 +122,14 @@
     - /url: /history/projects/q1-roadmap
   - link "Lucas Fontaine People The hub edited the notes text 20:30":
     - /url: /history/people/lucas-fontaine
+  - link "Marcus Webb People The hub edited the notes text 20:30":
+    - /url: /history/people/marcus-webb
+  - link "Maya Chen People The hub edited the notes text 20:30":
+    - /url: /history/people/maya-chen
   - link "Senior designer hire Projects The hub edited the notes text 20:30":
     - /url: /history/projects/designer-hire
+  - link "Pricing page refresh Projects The hub edited the notes text 20:30":
+    - /url: /history/projects/pricing-page-refresh
   - 'link "Lucas Fontaine People You changed last contact Last contact: 2026-09-14 to 2026-10-07 20:30"':
     - /url: /history/people/lucas-fontaine
   - link "Grace Liu People The hub edited the notes text 17:30":
@@ -156,10 +186,14 @@
   - 'link "Priya Shah People Claude added prefers Prefers: the decision in the first line of an email 12:15"':
     - /url: /history/people/priya-shah
   - heading "Mon 5 Oct 2026" [level=2]
+  - link "Omar Haddad People The hub edited the notes text 19:40":
+    - /url: /history/people/omar-haddad
   - link "Sam Patel People The hub edited the notes text 19:40":
     - /url: /history/people/sam-patel
   - 'link "Sam Patel People You changed last contact Last contact: 2026-09-19 to 2026-10-05 19:40"':
     - /url: /history/people/sam-patel
+  - link "Daniel Okoro People The hub edited the notes text 17:30":
+    - /url: /history/people/daniel-okoro
   - link "Felix Moreau People The hub edited the notes text 17:30":
     - /url: /history/people/felix-moreau
   - link "Laila Haddad People The hub edited the notes text 17:30":
@@ -177,10 +211,16 @@
   - heading "Sun 4 Oct 2026" [level=2]
   - link "Atlas beta scope Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-09-08-atlas-beta-scope
+  - link "Hire a senior designer, not two juniors Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-09-15-hire-senior-designer
   - link "Northgate for the pricing page Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-09-22-pick-northgate
   - link "Red River in April Decisions The hub edited the notes text 23:30":
     - /url: /history/decisions/2026-09-25-red-river-dates
+  - link "Three-month Pinecrest pilot Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-09-29-pinecrest-pilot-length
+  - link "Weekly Atlas review on Wednesdays Decisions The hub edited the notes text 23:30":
+    - /url: /history/decisions/2026-10-01-weekly-team-review
   - link "Northgate Design Studio Organisations The hub edited the notes text 23:30":
     - /url: /history/orgs/northgate-design
   - link "Pinecrest Labs Organisations The hub edited the notes text 23:30":
@@ -207,6 +247,8 @@
     - /url: /history/people/marcus-webb
   - link "Martin Leclerc People The hub edited the notes text 23:30":
     - /url: /history/people/martin-leclerc
+  - link "Omar Haddad People The hub edited the notes text 23:30":
+    - /url: /history/people/omar-haddad
   - link "Peter Novak People The hub edited the notes text 23:30":
     - /url: /history/people/peter-novak
   - link "Rachel Adler People The hub edited the notes text 23:30":
@@ -240,6 +282,10 @@
   - 'link "Daniel Okoro People Claude added prefers Prefers: a written spec before any meeting 12:15"':
     - /url: /history/people/daniel-okoro
   - heading "Sat 3 Oct 2026" [level=2]
+  - link "Maya Chen People The hub edited the notes text 17:30":
+    - /url: /history/people/maya-chen
+  - link "Omar Haddad People The hub edited the notes text 17:30":
+    - /url: /history/people/omar-haddad
   - 'link "Red River climbing trip Projects auto-decide changed next step Next step: book the cabin to book the cabin for 9 to 16 April 17:30"':
     - /url: /history/projects/red-river-trip
   - 'link "Choir winter concert Projects auto-decide changed next step Next step: buy the concert tickets for the grandparents to buy the concert tickets for the grandparents by 1 November 17:30"':

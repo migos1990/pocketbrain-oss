@@ -60,6 +60,38 @@
     - /url: /note/projects/atlas-launch?edit=_new#b-facts
   - heading "Notes" [level=2]
   - button "Edit the notes":
+    - text: "The Atlas launch is the big one this fall: ten beta customers, a public launch on 3 November."
+    - link "Grace Liu":
+      - /url: /p/people/grace-liu
+    - text: collects what the beta customers say every Friday. With
+    - link "Robin Lefebvre":
+      - /url: /p/people/robin-lefebvre
+    - text: ","
+    - link "Maya Chen":
+      - /url: /p/people/maya-chen
+    - text: ","
+    - link "Omar Haddad":
+      - /url: /p/people/omar-haddad
+    - text: ","
+    - link "Daniel Okoro":
+      - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Sofia Marquez":
+      - /url: /p/people/sofia-marquez
+    - text: and
+    - link "Hannah Becker":
+      - /url: /p/people/hannah-becker
+    - text: ". Decided so far:"
+    - link "Atlas beta scope":
+      - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - text: and
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "[1]":
+        - /url: "#fn-1"
+    - heading "From its facts" [level=3]
     - text: Atlas launch is in beta.
     - superscript:
       - link "[1]":
@@ -106,54 +138,30 @@
       - link "[3]":
         - /url: "#fn-3"
     - text: See also
-    - link "Weekly Atlas review on Wednesdays":
-      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - link "Grace Liu":
+      - /url: /p/people/grace-liu
     - text: .
     - superscript:
       - link "[4]":
         - /url: "#fn-4"
-    - text: (Written by the hub from this page's facts.)
-    - heading "Earlier notes" [level=3]
-    - text: "The Atlas launch is the big one this fall: ten beta customers, a public launch on 3 November."
-    - link "Grace Liu":
-      - /url: /p/people/grace-liu
-    - text: collects what the beta customers say every Friday. With
-    - link "Robin Lefebvre":
-      - /url: /p/people/robin-lefebvre
-    - text: ","
-    - link "Maya Chen":
-      - /url: /p/people/maya-chen
-    - text: ","
-    - link "Omar Haddad":
-      - /url: /p/people/omar-haddad
-    - text: ","
-    - link "Daniel Okoro":
-      - /url: /p/people/daniel-okoro
-    - text: ","
-    - link "Sofia Marquez":
-      - /url: /p/people/sofia-marquez
-    - text: and
-    - link "Hannah Becker":
-      - /url: /p/people/hannah-becker
-    - text: ". Decided so far:"
-    - link "Atlas beta scope":
-      - /url: /p/decisions/2026-09-08-atlas-beta-scope
-    - text: and
+    - text: See also
     - link "Weekly Atlas review on Wednesdays":
       - /url: /p/decisions/2026-10-01-weekly-team-review
     - text: .
     - superscript:
-      - link "[1]":
-        - /url: "#fn-1"
+      - link "[5]":
+        - /url: "#fn-5"
+    - text: (Written by the hub from this page's facts.)
     - heading "References" [level=3]
     - list:
       - listitem: Email, 12 Sep 2026
       - listitem: Email, 7 Oct 2026
       - listitem: Email, 8 Sep 2026
+      - listitem: Email, 7 Oct 2026
       - listitem: Email, 1 Oct 2026
-  - group: Edit the Earlier notes section
+  - group: Edit the From its facts section
   - heading "Recent updates" [level=2]
-  - text: "Edited the notes of Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide Edited the notes of Atlas launch 3 days ago by hub Added an Earlier notes section to Atlas launch 3 days ago by hub New page: Atlas launch 8 days ago by you"
+  - text: "Edited the From its facts section of Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide Added a From its facts section to Atlas launch 3 days ago by hub New page: Atlas launch 8 days ago by you"
   - heading "Connections" [level=2]
   - heading "Where it came from" [level=3]
   - link "An email":
@@ -193,6 +201,8 @@
   - link "Sofia Marquez People":
     - /url: /p/people/sofia-marquez
   - heading "Links to" [level=3]
+  - link "Grace Liu People":
+    - /url: /p/people/grace-liu
   - link "Robin Lefebvre People":
     - /url: /p/people/robin-lefebvre
   - link "Maya Chen People":
@@ -209,8 +219,6 @@
     - /url: /p/decisions/2026-09-08-atlas-beta-scope
   - link "Weekly Atlas review on Wednesdays Decisions":
     - /url: /p/decisions/2026-10-01-weekly-team-review
-  - link "Grace Liu People":
-    - /url: /p/people/grace-liu
   - group: Earlier values (1)
   - group: Edit file
   - button "Forget"
