@@ -184,6 +184,7 @@ export const LINE_COPY = {
   disagreeNextValues: "Next for {title}: {a}. Or {b}?",
   disagreeRoleValues: "{title} is {a}. Or {b}?",
   disagreeVerbValues: "{title} {attr} {a}. Or {b}?",
+  disagreeMany: "{value} things about {title} disagree: {attr}",
 } as const;
 // Where a memory came from, as the canvas says it under the line.
 export const SAID_COPY = {
@@ -496,6 +497,16 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   // private for the line (owner's phone, 2026-11-03: only the first of three cards said "Two emails
   // disagree"; G662). The source line names kinds of source, never a value.
   const line = (c: SettleCase, verb: string) => { const v = valued(c); return { what: v?.what ?? disagree(c.page, c.title, c.attr), verb, href: `/settle/${c.id}`, meta: meta(c), ...(v ? { parts: v.parts } : {}) }; };
+  // One card for the questions one page's same two sources raise (owner's phone, 2026-11-03: three
+  // cards for one project from the same two emails, G669): it names each field, counts each question,
+  // and opens on the first; a pick goes on to the next (settleNext).
+  const card = (cs: SettleCase[], verb: string): Waiting => {
+    if (cs.length === 1) return line(cs[0]!, verb);
+    const c = cs[0]!, attrs = [...new Set(cs.map((x) => x.attr))];
+    const named = attrs.map((a) => a === "next_step" ? "what's next" : `its ${words(a)}`);
+    const what = attrs.length === 1 ? disagree(c.page, c.title, c.attr) : lineWords("disagreeMany", { title: displayName(c.page, c.title), value: String(cs.length), attr: `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` });
+    return { n: cs.length, what, verb, href: `/settle/${c.id}`, meta: cs.every((x) => meta(x) === SAID_COPY.twoEmails) ? SAID_COPY.twoEmails : SAID_COPY.twoSources };
+  };
   // What the owner hasn't seen yet is held from every assistant (spec §7): named, never shown here.
   // A held value's card names its page only when that name is safe on any sign-in (owner's phone,
   // 2026-10-31: "Something new about Apple Services payment" twice): never a name a stranger's mail
@@ -530,12 +541,12 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   // them have it, so Keep it private is never final (review of #60, G630).
   const kept: Waiting[] = expand ? keptFacts(root).map((u) => ({ n: 0, what: ((name) => name ? lineWords("keptPrivate", { title: name }) : lineWords("keptUnnamed", {}))(heldName(rules, notes.get(u.page), u)), verb: "kept private", href: `/p/${u.page.split("/").map(encodeURIComponent).join("/")}`, seen: u.fact_key, ...(fresh ? { look: [factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)] } : {}), ...(u.unknownSender ? { stranger: true } : {}) })) : [];
   // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
-  const inbox = inboxConflicts(root).map((c) => line(c, "tap to settle"));
+  const asking = settleCards(open.filter((c) => !c.held), inboxConflicts(root)).map((cs) => card(cs, "tap to settle"));
   // A message the relay held between two assistants: send it or not, on its own settle screen.
   const mail = comms(root).filter((m) => m.verdict === "held").map((m) => ({ what: `${cap(agentLabel(rules, m.from))}'s message to ${agentLabel(rules, m.to)} is held.`, verb: "tap to decide", href: `/settle/m-${m.id}` }));
   // What waits on Settings (src/waiting.ts): one card that counts it and links there (G626).
   const settings: Waiting[] = asks.settings > 0 ? [{ n: asks.settings, what: settingsWords(asks), verb: "on Settings", href: SETTINGS_HREF }] : [];
-  return { waiting: [...open.filter((c) => !c.held).map((c) => line(c, "tap to settle")), ...inbox, ...mail, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
+  return { waiting: [...asking, ...mail, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
 
 // How many things the home lists as waiting on the owner: the one count the digest and the text
@@ -564,10 +575,34 @@ export function settingsWords(a: Pick<OwnerAsks, "by" | "settings">): string {
   return `${cap(parts.join("; "))}.`;
 }
 
+// The questions waiting on the owner, one group per home card: a page's conflicts that share their
+// two sources (the same refs on each side, in either order) or their field are one card (G669).
+// Conflicts with no refs group only by field. Each group keeps the order the home lists them in.
+const pairOf = (c: SettleCase) => c.sides.length === 2 && c.sides.every((s) => s.refs?.length) ? c.sides.map((s) => [...s.refs!].sort().join(",")).sort().join("|") : "";
+export function settleCards(open: SettleCase[], inbox: SettleCase[] = []): SettleCase[][] {
+  const groups: SettleCase[][] = [];
+  for (const c of [...open, ...inbox]) {
+    const k = pairOf(c);
+    const g = groups.find((cs) => cs[0]!.page === c.page && cs.some((x) => x.attr === c.attr || (!!k && pairOf(x) === k)));
+    if (g) g.push(c); else groups.push([c]);
+  }
+  return groups;
+}
+// After a pick on one of a card's questions: the next one on that card still open, if any (G669).
+// `card` is the card's ids as they were before the pick.
+export function settleCard(root: string, id: string, now = new Date()): string[] {
+  const open = ownerConflicts(root, now, { held: true }).filter((c) => !c.held || c.id === id);
+  return settleCards(open, inboxConflicts(root)).find((cs) => cs.some((c) => c.id === id))?.map((c) => c.id) ?? [];
+}
+export function settleNext(root: string, card: string[], done: string, now = new Date()): string | undefined {
+  const still = new Set([...ownerConflicts(root, now).map((c) => c.id), ...inboxConflicts(root).map((c) => c.id)]);
+  return card.find((id) => id !== done && still.has(id));
+}
+
 // How many questions still wait on a Settle (or Decide) screen: what the line after a pick says is
 // left (G631).
 export function settleLeft(root: string, now = new Date()): number {
-  return conflicts(root, now, true).waiting.filter((w) => w.href.startsWith("/settle/")).length;
+  return waitingTotal(conflicts(root, now, true).waiting.filter((w) => w.href.startsWith("/settle/")));
 }
 // The north star passes its own asks, read at its own time, so the two count one list (G626).
 export function waitingCount(root: string, now = new Date(), asks?: OwnerAsks): number {

@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G669: {
+    closed: "27511afe",
+    title: "One project showed a conflict card per field from the same two emails",
+    severity: "low",
+    finding: "Owner's phone 2026-11-03: three conflict cards for one project, all from the same two emails, each opening on much the same content; the owner had to find and settle each one from the home.",
+    fix: "src/dashboard/home.ts settleCards: a page's conflicts that share their two sources (or their field) are one card naming each field and counting each question; a pick or keep both on one goes to the next on that card (settleNext, src/dashboard/server.ts), the last home. test/one-card-per-pair.test.ts.",
+  },
   G667: {
     closed: "a62288db",
     title: "An assistant's org page that the owner accepted or filing saved could choose where a person page moves",

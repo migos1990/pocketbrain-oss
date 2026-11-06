@@ -40,7 +40,7 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, pageSentences, type HeldValue, settleLeft, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, pageSentences, type HeldValue, settleLeft, settleCard, settleNext, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
@@ -680,21 +680,24 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         if (!c) return go("/home", { err: "Nothing to settle there any more." });
         const back = `/settle/${encodeURIComponent(id)}`;
         const at = diaryAt();
+        // A card that holds several questions goes on to its next one; the last goes home (G669).
+        const card = settleCard(root, id, now());
+        const done = () => { const n = settleNext(root, card, id, now()); return n ? `/settle/${encodeURIComponent(n)}` : "/home"; };
         // A conflict that waits in the inbox (src/settle-inbox.ts): keep yours, take the new one, or type it.
         if (id.startsWith("p-")) {
           try {
-            if (action === "settle-both") { settleInbox(root, id, { n: 1 }); return go("/home", { ok: `Kept what you had. I won't ask again unless something newer comes in. ${leftWords()}`, tok: newTokens(at, c.fact_key) }); }
+            if (action === "settle-both") { settleInbox(root, id, { n: 1 }); return go(done(), { ok: `Kept what you had. I won't ask again unless something newer comes in. ${leftWords()}`, tok: newTokens(at, c.fact_key) }); }
             if (!form.n && !value) return go(back, { err: "Pick one, or type what it is." });
             settleInbox(root, id, value ? { typed: value } : { n: Number(form.n) });
             // A pick ends the question: back to the home, where it is gone and the number is one less (G631).
-            return go("/home", { ok: `${settledWords(c)} ${leftWords()}`, tok: newTokens(at, c.fact_key) });
+            return go(done(), { ok: `${settledWords(c)} ${leftWords()}`, tok: newTokens(at, c.fact_key) });
           } catch (e) { return go(back, { err: fail(e) }); }
         }
         try {
-          if (action === "settle-both") { ownerKeepBoth(root, id); return go("/home", { ok: `Kept both. I won't ask again unless something newer comes in. ${leftWords()}`, tok: newTokens(at, c.fact_key) }); }
+          if (action === "settle-both") { ownerKeepBoth(root, id); return go(done(), { ok: `Kept both. I won't ask again unless something newer comes in. ${leftWords()}`, tok: newTokens(at, c.fact_key) }); }
           if (!form.n && !value) return go(back, { err: "Pick one, or type what it is." });
           ownerDecide(root, id, value || form.n!, `settle-${id}`, { typed: !!value });
-          return go("/home", { ok: `${settledWords(c)} ${leftWords()}`, tok: newTokens(at, c.fact_key) });
+          return go(done(), { ok: `${settledWords(c)} ${leftWords()}`, tok: newTokens(at, c.fact_key) });
         } catch (e) { return go(back, { err: fail(e) }); }
       }
       if (action === "sign-in-again") {
