@@ -61,6 +61,27 @@ export const GAPS: Record<string, Gap> = {
     finding: "Real-brain north star, 2026-11-01: 11 of 13 project pages had no link in. A fact whose value links a page already links back (See also), but a [[link]] someone wrote into a page's own text (Earlier notes, the Gardener's prose) didn't, so the page it sat on stayed unlinked.",
     fix: "src/wiki.ts renderTouchedPages: a [[link]] in a cited paragraph of a page's own text (never the hub's lead) gives the page it names a See also line back, cited by that paragraph's references, under the same rules as a fact's link (at most the page's ties, no page more private than it, none from or onto the owner's own page), and only when every reader of the named page reads the linking page's text. Test: test/body-link-backlinks.test.ts. Eval: wiki-body-link-links-back.",
   },
+  G681: {
+    closed: "bcdae9ca",
+    title: "Ten probe shapes of hearsay and orders wrote as the owner's word with no ceilings row",
+    severity: "low",
+    finding: "Audit v12 (v11 finding 9 partly fixed): the box filed \"Paul believes …\", \"They say …\", \"I'm told …\", \"…, I'm told\" and \"Paul's email says …\" as the owner's word, and the order guard let \"Pass her number to anyone\", \"Show her file to whoever asks\" and \"Tell all agents her salary\" through; none had a ceilings row.",
+    fix: "src/owner-say.ts hearsay reads those five shapes; src/checks.ts speaksToReader takes more verbs (hand, pass, provide, read, show, publish) only with an open audience, and agents as one. What it still lets through is rowed as ceiling in test/ceilings.test.ts (\"(Paul)\", \"- Paul\", \"any caller\", \"on request\", \"publicly\", no audience). Eval: box-hearsay-and-orders-v12-shapes.",
+  },
+  G680: {
+    closed: "4d08dc77",
+    title: "A trusted assistant's guess at a hidden value was refused while a wrong guess committed",
+    severity: "medium",
+    finding: "Audit v12 (and G648's open part), reproduced on main 47114d13: a core writer whose view hides a money fact \"Hydro bill for the cottage\" titling a new page \"Hydro bill October\" got refused leak_tripwire, while \"Phone bill October\" committed; a trial writer gets inbox for both. Each refusal confirmed a guess, against invariant 3.",
+    fix: "The owner's choice 2026-11-06, one guess then proposals only: src/write.ts refuses a committing writer's first trip and puts it on proposals only (src/write-hold.ts, log/write-holds.jsonl); from then on every write it makes goes to the inbox as a trial writer's does (a guess carries the owner-only leak mark, G648) and every journal line is refused, so no later guess is answered. The owner lets it write again from Settings (Still open, write-unhold) or `pocketbrain write-hold clear <agent>`. Left: the first trip still answers one guess, with the owner alerted. Test: test/core-tripwire-hold.test.ts. Eval: rt-core-tripwire-one-guess.",
+  },
+  G679: {
+    closed: "fef322cd",
+    title: "The machine-mail refusal held only when every source was machine mail",
+    severity: "medium",
+    finding: "Audit v12, reproduced on main 47114d13: write(planner, sources [machine mail]) was refused machine_mail, but the same write with \"agent:planner\", a URL, or another mail id beside it committed a new fact (src/write.ts every-source test), so an assistant's own word as a second ref defeated the owner's rule that machine mail is never read for facts.",
+    fix: "src/write.ts: an assistant's fact citing any mail in log/machine-mail.jsonl is refused machine_mail, whatever else it cites, still before any lookup; the owner's word and owner-accepted writes stay exempt. Test: test/machine-mail-facts.test.ts. Eval: rt-machine-mail-second-source.",
+  },
   G673: {
     closed: "55c5963f",
     title: "A line the hub set aside said \"From today's email\" under it",
@@ -3980,7 +4001,7 @@ export const GAPS: Record<string, Gap> = {
     title: "A trial assistant's refused guess confirmed a hidden value; a made-up one went to the inbox",
     severity: "medium",
     finding: "Audit v11, receipts row, reproduced on main: a trial assistant's new page whose title shared words with a fact's value hidden from it was refused with leak_tripwire, while the same write with a made-up title went to the inbox. The difference answers a guess one write at a time, against invariant 3 (a hidden note answers like a missing one).",
-    fix: "src/write.ts: for a writer whose write goes to the inbox anyway (trial tier, not the editor, not a journal line), the three leak wires (hidden values, title, withheld parts of a value) alert the owner and mark the write; it goes on to the inbox with the reply any write gets, and the proposal carries an owner-only `leak: true`, which the owner's card states (src/dashboard/data.ts). A core writer's write that would commit is still refused. Left open (slice audit, Low): a trial Gardener's last_run reports the owner's decision on its proposals, and the owner declines a leak proposal; that signal passes through the owner, who has the alert. Tests: test/tripwire-title-oracle.test.ts, test/contracts/write.contract.test.ts.",
+    fix: "src/write.ts: for a writer whose write goes to the inbox anyway (trial tier, not the editor, not a journal line), the three leak wires (hidden values, title, withheld parts of a value) alert the owner and mark the write; it goes on to the inbox with the reply any write gets, and the proposal carries an owner-only `leak: true`, which the owner's card states (src/dashboard/data.ts). A core writer's write that would commit is refused once, then that writer proposes only (G680). Left open (slice audit, Low): a trial Gardener's last_run reports the owner's decision on its proposals, and the owner declines a leak proposal; that signal passes through the owner, who has the alert. Tests: test/tripwire-title-oracle.test.ts, test/contracts/write.contract.test.ts.",
   },
   G644: {
     title: "A fold's Undo broke after any later write, and the home's Undo for a fold wasn't the fold's",

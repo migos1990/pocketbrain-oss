@@ -19,7 +19,7 @@ Once the address works, record it so `connect` and `add` print it: `pocketbrain 
 
 ## Keys at rest
 
-pocketBrain keeps only a hash of each assistant's key in the brain (`rules/tokens.yaml`), with one exception. An app on this computer connected with `pocketbrain add <app> --kind <app>` gets its key saved in `~/.config/pocketbrain/agent-keys/<app>`, so the app's own config holds only the command `pocketbrain mcp --agent <app>` and never the key. That file is a real key, stored in plain text:
+pocketBrain keeps only a hash of each assistant's key in the brain (`rules/tokens.yaml`), with one exception. An app on this computer connected with `pocketbrain add <app> --kind <app>` (Claude Code included) gets its key saved in `~/.config/pocketbrain/agent-keys/<app>`, so the app's own config holds only the command `pocketbrain mcp --agent <app>` and never the key. That file is a real key, stored in plain text:
 
 - the folder is created readable by you alone (0700) and the file too (0600). The bridge refuses a file anyone else can read;
 - any program running as you can read it, the same as a key pasted into the app's config. Don't sync or back up `~/.config/pocketbrain/agent-keys/` to a shared place;

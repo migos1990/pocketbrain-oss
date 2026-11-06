@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // SPDX-License-Identifier: AGPL-3.0-only
 // pocketbrain CLI. The brain folder comes from --brain, $PB_BRAIN, or the current directory.
+import { heldWriters, clearWriteHold } from "./write-hold";
 import { findOverlaps } from "./overlap";
 import { catchUpDiary } from "./diary-catchup";
 import { forgetPerson, planForget, undoForget } from "./forget";
@@ -70,7 +71,7 @@ import * as share from "./share";
 import { createInvite, mintFromShell, shellMintRefusal, reachRefusal } from "./invite";
 import { initBrain, interview, InitError, AGENT_KINDS, KIND_NAME, type AgentKind, type InitOptions } from "./init";
 import { timezoneOf } from "./clock";
-import { APP_LABEL, INSTRUCTION_PLACE, agentKeyFile, bridge, configPath, dropAgentKey, isLocalApp, isLoopback, mergeConfig, saveAgentKey, snippet, stdinLines, writeAppConfig } from "./local-apps";
+import { APP_LABEL, INSTRUCTION_PLACE, agentKeyFile, bridge, bridgeCommand, configPath, dropAgentKey, isLocalApp, isLoopback, mergeConfig, saveAgentKey, snippet, stdinLines, writeAppConfig } from "./local-apps";
 import { tick, watch, watchdog, loadTextState } from "./textline/poll";
 import { ESCALATION_TEMPLATE, loadEscalation, useTransport, TRANSPORTS } from "./textline/policy";
 import { makeTransport, fakeReply } from "./textline/transport";
@@ -317,6 +318,7 @@ const USAGE = `pocketbrain <command>
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
   overlaps                           assistants' routines that may do the same job, by page id (docs/wiki.md)
+  write-hold | write-hold clear <agent>   who writes proposals only after writing a value it can't see, or let one write again (docs/add-an-agent.md)
   machine-mail | machine-mail on|off   count the held facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
@@ -629,7 +631,13 @@ function connectKind(root: string, agent: string, kind: Kind, url: string, name?
   if (kind === "claude-code") {
     const local = "http://127.0.0.1:8787";
     const tok = mintFromShell(root, agent, { via, code });
-    const add = ["mcp", "add", "--scope", "user", "--transport", "http", "pocketbrain", `${local}/mcp`, "--header", `Authorization: Bearer ${tok}`];
+    // The stdio bridge, as for every app on this computer (src/local-apps.ts): the key goes to its
+    // file, readable only by you, never onto claude's command line or into its config (audit v11
+    // finding 6, audit v12: the bearer sat on the `claude mcp add --header` line).
+    saveAgentKey(agent, tok);
+    const b = bridgeCommand(agent);
+    const add = ["mcp", "add", "--scope", "user", ...Object.entries(b.env ?? {}).flatMap(([k, v]) => ["--env", `${k}=${v}`]), "pocketbrain", "--", b.command, ...b.args];
+    const shq = (x: string) => /^[\w@%+=:,./-]+$/.test(x) ? x : `'${x.replace(/'/g, "'\\''")}'`;
     const claude = Bun.which("claude", { PATH: process.env.PATH ?? "" });
     testRunGuard([process.env.HOME ?? homedir(), claude]);
     const cc = (a: string[]) => Bun.spawnSync([claude!, ...a], { stdout: "pipe", stderr: "pipe", env: process.env }).exitCode === 0;
@@ -637,9 +645,9 @@ function connectKind(root: string, agent: string, kind: Kind, url: string, name?
     const ran = !!claude && (cc(add) || (cc(["mcp", "remove", "--scope", "user", "pocketbrain"]) && cc(add)));
     const md = writeClaudeMd(standingInstruction(rules, "mcp", local));
     console.log(`${ran ? "Added pocketbrain to Claude Code (claude mcp add, user scope). " : ""}Wrote the standing instruction into ${md}, between <!-- pocketbrain --> lines.`);
-    say(ran ? [] : [`Claude Code isn't on this machine's PATH. Once it is, run:\n     claude ${add.slice(0, 9).join(" ")} --header "Authorization: Bearer ${tok}"`],
+    say(ran ? [] : [`Claude Code isn't on this machine's PATH. Once it is, run:\n     claude ${add.map(shq).join(" ")}`],
       "Then open a new Claude Code session and ask it something about you.");
-    console.error(`${ran ? "token handed to Claude Code, not shown" : "token printed once"}; only its hash is in rules/tokens.yaml. Revoke: pocketbrain token --revoke ${agent}`);
+    console.error(`key kept for Claude Code in ${agentKeyFile(agent)}, readable only by you, never printed; only its hash is in rules/tokens.yaml. Revoke (deletes that file too): pocketbrain token --revoke ${agent}`);
     return 0;
   }
   const tok = mintFromShell(root, agent, { via, code });
@@ -1896,6 +1904,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
   if (cmd === "machine-mail") {
     const r = setAsideMachineMail(root, false);
     console.log(`${r.facts} held fact${r.facts === 1 ? "" : "s"} on ${r.pages} page${r.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside each night, each with Undo.`);
+    return 0;
+  }
+  // One guess, then proposals only (src/write-hold.ts, G680): who is held, or let one write again.
+  if (cmd === "write-hold") {
+    if (args[0] === "clear") { if (!args[1]) { console.error("pocketbrain write-hold clear <agent>"); return 2; } console.log(clearWriteHold(root, args[1])); return 0; }
+    const held = heldWriters(root);
+    console.log(held.length ? held.map((h) => `${h.agent}: proposals only since ${h.at.slice(0, 10)}, after it wrote a value it can't see (\`pocketbrain write-hold clear ${h.agent}\` lets it write again)`).join("\n") : "No assistant is on proposals only.");
     return 0;
   }
   if (cmd === "fold") {

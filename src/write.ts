@@ -15,6 +15,7 @@ import { loadRules, attributeSpec, tierOf, ownerName, captureAgentName } from ".
 import { runChecks, shapeFails, thirdPartySensitive, findInjection, speaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
 import { normalizeValue, compareKey, valueKey, nearSame } from "./normalize";
 import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
+import { writesHeld, holdWrites } from "./write-hold";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath, machineMail, mailKey } from "./louis";
 import { tokenRole } from "./tokenrole";
 import { carve, grantFor, mergedTarget, records, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
@@ -465,18 +466,32 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // a write holding nothing hidden gets, the owner is alerted, and the proposal carries an
   // owner-only `leak: true` (audit v11, G648; invariant 3). A writer whose write would commit is
   // still refused: no reply can look like a commit without saving the value where readers see it.
-  const proposesAnyway = !opts.acceptedBy && !editor && (req.kind ?? "fact") !== "journal" && tierOf(rules, req.agent).writes === "propose";
+  // An assistant on proposals only (src/write-hold.ts, G680) is one too, whatever its tier.
+  const onHold = !opts.acceptedBy && !asOwner && writesHeld(root, req.agent);
+  const proposesAnyway = !opts.acceptedBy && (req.kind ?? "fact") !== "journal" && ((!editor && tierOf(rules, req.agent).writes === "propose") || onHold);
   let leak = false;
+  // A writer whose write would commit (a core assistant, its first time) is refused, and from then
+  // on writes proposals only until the owner says (audit v12, G680; the owner's choice "one guess,
+  // then proposals only"): the refusal answers one guess, never a second.
+  // The first trip starts the hold and says so; an owner's accept or a writer already held is told nothing new.
+  const holdNow = (r: WriteResult): WriteResult => {
+    if (opts.acceptedBy || asOwner || onHold || proposesAnyway) return r;
+    holdWrites(root, req.agent);
+    return { ...r, message: `${r.message} From now on its writes go to the owner as proposals until they say otherwise.` };
+  };
   const tripped = (r: WriteResult, from: string): WriteResult | undefined => {
     alert(root, { agent: req.agent, check: "leak_tripwire", from });
     if (proposesAnyway) { leak = true; return undefined; }
-    return done(r);
+    return done(holdNow(r));
   };
+  // A journal line can't be proposed: on proposals only, every one is refused, so none answers a guess.
+  if (onHold && (req.kind ?? "fact") === "journal") return done({ outcome: "refused", message: "held: your writes go to the owner as proposals for now, and a journal line can't be one", fails: [{ check: "write_hold", outcome: "refuse", reason: "proposals only", fix: "the owner lets you write again" }] });
   // A canary (src/canary.ts) the writer's carve doesn't show, in any field: a leak, whatever its level.
-  // The agent sees an ordinary leak refusal; only the owner's alert says it was a canary.
+  // The agent sees an ordinary leak refusal, and a core writer's one guess is spent as by a real hit
+  // (slice audit of G680); only the owner's alert says it was a canary.
   const canary = canaryHits(root, unhide(JSON.stringify(req)), new Set(own.visible.keys()))[0];
   if (canary) {
-    const r = done({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] });
+    const r = done(holdNow({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] }));
     alert(root, { agent: req.agent, check: "canary", from: canary.id });
     return r;
   }
@@ -511,17 +526,19 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
 
 
   // Machine mail is never read for facts (the owner's standing rule; G506 and G662 keep the hub's
-  // own pull from it): an assistant's fact whose every source is mail the hub saw was machine-sent
-  // (a no-reply, list or billing sender, src/louis.ts machineMail) is refused in one line, on any
-  // kind of page, before anything is looked up, so the reply says nothing about the brain (G668;
-  // owner's phone, 2026-11-03: a ride receipt became an org page). The owner's word, and a write the
-  // owner accepted, never are. Mail the hub never saw as a machine's isn't refused for this.
+  // own pull from it): an assistant's fact citing any mail the hub saw was machine-sent (a no-reply,
+  // list or billing sender, src/louis.ts machineMail) is refused in one line, on any kind of page,
+  // before anything is looked up, so the reply says nothing about the brain (G668; owner's phone,
+  // 2026-11-03: a ride receipt became an org page). Any one such source refuses, whatever else is
+  // cited: asking that every source be machine mail let the assistant's own word, a URL or another
+  // mail beside the receipt file it (audit v12, G679). The owner's word, and a write the owner
+  // accepted, never are. Mail the hub never saw as a machine's isn't refused for this.
   if (!asOwner && !isOwnerId(opts.acceptedBy) && !req.retract && (req.kind ?? "fact") !== "journal" && (req.sources ?? []).length) {
-    const keys = (req.sources ?? []).map((x) => mailKey(refString(x)));
-    if (keys.every((k) => !!k)) {
+    const keys = (req.sources ?? []).map((x) => mailKey(refString(x))).filter((k): k is string => !!k);
+    if (keys.length) {
       const machine = machineMail(root);
-      if (keys.every((k) => machine.has(k!))) {
-        const fail: CheckFail = { check: "machine_mail", outcome: "refuse", reason: "every source is mail a machine sent (a no-reply, list or billing sender), and the owner's rule is that machine mail is never read for facts", fix: "don't file receipts or notices from machine mail; a fact a person wrote can cite that person's mail" };
+      if (keys.some((k) => machine.has(k))) {
+        const fail: CheckFail = { check: "machine_mail", outcome: "refuse", reason: "a source is mail a machine sent (a no-reply, list or billing sender), and the owner's rule is that machine mail is never read for facts", fix: "don't file receipts or notices from machine mail, and don't cite one beside another source; a fact a person wrote can cite that person's mail alone" };
         return done({ outcome: "refused", message: `${fail.check}: ${fail.reason}. Fix: ${fail.fix}`, fails: [fail] });
       }
     }
@@ -602,7 +619,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   const coHere = !!co && co.areas.includes(area);
   if (co && !coHere) return coRefuse(area);
   // Louis's editor writes where he would: no trial or area-owner routing (the checks above still ran).
-  if (!opts.acceptedBy && !editor && tier.writes === "propose") {
+  if (!opts.acceptedBy && ((!editor && tier.writes === "propose") || onHold)) {
     // A trial proposal that claims the owner's word says so, so the owner sees the claim before
     // accepting (accepting registers the cited id as theirs).
     const claimed = (req.sources ?? []).map(refString).filter(isExactLouisRef);
@@ -612,7 +629,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       const fail: CheckFail = { check: "owner_message_registered", outcome: "inbox", reason: `cites ${unknown.join(", ") || "no message"} as the owner's word, not in the owner's registry`, fix: "The owner accepts it from the inbox, which registers the id" };
       return done(propose(root, req, `${req.agent} is a trial agent: propose-only; ${fail.check}: ${fail.reason}`, [fail], leak));
     }
-    return done(propose(root, req, `${req.agent} is a trial agent: propose-only`, [], leak));
+    return done(propose(root, req, onHold ? `${req.agent} writes proposals only for now` : `${req.agent} is a trial agent: propose-only`, [], leak));
   }
   // Past here a write commits: a held guess never gets this far (proposesAnyway is this branch's test).
   if (leak) return done({ outcome: "refused", message: "leak_tripwire: held", fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "held", fix: "don't relay carved-out facts" }] });

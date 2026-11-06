@@ -147,8 +147,11 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `install.git-mac` | git is missing. Fix: run xcode-select --install, and run this installer again. |
 | `install.git` | git is missing. Fix: run sudo apt install git, or your package manager's equivalent, and run this installer again. |
 | `install.curl` | curl is missing. Fix: run sudo apt install curl, and run this installer again. |
-| `install.bun-download` | Couldn't download Bun (no internet?). Fix: check your connection, then run curl -fsSL https://bun.sh/install \| bash, and run this installer again. |
-| `install.bun-failed` | Bun didn't install. Fix: run curl -fsSL https://bun.sh/install \| bash, to see why, and run this installer again. |
+| `install.bun-platform` | This installer pins no Bun build for $BUN_TARGET. Fix: install Bun yourself (https://bun.sh), then run bun --version, and if it answers, this installer again. |
+| `install.unzip` | unzip is missing. Fix: run sudo apt install unzip, and run this installer again. |
+| `install.bun-download` | Couldn't download Bun from $BUN_ZIP (no internet?). Fix: check your connection, then run curl -fsSLI $BUN_ZIP, to see why, and run this installer again. |
+| `install.bun-checksum` | Bun's download from $BUN_ZIP doesn't match the checksum this installer pins, so nothing was installed. Fix: install Bun yourself (https://bun.sh), then run bun --version, and if it answers, this installer again. |
+| `install.bun-failed` | Bun didn't install. Fix: run $BUN_BIN/bun --version, to see why, and run this installer again. |
 | `install.bun-path` | Bun installed but isn't on the PATH. Fix: open a new terminal window, then run bun --version, and if it answers, this installer again. |
 | `install.package` | Couldn't install $PKG (no internet, or no such package). Fix: run bun add -g $PKG, to see why. |
 | `install.no-run` | pocketbrain installed but doesn't run. Fix: run bun add -g $PKG, to reinstall it. |

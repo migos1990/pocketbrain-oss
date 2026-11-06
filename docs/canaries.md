@@ -22,7 +22,7 @@ On the trial tier it sees the personal decoy and nothing else, so its answers ma
 ## Watching
 
 - **Relay:** mail carrying any planted or retired canary is held and alerts (the relay reads `rules/canaries.yaml` next to the `canaries:` in `rules/relay.yaml`).
-- **Write path:** a write whose fields (value, text, title, attribute, source refs) carry a canary whose decoy the writer can't see is refused and alerts, whatever the decoy's level. The writer sees an ordinary `leak_tripwire` refusal that names no note, fact or canary; only the owner's alert says which (eval gap G165).
+- **Write path:** a write whose fields (value, text, title, attribute, source refs) carry a canary whose decoy the writer can't see is refused and alerts, whatever the decoy's level. The writer sees an ordinary `leak_tripwire` refusal that names no note, fact or canary; only the owner's alert says which (eval gap G165). For a wider assistant whose writes save at once, that refusal also puts it on proposals only, as a real hidden value would (G680, docs/add-an-agent.md).
 - **Reads:** a context pack, search, read or what's-new (`whats_new`, the API's `/v1/changes` and the dashboard's change list) that would hand an agent a canary its carve doesn't hold raises a `canary_served` alert. (Values carved from an agent are also scrubbed from what it reads, so the private and secret canaries never get that far.)
 
 ## The leak oracle

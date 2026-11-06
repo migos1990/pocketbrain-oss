@@ -1685,7 +1685,8 @@ const fuzzCases: Case[] = [
     const a = await l.api("planner", "POST", "/v1/remember", { id: "projects/course-a", attribute: "zephyr_holdings_7731", value: "yes", as_of: "2026-10-07", ...SRCREF });
     const b = await l.api("planner", "POST", "/v1/remember", { id: "projects/course-a", attribute: "next_step", value: "checked", as_of: "2026-10-07", sources: ["doc:Zephyr-Holdings-7731"], verification: "verified-by-source" });
     const after = noteText(l.root, "projects/course-a").toLowerCase();
-    return steps([[`attribute: ${a.json?.outcome}`, a.json?.outcome === "refused"], [`ref: ${b.json?.outcome}`, b.json?.outcome === "refused"], ["note never carries it", !after.includes("zephyr") && before.length > 0]]);
+    // After the first trip Planner writes proposals only (G680): the second carry waits for the owner.
+    return steps([[`attribute: ${a.json?.outcome}`, a.json?.outcome === "refused"], [`ref: ${b.json?.outcome}`, b.json?.outcome === "refused" || b.json?.outcome === "inbox"], ["note never carries it", !after.includes("zephyr") && before.length > 0]]);
   }) },
   { id: "rt-fuzz-null-optionals", dimension: "write-quality", kind: "attack", gap: "G23", title: "a client that sends null for the optional fields it leaves out (or a long link as its source) still gets its write, as on main", source: "synthetic", run: () => live(async (l) => {
     const nulls = { title: null, type: null, area: null, text: null, sensitivity: null, share_with: null, confidence: null, source_type: null, as_of_approx: null };
@@ -1792,8 +1793,9 @@ const hiddenNameCases: Case[] = [
   }) },
   { id: "rt-title-guess-by-title", dimension: "carving", kind: "attack", gap: "G56", title: "Planner can't confirm a guess at the withheld word in a title by writing to that title, and writing by the shown title reaches the note", source: "synthetic", run: () => live(async (l) => {
     const w = (title: string, attribute: string) => l.api("planner", "POST", "/v1/remember", { title, type: "project", area: "work", attribute, value: "B-210", as_of: "2026-10-07", ...SRCREF });
-    const right = await w("Course C (paid via Maple Trust Bank)", "room"), wrong = await w("Course C (paid via Redfin Partners)", "room");
+    // The shown title first: after a trip Planner writes proposals only (G680).
     const shown = await w("Course C (paid via [withheld])", "next_step");
+    const right = await w("Course C (paid via Maple Trust Bank)", "room"), wrong = await w("Course C (paid via Redfin Partners)", "room");
     return steps([
       [`right guess: ${right.json?.outcome} ${right.json?.fact_key ?? ""}`, right.json?.fact_key !== "projects/course-c#room"],
       // The bank is a value Planner was never shown, so the right guess trips the leak wire and alerts
@@ -4373,6 +4375,54 @@ const ownerQ = await opt("owner-queue.ts");
 const homeMod = await opt("dashboard/home.ts");
 const ownerCount = (root: string, at: Date): number => ownerQ?.ownerQueue ? ownerQ.ownerQueue(root, at).count : homeMod.waitingCount(root, at);
 const leakTextCases: Case[] = [
+  { id: "rt-core-tripwire-one-guess", dimension: "carving", kind: "attack", gap: "G680", source: "audit v12 (core writer title oracle)",
+    title: "a trusted assistant's guess at a hidden value answers once; after it a guess and a miss get the same reply",
+    run: async () => {
+      if (!existsSync(join(SRC, "write-hold.ts"))) return na("no write hold at this commit");
+      const root = sandbox("synthetic");
+      writeNote(root, "money/hydro", `---\nid: money/hydro\ntype: money\ntitle: Utilities\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  payee: { value: Hydro bill for the cottage, as_of: 2026-10-01, sources: ["gmail:f000000000000004"], verification: verified-by-source, by: steward, recorded: 2026-10-01 }\n---\n`);
+      sh(root, ["git", "add", "-A"]); sh(root, ["git", "commit", "-qm", "hydro"]);
+      const page = (title: string) => pb.write.write(root, { agent: "planner", title, type: "org", area: "work", attribute: "what_it_is", value: "a company", as_of: TODAY, ...SRCREF });
+      const first = page("Hydro bill October");
+      const hit = page("Hydro bill November"), miss = page("Phone bill October");
+      const shape = (r: any) => JSON.stringify({ o: r.outcome, m: String(r.message ?? "").replace(/inbox\/\S+/g, "F"), f: r.fails });
+      const once = first.outcome === "refused" && first.fails?.some((f: { check: string }) => f.check === "leak_tripwire");
+      return ok(!!once && shape(hit) === shape(miss) && miss.outcome !== "committed", `first refused ${once}; then hit ${hit.outcome} vs miss ${miss.outcome}`);
+    } },
+  { id: "rt-core-hold-filing-no-oracle", dimension: "carving", kind: "attack", gap: "G680", source: "slice audit of G680 (filing tick and canary)",
+    title: "after a trusted assistant's guess, the hub's filing files neither its hit nor its miss, and a canary spends the guess like a real hit",
+    run: async () => {
+      if (!existsSync(join(SRC, "write-hold.ts"))) return na("no write hold at this commit");
+      const filing = await opt("filing.ts"), canary = await opt("canary.ts"), hold = await opt("write-hold.ts");
+      if (!filing?.runAuto || !canary?.probeInit || !hold?.writesHeld) return na("no filing, canary kit or write hold at this commit");
+      const org = (root: string, title: string) => pb.write.write(root, { agent: "planner", title, type: "org", area: "work", attribute: "what_it_is", value: "a company", as_of: TODAY, ...SRCREF });
+      const root = sandbox("synthetic");
+      org(root, "Maple Trust Bank review");
+      org(root, "Maple Trust Bank audit"); org(root, "Redfin audit");
+      filing.runAuto(root, new Date("2026-10-30T15:00:00Z"));
+      const filed = sh(root, ["git", "ls-files", "orgs"]).split("\n").filter((l: string) => /audit/i.test(l)).length;
+      const a = sandbox("synthetic"), b = sandbox("synthetic");
+      const c = canary.probeInit(a).planted[0].canary; canary.probeInit(b);
+      const same = org(a, `Org ${c}`).message === org(b, "Maple Trust Bank review").message;
+      const held = hold.writesHeld(a, "planner") && hold.writesHeld(b, "planner");
+      return ok(filed === 0 && same && held, `filed by the hub ${filed}; canary reply same ${same}; both held ${held}`);
+    } },
+  { id: "rt-machine-mail-second-source", dimension: "write-quality", kind: "attack", gap: "G679", source: "audit v12 (machine-mail refusal beaten by a second source)",
+    title: "a receipt from machine mail is refused whatever second source an assistant cites beside it",
+    run: async () => {
+      const louis = await opt("louis.ts");
+      if (!louis?.recordMachineMail) return na("no machine-mail record at this commit");
+      const RIDE = "gmail:f0000000000000a1";
+      const steps: [string, boolean][] = [];
+      for (const other of ["agent:planner", "https://ride.example/r", "gmail:f0000000000000b1"]) {
+        const root = sandbox("synthetic");
+        louis.recordMachineMail(root, [RIDE]);
+        const n = commitCount(root);
+        const r = pb.write.write(root, { agent: "planner", type: "org", title: "Ride Co Canada Inc.", area: "work", attribute: "trip", value: "a ride on 3 Nov, 14.20", as_of: TODAY, sources: [RIDE, other], verification: "verified-by-source" });
+        steps.push([`with ${other.split(":")[0]} beside it: refused machine_mail (${r.outcome})`, r.outcome === "refused" && !!r.fails?.some((f: { check: string }) => f.check === "machine_mail") && commitCount(root) === n]);
+      }
+      return steps.every(([, v]) => v) ? ok(true, `${steps.length} second sources refused`) : ok(false, steps.filter(([, v]) => !v).map(([k]) => k).join("; "));
+    } },
   { id: "rt-text-leak-breaks-through", dimension: "escalation", kind: "attack", gap: "G392", source: "synthetic",
     title: "a leak tripwire or canary texts at once at night and is never counted; a widened carve stays an alert, never texted",
     run: async () => {

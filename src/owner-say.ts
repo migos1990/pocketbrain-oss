@@ -187,7 +187,7 @@ export function parseTells(text: string, d = today()): Told[] {
 }
 
 // Reported speech: what someone else said, heard or thinks. Its clause is theirs, not the owner's.
-const HEARD_FROM = /^(?:(?:[Ss]o\s+)?([A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)*|[Mm]y \p{Ll}+|[Ss]he|[Hh]e|[Tt]hey)\s+(?:told me|tells me|told us|said|says|mentioned|thinks|thought|heard|claims|claimed|reckons|wrote|texted|emailed)(?:\s+(?:to me|me))?(?:\s+that)?[,:]?\s+|(?:I|[Ww]e)\s+(?:heard|was told|were told|read)(?:\s+(?:from|by)\s+([^,]+?))?(?:\s+that)?[,:]?\s+|[Aa]pparently,?\s+|[Aa]ccording to ([^,]+),\s*|[Ww]ord is,?\s+|[Rr]umou?r (?:is|has it),?\s+)(.+)$/u;
+const HEARD_FROM = /^(?:(?:[Ss]o\s+)?([A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)*|[Mm]y \p{Ll}+|[Ss]he|[Hh]e|[Tt]hey)\s+(?:told me|tells me|told us|said|says|say|mentioned|thinks|thought|believes|believed|heard|claims|claimed|reckons|wrote|texted|emailed)(?:\s+(?:to me|me))?(?:\s+that)?[,:]?\s+|(?:(?:I|[Ww]e)\s+(?:heard|was told|were told|read|am told|are told)|I['’]m told|[Ww]e['’]re told)(?:\s+(?:from|by)\s+([^,]+?))?(?:\s+that)?[,:]?\s+|[Aa]pparently,?\s+|[Aa]ccording to ([^,]+),\s*|[Ww]ord is,?\s+|[Rr]umou?r (?:is|has it),?\s+)(.+)$/u;
 // More shapes of the same (audit v7, G556: "Per Paul, Jane is the dean" filed as the owner's word):
 // each is [pattern, group holding who said it (0: no one named), group holding what they said].
 const NAMED = String.raw`([A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)*|[Mm]y \p{Ll}+)`;
@@ -212,6 +212,9 @@ const SAID_BY: [RegExp, number, number][] = [
   // the verb first (G661): "Jane is the dean, says Paul", "… (says Paul)"; and "In Paul's words, …"
   [new RegExp(String.raw`^(.+?)(?:\s*,\s*|\s+\()(?:or so\s+)?(?:says|said|tells me|told me|claims|reckons|swears|dit)\s+${NAMED}\)?[.!]*$`, "u"), 2, 1],
   [new RegExp(String.raw`^[Ii]n\s+${NAMED}['’]s?\s+(?:own\s+)?words\s*,\s*(.+)$`, "u"), 1, 2],
+  // Audit v12's probes: "Jane is the dean, I'm told" and "Paul's email says Jane is the dean".
+  [/^(.+?)\s*,\s*(?:I['’]m|I am|I was|we['’]re|we are|we were)\s+told[.!]*$/u, 0, 1],
+  [new RegExp(String.raw`^${NAMED}['’]s\s+(?:e-?mail|text|message|note|letter|post|voicemail)\s+(?:says|said)(?:\s+that)?\s*[,:]?\s+(.+)$`, "u"), 1, 2],
 ];
 export function hearsay(text: string): { who: string; rest: string } | undefined {
   const t = text.trim();

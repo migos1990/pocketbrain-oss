@@ -11,13 +11,15 @@
 # POCKETBRAIN_REPO overrides where the source is cloned from, POCKETBRAIN_HOME where it goes,
 # and POCKETBRAIN_REF which tag or branch is installed (default: the newest v* tag).
 # POCKETBRAIN_PACKAGE installs from a package instead (a version, a tarball, or the npm
-# registry's pocketbrain once it is published) with bun add -g. POCKETBRAIN_BUN_INSTALLER
-# overrides where the Bun installer comes from (tests). POCKETBRAIN_RELEASE_KEY is the ssh public key
+# registry's pocketbrain once it is published) with bun add -g. POCKETBRAIN_BUN_URL and
+# POCKETBRAIN_BUN_SHA256 override where Bun's zip comes from and the sum it must match (tests). POCKETBRAIN_RELEASE_KEY is the ssh public key
 # ("ssh-ed25519 AAAA...") a release tag must be signed with; empty means no key, as today.
 set -eu
 
 # The release key this installer trusts. Empty until releases are signed (docs/release.md, "Signed releases").
 PINNED_RELEASE_KEY=""
+# The Bun release this installer installs when Bun is missing, each build by its pinned sha256 below.
+BUN_VERSION="1.4.4"
 RELEASE_KEY="${POCKETBRAIN_RELEASE_KEY-$PINNED_RELEASE_KEY}"
 
 REPO="${POCKETBRAIN_REPO:-https://pocketbrain.dev/git}"
@@ -42,19 +44,48 @@ fi
 BUN_BIN="${BUN_INSTALL:-$HOME/.bun}/bin"
 if [ -n "$PKG" ]; then WHERE="the $PKG package, with bun add -g"; else WHERE="its code in $SRC (from $REPO)"; fi
 say "This installs pocketBrain for you alone, on this computer:"
-say "  - Bun, the runtime it uses, in $BUN_BIN, if it isn't there yet (Bun's own installer also adds"
-say "    that folder to your shell's startup file)"
+say "  - Bun $BUN_VERSION, the runtime it uses, in $BUN_BIN, if it isn't there yet, checked against"
+say "    the checksum this installer pins"
 say "  - $WHERE"
 say "  - the pocketbrain command, in $BUN_BIN"
 say "Nothing else on this computer changes, nothing about you is sent anywhere, and nothing is started."
 say ""
 if ! command -v bun >/dev/null 2>&1 && [ ! -x "$BUN_BIN/bun" ]; then
-  say "Installing Bun, the runtime pocketBrain uses (https://bun.sh)..."
+  # One Bun release, by checksum: the zip from Bun's GitHub release is checked against the sum pinned
+  # here before anything runs, so neither bun.sh nor a changed download chooses the code (audit v11
+  # finding 6, audit v12: Bun's own installer was run as served).
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64|Darwin-aarch64) BUN_TARGET=darwin-aarch64 ;;
+    Darwin-x86_64) BUN_TARGET=darwin-x64 ;;
+    Linux-aarch64|Linux-arm64) BUN_TARGET=linux-aarch64 ;;
+    Linux-x86_64) BUN_TARGET=linux-x64 ;;
+    *) BUN_TARGET="$(uname -s)-$(uname -m)" ;;
+  esac
+  # Linux without glibc (Alpine's musl) and x64 processors without AVX2 take other builds.
+  if [ "$(uname -s)" = Linux ] && ldd --version 2>&1 | grep -qi musl; then BUN_TARGET="$BUN_TARGET-musl"; fi
+  if [ "$BUN_TARGET" = linux-x64 ] && [ -r /proc/cpuinfo ] && ! grep -q avx2 /proc/cpuinfo; then BUN_TARGET=linux-x64-baseline; fi
+  if [ "$BUN_TARGET" = darwin-x64 ] && ! sysctl -n machdep.cpu.leaf7_features 2>/dev/null | grep -qi avx2; then BUN_TARGET=darwin-x64-baseline; fi
+  case "$BUN_TARGET" in
+    darwin-aarch64) BUN_SUM=c240d7f0ccb90c263a849fcdb09b7ee62630d921348ed6aafda86b9d577bc510 ;;
+    darwin-x64) BUN_SUM=50a3491f73abc2fe81673171a85762d3bc2cc1680ccecadd983de99adf77977e ;;
+    darwin-x64-baseline) BUN_SUM=d4a155adfbfd09155eb3ba05c9e3a544f39297d7a68616d3c7759f67ab5c47dc ;;
+    linux-aarch64) BUN_SUM=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e ;;
+    linux-x64) BUN_SUM=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c ;;
+    linux-x64-baseline) BUN_SUM=e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76 ;;
+    *) BUN_SUM="" ;;
+  esac
+  BUN_SUM="${POCKETBRAIN_BUN_SHA256:-$BUN_SUM}"
+  [ -n "$BUN_SUM" ] || fail "This installer pins no Bun build for $BUN_TARGET. Fix: install Bun yourself (https://bun.sh), then run bun --version, and if it answers, this installer again."
+  BUN_ZIP="${POCKETBRAIN_BUN_URL:-https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION}/bun-$BUN_TARGET.zip"
+  say "Installing Bun $BUN_VERSION, the runtime pocketBrain uses (https://bun.sh)..."
   command -v curl >/dev/null 2>&1 || fail "curl is missing. Fix: run sudo apt install curl, and run this installer again."
-  tmp="$(mktemp)"
-  curl -fsSL "${POCKETBRAIN_BUN_INSTALLER:-https://bun.sh/install}" -o "$tmp" || { rm -f "$tmp"; fail "Couldn't download Bun (no internet?). Fix: check your connection, then run curl -fsSL https://bun.sh/install | bash, and run this installer again."; }
-  bash "$tmp" >/dev/null || { rm -f "$tmp"; fail "Bun didn't install. Fix: run curl -fsSL https://bun.sh/install | bash, to see why, and run this installer again."; }
-  rm -f "$tmp"
+  command -v unzip >/dev/null 2>&1 || fail "unzip is missing. Fix: run sudo apt install unzip, and run this installer again."
+  tmp="$(mktemp -d)"
+  curl -fsSL "$BUN_ZIP" -o "$tmp/bun.zip" || { rm -rf "$tmp"; fail "Couldn't download Bun from $BUN_ZIP (no internet?). Fix: check your connection, then run curl -fsSLI $BUN_ZIP, to see why, and run this installer again."; }
+  if command -v sha256sum >/dev/null 2>&1; then got="$(sha256sum "$tmp/bun.zip" | cut -d' ' -f1)"; else got="$(shasum -a 256 "$tmp/bun.zip" | cut -d' ' -f1)"; fi
+  [ "$got" = "$BUN_SUM" ] || { rm -rf "$tmp"; fail "Bun's download from $BUN_ZIP doesn't match the checksum this installer pins, so nothing was installed. Fix: install Bun yourself (https://bun.sh), then run bun --version, and if it answers, this installer again."; }
+  { unzip -q -o "$tmp/bun.zip" -d "$tmp" && mkdir -p "$BUN_BIN" && mv -f "$tmp/bun-$BUN_TARGET/bun" "$BUN_BIN/bun" && chmod +x "$BUN_BIN/bun" && "$BUN_BIN/bun" --version >/dev/null 2>&1; } || { rm -rf "$tmp"; fail "Bun didn't install. Fix: run $BUN_BIN/bun --version, to see why, and run this installer again."; }
+  rm -rf "$tmp"
 fi
 PATH="$BUN_BIN:$PATH"; export PATH
 command -v bun >/dev/null 2>&1 || fail "Bun installed but isn't on the PATH. Fix: open a new terminal window, then run bun --version, and if it answers, this installer again."
@@ -107,6 +138,8 @@ say "pocketBrain is installed. Next, create your brain:"
 say ""
 case ":$ORIG_PATH:" in
   *":$BUN_BIN:"*) say "  pocketbrain init" ;;
-  *) say "  open a new terminal window (so it finds the command), then: pocketbrain init" ;;
+  *) say "  put $BUN_BIN on your PATH, once: add this line to your shell's startup file (~/.zshrc on a Mac,"
+     say "  ~/.bashrc on most Linux):  export PATH=\"$BUN_BIN:\$PATH\""
+     say "  then open a new terminal window, and: pocketbrain init" ;;
 esac
 say ""

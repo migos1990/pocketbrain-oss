@@ -43,6 +43,7 @@ PB_BRAIN=<brain> bun src/cli.ts help   # every CLI command
 | Write checks (schema, secrets, injection, protected paths), always-on list `ALWAYS_ON` | `src/checks.ts` |
 | The one write function: tripwire, entity resolution, tier/owner routing (a trial agent proposes; outside its areas a core agent's fact files itself and a contradiction is filed as a conflict, G422), conflict steps 1–7, the few writes that wait in the inbox (private notes, a claim of the owner's word, a retire from outside), disputes | `src/write.ts` |
 | Source refs, ranks, ref extraction from text | `src/sources.ts` |
+| One guess, then proposals only: a core assistant whose write tripped the leak wire writes only proposals until the owner lets it write again (`log/write-holds.jsonl`, `writesHeld`, `clearWriteHold`; Settings and `pocketbrain write-hold`, G680). See `docs/add-an-agent.md` | `src/write-hold.ts` |
 | Live server logic per agent (context, search, read, remember, dispute endpoints) | `src/core.ts` |
 | Per-agent cells: each agent's reads come from a directory holding only its slice | `src/cell.ts` |
 | HTTP adapters: MCP (`/mcp`), JSON API (`/v1`), OpenAPI. Bodies are read as a stream and cut off at the route's limit (`readCapped` in `src/util.ts`: 4 KB for `/v1/enroll`, 64 KB for JSON and the `/b` forms, more for logs and captures; `maxRequestBodySize` is the largest route's). `/health` is 503 when the rules don't parse | `src/server.ts` |

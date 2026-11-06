@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Server-rendered pages for the owner dashboard. Plain HTML forms, no framework, no build
 // step; a few lines of script only for the chart tooltip.
+import { heldWriters } from "../write-hold";
 import { inboxConflict } from "../settle-inbox";
 import { budgetUse, servesHere } from "../budget";
 import { writeQuality, qualityText, trialText } from "../writequality";
@@ -580,6 +581,10 @@ function needsYou(s: State, csrf: string) {
   for (const a of waitingActions(s.root)) extra.push(actionItem(s, a, csrf));
   for (const agent of latchedAgents(s.root))
     extra.push(`<div class="item"><div class="what"><span class="kind k-alert">mail requests stopped</span><b>${agentName(s.rules, agent)}</b> asked to send a mail carrying a value it can't see. Its requests are refused until you let it ask again; look at the alert first.</div><div class="acts">${button(csrf, "act-unlatch", { agent }, "Let it ask again", "", `Let ${agentLabel(s.rules, agent)} ask to send mail again?`)}</div></div>`);
+  // One guess, then proposals only (src/write-hold.ts, G680): a trusted assistant that wrote a value
+  // it can't see writes proposals until the owner lets it write again.
+  for (const h of heldWriters(s.root))
+    extra.push(`<div class="item"><div class="what"><span class="kind k-alert">proposals only</span><b>${agentName(s.rules, h.agent)}</b> wrote a value it can't see on ${esc(shortDate(h.at))}. Since then its writes go to you as proposals; look at the alert first.</div><div class="acts">${button(csrf, "write-unhold", { agent: h.agent }, "Let it write again", "", `Let ${agentLabel(s.rules, h.agent)} write again?`)}</div></div>`);
   // What the hub files on its own isn't listed (src/filing.ts autoSaves); the page says how many.
   const { saves, queues } = keptFor(s.root, "autosaves", s.key, () => { const queues = newQueues(); return { saves: autoSaves(s.root, s.now, s, queues), queues }; });
   QUEUES.set(s, queues);

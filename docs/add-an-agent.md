@@ -97,7 +97,7 @@ A cloud assistant needs your public address (your named tunnel, see [hub.md](hub
 
 ## 2. Carve its slice
 
-Start small: a new assistant is a **trial** agent. It sees up to `personal` sensitivity, and everything it writes waits for your OK. A trial assistant whose write carries a value it can't see (a guess at something hidden from it, in the title, the value or anywhere else) gets the same reply as any other write: it waits for you. It is never told the guess was right. You get the `leak_tripwire` alert, and its card on Settings starts with "It carried a value this assistant can't see"; the hub's own filing never saves it (G648). A wider assistant's write that would save at once is still refused with `leak_tripwire`, because no reply can look like a save without saving the value where others read it. Pick from the ready-made slices (`area:<area>` for each area, `contacts-basic` for names and roles) and the ones in `rules/slices.yaml`:
+Start small: a new assistant is a **trial** agent. It sees up to `personal` sensitivity, and everything it writes waits for your OK. A trial assistant whose write carries a value it can't see (a guess at something hidden from it, in the title, the value or anywhere else) gets the same reply as any other write: it waits for you. It is never told the guess was right. You get the `leak_tripwire` alert, and its card on Settings starts with "It carried a value this assistant can't see"; the hub's own filing never saves it (G648). A wider assistant's write that would save at once is refused with `leak_tripwire` once, because no reply can look like a save without saving the value where others read it; from then on that assistant writes proposals only, a guess and any other write alike, so no second guess is answered (G680, your choice of 2026-11-06). Its proposals wait for you: the hub's own filing saves none of them, so a miss never turns into a saved page that a hit doesn't, and a canary in its write spends the guess just as a real hidden value does. Settings lists it under Still open ("proposals only") with **Let it write again**; `pocketbrain write-hold` lists who is held and `pocketbrain write-hold clear <agent>` lets one write again. A held assistant's journal lines are refused until then. Pick from the ready-made slices (`area:<area>` for each area, `contacts-basic` for names and roles) and the ones in `rules/slices.yaml`:
 
 ```sh
 pocketbrain carve newbot --slices area:work,contacts-basic --exclude-types money --preview
@@ -139,7 +139,7 @@ The step the owner does by hand, as an Operator task line: `pocketbrain task "Gi
 
 The assistant can also redeem the same code itself at `POST /v1/enroll`. Every token made from a terminal, yours included, is a `token_minted` alert in the digest. If one wasn't you, `pocketbrain token --revoke <agent>`. (Gap G184; code: `mintFromShell` in `src/invite.ts`.)
 
-For Claude Code, use the local address and the `claude mcp add --scope user --transport http "pocketbrain" http://127.0.0.1:8787/mcp --header "Authorization: Bearer <token>"` line instead.
+For Claude Code on this computer, `pocketbrain connect <agent> --kind claude-code` does it without a token to paste: the key goes to its file and Claude Code starts the stdio bridge (docs/connect/claude-code.md).
 
 **OAuth sign-in** (`/mcp/oauth`):
 

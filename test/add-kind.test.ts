@@ -9,6 +9,7 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
 import { main } from "../src/cli";
+import { readAgentKey } from "../src/local-apps";
 import { handle } from "../src/server";
 import { setupOAuth, clearJwksCache } from "../src/oauth";
 import { startFakeAS, connect } from "./fake-as";
@@ -55,15 +56,18 @@ test("--kind claude-code: runs `claude mcp add` and writes the standing instruct
   chmodSync(join(bin, "claude"), 0o755);
   mkdirSync(join(home, ".claude"));
   writeFileSync(join(home, ".claude", "CLAUDE.md"), "# My notes\n\nKeep answers short.\n");
-  const env = { HOME: process.env.HOME, PATH: process.env.PATH };
-  process.env.HOME = home; process.env.PATH = `${bin}:${process.env.PATH}`;
+  const env = { HOME: process.env.HOME, PATH: process.env.PATH, PB_CONFIG_DIR: process.env.PB_CONFIG_DIR };
+  process.env.HOME = home; process.env.PB_CONFIG_DIR = join(home, ".config", "pocketbrain"); process.env.PATH = `${bin}:${process.env.PATH}`;
   try {
     const r = run(root, "add", "cc", "--kind", "claude-code", "--yes");
     expect(r.code).toBe(0);
     const args = readFileSync(record, "utf8").split("\n");
-    expect(args.slice(0, 7)).toEqual(["mcp", "add", "--scope", "user", "--transport", "http", "pocketbrain"]);
-    expect(args).toContain("http://127.0.0.1:8787/mcp");
-    const token = tokenIn(args.join(" "));
+    // The stdio bridge with the key in its file, never a bearer on claude's command line (audit v12).
+    expect(args.slice(0, 4)).toEqual(["mcp", "add", "--scope", "user"]);
+    expect(args.slice(args.indexOf("pocketbrain"), args.indexOf("pocketbrain") + 2)).toEqual(["pocketbrain", "--"]);
+    expect(args.slice(-4, -1)).toEqual(["mcp", "--agent", "cc"]);
+    expect(args.join(" ")).not.toMatch(/Bearer|pb_cc_/);
+    const token = readAgentKey("cc");
     expect(r.out).not.toContain(token); // ran for the owner, never printed
     const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
     expect(md).toStartWith("# My notes\n\nKeep answers short.\n");
@@ -73,24 +77,26 @@ test("--kind claude-code: runs `claude mcp add` and writes the standing instruct
     // A second Claude Code agent replaces the block instead of adding another.
     run(root, "add", "cc2", "--kind", "claude-code", "--yes");
     expect(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8").split("<!-- pocketbrain -->").length).toBe(2);
-  } finally { process.env.HOME = env.HOME; process.env.PATH = env.PATH; }
+  } finally { process.env.HOME = env.HOME; process.env.PATH = env.PATH; if (env.PB_CONFIG_DIR === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = env.PB_CONFIG_DIR; }
 });
 
 test("--kind claude-code without the claude CLI prints its line and the block instead", () => {
   const root = makeBrain();
   const home = mkdtempSync(join(tmpdir(), "pb-home-"));
-  const env = { HOME: process.env.HOME, PATH: process.env.PATH };
+  const env = { HOME: process.env.HOME, PATH: process.env.PATH, PB_CONFIG_DIR: process.env.PB_CONFIG_DIR };
   // git and the shell, but no claude: a dir with links to git only.
   const bin = mkdtempSync(join(tmpdir(), "pb-noclaude-"));
   symlinkSync(Bun.which("git")!, join(bin, "git"));
-  process.env.HOME = home; process.env.PATH = `${bin}:/bin`;
+  process.env.HOME = home; process.env.PB_CONFIG_DIR = join(home, ".config", "pocketbrain"); process.env.PATH = `${bin}:/bin`;
   try {
     const r = run(root, "add", "cc", "--kind", "claude-code", "--yes");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("claude mcp add --scope user --transport http pocketbrain http://127.0.0.1:8787/mcp");
+    expect(r.out).toMatch(/claude mcp add --scope user (--env \S+ )*pocketbrain -- /);
+    expect(r.out).toContain("mcp --agent cc");
+    expect(r.out).not.toMatch(/Bearer|pb_cc_/);
     expect(steps(r.out)).toEqual([1]);
     expect(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8")).toContain("call context_pack with the topic");
-  } finally { process.env.HOME = env.HOME; process.env.PATH = env.PATH; }
+  } finally { process.env.HOME = env.HOME; process.env.PATH = env.PATH; if (env.PB_CONFIG_DIR === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = env.PB_CONFIG_DIR; }
 });
 
 test("--kind claude-ai: opens the sign-in window; after one sign-in, context_pack works", async () => {
@@ -149,12 +155,13 @@ test("connect <existing agent> --kind claude-code does what add --kind does, for
   const record = join(bin, "args.txt");
   writeFileSync(join(bin, "claude"), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${record}\n`);
   chmodSync(join(bin, "claude"), 0o755);
-  const env = { HOME: process.env.HOME, PATH: process.env.PATH };
-  process.env.HOME = home; process.env.PATH = `${bin}:${process.env.PATH}`;
+  const env = { HOME: process.env.HOME, PATH: process.env.PATH, PB_CONFIG_DIR: process.env.PB_CONFIG_DIR };
+  process.env.HOME = home; process.env.PB_CONFIG_DIR = join(home, ".config", "pocketbrain"); process.env.PATH = `${bin}:${process.env.PATH}`;
   try {
     const r = run(root, "connect", "helper", "--kind", "claude-code");
     expect(r.code).toBe(0);
-    const token = tokenIn(readFileSync(record, "utf8").split("\n").join(" "));
+    expect(readFileSync(record, "utf8")).not.toMatch(/Bearer|pb_helper_/);
+    const token = readAgentKey("helper");
     expect(token).toStartWith("pb_helper_");
     expect(r.out).not.toContain(token);
     expect(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8")).toContain("<!-- pocketbrain -->");
@@ -162,5 +169,5 @@ test("connect <existing agent> --kind claude-code does what add --kind does, for
     // Every kind connects an existing agent (row 388: init prints connect <agent> --kind for each); an unknown one doesn't.
     expect(run(root, "connect", "helper", "--kind", "town").code).toBe(0);
     expect(run(root, "connect", "helper", "--kind", "chatgpt").code).toBe(2);
-  } finally { process.env.HOME = env.HOME; process.env.PATH = env.PATH; }
+  } finally { process.env.HOME = env.HOME; process.env.PATH = env.PATH; if (env.PB_CONFIG_DIR === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = env.PB_CONFIG_DIR; }
 });

@@ -764,3 +764,24 @@ test("contract write: \"not proposed again\" answers only for the writer's own t
   editPolicy(root, (s) => s.replace("helper: { tier: trial", "helper2: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }\n  helper: { tier: trial"));
   expect(ask("helper2").outcome).toBe("inbox");
 });
+
+test("contract write: after a core assistant's first guess at a hidden value, a hit and a miss answer the same and neither files, by the reply, a canary or the hub's filing (G680, invariant 3)", async () => {
+  const { runAuto } = await import("../../src/filing");
+  const { probeInit } = await import("../../src/canary");
+  const { writesHeld } = await import("../../src/write-hold");
+  const org = (root: string, title: string) => write(root, { ...base, type: "org", title, area: "work", attribute: "what_it_is", value: "a company" } as never);
+  const root = makeBrain();
+  expect(org(root, "Maple Trust Bank review").outcome).toBe("refused");
+  const hit = org(root, "Maple Trust Bank audit"), miss = org(root, "Redfin Bank audit"); // "bank" in both: the money category check answers the same
+  const shape = (r: { outcome: string; message?: string }) => `${r.outcome} ${(r.message ?? "").replace(/inbox\/\S+/g, "F")}`;
+  expect(shape(hit)).toBe(shape(miss));
+  runAuto(root, new Date("2026-10-30T15:00:00Z"));
+  const titles = loadBrain(root).map((n) => n.fm.title);
+  expect(titles.filter((t) => /audit/.test(String(t)))).toEqual([]);
+  // A canary spends the one guess exactly as a real hit does.
+  const viaCanary = makeBrain(), viaReal = makeBrain();
+  const c = probeInit(viaCanary).planted[0].canary;
+  probeInit(viaReal);
+  expect(org(viaCanary, `Org ${c}`).message).toBe(org(viaReal, "Maple Trust Bank review").message);
+  expect([writesHeld(viaCanary, "planner"), writesHeld(viaReal, "planner")]).toEqual([true, true]);
+});

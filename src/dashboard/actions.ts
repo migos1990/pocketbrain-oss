@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // What Louis can do from the dashboard. Each action is the same function the CLI calls, so
 // the dashboard adds no new way to change the brain; every change is a commit by the owner.
+import { clearWriteHold } from "../write-hold";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -69,6 +70,7 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
     }
     case "act-decline": return declineAction(root, need("id"));
     case "act-unlatch": return clearLatch(root, need("agent"));
+    case "write-unhold": return clearWriteHold(root, need("agent"));
     case "memsync-approve": return approveFix(root, need("id"));
     case "memsync-decline": return declineFix(root, need("id"));
     case "proposal-accept":

@@ -366,12 +366,10 @@ test("the npm package ships the tool and nothing else: no tests, evals, sample b
 test("the installer is valid sh, stops with a clear message without git or Bun, and installs only pocketbrain", () => {
   expect(Bun.spawnSync(["sh", "-n", join(REPO, "install.sh")]).exitCode).toBe(0);
   const home = mkdtempSync(join(tmpdir(), "pb-home-"));
-  // A Bun installer that fails, as on a machine with no internet.
-  const bad = join(home, "bad.sh");
-  writeFileSync(bad, "exit 1\n");
-  const r = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { HOME: home, PATH: "/usr/bin:/bin", POCKETBRAIN_BUN_INSTALLER: `file://${bad}` } });
+  // Nothing to download, as on a machine with no internet.
+  const r = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { HOME: home, PATH: "/usr/bin:/bin", POCKETBRAIN_BUN_URL: `file://${join(home, "nowhere")}` } });
   expect(r.exitCode).toBe(1);
-  expect(r.stderr.toString()).toContain("Bun didn't install");
+  expect(r.stderr.toString()).toContain("Couldn't download Bun");
   // No git: a PATH with only the basics the installer needs.
   const bin = join(home, "bin");
   mkdirSync(bin);
@@ -521,6 +519,41 @@ test("the installer installs a release only when the pinned release key signed i
   expect(plain.stdout.toString()).toContain("No release key is pinned in this installer, so it can't check v1.3.0's signature");
 });
 
+// Audit v11 finding 6, audit v12: Bun came from running bun.sh's installer as served. Now one Bun
+// release's zip is checked against a sum the installer pins before anything of it runs.
+test("the installer installs Bun only from a zip matching the checksum it pins, and runs no downloaded script", () => {
+  const sh = readFileSync(join(REPO, "install.sh"), "utf8");
+  expect(sh).not.toMatch(/bun\.sh\/install/);
+  for (const l of sh.split("\n").filter((x) => !x.trim().startsWith("#"))) expect(l).not.toMatch(/\|\s*(ba)?sh\b|\bbash "\$tmp/);
+  expect(sh).toMatch(/^BUN_VERSION="\d+\.\d+\.\d+"$/m);
+  for (const t of ["darwin-aarch64", "darwin-x64", "linux-aarch64", "linux-x64"]) expect(sh).toMatch(new RegExp(`${t}\\) BUN_SUM=[0-9a-f]{64} ;;`));
+  const home = mkdtempSync(join(tmpdir(), "pb-home-"));
+  // A stand-in release: a zip holding a "bun" for this machine's target.
+  const target = `${process.platform === "darwin" ? "darwin" : "linux"}-${process.arch === "arm64" ? "aarch64" : "x64"}`;
+  const rel = join(home, "rel"), stage = join(home, "stage");
+  for (const t of [target, `${target}-baseline`]) {
+    mkdirSync(join(stage, `bun-${t}`), { recursive: true });
+    writeFileSync(join(stage, `bun-${t}`, "bun"), "#!/bin/sh\necho 9.9.9\n");
+    Bun.spawnSync(["chmod", "+x", join(stage, `bun-${t}`, "bun")]);
+  }
+  mkdirSync(rel);
+  for (const t of [target, `${target}-baseline`]) Bun.spawnSync(["zip", "-qr", join(rel, `bun-${t}.zip`), `bun-${t}`], { cwd: stage });
+  const env = { HOME: home, PATH: "/usr/bin:/bin", POCKETBRAIN_BUN_URL: `file://${rel}`, POCKETBRAIN_REPO: join(home, "no-repo") };
+  // A zip that isn't the pinned one: refused, nothing put in ~/.bun.
+  const wrong = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, POCKETBRAIN_BUN_SHA256: "0".repeat(64) } });
+  expect(wrong.exitCode).toBe(1);
+  expect(wrong.stderr.toString()).toContain("doesn't match the checksum this installer pins, so nothing was installed");
+  expect(existsSync(join(home, ".bun", "bin", "bun"))).toBe(false);
+  // The matching one goes in and runs (the clone after it fails here: no source).
+  const sum = (t: string) => new Bun.CryptoHasher("sha256").update(readFileSync(join(rel, `bun-${t}.zip`))).digest("hex");
+  const sums = new Set([sum(target), sum(`${target}-baseline`)]);
+  for (const s of sums) {
+    const ok = Bun.spawnSync(["sh", join(REPO, "install.sh")], { env: { ...env, POCKETBRAIN_BUN_SHA256: s } });
+    if (existsSync(join(home, ".bun", "bin", "bun"))) { expect(ok.stdout.toString()).toContain("Installing Bun"); break; }
+  }
+  expect(existsSync(join(home, ".bun", "bin", "bun"))).toBe(true);
+});
+
 test("the installer's library step never rewrites the lockfile the release shipped (G660)", () => {
   const sh = readFileSync(join(REPO, "install.sh"), "utf8");
   const installs = sh.split("\n").filter((l) => /bun install\b/.test(l) && !l.trim().startsWith("#"));
@@ -578,7 +611,8 @@ test("init --kind claude-code connects Claude Code itself: claude mcp add runs, 
   const r = cli(["init", root, "--name", "Alex", "--kind", "claude-code"], undefined, { env: { PATH: `${bin}:${process.env.PATH}`, HOME: home } });
   expect(r.code).toBe(0);
   expect(loadRules(root).policy.agents.claude).toBeDefined();
-  expect(readFileSync(log, "utf8")).toMatch(/^mcp add --scope user --transport http pocketbrain http:\/\/127\.0\.0\.1:8787\/mcp --header Authorization: Bearer pb_claude_/m);
+  expect(readFileSync(log, "utf8")).toMatch(/^mcp add --scope user (--env \S+ )*pocketbrain -- \S+ \S+cli\.ts mcp --agent claude$/m);
+  expect(readFileSync(log, "utf8")).not.toMatch(/Bearer|pb_claude_/);
   expect(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8")).toContain("<!-- pocketbrain -->");
   expect(r.out).toContain("Added pocketbrain to Claude Code");
   expect(r.out).not.toMatch(/pb_claude_\S+/);

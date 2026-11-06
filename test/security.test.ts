@@ -124,7 +124,11 @@ test("the tripwire reads titles and numbers too", () => {
   writeFileSync(p, readFileSync(p, "utf8").replace("facts:\n", "facts:\n  balance: { value: 438217, as_of: 2026-10-04, sources: [\"imsg:phonemsg-01FAKE0000000000000000000T\"], verification: confirmed-by-louis, by: steward, recorded: 2026-10-04 }\n"));
   git(root, ["commit", "-qam", "balance"]);
   expect(write(root, { ...base, agent: "planner", type: "project", title: "Maple Trust Bank review", area: "work", attribute: "status", value: "open" }).outcome).toBe("refused");
-  expect(write(root, { ...base, agent: "planner", id: "projects/course-a", attribute: "status", value: "budget 438217 confirmed" }).outcome).toBe("refused");
+  // A fresh brain: after its first trip a core writer writes proposals only (G680).
+  const again = makeBrain();
+  writeFileSync(join(again, "money/main-bank.md"), readFileSync(p, "utf8"));
+  git(again, ["commit", "-qam", "balance"]);
+  expect(write(again, { ...base, agent: "planner", id: "projects/course-a", attribute: "status", value: "budget 438217 confirmed" }).outcome).toBe("refused");
 });
 
 test("zero-width characters don't hide a carved value", () => {
@@ -174,13 +178,13 @@ test("wrong types, null bytes and reserved attribute names are refused, never a 
 });
 
 test("a carved value in the attribute name or a source ref trips the leak wire", () => {
-  const root = makeBrain();
   for (const b of [{ attribute: "maple_trust_bank", value: "yes" }, { sources: ["doc:Maple-Trust-Bank"], value: "checked" }]) {
+    const root = makeBrain(); // one guess per brain: after a trip a core writer proposes only (G680)
     const r = write(root, { ...base, id: "projects/course-a", ...b });
     expect(r.outcome, JSON.stringify(b)).toBe("refused");
     expect(r.fails?.[0].check).toBe("leak_tripwire");
+    expect(readFileSync(join(root, "projects/course-a.md"), "utf8").toLowerCase()).not.toContain("maple");
   }
-  expect(readFileSync(join(root, "projects/course-a.md"), "utf8").toLowerCase()).not.toContain("maple");
 });
 
 // Red team 2026-10-15 (capture): line breaks and untrusted text.

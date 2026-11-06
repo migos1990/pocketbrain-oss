@@ -3,8 +3,8 @@
 // a ride receipt became an org page named for the payee's legal name, filed under a work area, with
 // two held rows "Something new only you can see. from an email" and nothing else. The hub's own pull
 // skips machine mail (G506, G662), but an assistant reading the inbox filed from it. The hub now
-// remembers, by ref, the mail it saw was machine-sent, and write() refuses an assistant's fact whose
-// every source is such mail, of any kind of page (G668; G571 covered money pages and never landed).
+// remembers, by ref, the mail it saw was machine-sent, and write() refuses an assistant's fact citing
+// any such mail, whatever else it cites (G679), of any kind of page (G668; G571 covered money pages and never landed).
 import { test, expect } from "bun:test";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -47,12 +47,29 @@ test("a ref with its account names the same mail", () => {
   expect(receipt("planner", ["mail:abc123@mailer.example"]).outcome).toBe("refused");
 });
 
-test("mail the hub never saw as a machine's, or one person's mail beside it, files as before", () => {
+test("mail the hub never saw as a machine's files as before", () => {
+  rig();
+  expect(receipt("planner", [PERSON]).outcome).toBe("committed");
+});
+
+// Audit v12 (G679): the refusal asked that EVERY source be machine mail, so citing any second
+// source beside the receipt (a person's mail, the assistant's own word, a web page) filed it.
+// Citing machine mail is reading it for a fact: any machine-mail source refuses, before any lookup.
+test("a second source beside machine mail does not get a receipt filed", () => {
+  for (const other of [PERSON, "agent:planner", "https://ride.example/receipt", "gmail:primary/" + PERSON.slice(6)]) {
+    const root = rig();
+    const r = receipt("planner", [RIDE, other]);
+    expect(r.outcome).toBe("refused");
+    expect(r.fails?.[0]?.check).toBe("machine_mail");
+    expect(pages(root)).toHaveLength(0);
+    expect(inbox(root)).toHaveLength(0);
+  }
+  // The same one-line reply whether or not the page exists, so it says nothing about the brain.
   const root = rig();
   expect(receipt("planner", [PERSON]).outcome).toBe("committed");
-  const root2 = rig();
-  expect(receipt("planner", [RIDE, PERSON]).outcome).toBe("committed");
-  expect(pages(root2)).toHaveLength(1);
+  const again = receipt("planner", [RIDE2, PERSON]);
+  const fresh = (rig(), receipt("planner", [RIDE2, PERSON]));
+  expect(again.message).toBe(fresh.message);
   void root;
 });
 

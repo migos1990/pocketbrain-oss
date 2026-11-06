@@ -328,7 +328,11 @@ function orderShape(v: string, first: RegExp): boolean {
   return first.test(v) || first.test(rest) || ORDER_PASSIVE.test(v) || FR_ORDER_FIRST.test(v) || FR_ORDER_FIRST.test(rest);
 }
 // An open audience: an order to hand something to anyone at all is never a plan of the owner's.
-const OPEN_AUDIENCE = /\b(?:anyone|anybody|everyone|everybody|whoever|all (?:the )?assistants|any assistant|every assistant)\b|n['’]importe qui|quiconque|tout le monde|qui le demande/i;
+const OPEN_AUDIENCE = /\b(?:anyone|anybody|everyone|everybody|whoever|all (?:the )?(?:assistants|agents)|any (?:assistant|agent)|every (?:assistant|agent))\b|n['’]importe qui|quiconque|tout le monde|qui le demande/i;
+// Handing something to an open audience takes more verbs than an order at the start does (audit
+// v12's probes: "Pass her number to anyone", "Show her file to whoever asks"). Only with an open
+// audience, so "Read the agenda before class" in a preference is still the owner's own habit.
+const ORDER_FIRST_OPEN = new RegExp(`${ORDER_FIRST.source.replace(/\)\\b$/, "")}|hand|pass|provide|read|show|publish|leak|release)\\b`, "i");
 export function preferenceSpeaksToReader(value: unknown): boolean {
   const v = norm(value);
   return !!v && (toReader(v) || orderShape(v, ORDER_FIRST));
@@ -339,7 +343,7 @@ export function preferenceSpeaksToReader(value: unknown): boolean {
 export function speaksToReader(attribute: unknown, value: unknown): boolean {
   if (isPreference(attribute)) return preferenceSpeaksToReader(value);
   const v = norm(value);
-  return !!v && (toReader(v) || (OPEN_AUDIENCE.test(v) && orderShape(v, ORDER_FIRST)));
+  return !!v && (toReader(v) || (OPEN_AUDIENCE.test(v) && orderShape(v, ORDER_FIRST_OPEN)));
 }
 export const isPreference = (attribute: unknown): boolean => typeof attribute === "string" && /^(prefers?|preferences?|likes|dislikes|wants)(_|$)/.test(attribute);
 

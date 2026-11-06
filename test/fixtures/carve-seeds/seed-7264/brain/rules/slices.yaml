@@ -1,0 +1,7 @@
+slices:
+  s1:
+    tags:
+      - beta
+    max_sensitivity: secret
+    exclude_attributes:
+      - contact

@@ -1,0 +1,23 @@
+{
+ "seed": 7214,
+ "why": "audit v11 soak: after a merge, an agent's whats_new carried values of a note its carve hides; passes since G656/G657, frozen as a guard (audit v12)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  }
+ ],
+ "ops": [
+  "merge notes/qiryzex-dufin -> notes/qiryzex-dufin-dup: ok"
+ ]
+}

@@ -185,15 +185,16 @@ const by = (title: string, attribute = "room") => ({ title, type: "project", are
 test("a by-title write can't land on a note by guessing its withheld word; the guess trips the leak wire", () => {
   const root = withSponsor();
   expect(readNote(root, "planner", "projects/course-d").title).toBe("Course D (sponsored by [withheld])");
-  const right = remember(root, "planner", by("Course D (sponsored by Bluefin Holdings)"));
+  // The miss first: once a core assistant's guess trips the wire, all its writes go to the owner (G680).
   const wrong = remember(root, "planner", by("Course D (sponsored by Redfin Partners)"));
+  const right = remember(root, "planner", by("Course D (sponsored by Bluefin Holdings)"));
   expect(right.outcome).toBe("refused");
   expect(right.message).toMatch(/^leak_tripwire: the title/);
   expect(right.message).not.toMatch(/course-d|sponsor/);
   expect(wrong.fact_key).toMatch(/^projects\/course-d-sponsored-by-redfin-partners-[0-9a-f]{6}#room$/);
   expect(note(root, "projects/course-d").fm.facts?.room).toBeUndefined();
   // A disguised spelling is refused too, so the guess can't be read back as [withheld].
-  expect(remember(root, "planner", by("Zed from Bluefin-Holdings")).outcome).toBe("refused");
+  expect(remember(withSponsor(), "planner", by("Zed from Bluefin-Holdings")).outcome).toBe("refused");
 });
 
 test("names keep innocent words that only share a fragment with a carved value", () => {

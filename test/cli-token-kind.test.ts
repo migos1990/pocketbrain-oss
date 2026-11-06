@@ -34,10 +34,11 @@ function withFakeClaude<T>(fn: (calls: string, home: string) => T): T {
   const calls = join(bin, "calls.log");
   writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> "${calls}"\nexit 0\n`);
   chmodSync(join(bin, "claude"), 0o755);
-  const old = { PATH: process.env.PATH, HOME: process.env.HOME };
+  const old = { PATH: process.env.PATH, HOME: process.env.HOME, PB_CONFIG_DIR: process.env.PB_CONFIG_DIR };
   process.env.PATH = `${bin}:${old.PATH}`;
   process.env.HOME = home;
-  try { return fn(calls, home); } finally { process.env.PATH = old.PATH; process.env.HOME = old.HOME; }
+  process.env.PB_CONFIG_DIR = join(home, ".config", "pocketbrain"); // the bridge key lands here, whatever homedir() says
+  try { return fn(calls, home); } finally { process.env.PATH = old.PATH; process.env.HOME = old.HOME; if (old.PB_CONFIG_DIR === undefined) delete process.env.PB_CONFIG_DIR; else process.env.PB_CONFIG_DIR = old.PB_CONFIG_DIR; }
 }
 
 test("G184: connect <wide agent> --kind claude-code|town|browser mints nothing from a shell and changes nothing", () => {

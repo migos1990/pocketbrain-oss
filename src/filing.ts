@@ -24,6 +24,7 @@ import { sensitiveShape } from "./shape";
 import type { Rules } from "./rules";
 import { logWrite, inboxCards, forgottenName, forgottenSlugs } from "./write";
 import { loadRules, attributeSpec, isOwnerWord, isGardener, tierOf } from "./rules";
+import { writesHeld } from "./write-hold";
 import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide, pageLink } from "./write";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
 import { refString, schemeOf, isExactLouisRef, SCHEMES, sourceRank, asAgentWord, AGENT_MEMORY_SCHEMES } from "./sources";
@@ -159,6 +160,7 @@ export function verdict(root: string, it: Item, p: EscalationPolicy, ctx: { note
 
 // Something that cites the owner's word (an owner ref, or the owner's label) waits for the owner (G83).
 const CITES_OWNER = "It cites your own word, so only you can keep or drop it.";
+const HELD_WRITER = "This assistant wrote a value it can't see, so its writes wait for you until you let it write again.";
 function citesOwner(pr: Proposal): boolean {
   const r = pr.request as { sources?: unknown[]; verification?: unknown };
   const refs = (Array.isArray(r.sources) ? r.sources : []).map((x) => refString(x as never));
@@ -198,6 +200,10 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // the inbox, reopened with no writer, read its writer from the request after G601 (slice audit F1).
     if (pr && !pr.request.id && typeof pr.request.title === "string" && forgottenName(pr.request.title, forgottenSlugs(root))) return { never: FORGOTTEN };
     if (pr && (pr.by === captureAgent(rulesOf(root)) || isOwnerId(pr.by)) && captured(root, pr.file)) return filed(fileVerdict(root, it, pr, ctx.notes, now));
+    // An assistant on proposals only (its write tripped the leak wire, src/write-hold.ts, G680)
+    // files nothing by itself, through any branch below (core, the Gardener, the capture agent,
+    // expiry): a miss that filed while the hit waited would answer the guess one tick later.
+    if (pr && !isOwnerId(pr.by) && !captured(root, pr.file) && writesHeld(root, pr.by)) return { never: HELD_WRITER };
     // An assistant's proposal that says it is the owner's word waits for the owner, whatever tier
     // the assistant is: once the hold on core assistants' proposals ended (2026-10-30) a forged
     // owner ref filed as a conflict side ranked as the owner's word (rt-dash-routed-forged-owner-ref).
@@ -269,7 +275,8 @@ export interface Queues { held: Map<string, string>; expiring: Map<string, strin
 export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map(), byCapture: new Set(), byAmbiguity: new Set() });
 const HELD_DATED = new WeakSet<Plan>();
 
-// Active, and one the owner lets write: a core tier, inside the wall, or the capture agent.
+// Active, and one the owner lets write: a core tier, inside the wall, or the capture agent. One on
+// proposals only (src/write-hold.ts, G680) never gets here: verdict() stops its proposals first.
 function coreAssistant(rules: Rules, by: string): boolean {
   const agent = rules.policy.agents[by];
   if (!agent || (agent.status && agent.status !== "active")) return false;

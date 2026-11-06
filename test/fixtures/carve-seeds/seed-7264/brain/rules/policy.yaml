@@ -1,0 +1,33 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: core
+    slices:
+      - area:home
+  bex:
+    tier: core
+    slices:
+      - all
+      - area:personal
+    exclude_types:
+      - people
+    max_sensitivity: public
+  cyd:
+    tier: core
+    slices:
+      - area:personal
+      - all
+    max_sensitivity: secret
+    exclude:
+      - projects/sulin-nakath
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  home: {}
+  personal: {}

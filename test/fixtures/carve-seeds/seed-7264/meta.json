@@ -1,0 +1,29 @@
+{
+ "seed": 7264,
+ "why": "audit v10 soak: after a merge and a handoff ava -> bex, whats_new leaked; passes since G656/G657, frozen as a guard (audit v12)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  }
+ ],
+ "ops": [
+  "merge orgs/poseth-vymil-dup -> orgs/poseth-vymil: ok",
+  "handoff ava -> bex about decisions/gidiqen-bybanuth: ho-20261008164447-xhg7"
+ ]
+}

@@ -20,7 +20,7 @@ uname -s && git --version && bun --version
 
 - `uname -s` must say `Darwin` (Mac) or `Linux` (Linux, or WSL on Windows). On Windows outside WSL, **stop: ask the person** to run `wsl --install` and open the Ubuntu terminal.
 - No git: on a Mac, **stop: ask the person** to run `xcode-select --install` (it opens a window). On Linux, `sudo apt install -y git` needs their password, so ask first.
-- No Bun, or older than 1.4: **stop: ask the person** whether you may install it. Their yes covers `curl -fsSL https://bun.sh/install | bash`, which also adds `~/.bun/bin` to their shell's startup file. Then run `export PATH="$HOME/.bun/bin:$PATH"` in your own shell.
+- No Bun, or older than 1.4: **stop: ask the person** whether you may install it. Their yes covers running pocketBrain's `install.sh`, which installs one pinned Bun release checked against its sha256 (it doesn't add `~/.bun/bin` to their shell's startup file; it prints the line that does). Then run `export PATH="$HOME/.bun/bin:$PATH"` in your own shell.
 
 ## 2. Install
 
@@ -68,7 +68,7 @@ After the restart, call the `orientation` tool on the `pocketbrain` server. It w
 Then tell the person, in this order:
 
 1. The dashboard link from `.git/pb-dashboard-login` in the brain (the log says where). It works only on this computer.
-2. To try it: *"Remember that I prefer short answers."* What you save waits for their OK on the dashboard's **On your mind** while you're on trial.
+2. To try it: *"Remember that I prefer short answers."* While you're on trial, what you save is a proposal: no screen asks them to approve it (they're asked only about conflicts). It lets in with `pocketbrain inbox --accept <file>`, the `inbox/…yaml` file your save went to, and `pocketbrain agent tier <you> core` lets your saves in from now on ([connect.md](connect.md), Try it).
 3. To add their other apps: [connect.md](connect.md). Cloud assistants (Claude on the web, ChatGPT) need more: [connect/claude-web.md](connect/claude-web.md).
 
 ## If something fails

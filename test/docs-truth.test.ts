@@ -212,3 +212,13 @@ test("CI runs docs-live on main and daily, read-only, with no secrets", () => {
   expect(wf).toMatch(/permissions:\n\s+contents: read/);
   expect(wf).not.toMatch(/secrets\./);
 });
+
+// Audit v12: connect.md's "Try it" and install-with-an-agent.md said to approve a trial assistant's
+// save on "On your mind"; the dashboard has no such button (Settings decides nothing, owner
+// 2026-10-27: only conflicts ask). No doc may promise an approve step on the dashboard for a save.
+test("no doc tells the owner to approve an assistant's save on the dashboard", () => {
+  const bad = /waits? for (?:your|their) OK on|waiting for your OK because|approve it on the dashboard(?!['’]s Assistants)|approve it on \*\*On your mind/i;
+  const docs = [join(ROOT, "README.md"), ...walk("docs").filter((f) => f.endsWith(".md")).map((f) => join(ROOT, f))];
+  const hits = docs.flatMap((f) => readFileSync(f, "utf8").split("\n").filter((l) => bad.test(l)).map((l) => `${f.slice(ROOT.length + 1)}: ${l.slice(0, 120)}`));
+  expect(hits).toEqual([]);
+});
