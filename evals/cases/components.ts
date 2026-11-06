@@ -686,6 +686,46 @@ const pullCases: Case[] = [
     const alone = parent("fair-stalls") === undefined;
     return ok(under && alone, `named and linked pages under the cabin ${under}; a shared name left alone ${alone}`);
   } },
+  { id: "wiki-body-link-links-back", dimension: "upkeep", gap: "G670", title: "a [[link]] written into a page's own text links back from the page it names, cited, and never from text the named page's readers can't read", source: "real-brain north star 2026-11-01 (11 of 13 projects with no link in)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.parentPlan) return na("no wiki at this commit");
+    const root = sandbox("synthetic");
+    const put = (dir: string, slug: string, type: string, title: string, area: string, text = "") => writeFileSync(join(root, dir, `${slug}.md`), `---\nid: ${dir}/${slug}\ntype: ${type}\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  status: { value: active, as_of: 2026-10-05, sources: ["gmail:f0000000000000c1"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }\n---\n${text}`);
+    const cited = (line: string, ref: string) => `## Earlier notes\n${line}[^e1]\n\n[^e1]: Gmail, 2026-10-05 (${ref})\n`;
+    mkdirSync(join(root, "people"), { recursive: true }); mkdirSync(join(root, "projects"), { recursive: true });
+    put("people", "kim-roux", "person", "Kim Roux", "work");
+    put("projects", "office-move", "project", "Office move", "work", cited("[[Kim Roux]] books the movers.", "gmail:f0000000000000c2"));
+    put("people", "dana-moss", "person", "Dana Moss", "personal", cited("Dana helps with the [[Office move]].", "gmail:f0000000000000c3"));
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=planner", "-c", "user.email=p@x", "commit", "-qm", "planner: pages"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const back = /See also \[\[projects\/office-move\|Office move\]\]/.test(readFileSync(join(root, "people", "kim-roux.md"), "utf8"));
+    const kept = !readFileSync(join(root, "projects", "office-move.md"), "utf8").includes("Dana");
+    return ok(back && kept, `Kim's page links back to the project ${back}; a personal page the work assistants can't read gives none ${kept}`);
+  } },
+  { id: "wiki-parent-title-among-seen", dimension: "upkeep", gap: "G671", title: "a fact that links a project by title finds its parent among the projects every reader of the page sees", source: "builder's slice audit of PR 78 (deferred Low)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.parentPlan) return na("no parent plan at this commit");
+    const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `${readFileSync(f, "utf8")}page_parents: true\n`); });
+    const put = (slug: string, title: string, area: string, extra = "") => writeFileSync(join(root, "projects", `${slug}.md`), `---\nid: projects/${slug}\ntype: project\ntitle: ${JSON.stringify(title)}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\n${extra}---\n`);
+    put("office", "Office move", "work"); put("office-private", "Office move", "personal");
+    put("movers", "Movers quote", "work", `facts:\n  part_of: { value: "[[Office move]]", as_of: 2026-10-28, sources: ["gmail:f0000000000000c4"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "steward: pages"], { cwd: root });
+    (await import(join(SRC_DIR, "upkeep.ts"))).upkeep(root, { now: "2026-11-03" });
+    const p = readFileSync(join(root, "projects", "movers.md"), "utf8").match(/^parent: (.+)$/m)?.[1];
+    return ok(p === "projects/office", `parent ${p ?? "none"}`);
+  } },
+  { id: "north-star-measures-up-to-the-night", dimension: "upkeep", gap: "G672", title: "the real brain's pages are counted over the day up to the last nightly run, so a page changed since waits for the next night", source: "real-brain north star 2026-11-01 (pages-ok shape)", run: async () => {
+    const ns = await import(join(SRC_DIR, "..", "scripts", "north-star.ts"));
+    if (!ns.nightWindow) return na("no night window at this commit");
+    const root = sandbox("synthetic");
+    const at = (who: string, when: string, file: string, msg: string) => { writeFileSync(join(root, file), `${readFileSync(join(root, file), "utf8")}\n`); const env = { ...process.env, GIT_AUTHOR_NAME: who, GIT_AUTHOR_EMAIL: `${who}@x`, GIT_COMMITTER_NAME: who, GIT_COMMITTER_EMAIL: `${who}@x`, GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when }; Bun.spawnSync(["git", "add", "-A"], { cwd: root, env }); Bun.spawnSync(["git", "commit", "-qm", msg], { cwd: root, env }); };
+    at("planner", "2026-11-05T20:00:00Z", "projects/course-a.md", "planner: before");
+    at("reflect", "2026-11-06T07:30:00Z", "rules/policy.yaml", "reflect: findings\n\nAgent: reflect\nRun: r\nKind: findings");
+    at("planner", "2026-11-06T10:00:00Z", "projects/course-b.md", "planner: after");
+    const day = ns.nightWindow(root, new Date("2026-11-06T12:00:00Z"));
+    const t: Set<string> = ns.touchedSince(root, day.since, day.until);
+    return ok(t.has("projects/course-a.md") && !t.has("projects/course-b.md"), `before the night counted ${t.has("projects/course-a.md")}; after it waits ${!t.has("projects/course-b.md")}`);
+  } },
   { id: "wiki-owner-page-rewritten-untouched", dimension: "upkeep", gap: "G627", title: "the night writer rewrites the owner's own page even when nothing touched it in its window, so an old lead doesn't outlive a rule change", source: "Mac 2026-11-02 (G624 live, his page still said how you know)", run: async () => {
     const wiki = await import(join(SRC_DIR, "wiki.ts"));
     if (!wiki.TIES) return na("no tie rules at this commit");

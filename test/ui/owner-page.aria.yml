@@ -35,12 +35,19 @@
       - link "4":
         - /url: "#fn-4"
     - text: See also
-    - link "Senior designer hire":
-      - /url: /p/projects/designer-hire
+    - link "Hire a senior designer, not two juniors":
+      - /url: /p/decisions/2026-09-15-hire-senior-designer
     - text: .
     - superscript:
       - link "5":
         - /url: "#fn-5"
+    - text: See also
+    - link "Lucas Fontaine":
+      - /url: /p/people/lucas-fontaine
+    - text: .
+    - superscript:
+      - link "6":
+        - /url: "#fn-6"
   - paragraph: (Written by the hub from this page's facts.)
   - heading "Earlier notes" [level=2]
   - paragraph:
@@ -65,7 +72,8 @@
       - text: Email, 7 Oct 2026
       - group: + What the source said
     - listitem: Email, 12 Sep 2026
-    - listitem: Email, 18 Sep 2026
+    - listitem: Email, 15 Sep 2026
+    - listitem: Email, 6 Sep 2026
   - heading "What changed" [level=2]
   - list:
     - listitem:
@@ -83,6 +91,9 @@
     - text: ","
     - link "Harbourline Software":
       - /url: /p/orgs/harbourline
+    - text: ","
+    - link "Kenji Watanabe":
+      - /url: /p/people/kenji-watanabe
     - text: ","
     - link "Lucas Fontaine":
       - /url: /p/people/lucas-fontaine

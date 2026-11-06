@@ -84,10 +84,12 @@ export function parentPlan(notes: Note[], hidden: (key: string) => boolean, sees
   const projects = notes.filter(isProject);
   const named = new Map<string, string[]>();
   for (const p of projects) { const k = nameOfTitle(String(p.fm.title ?? "")); if (k) named.set(k, [...(named.get(k) ?? []), p.fm.id]); }
-  // Title or alias -> the one note it names, for a fact that links by name.
-  const titles = new Map<string, string | null>();
-  for (const n of notes) for (const t of new Set([n.fm.title, ...(n.fm.aliases ?? [])].map((x) => String(x ?? "").toLowerCase()).filter(Boolean))) titles.set(t, titles.has(t) ? null : n.fm.id);
-  const resolve = (to: string) => byId.has(to) ? to : titles.get(to.toLowerCase()) ?? undefined;
+  // Title or alias -> the projects it names, for a fact that links by name. Only a project every
+  // reader of the page sees counts, so a page outside a reader's view sharing the title never
+  // decides it, and a note that is no project can't be a parent anyway (G671).
+  const titles = new Map<string, string[]>();
+  for (const n of projects) for (const t of new Set([n.fm.title, ...(n.fm.aliases ?? [])].map((x) => String(x ?? "").toLowerCase()).filter(Boolean))) titles.set(t, [...(titles.get(t) ?? []), n.fm.id]);
+  const resolve = (to: string, child: string) => { if (byId.has(to)) return to; const ids = (titles.get(to.toLowerCase()) ?? []).filter((id) => sees(child, id)); return ids.length === 1 ? ids[0] : undefined; };
   const loops = (id: string, to: string) => { const seen = new Set<string>(); for (let p: string | undefined = to; p; p = byId.get(p) && parentOf(byId.get(p)!)) { if (p === id) return true; if (seen.has(p)) return false; seen.add(p); } return false; };
   const out: ParentPlan[] = [];
   for (const n of projects) {
@@ -107,7 +109,7 @@ export function parentPlan(notes: Note[], hidden: (key: string) => boolean, sees
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
       if (NOT_PROSE.test(attr) || isDisputed(f) || hidden(`${n.fm.id}#${attr}`)) continue;
       const seen = (r: FactRecord) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity));
-      for (const r of records(f).filter(live).filter(seen)) for (const m of shown(r.value).matchAll(/\[\[([^\]|]+)/g)) { const id = resolve(m[1].trim()); if (id && id !== n.fm.id && isProject(byId.get(id)) && sees(n.fm.id, id)) to.add(id); }
+      for (const r of records(f).filter(live).filter(seen)) for (const m of shown(r.value).matchAll(/\[\[([^\]|]+)/g)) { const id = resolve(m[1].trim(), n.fm.id); if (id && id !== n.fm.id && isProject(byId.get(id)) && sees(n.fm.id, id)) to.add(id); }
     }
     if (to.size === 1) { const [p] = [...to]; if (!loops(n.fm.id, p)) out.push({ id: n.fm.id, parent: p }); }
   }
@@ -857,6 +859,28 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
       for (const to of tos) if (to && to !== p.fm.id && byId.has(to)) seeAlso.set(to, [...(seeAlso.get(to) ?? []), { from: p.fm.id, attr, rec }]);
     }
   }
+  // A [[link]] someone wrote into a page's own text links back the same way, cited by that
+  // paragraph's references (G670, pages-ok part 3: the link went one way only). Not the hub's own
+  // lead, which links from facts already, and not from or onto the owner's own page (G624). Kept
+  // apart so each page's readers are checked before it shows (they must read that text).
+  const bodyLinks = new Map<string, { from: string; rec: FactRecord }[]>();
+  for (const p of notes) {
+    if (!active(p) || p.fm.id === self) continue;
+    const f = footnotes(p.body ?? ""), defs = new Map(f.notes.map((x) => [x.label, x.text]));
+    for (const s of sections(f.text)) {
+      if (s.heading === undefined && s.text.includes(MADE)) continue;
+      for (const para of s.text.split(/\n\s*\n/)) {
+        const cites = [...para.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => defs.get(m[1]) ?? "").filter((t) => refsIn(t).length);
+        if (!cites.length) continue;
+        const rec: FactRecord = { value: "", as_of: cites[0].match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? String(p.fm.updated ?? ""), sources: [...new Set(cites.flatMap(refsIn))] } as FactRecord;
+        for (const m of para.matchAll(/\[\[([^\]|]+)/g)) {
+          const to = resolve(m[1].trim());
+          if (to && to !== p.fm.id && to !== self && byId.has(to) && !(bodyLinks.get(to) ?? []).some((x) => x.from === p.fm.id)) bodyLinks.set(to, [...(bodyLinks.get(to) ?? []), { from: p.fm.id, rec }]);
+        }
+      }
+    }
+  }
+  for (const [id, xs] of bodyLinks) for (const x of xs) if (!(seeAlso.get(id) ?? []).some((y) => y.from === x.from)) seeAlso.set(id, [...(seeAlso.get(id) ?? []), { from: x.from, attr: "", rec: x.rec }]);
   for (const p of [...pages]) for (const [id, xs] of seeAlso) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && active(q)) { pages.push(q); via.add(q.path); } }
   // A page named by a touched page's sources is written again with it.
   for (const p of [...pages]) for (const [id, xs] of namedIn) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && PAGE_DIRS.has(id.split("/")[0]) && q.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(q.fm.status))) { pages.push(q); via.add(q.path); } }
@@ -876,7 +900,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     // one the writer moved there before is Earlier notes too.
     const f = footnotes(n.body), secs = sections(f.text);
     const said = plainWords(secs.filter((x) => x.heading !== undefined && !OLD_HEADS.has(x.heading) && x.heading !== EARLIER && x.heading !== YOURS).map((x) => x.text).join("\n"));
-    const lead = pageLead(n, { hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
+    const lead = pageLead(n, { hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
     if (!lead) {
       // Nothing left to say (an Undo took the last fact out): the writer's own opening goes with its
       // references, so the page never keeps stating a value it no longer holds (UI thread, 2026-10-27).

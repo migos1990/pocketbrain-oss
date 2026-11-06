@@ -30,66 +30,66 @@
         - cell "What"
         - cell "Notes"
     - rowgroup:
-      - row "2 h ago ChatGPT · loaded its notes \"Pinecrest pilot\" · Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ben Carter":
+      - row "2 h ago ChatGPT · loaded its notes \"Pinecrest pilot\" · Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Ben Carter":
         - cell "2 h ago"
         - cell "ChatGPT"
         - cell "· loaded its notes \"Pinecrest pilot\""
-        - cell "· Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ben Carter"
-      - row "3 h ago ChatGPT · loaded its notes \"Priya Shah\" · Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman":
+        - cell "· Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Ben Carter"
+      - row "3 h ago ChatGPT · loaded its notes \"Priya Shah\" · Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors":
         - cell "3 h ago"
         - cell "ChatGPT"
         - cell "· loaded its notes \"Priya Shah\""
-        - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman"
-      - row "3 h ago ChatGPT · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Valérie Roy":
+        - cell "· Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors"
+      - row "3 h ago ChatGPT · loaded its notes \"Mom's move\" · Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre":
         - cell "3 h ago"
         - cell "ChatGPT"
         - cell "· loaded its notes \"Mom's move\""
-        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre, Valérie Roy"
+        - cell "· Hélène Lefebvre, Mom's move, Mom moves in December, Marc Lefebvre"
       - row "70 min ago Claude · loaded its notes \"Product Discovery course\" · Product Discovery course, Claire Dubois, Antoine Lavoie, Isabelle Roy":
         - cell "70 min ago"
         - cell "Claude"
         - cell "· loaded its notes \"Product Discovery course\""
         - cell "· Product Discovery course, Claire Dubois, Antoine Lavoie, Isabelle Roy"
-      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent":
+      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Atelier Boréal for the kitchen, Luc Gauthier, Jordan Ellis":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Kitchen renovation\""
-        - cell "· Kitchen renovation, Luc Gauthier, Ahmed Saleh, Simone Laurent"
-      - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis":
+        - cell "· Kitchen renovation, Atelier Boréal for the kitchen, Luc Gauthier, Jordan Ellis"
+      - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
-        - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis"
-      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah":
+        - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre"
+      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah"
-      - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch, Harbourline Software":
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
+      - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Harbourline Software":
         - cell "3 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Maya Chen\""
-        - cell "· Maya Chen, Senior designer hire, Atlas launch, Harbourline Software"
-      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Sofia Marquez, Maya Chen":
+        - cell "· Maya Chen, Senior designer hire, Harbourline Software"
+      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez":
         - cell "3 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Atlas launch\""
-        - cell "· Atlas launch, Atlas beta scope, Sofia Marquez, Maya Chen"
+        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez"
       - row "7 h ago gardener · open disputes · Atlas launch, Grace Liu, Kitchen renovation":
         - cell "7 h ago"
         - cell "gardener"
         - cell "· open disputes"
         - cell "· Atlas launch, Grace Liu, Kitchen renovation"
-      - row "27 h ago ChatGPT · loaded its notes \"Senior designer hire\" · Hire a senior designer, not two juniors, Senior designer hire, Lucas Fontaine, Felix Moreau, Nina Petrova, Maya Chen +2":
+      - row "27 h ago ChatGPT · loaded its notes \"Senior designer hire\" · Felix Moreau, Hire a senior designer, not two juniors, Senior designer hire, Maya Chen":
         - cell "27 h ago"
         - cell "ChatGPT"
         - cell "· loaded its notes \"Senior designer hire\""
-        - cell "· Hire a senior designer, not two juniors, Senior designer hire, Lucas Fontaine, Felix Moreau, Nina Petrova, Maya Chen +2"
-      - row "27 h ago Claude · loaded its notes \"Pinecrest pilot\" · Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ravi Menon, Ben Carter +1":
+        - cell "· Felix Moreau, Hire a senior designer, not two juniors, Senior designer hire, Maya Chen"
+      - row "27 h ago Claude · loaded its notes \"Pinecrest pilot\" · Pinecrest pilot, Three-month Pinecrest pilot, Chloé Gagnon, Ben Carter":
         - cell "27 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Pinecrest pilot\""
-        - cell "· Three-month Pinecrest pilot, Pinecrest pilot, Chloé Gagnon, Pinecrest Labs, Ravi Menon, Ben Carter +1"
+        - cell "· Pinecrest pilot, Three-month Pinecrest pilot, Chloé Gagnon, Ben Carter"
       - row "27 h ago Claude · loaded its notes \"Priya Shah\" · Priya Shah, Q1 roadmap, Harbourline Software, Hire a senior designer, not two juniors, Aisha Rahman":
         - cell "27 h ago"
         - cell "Claude"
@@ -114,11 +114,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
         - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch, Robert Ellis, Theo Lefebvre"
-      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
+      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Priya Shah, Kenji Watanabe":
         - cell "3 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
+        - cell "· Q1 roadmap, Julie Tran, Priya Shah, Kenji Watanabe"
       - row "6 days ago ChatGPT · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Harbourline Software +1":
         - cell "6 days ago"
         - cell "ChatGPT"

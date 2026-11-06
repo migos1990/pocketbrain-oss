@@ -46,6 +46,20 @@
     - superscript:
       - link "1":
         - /url: "#fn-1"
+    - text: See also
+    - link "Atlas beta scope":
+      - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - text: .
+    - superscript:
+      - link "3":
+        - /url: "#fn-3"
+    - text: See also
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "4":
+        - /url: "#fn-4"
   - paragraph: (Written by the hub from this page's facts.)
   - heading "Earlier notes" [level=2]
   - paragraph:
@@ -86,6 +100,8 @@
     - listitem:
       - text: Email, 7 Oct 2026
       - group: + What the source said
+    - listitem: Email, 8 Sep 2026
+    - listitem: Email, 1 Oct 2026
   - 'link "Atlas launch Next: freeze the beta build on 15 October Two sources disagree · settle"':
     - /url: /settle/c-0001
   - heading "What changed" [level=2]
@@ -105,6 +121,9 @@
     - text: ","
     - link "Daniel Okoro":
       - /url: /p/people/daniel-okoro
+    - text: ","
+    - link "Grace Liu":
+      - /url: /p/people/grace-liu
     - text: ","
     - link "Hannah Becker":
       - /url: /p/people/hannah-becker

@@ -6,7 +6,7 @@
 // cabin. A name that fits two pages, a page that already has a parent, or a parent that would loop
 // is left alone (G640).
 import { test, expect } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
 import { loadBrain } from "../src/brain";
@@ -134,4 +134,22 @@ test("G640 a same-name page a reader of the page can't see doesn't count", () =>
   const r = upkeep(root, { now: "2026-11-03" });
   expect(parentOf(root, "office-boxes")).toBe("projects/office");
   expect(r.findings.some((x) => x.rule === "parent-ambiguous")).toBe(false);
+});
+// A fact that links by title ("[[Office move]]") names the one project every reader of the page sees
+// by that title: a page outside a reader's view, or a note that is no project, sharing the title
+// doesn't stop it, so whether it gets a parent says nothing about what that reader can't see (G671).
+test("G671 a link by title counts only projects every reader of the page sees", () => {
+  const root = brain();
+  const page = (slug: string, title: string, area: string, extra = "") => writeFileSync(join(root, "projects", `${slug}.md`), `---\nid: projects/${slug}\ntype: project\ntitle: ${JSON.stringify(title)}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\n${extra}---\n`);
+  page("office", "Office move", "work");
+  page("office-private", "Office move", "personal"); // the same title, outside the trial helper's view
+  page("movers", "Movers quote", "work", links("part_of", "Office move"));
+  mkdirSync(join(root, "orgs"), { recursive: true });
+  writeFileSync(join(root, "orgs", "harbour.md"), `---\nid: orgs/harbour\ntype: org\ntitle: Harbour\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\n---\n`);
+  page("harbour", "Harbour", "work");
+  page("dock", "Dock repairs", "work", links("part_of", "Harbour"));
+  commit(root);
+  upkeep(root, { now: "2026-11-03" });
+  expect(parentOf(root, "movers")).toBe("projects/office");
+  expect(parentOf(root, "dock")).toBe("projects/harbour");
 });

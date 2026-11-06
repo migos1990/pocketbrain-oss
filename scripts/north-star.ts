@@ -131,9 +131,9 @@ function askedKey(root: string, i: { kind: string; ref: string }): string {
   return i.ref;
 }
 
-// Pages whose file changed in commits since `since` (git, paths only).
-export function touchedSince(root: string, since: string): Set<string> {
-  const r = Bun.spawnSync(["git", "-C", root, "log", `--since=${since}`, "--name-only", "--format="], { stdout: "pipe", stderr: "pipe" });
+// Pages whose file changed in commits since `since`, up to `until` when given (git, paths only).
+export function touchedSince(root: string, since: string, until?: string): Set<string> {
+  const r = Bun.spawnSync(["git", "-C", root, "log", `--since=${since}`, ...(until ? [`--until=${until}`] : []), "--name-only", "--format="], { stdout: "pipe", stderr: "pipe" });
   return new Set(r.stdout.toString().split("\n").filter((p) => p.endsWith(".md")));
 }
 
@@ -149,9 +149,20 @@ export function whyCounts(root: string, since: string, isGardener: (author: stri
   return out;
 }
 
-export function measure(root: string, since: string, now: Date, planted = 0): NorthStar {
+// The day the real brain is measured over: the 24 hours up to the last nightly run (upkeep's
+// findings commit, src/upkeep.ts), since pages "end the night" with prose and a page changed after
+// that run hasn't been written yet (G672; pages-ok part 3). With no run in the last 36 hours, the
+// last 24 hours.
+export function nightWindow(root: string, now: Date): { since: string; until: string } {
+  const r = Bun.spawnSync(["git", "-C", root, "log", "-1", "--author=reflect", "--grep=^Kind: findings$", "--format=%cI"], { stdout: "pipe", stderr: "pipe" });
+  const at = Date.parse(r.stdout.toString().trim());
+  const end = Number.isFinite(at) && at <= now.getTime() && now.getTime() - at <= 36 * 3_600_000 ? at : now.getTime();
+  return { since: new Date(end - 86_400_000).toISOString(), until: new Date(end).toISOString() };
+}
+
+export function measure(root: string, since: string, now: Date, planted = 0, until?: string): NorthStar {
   const notes = loadBrain(root);
-  const touched = touchedSince(root, since);
+  const touched = touchedSince(root, since, until);
   // A page whose facts were all ended (set aside or taken back, as receipts were after 0.2.0; G520) has
   // nothing left to write a page from: it isn't counted. A page that never had facts still is.
   const pages = notes.filter((n) => isContent(n) && touched.has(n.path) && !emptied(n));
@@ -351,14 +362,15 @@ if (import.meta.main) {
     const root = Bun.argv[i + 1];
     if (!root || !existsSync(join(root, "rules"))) { console.error("--brain <path to a brain>"); process.exit(2); }
     const now = new Date();
-    const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
+    const day = nightWindow(root, now);
+    const m = measure(root, day.since, now, 0, day.until);
     // No planted answer key here: an ask passes when it is about a contradiction (a conflict, or a
     // proposal to change a value the brain holds); anything else is an ask the north star rules out.
     const notConflict = m.not_conflict;
     const pass = m.share >= BAR.share && notConflict === 0;
     // --json: counts only, no page names (the hub records it after each start: src/probe.ts).
     if (Bun.argv.includes("--json")) { console.log(JSON.stringify(counts({ ...m, pass }))); process.exit(pass ? 0 : 1); }
-    console.log(report({ ...m, pass, notes: [...m.notes, `${notConflict} ask(s) not about a contradiction`] }, "real brain, pages touched in the last day; asks are today's cards"));
+    console.log(report({ ...m, pass, notes: [...m.notes, `${notConflict} ask(s) not about a contradiction`] }, "real brain, pages touched in the day up to the last nightly run; asks are today's cards"));
     process.exit(pass ? 0 : 1);
   }
   const fileAll = Bun.argv.includes("--file-all");

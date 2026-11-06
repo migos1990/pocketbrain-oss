@@ -40,6 +40,27 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner's phone, 2026-11-06: \"You said, 2 Nov\" against an assistant's guess at how the owner knows a person. By the conflict order the owner's word comes first; an assistant's own word dated the same day or later still opened a conflict, and its proposal was a card on the settle screen.",
     fix: "write() ownerDispute: a value whose only sources are an assistant's word or memory (AGENT_MEMORY_SCHEMES) goes to history against the owner's word whatever its date; filing files such a proposal the same way, and the inbox's conflict list leaves it out. A checkable source of the same day or later still asks. Tests: test/false-conflicts-2.test.ts.",
   },
+  G672: {
+    closed: "c837a994",
+    title: "The real brain's pages-ok counted pages before the night wrote them",
+    severity: "low",
+    finding: "Real-brain north star, 2026-11-01 (pages-ok shape): the --brain probe counted pages touched in the 24 hours before it ran, so a page changed after the night's page writer counted as having no prose though the rule says pages end the night with it.",
+    fix: "scripts/north-star.ts nightWindow: the real brain is measured over the 24 hours up to the last nightly run (upkeep's findings commit by reflect), or the last 24 hours when no run is within 36 hours; touchedSince takes an until. Test: test/north-star-night.test.ts. Eval: north-star-measures-up-to-the-night.",
+  },
+  G671: {
+    closed: "c837a994",
+    title: "A parent by title counted pages outside a reader's view",
+    severity: "low",
+    finding: "Builder's slice audit of PR 78 (deferred Low): parentPlan resolved a fact's [[Title]] link against every note, so a page outside a reader's view, or a note that is no project, sharing the title made the link resolve to nothing; whether a page got a parent then depended on what that reader can't see.",
+    fix: "src/wiki.ts parentPlan: a link by title counts only active projects with that title or alias that every reader of the page sees; exactly one is the parent. Test: test/project-parents.test.ts (G671). Eval: wiki-parent-title-among-seen.",
+  },
+  G670: {
+    closed: "c837a994",
+    title: "A link written into a page's text linked one way only",
+    severity: "medium",
+    finding: "Real-brain north star, 2026-11-01: 11 of 13 project pages had no link in. A fact whose value links a page already links back (See also), but a [[link]] someone wrote into a page's own text (Earlier notes, the Gardener's prose) didn't, so the page it sat on stayed unlinked.",
+    fix: "src/wiki.ts renderTouchedPages: a [[link]] in a cited paragraph of a page's own text (never the hub's lead) gives the page it names a See also line back, cited by that paragraph's references, under the same rules as a fact's link (at most the page's ties, no page more private than it, none from or onto the owner's own page), and only when every reader of the named page reads the linking page's text. Test: test/body-link-backlinks.test.ts. Eval: wiki-body-link-links-back.",
+  },
   G673: {
     closed: "55c5963f",
     title: "A line the hub set aside said \"From today's email\" under it",

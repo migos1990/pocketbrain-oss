@@ -98,6 +98,20 @@
     - superscript:
       - link "[1]":
         - /url: "#fn-1"
+    - text: See also
+    - link "Atlas beta scope":
+      - /url: /p/decisions/2026-09-08-atlas-beta-scope
+    - text: .
+    - superscript:
+      - link "[3]":
+        - /url: "#fn-3"
+    - text: See also
+    - link "Weekly Atlas review on Wednesdays":
+      - /url: /p/decisions/2026-10-01-weekly-team-review
+    - text: .
+    - superscript:
+      - link "[4]":
+        - /url: "#fn-4"
     - text: (Written by the hub from this page's facts.)
     - heading "Earlier notes" [level=3]
     - text: "The Atlas launch is the big one this fall: ten beta customers, a public launch on 3 November."
@@ -135,9 +149,11 @@
     - list:
       - listitem: Email, 12 Sep 2026
       - listitem: Email, 7 Oct 2026
+      - listitem: Email, 8 Sep 2026
+      - listitem: Email, 1 Oct 2026
   - group: Edit the Earlier notes section
   - heading "Recent updates" [level=2]
-  - text: "Edited the notes of Atlas launch today by hub Added an Earlier notes section to Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide New page: Atlas launch 8 days ago by you"
+  - text: "Edited the notes of Atlas launch today by hub Changed the Next step fact on Atlas launch yesterday by auto-decide Edited the notes of Atlas launch 3 days ago by hub Added an Earlier notes section to Atlas launch 3 days ago by hub New page: Atlas launch 8 days ago by you"
   - heading "Connections" [level=2]
   - heading "Where it came from" [level=3]
   - link "An email":
@@ -166,6 +182,8 @@
     - /url: /p/decisions/2026-10-01-weekly-team-review
   - link "Daniel Okoro People":
     - /url: /p/people/daniel-okoro
+  - link "Grace Liu People":
+    - /url: /p/people/grace-liu
   - link "Hannah Becker People":
     - /url: /p/people/hannah-becker
   - link "Maya Chen People":
@@ -187,12 +205,12 @@
     - /url: /p/people/sofia-marquez
   - link "Hannah Becker People":
     - /url: /p/people/hannah-becker
-  - link "Grace Liu People":
-    - /url: /p/people/grace-liu
   - link "Atlas beta scope Decisions":
     - /url: /p/decisions/2026-09-08-atlas-beta-scope
   - link "Weekly Atlas review on Wednesdays Decisions":
     - /url: /p/decisions/2026-10-01-weekly-team-review
+  - link "Grace Liu People":
+    - /url: /p/people/grace-liu
   - group: Earlier values (1)
   - group: Edit file
   - button "Forget"
