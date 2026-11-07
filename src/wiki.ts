@@ -497,7 +497,7 @@ function sentence(n: Note, attr: string, values: string[], owner: string[] = [],
 }
 // What kind of source it is, in words: an assistant's own note names the assistant; a kind the
 // hub has no word for is named by its scheme ("Import"), never just "Source".
-function sourceWord(ref: string): string {
+export function sourceWord(ref: string): string {
   const scheme = ref.match(/^([a-z-]+):/)?.[1] ?? ref.match(/^[a-z-]+$/)?.[0] ?? "";
   const who = scheme === "agent" ? ref.match(/^agent:([A-Za-z][\w-]{0,39})\//)?.[1] : undefined;
   if (who) return `${who.charAt(0).toUpperCase()}${who.slice(1)}'s note`;

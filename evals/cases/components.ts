@@ -815,6 +815,22 @@ const pullCases: Case[] = [
     const first = core.search(root, "steward", "Harbour walk")[0]?.id;
     return ok(first === "projects/harbour-walk", `first hit ${first}`);
   } },
+  { id: "week-across-pages", dimension: "upkeep", gap: "G689", title: "an assistant asking about its week gets one dated block across pages, each line its note and source, and nothing its carve hides", source: "audit v12 (\"what's next this week?\" answered not at all); plans/next-level.md F1", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const week = existsSync(join(SRC_DIR, "week.ts")) ? await import(join(SRC_DIR, "week.ts")) : undefined;
+    if (!week?.weekOf) return na("no week at this commit");
+    const plus = (n: number) => new Date(Date.parse(`${TODAY}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+    const root = sandbox("synthetic", (r) => {
+      const put = (id: string, area: string, title: string, due: string) => writeFileSync(join(r, `${id}.md`), `---\nid: ${id}\ntype: project\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-09-01\nupdated: 2026-09-01\nby: planner\nfacts:\n  due: { value: "${due}", as_of: 2026-09-01, sources: ["gmail:f0000000000000c1"], verification: self-reported, by: planner, recorded: 2026-09-01 }\n---\n`);
+      put("projects/wk-work", "work", "Grant report", plus(2));
+      put("projects/wk-home", "home", "Roof repair", plus(3));
+    });
+    const helper = core.contextPack(root, "helper", "what's due this week");
+    const steward = core.contextPack(root, "steward", "what's due this week");
+    const line = new RegExp(`- ${plus(2)} \\w{3}: Grant report \\(projects/wk-work\\): due \\(Email, 2026-09-01`);
+    const mine = line.test(helper) && line.test(steward), hidden = !helper.includes("Roof repair") && !helper.includes("wk-home"), whole = steward.includes("projects/wk-home");
+    return ok(mine && hidden && whole, `dated line with its source ${mine}; a hidden page left out ${hidden}; the whole view has it ${whole}`);
+  } },
   { id: "wiki-owner-page-rewritten-untouched", dimension: "upkeep", gap: "G627", title: "the night writer rewrites the owner's own page even when nothing touched it in its window, so an old lead doesn't outlive a rule change", source: "Mac 2026-11-02 (G624 live, his page still said how you know)", run: async () => {
     const wiki = await import(join(SRC_DIR, "wiki.ts"));
     if (!wiki.TIES) return na("no tie rules at this commit");

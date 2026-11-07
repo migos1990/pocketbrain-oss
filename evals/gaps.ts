@@ -54,6 +54,20 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner, 2026-11-06 (audit v12, nothing crosses pages): \"like an org as people who are tied to projects\". An org listed who works there; the projects they are on were two pages away.",
     fix: "src/wiki.ts (related, kind on): \"Ana Diaz and Ben Roy are on [[Spring course]].\", cited by each person's org fact and the project's fact; src/view.ts drops a p-rel- sentence from a read when a page it links is out of view or a fact behind it is hidden from that reader. Tests: test/related-across-pages.test.ts. Evals: wiki-org-people-on-projects, wiki-tie-dropped-for-reader.",
   },
+  G689: {
+    closed: "claude/week-page",
+    title: "An assistant asked about the week had no dated answer across pages",
+    severity: "medium",
+    finding: "Audit v12: \"what's next this week?\" was answered not at all. context_pack ranked notes that matched \"next\" and \"week\"; nothing put the due dates, dated next steps and birthdays an assistant can see in day order.",
+    fix: "src/week.ts weekOf over the agent's own carve (visibleFacts), no calendar events beyond the next_* facts withUpcoming serves; src/core.ts weekBlock leads a time topic's pack (and the whole-view pack) with \"## Your week\", each line its day, note id, fact and source. Test: test/week.test.ts (G689). Eval: week-across-pages.",
+  },
+  G688: {
+    closed: "claude/week-page",
+    title: "The owner's page had no week: Right now listed projects only",
+    severity: "medium",
+    finding: "Audit v12 and plans/next-level.md F1: Right now on the owner's own page was a row of active project names, with no dates, no calendar and nothing across pages, so opening the app on Monday didn't say what the week held.",
+    fix: "Right now is the week (Louis, 2026-11-06 decision card): src/week.ts weekOf over every page shown, past due, each of the coming seven days, coming up, next steps with no date (a step that names its day goes on it; one whose day went by leaves), the calendar's events with the page they name; then the projects no line names. Private pages, facts and events after a sign-in only. Test: test/week.test.ts (G688).",
+  },
   G678: {
     closed: "claude/false-conflicts-2",
     title: "The same notice from two mails, its parts in another order, was asked as a conflict",

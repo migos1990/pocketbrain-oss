@@ -28,6 +28,8 @@ import { describeCardState, isOrg, whatItIs } from "../describe";
 import { siteHost } from "./home";
 import { ownerOf, ownerTitle } from "../capture";
 import { ownerBook } from "./owner-book";
+import { WEEK_CAPS, type Week, type WeekLine } from "../week";
+import { sourceWord } from "../wiki";
 import { escapeRe } from "../util";
 
 export const PAGE_COPY = {
@@ -68,6 +70,17 @@ export const PAGE_COPY = {
   bookWaits: "{n} things wait for you",
   bookWaitsOne: "1 thing waits for you",
   bookNothing: "Nothing waits for you.",
+  weekPast: "Past due",
+  weekToday: "Today",
+  weekTomorrow: "Tomorrow",
+  weekLater: "Coming up",
+  weekNext: "What's next",
+  weekGoing: "Also going",
+  weekQuiet: "Nothing dated in the next 7 days.",
+  isDue: "{page} is due",
+  wasDue: "{page} was due {day}",
+  birthday: "{page}'s birthday",
+  calendar: "Calendar",
   editShort: "Edit",
   roleAt: "{role} at {org}",
   isThisIt: "Is this it?",
@@ -121,6 +134,7 @@ h2.sec{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;mar
 p.links{margin:0;font-size:16px;line-height:24px}
 p.links a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
 ul.book{margin:0;padding:0;list-style:none}
+h3.day{font-size:13px;line-height:18px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:16px 0 0}
 ul.book li{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:16px;line-height:22px}
 ul.book li>span:first-child{min-width:0;flex:1;overflow-wrap:anywhere}
 ul.book a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
@@ -301,10 +315,59 @@ function bookSections(s: State, fresh: boolean): string {
   const waits = b.waiting === 0 ? esc(PAGE_COPY.bookNothing) : `<a href="/home">${esc(b.waiting === 1 ? PAGE_COPY.bookWaitsOne : fill(PAGE_COPY.bookWaits, { n: b.waiting }))}</a>.`;
   return [
     news.length ? `<h2 class="sec">${PAGE_COPY.bookNew}</h2><ul class="book">${news.join("")}</ul>` : "",
-    b.now.length ? `<h2 class="sec">${PAGE_COPY.bookNow}</h2><p class="links">${b.now.map(link).join(" · ")}</p>` : "",
+    weekSection(s, b.week, b.now, link),
     b.matters.length ? `<h2 class="sec">${PAGE_COPY.bookMatters}</h2><p class="links">${b.matters.map(link).join(" · ")}</p>` : "",
     `<h2 class="sec">${PAGE_COPY.bookWaiting}</h2><p class="links">${waits}</p>`,
   ].join("");
+}
+
+// Right now is the week (src/week.ts; Louis 2026-11-06): what went past its due date, each of the
+// coming seven days that has something, later this month, the next steps with no date, then the
+// projects still going. A line names its page as a link; the right column says where it came from.
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function dayLabel(day: string, from: string): string {
+  if (day === from) return PAGE_COPY.weekToday;
+  if (Date.parse(`${day}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) === 864e5) return PAGE_COPY.weekTomorrow;
+  const said = sayDay(day).replace(/ \d{4}$/, "");
+  return `${WEEKDAYS[new Date(`${day}T00:00:00Z`).getUTCDay()]} ${said}`;
+}
+function weekSection(s: State, w: Week, going: Note[], link: (n: Note) => string): string {
+  const byId = new Map(s.notes.map((n) => [n.fm.id, n]));
+  const page = (l: WeekLine) => (l.page ? byId.get(l.page) : undefined);
+  const from = (l: WeekLine) => l.event ? PAGE_COPY.calendar : sourceWord(refString(l.record?.sources?.[0] ?? "") || "");
+  const text = (l: WeekLine, past = false): string => {
+    const n = page(l), a = n ? link(n) : "";
+    const time = l.time ? `${esc(l.time)} ` : "";
+    if (l.kind === "event") {
+      // The event's own words, the page they name a link inside them, else after them.
+      const t = n ? displayName(n.fm.id, n.fm.title) : "";
+      const m = t ? new RegExp(`(^|[^\\p{L}])(${escapeRe(esc(t))})(?![\\p{L}])`, "iu") : undefined;
+      const words = esc(l.what);
+      return time + (m && m.test(words) ? words.replace(m, (_x, pre: string, name: string) => `${pre}<a href="${href(n!.fm.id)}">${name}</a>`) : n ? `${words} · ${a}` : words);
+    }
+    if (!n) return "";
+    if (l.kind === "due") return time + (past ? fill(PAGE_COPY.wasDue, { page: a, day: esc(sayDay(l.day!).replace(/ \d{4}$/, "")) }) : fill(PAGE_COPY.isDue, { page: a }));
+    if (l.kind === "birthday") return fill(PAGE_COPY.birthday, { page: a });
+    return `${time}${a}: ${esc(sayDays(l.what))}`;
+  };
+  const list = (ls: WeekLine[], cap: number, f: (l: WeekLine) => string) => {
+    const li = ls.map((l) => [f(l), l] as const).filter(([t]) => t).slice(0, cap).map(([t, l]) => `<li><span>${t}</span><span class="kind">${esc(from(l))}</span></li>`);
+    return li.length ? `<ul class="book">${li.join("")}</ul>` : "";
+  };
+  const group = (head: string, body: string) => (body ? `<h3 class="day">${esc(head)}</h3>${body}` : "");
+  const later = (l: WeekLine) => { const t = text(l); return t && l.kind !== "next" ? `${t} · ${esc(sayDay(l.day!).replace(/ \d{4}$/, ""))}` : t; };
+  const parts = [
+    group(PAGE_COPY.weekPast, list(w.past, WEEK_CAPS.past, (l) => text(l, true))),
+    ...w.days.map((d) => group(dayLabel(d.day, w.from), list(d.lines, WEEK_CAPS.day, (l) => text(l)))),
+    group(PAGE_COPY.weekLater, list(w.later, WEEK_CAPS.later, later)),
+    group(PAGE_COPY.weekNext, list(w.next, WEEK_CAPS.next, (l) => text(l))),
+  ].filter(Boolean);
+  const quiet = parts.length ? "" : `<p class="links">${esc(PAGE_COPY.weekQuiet)}</p>`;
+  // The projects still going that no line above already names.
+  const named = new Set([w.past, ...w.days.map((d) => d.lines), w.later, w.next].flat().map((l) => l.page));
+  const others = going.filter((n) => !named.has(n.fm.id));
+  const rest = others.length ? `<h3 class="day">${esc(PAGE_COPY.weekGoing)}</h3><p class="links">${others.map(link).join(" · ")}</p>` : "";
+  return `<h2 class="sec">${PAGE_COPY.bookNow}</h2>${parts.join("")}${quiet}${rest}`;
 }
 
 export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; undo?: string; fresh?: boolean } = {}): string {
