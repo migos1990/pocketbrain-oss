@@ -31,6 +31,7 @@ import { ownerBook } from "./owner-book";
 import { WEEK_CAPS, type Week, type WeekLine } from "../week";
 import { sourceWord } from "../wiki";
 import { escapeRe } from "../util";
+import { loadCalendar, meetingsWith, type Meetings } from "../upcoming";
 
 export const PAGE_COPY = {
   back: "Memory",
@@ -83,6 +84,11 @@ export const PAGE_COPY = {
   calendar: "Calendar",
   editShort: "Edit",
   roleAt: "{role} at {org}",
+  lastMet: "Last met {day}",
+  nextMeet: "Next: {what}, {day}",
+  nextDay: "Next: {day}",
+  quarterMeets: "{n} meetings so far this quarter",
+  quarterMeet: "1 meeting so far this quarter",
   isThisIt: "Is this it?",
   yesItIs: "Yes, that's it",
   notIt: "Not it",
@@ -270,6 +276,39 @@ function personLine(s: State, n: Note, fresh: boolean, closed: boolean): string 
   return [what, city].filter(Boolean).join(" · ") || undefined;
 }
 
+// When you last met and will next meet someone, and how often this quarter, from the calendar you
+// connected (G694): read from its cache each time the page is drawn, never written to the brain
+// and never a card. A meeting from a private calendar shows only right after a sign-in.
+function meetings(s: State, n: Note, fresh: boolean, closed: boolean): Meetings | undefined {
+  if (closed || folderOf(n.fm.id) !== "people") return undefined;
+  const day = s.now.toISOString().slice(0, 10);
+  return meetingsWith(n, loadCalendar(s.root, day), day, (e) => fresh || sensitivityRank(e.sensitivity ?? "personal") < sensitivityRank("private"));
+}
+function meetLine(s: State, m: Meetings | undefined, fresh: boolean): string {
+  if (!m) return "";
+  const year = s.now.toISOString().slice(0, 4);
+  const say = (d: string) => sayDay(d.slice(0, 10)).replace(` ${year}`, "");
+  // A title shaped like health, money or legal names only its day on the 30-day sign-in (G696).
+  const next = m.next && (fresh || !sensitiveShape(s.rules, m.next.summary)) ? fill(PAGE_COPY.nextMeet, { what: m.next.summary, day: say(m.next.start) }) : m.next ? fill(PAGE_COPY.nextDay, { day: say(m.next.start) }) : "";
+  const parts = [
+    m.last ? fill(PAGE_COPY.lastMet, { day: say(m.last.start) }) : "",
+    next,
+    m.quarter > 1 ? fill(PAGE_COPY.quarterMeets, { n: String(m.quarter) }) : m.quarter === 1 ? PAGE_COPY.quarterMeet : "",
+  ].filter(Boolean);
+  return parts.length ? `<p class="kind meet">${esc(parts.join(" · "))}</p>` : "";
+}
+
+// The page never says "Last met 2 Oct" over prose saying "last in touch 24 Sep" (G696): when the
+// calendar holds a meeting after the stored last contact (the nightly capture lags), the line wins
+// and the stale sentence leaves the page as drawn. The brain itself is never changed.
+export function dropStaleContact(text: string, n: Note, m: Meetings | undefined): string {
+  const f = n.fm.facts?.last_contact;
+  const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined;
+  const held = r ? String(r.value ?? "").match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? String(r.as_of ?? "").slice(0, 10) : "";
+  if (!m?.last || !held || m.last.start.slice(0, 10) <= held) return text;
+  return text.replace(/ ?[^.!?\n\]]*[.!?](?:\[\^[^\]\s]+\])*\[\^pf-last-contact\](?:\[\^[^\]\s]+\])*/g, "");
+}
+
 const AREAS = new Set(["work", "teaching", "personal"]);
 
 // What the box and Who sees call a page: a person by their first name, anything else by its whole
@@ -379,7 +418,8 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   let withheld = false;
   // The prose was written when its facts were; a value private now is never in it on the 30-day
   // sign-in, whatever it was then (audit v7, G551).
-  const text = fresh ? n.body : shutInProse(n);
+  const met = meetings(s, n, fresh, closed);
+  const text = dropStaleContact(fresh ? n.body : shutInProse(n), n, met);
   const prose = wikiBody(s, isOrg(n) ? text.replace(IMPORT_LINE, "") : text, (ref) => {
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
@@ -402,7 +442,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
   const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
-<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}${meetLine(s, met, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
   const book = !closed && n.fm.id === ownerOf(s.rules, s.notes, ownerTitle(s.rules) ?? "")?.page ? bookSections(s, fresh) : "";
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   // Routines that may do the same job as this one (G641): the others, linked; a secret page only

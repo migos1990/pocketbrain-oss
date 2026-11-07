@@ -384,6 +384,24 @@ export function copyBase(root: string): void {
   run(["commit", "-q", "-m", "owner: the demo brain on 30 September"]);
 }
 
+// A made-up calendar for the demo brain (next-level D2, G694): a few meetings around DEMO_DAY with
+// guests whose addresses are on demo people's pages, in the read-time cache the hub keeps for a
+// calendar marked `upcoming: true` (src/upcoming.ts), so a person's page says when you last met.
+export async function demoCalendar(root: string) {
+  const { toUpcoming, saveUpcoming } = await import("../src/upcoming");
+  const ev = (id: string, summary: string, start: string, guests: string[]) => ({ id: `demo${id}`, etag: `"${id}"`, summary, start: { dateTime: `${start}T14:00:00Z` }, attendees: [{ email: OWNER.address, self: true }, ...guests.map((g) => ({ email: `${g}@example.org` }))] });
+  const events = [
+    ev("c01", "Pinecrest pilot kickoff", "2026-09-24", ["ben.carter", "chloe.gagnon"]),
+    ev("c02", "Pilot check-in", "2026-10-02", ["ben.carter"]),
+    ev("c03", "Atlas design review", "2026-10-05", ["maya.chen", "grace.liu"]),
+    ev("c04", "Q1 roadmap", "2026-10-07", ["priya.shah", "kenji.watanabe"]),
+    ev("c05", "Export sample walkthrough", "2026-10-09", ["ben.carter", "chloe.gagnon"]),
+    ev("c06", "Atlas weekly review", "2026-10-14", ["maya.chen", "grace.liu", "kenji.watanabe"]),
+    ev("c07", "Roadmap follow-up", "2026-10-21", ["priya.shah"]),
+  ];
+  saveUpcoming(root, "calendar", events.flatMap((e) => toUpcoming(e, "calendar") ?? []), DEMO_DAY);
+}
+
 if (import.meta.main) {
   const i = Bun.argv.indexOf("--out");
   if (i >= 0) {
@@ -392,6 +410,7 @@ if (import.meta.main) {
     mkdirSync(out, { recursive: true });
     copyBase(out);
     const r = await replayWeek(out);
+    await demoCalendar(out);
     const { loadBrain } = await import("../src/brain");
     console.log(`demo brain in ${out}: ${loadBrain(out).length} pages, ${factCount(loadBrain(out))} facts, ${r.conflicts.length} open conflicts. Now is ${DEMO_NOW}: PB_NOW=${DEMO_NOW} PB_BRAIN=${out} bun src/cli.ts dashboard`);
   } else {

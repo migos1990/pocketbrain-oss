@@ -16,11 +16,15 @@ import { attributeSpec, type Rules } from "./rules";
 import { factFreshness, daysBetween } from "./freshness";
 import { findInjection, redactSecrets } from "./checks";
 
-export interface Upcoming { id: string; version: string; summary: string; location?: string; start: string; source: string; sensitivity?: Sensitivity }
+// `who`: the guests' addresses as hashes (guestKey), never the addresses, so a meeting can be tied
+// to a person's page by an address the page holds (G695); not the owner, not a room.
+export interface Upcoming { id: string; version: string; summary: string; location?: string; start: string; source: string; sensitivity?: Sensitivity; who?: string[] }
 interface CacheFile { sources: Record<string, { at: string; events: Upcoming[] }> }
 
 const DAYS = 60;          // how far ahead the cache reaches
-const MAX = 200;          // events kept per source
+export const PAST_DAYS = 92; // how far back it keeps what happened: a quarter, for "last met" (G695)
+const MAX = 400;          // events kept per source
+const GUESTS = 30;        // guests kept per event; a bigger meeting ties no one by its guest list
 const FRESH_DAYS = 2;     // a source not refreshed for this long is no longer "live"; its events are ignored
 const MIN_NAME = 4;       // shorter titles or aliases ("HR", "Bob") would match too much
 
@@ -38,8 +42,13 @@ export function toUpcoming(r: Record<string, any>, source: string, sensitivity?:
   if (findInjection(String(r.summary)) || (r.location && findInjection(String(r.location)))) return undefined;
   const summary = redactSecrets(String(r.summary)).text.slice(0, 200);
   const location = r.location ? redactSecrets(String(r.location)).text.slice(0, 200) : undefined;
-  return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}) };
+  const guests = (Array.isArray(r.attendees) ? r.attendees : []).filter((a: Record<string, unknown>) => a && !a.self && !a.resource && typeof a.email === "string" && !/@resource\.calendar\.google\.com$/i.test(String(a.email)) && a.responseStatus !== "declined");
+  const who = guests.length && guests.length <= GUESTS ? [...new Set(guests.map((a: Record<string, unknown>) => guestKey(String(a.email))))] as string[] : [];
+  return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}), ...(who.length ? { who } : {}) };
 }
+
+// An address as the cache keeps it: a hash, so the file never holds who the owner meets.
+export const guestKey = (email: string) => createHash("sha256").update(`pocketbrain-guest:${email.trim().toLowerCase()}`).digest("hex").slice(0, 20);
 
 function readCache(root: string): CacheFile {
   try { return JSON.parse(readFileSync(upcomingFile(root), "utf8")); } catch { return { sources: {} }; }
@@ -50,7 +59,10 @@ export function saveUpcoming(root: string, source: string, events: Upcoming[], d
   const f = upcomingFile(root);
   const c = readCache(root);
   const end = new Date(Date.parse(`${day}T00:00:00Z`) + DAYS * 864e5).toISOString().slice(0, 10);
-  c.sources[source] = { at: day, events: events.filter((e) => e.start.slice(0, 10) >= day && e.start.slice(0, 10) <= end).sort((a, b) => a.start.localeCompare(b.start)).slice(0, MAX) };
+  const from = new Date(Date.parse(`${day}T00:00:00Z`) - PAST_DAYS * 864e5).toISOString().slice(0, 10);
+  const kept = events.filter((e) => e.start.slice(0, 10) >= from && e.start.slice(0, 10) <= end).sort((a, b) => a.start.localeCompare(b.start));
+  // Past the cap the coming ones stay and the oldest go.
+  c.sources[source] = { at: day, events: kept.slice(Math.max(0, kept.length - MAX)) };
   mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
   writeFileSync(f, JSON.stringify(c), { mode: 0o600 });
   chmodSync(f, 0o600);
@@ -70,18 +82,40 @@ export function dropUpcoming(root: string, keep: (source: string) => boolean) {
 }
 
 let memo: { file: string; mtime: number; day: string; events: Upcoming[] } | undefined;
-// The events still to come today or later, from sources refreshed in the last FRESH_DAYS, soonest first.
-export function loadUpcoming(root: string, day = today()): Upcoming[] {
+// Every event the cache holds, past quarter and coming 60 days, from sources refreshed in the last
+// FRESH_DAYS, soonest first.
+export function loadCalendar(root: string, day = today()): Upcoming[] {
   const f = upcomingFile(root);
   let mtime: number;
   try { mtime = statSync(f).mtimeMs; } catch { return []; }
   if (memo && memo.file === f && memo.mtime === mtime && memo.day === day) return memo.events;
   const events = Object.values(readCache(root).sources)
     .filter((s) => s?.at && daysBetween(s.at, day) <= FRESH_DAYS)
-    .flatMap((s) => s.events ?? []).filter((e) => e.start.slice(0, 10) >= day)
+    .flatMap((s) => s.events ?? [])
     .sort((a, b) => a.start.localeCompare(b.start));
   memo = { file: f, mtime, day, events };
   return events;
+}
+// The events still to come today or later, soonest first.
+export const loadUpcoming = (root: string, day = today()): Upcoming[] => loadCalendar(root, day).filter((e) => e.start.slice(0, 10) >= day);
+
+// The meetings tied to a person's page (G694): those whose guests include an address the page
+// holds, or whose title names the person in full (two words at least, MIN_NAME letters). The last
+// one before today, the next from today on, and how many so far this calendar quarter.
+export interface Meetings { last?: Upcoming; next?: Upcoming; quarter: number }
+export function meetingsWith(n: Note, events: Upcoming[], day = today(), keep: (e: Upcoming) => boolean = () => true): Meetings {
+  const out: Meetings = { quarter: 0 };
+  if (n.fm.type !== "person" || !events.length) return out;
+  const em = n.fm.facts?.emails;
+  const mails = em && !isDisputed(em) ? (isList(em) ? em.items : [em as FactRecord]).filter((r) => r && !r.valid_to && !r.retired && typeof r.value === "string").map((r) => guestKey(String(r.value))) : [];
+  const names = [n.fm.title, ...(Array.isArray(n.fm.aliases) ? n.fm.aliases : [])].filter((x): x is string => typeof x === "string" && x.trim().length >= MIN_NAME && /\S\s+\S/.test(x.trim())).map(norm);
+  const q = `${day.slice(0, 5)}${String(Math.floor((Number(day.slice(5, 7)) - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
+  for (const e of events) {
+    if (!keep(e) || !((e.who ?? []).some((h) => mails.includes(h)) || names.some((nm) => norm(e.summary).includes(nm)))) continue;
+    const d = e.start.slice(0, 10);
+    if (d < day) { out.last = e; if (d >= q) out.quarter++; } else out.next ??= e;
+  }
+  return out;
 }
 
 // A stamp that changes when the cache does, for read caches keyed on what they served.

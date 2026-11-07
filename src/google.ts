@@ -278,13 +278,17 @@ export async function fetchCalendar(cfg: SourceConfig, cursor?: string, seen: Se
 
 // The coming events of the listed calendars, soonest first, recurring ones expanded: the read-time
 // cache behind live next_* facts (src/upcoming.ts). Nothing here goes to a model.
-export async function fetchUpcoming(cfg: SourceConfig, days = 60): Promise<Raw[]> {
+// The coming `days` and the past `past` days (for "last met", G695), each window its own list so
+// a busy past never crowds out what's coming.
+export async function fetchUpcoming(cfg: SourceConfig, days = 60, past = 92): Promise<Raw[]> {
   const token = await accessToken(cfg.account, "gcal");
   const now = Date.now(), out: Raw[] = [];
   for (const cal of cfg.where?.length ? cfg.where : ["primary"]) {
-    const r = await get(token, `calendars/${encodeURIComponent(cal)}/events`, { timeMin: new Date(now).toISOString(), timeMax: new Date(now + days * 864e5).toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" }, "gcal");
-    if (r._notFound || r._gone) throw new Error(`calendar ${cal} can't be read`);
-    out.push(...(r.items ?? []).map((e: Raw) => ({ ...e, calendar: cal })));
+    for (const [from, to] of [[now, now + days * 864e5], [now - past * 864e5, now]]) {
+      const r = await get(token, `calendars/${encodeURIComponent(cal)}/events`, { timeMin: new Date(from).toISOString(), timeMax: new Date(to).toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" }, "gcal");
+      if (r._notFound || r._gone) throw new Error(`calendar ${cal} can't be read`);
+      out.push(...(r.items ?? []).map((e: Raw) => ({ ...e, calendar: cal })));
+    }
   }
   return out;
 }

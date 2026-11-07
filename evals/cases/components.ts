@@ -831,6 +831,33 @@ const pullCases: Case[] = [
     const mine = line.test(helper) && line.test(steward), hidden = !helper.includes("Roof repair") && !helper.includes("wk-home"), whole = steward.includes("projects/wk-home");
     return ok(mine && hidden && whole, `dated line with its source ${mine}; a hidden page left out ${hidden}; the whole view has it ${whole}`);
   } },
+  { id: "calendar-last-met-next-meeting", dimension: "upkeep", gap: "G694", title: "a person's meetings come from the consented calendar's cache: by an address on their page or their full name in a title, the last before today, the next from today, the count so far this quarter", source: "next-level D2 (every person page says when I last saw them and when I will)", run: async () => {
+    const up = await import(join(SRC_DIR, "upcoming.ts"));
+    if (!up.meetingsWith) return na("no meetings at this commit");
+    const e = (id: string, summary: string, d: string, guests: string[] = []) => up.toUpcoming({ id, summary, start: { dateTime: `${d}T15:00:00Z` }, attendees: [{ email: "me@x.example", self: true }, ...guests.map((email) => ({ email }))] }, "cal");
+    const n = { fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", facts: { emails: { items: [{ value: "ana@north.example" }] } } } };
+    const m = up.meetingsWith(n, [e("a", "Check-in", "2026-07-02", ["ana@north.example"]), e("b", "Coffee with Ana Diaz", "2026-10-03"), e("c", "Review", "2026-10-20", ["ANA@north.example"]), e("d", "Ana and team", "2026-10-04")], "2026-10-08");
+    const right = m.last?.id === "b" && m.next?.id === "c" && m.quarter === 1;
+    return ok(right, `last ${m.last?.id}, next ${m.next?.id}, this quarter ${m.quarter}`);
+  } },
+  { id: "calendar-newer-than-last-contact", dimension: "upkeep", gap: "G696", title: "a meeting after the stored last contact drops the stale last-in-touch sentence from the page as drawn, and an older one keeps it", source: "coordinator 2026-11-06 under the product bar (Last met 2 Oct beside last in touch 24 Sep)", run: async () => {
+    const page = await import(join(SRC_DIR, "dashboard", "html-page.ts"));
+    if (!page.dropStaleContact) return na("no stale-contact rule at this commit");
+    const n = { fm: { id: "people/ana-diaz", facts: { last_contact: { value: "2026-09-24", as_of: "2026-09-24" } } } };
+    const text = "Ana's city is Halifax.[^pf-city] You were last in touch with Ana on 24 Sep.[^pf-last-contact] Ana is on the course.[^p-rel-x]";
+    const met = (d: string) => ({ last: { start: `${d}T15:00:00Z` }, quarter: 1 });
+    const newer = page.dropStaleContact(text, n, met("2026-10-02")), older = page.dropStaleContact(text, n, met("2026-09-10"));
+    const right = newer === "Ana's city is Halifax.[^pf-city] Ana is on the course.[^p-rel-x]" && older === text;
+    return ok(right, `newer drops it ${!newer.includes("last in touch")}; the rest stands ${newer.includes("[^pf-city]") && newer.includes("[^p-rel-x]")}; older keeps it ${older === text}`);
+  } },
+  { id: "calendar-guests-hashed", dimension: "carving", gap: "G695", title: "the calendar cache keeps guests only as hashes of their addresses, never the owner, a room or a declined guest", source: "next-level D2 (attendees to people pages, the cache outside the brain)", run: async () => {
+    const up = await import(join(SRC_DIR, "upcoming.ts"));
+    if (!up.guestKey) return na("no guest hashes at this commit");
+    const u = up.toUpcoming({ id: "a", summary: "Review", start: { dateTime: "2026-10-20T15:00:00Z" }, attendees: [{ email: "me@x.example", self: true }, { email: "ana@north.example" }, { email: "r1@resource.calendar.google.com" }, { email: "cy@x.example", responseStatus: "declined" }] }, "cal");
+    const text = JSON.stringify(u);
+    const right = !/@/.test(text) && u.who?.length === 1 && u.who[0] === up.guestKey("Ana@North.example");
+    return ok(right, `no address in the cache ${!/@/.test(text)}; one guest kept ${u.who?.length === 1}`);
+  } },
   { id: "wiki-owner-page-rewritten-untouched", dimension: "upkeep", gap: "G627", title: "the night writer rewrites the owner's own page even when nothing touched it in its window, so an old lead doesn't outlive a rule change", source: "Mac 2026-11-02 (G624 live, his page still said how you know)", run: async () => {
     const wiki = await import(join(SRC_DIR, "wiki.ts"));
     if (!wiki.TIES) return na("no tie rules at this commit");

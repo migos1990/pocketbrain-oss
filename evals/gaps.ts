@@ -5,22 +5,43 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G696: {
+    closed: "f4c24273",
+    title: "A person's page said Last met 2 Oct over prose saying last in touch 24 Sep, and a sensitive-shaped meeting title showed on the 30-day sign-in",
+    severity: "medium",
+    finding: "Coordinator under the product bar, 2026-11-06, on the demo's Ben Carter: the calendar line knew a meeting the nightly capture hadn't filed yet, so the band and the prose disagreed; and a title like \"Lawyer call\" showed as it is on the long sign-in (owner-app thread).",
+    fix: "src/dashboard/html-page.ts dropStaleContact: when the calendar's last meeting is after the stored last_contact, the [^pf-last-contact] sentence leaves the page as drawn (the brain is never changed); meetLine names only the day of a next meeting whose title sensitiveShape matches unless just signed in. Test: test/last-met-next-meeting.test.ts. Eval: calendar-newer-than-last-contact.",
+  },
+  G695: {
+    closed: "b8d8e631",
+    title: "The calendar cache kept no guests and no past, so no meeting could be tied to a person but by a name in its title",
+    severity: "low",
+    finding: "Next-level D2, 2026-11-06: the read-time calendar cache (src/upcoming.ts) kept the coming 60 days' titles, places and starts only, so nothing could say when the owner last met someone or tie a meeting to the person invited.",
+    fix: "src/upcoming.ts toUpcoming keeps guests as hashes of their addresses (guestKey: not the owner, a room, a declined guest, nor any for an event over 30 guests); saveUpcoming keeps the past 92 days; src/google.ts fetchUpcoming reads the past quarter as its own list. Test: test/last-met-next-meeting.test.ts. Eval: calendar-guests-hashed.",
+  },
+  G694: {
+    closed: "b8d8e631",
+    title: "A person's page didn't say when the owner last met them or will next",
+    severity: "medium",
+    finding: "Next-level D2, 2026-11-06 (\"every person page says when I last saw them and when I will\"): the calendar the owner consented to knew; the page said a last contact only when a capture had filed one, and never the next meeting.",
+    fix: "src/upcoming.ts meetingsWith (an address the page holds among the guests, or the full name in the title) and src/dashboard/html-page.ts meetLine: \"Last met 2 Oct · Next: Export sample walkthrough, 9 Oct · 1 meeting so far this quarter\" under the person's name, drawn each time, never written, never a card; a private calendar's only right after a sign-in. Test: test/last-met-next-meeting.test.ts. Eval: calendar-last-met-next-meeting.",
+  },
   G690: {
-    closed: "claude/backup-heartbeats",
+    closed: "c415844a",
     title: "No restore was ever proven on a schedule, and the offsite copy was never read back",
     severity: "high",
     finding: "Next-level plan R1, 2026-11-06: backups were encrypted and copied to the owner's synced folder, but a restore was only proven when someone ran `pocketbrain drill` by hand, and nothing checked that the offsite copy of the newest backup was whole. A copy cut short in the synced folder would have been found the day it was needed.",
     fix: "src/restore-drill.ts restoreDrill, run by the hub every Sunday after the night pass in a child it stops after 30 minutes (start.ts drillApart, `pocketbrain drill --weekly`): the newest backup, read back out of the offsite folder in a child process and hash-checked against the local file, restored into a scratch folder with the drill key (`pocketbrain backup drill-key`, an age identity in the keys folder) and checked (hashes, fsck, note and fact counts at that commit, doctor, hub boot); without the key, the mechanics on a copy. One line on Settings and Who knows, a probe check (restore_drill), a heartbeat. Tests: test/restore-drill.test.ts. Eval: rt-restore-drill-offsite-copy.",
   },
   G691: {
-    closed: "claude/backup-heartbeats",
+    closed: "c415844a",
     title: "The owner's home never said a scheduled job was late",
     severity: "medium",
     finding: "Next-level plan R4: the nightly pass, pulls, digest, backup look, push, offsite copy and Gardener each kept their last run in a different file (log/start-state.json, log/backup-look.json, log/origin-push.json, log/offsite.json, log/watchdog.json) and only some had a lateness check, read by the probe and doctor; the home, which the owner reads, never said a job had stopped.",
     fix: "src/heartbeat.ts: one ledger (log/heartbeats/<job>.json) with a cadence per job; lateJobs is the one reader. The home shows one line (lateLine) under the count only when a job is late or failing, never counted as an ask; Settings lists the jobs (html.ts jobsSection), doctor names each, the week report says how many are on time, `pocketbrain jobs` prints the ledger. Tests: test/heartbeat.test.ts. Eval: rt-late-job-home-line.",
   },
   G692: {
-    closed: "claude/backup-heartbeats",
+    closed: "c415844a",
     title: "The probe, watchdog, backup look, origin push and offsite copy left no last-ran in one place",
     severity: "low",
     finding: "Same plan: the health probe and the watchdog left no run record a lateness check could read, and the offsite copy and push kept theirs in their own files only.",
@@ -55,14 +76,14 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/wiki.ts (related, kind on): \"Ana Diaz and Ben Roy are on [[Spring course]].\", cited by each person's org fact and the project's fact; src/view.ts drops a p-rel- sentence from a read when a page it links is out of view or a fact behind it is hidden from that reader. Tests: test/related-across-pages.test.ts. Evals: wiki-org-people-on-projects, wiki-tie-dropped-for-reader.",
   },
   G689: {
-    closed: "claude/week-page",
+    closed: "04972350",
     title: "An assistant asked about the week had no dated answer across pages",
     severity: "medium",
     finding: "Audit v12: \"what's next this week?\" was answered not at all. context_pack ranked notes that matched \"next\" and \"week\"; nothing put the due dates, dated next steps and birthdays an assistant can see in day order.",
     fix: "src/week.ts weekOf over the agent's own carve (visibleFacts), no calendar events beyond the next_* facts withUpcoming serves; src/core.ts weekBlock leads a time topic's pack (and the whole-view pack) with \"## Your week\", each line its day, note id, fact and source. Test: test/week.test.ts (G689). Eval: week-across-pages.",
   },
   G688: {
-    closed: "claude/week-page",
+    closed: "04972350",
     title: "The owner's page had no week: Right now listed projects only",
     severity: "medium",
     finding: "Audit v12 and plans/next-level.md F1: Right now on the owner's own page was a row of active project names, with no dates, no calendar and nothing across pages, so opening the app on Monday didn't say what the week held.",
