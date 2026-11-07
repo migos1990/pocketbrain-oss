@@ -50,13 +50,13 @@
         - /url: /b/notes/people%2Fsofia-marquez
       - text: "people/sofia-marquez · person #### From its facts Sofia Marquez is the senior product marketing manager at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Sofia works with you"
     - listitem:
-      - link "Omar Haddad":
-        - /url: /b/notes/people%2Fomar-haddad
-      - text: "people/omar-haddad · person #### From its facts Omar Haddad is the engineering manager at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Omar works with you on Atlas.[^pf-re"
-    - listitem:
       - link "Daniel Okoro":
         - /url: /b/notes/people%2Fdaniel-okoro
       - text: "people/daniel-okoro · person #### From its facts Daniel Okoro is the staff engineer at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Daniel works with you on Atlas.[^pf-rela"
+    - listitem:
+      - link "Omar Haddad":
+        - /url: /b/notes/people%2Fomar-haddad
+      - text: "people/omar-haddad · person #### From its facts Omar Haddad is the engineering manager at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Omar works with you on Atlas.[^pf-re"
   - paragraph:
     - link "Back to the start page":
       - /url: /b

@@ -12,6 +12,7 @@ import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFo
 import { needleFor, findCarried, type Needle } from "./match";
 import { escapeRe, tokenIndex } from "./util";
 import { summaryOf, referenceForms } from "./wiki";
+import { readerSource, readerText } from "./sources";
 import { headCommit } from "./git";
 import { visibleStanding, standingLine } from "./standing";
 import { tokensOf, fitBlocks, cutLine, contextBudget } from "./context";
@@ -122,7 +123,9 @@ function withoutHiddenSentences(text: string, v: Visible, res: CarveResult, link
 export function scrubPage(text: string, v: Visible, res: CarveResult): string {
   // The links as written, for the sentences about another page's fact (G607): redactLinks turns a
   // link to a page out of view into [[redacted]], which no longer says which page it was.
-  return withoutHiddenSentences(redactLinks(text, res), v, res, text);
+  // Hidden facts' sentences go first, matched by their references as written; then another
+  // assistant's refs and name leave what is left (G723). The file keeps them for the owner.
+  return readerText(withoutHiddenSentences(redactLinks(text, res), v, res, text), res.grant.agent);
 }
 
 // The writer's sentences that state ANOTHER page's fact (audit v10, G607): an org's "Ana Diaz
@@ -239,6 +242,8 @@ export function scrubLeaves(v: unknown, res: CarveResult): unknown {
 // other agents, and an agent shouldn't learn they exist.
 function agentRecord(r: FactRecord, agent: string, res: CarveResult): FactRecord {
   const out = scrubLeaves(r, res) as FactRecord;
+  // Another assistant's ref says which assistant filed it (G722): the reader gets it unnamed.
+  if (Array.isArray(out.sources)) out.sources = out.sources.map((s) => readerSource(s, agent));
   delete (out as { by?: string }).by;
   delete out.shared_by;
   delete out.confirmed_by;
@@ -303,7 +308,7 @@ export function renderNote(v: Visible, res: CarveResult, rules: Rules, now = tod
   const facts = visibleFacts(v, res);
   if (facts.length) {
     lines.push("");
-    for (const [attr, f] of facts) lines.push(...factSummary(attr, scrubLeaves(f, res) as typeof f, fm.type, rules, now).map((l) => redactLinks(l, res, false)));
+    for (const [attr, f] of facts) lines.push(...factSummary(attr, agentFact(f, res.grant.agent, res), fm.type, rules, now).map((l) => redactLinks(l, res, false)));
   }
   const text = body ?? (v.body && v.note.body.trim() ? scrubPage(v.note.body.trim(), v, res) : "");
   if (text) {

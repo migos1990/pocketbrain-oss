@@ -1323,4 +1323,28 @@ const tellerCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases];
+// No assistant learns from a read which other assistant filed a fact (G30; G722, G723).
+const unnamedCases: Case[] = [
+  { id: "reader-never-sees-another-assistants-ref", dimension: "carve", gap: "G722", kind: "attack", title: "Gemini reads every demo page it may see; no fact source or footnote names ChatGPT or Claude, whose notes filed some of them", source: "builder's slice audit of G720, 2026-11-07 (backlog 422)", run: async () => {
+    const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+    const src = await import(join(SRC_DIR, "sources.ts"));
+    if (!existsSync(demo) || !src.readerText) return na("no reader-side assistant masking at this commit");
+    const d = await import(demo), wiki = await import(join(SRC_DIR, "wiki.ts")), core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+    d.copyBase(root);
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const ids = pb.brain.loadBrain(root).filter((n: any) => JSON.stringify(n).match(/agent:(chatgpt|claude)\//)).map((n: any) => n.fm.id);
+    let read = 0, named = 0;
+    for (const id of ids) {
+      let r: any;
+      try { r = core.readNote(root, "gemini", id); } catch { continue; }
+      if (!r || typeof r !== "object" || !("facts" in r)) continue;
+      read++;
+      if (/agent:(chatgpt|claude)\/|chatgpt's note|claude's note/i.test(JSON.stringify({ facts: r.facts, body: r.body }))) named++;
+    }
+    return ok(read > 0 && named === 0, `${ids.length} pages cite chatgpt or claude; gemini read ${read}; ${named} named another assistant`);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases, ...unnamedCases];

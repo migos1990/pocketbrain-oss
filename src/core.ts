@@ -18,7 +18,7 @@ import { contextBudget, tokensOf, fitBlocks, cutLine } from "./context";
 import { write, logWrite, gardenerProposals, REJECT_DAYS, type WriteResult } from "./write";
 import { runChecks, redactSecrets, findInjection, findSecret, refShapeOk, approvalClaim, type WriteRequest } from "./checks";
 import { normalizeValue, compareKey } from "./normalize";
-import { sourceRank, refString, normalizeRef, isExactLouisRef } from "./sources";
+import { sourceRank, refString, normalizeRef, isExactLouisRef, readerSource, readerRef } from "./sources";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
 import { renderTouchedPages, openingProblem, hubLead, leadSentences, ownerWordsOf, applyRewrite, ungrounded, summaryOf, isPersonAuthor, isPersonCommit, partAuthors, pageFindings, pageChanges, footnotes, refsIn, parentOf, sectionWithRefs, reference } from "./wiki";
 import { hiddenNeedles } from "./needles";
@@ -219,7 +219,7 @@ function weekBlock(res: CarveResult, rules: Rules, keep?: (id: string) => boolea
   const say = (l: WeekLine, dated = true) => {
     if (l.page) ids.add(l.page);
     const d = l.day ? `${l.day} ${DOW[new Date(`${l.day}T00:00:00Z`).getUTCDay()]}${l.time ? ` ${l.time}` : ""}: ` : "";
-    const src = l.record ? ` (${reference({ ...l.record, sources: (l.record.sources ?? []).slice(0, 1) })})` : "";
+    const src = l.record ? ` (${reference({ ...l.record, sources: (l.record.sources ?? []).slice(0, 1).map((x) => readerSource(x, res.grant.agent)) })})` : "";
     return `- ${dated ? d : ""}${l.page ? `${title(l.page) ?? l.page} (${l.page}): ` : ""}${l.what}${src}`;
   };
   const lines: string[] = [];
@@ -244,7 +244,7 @@ function citeLine(res: CarveResult, id: string): string | undefined {
   // Newest first, so what the owner just said is never the part cut off.
   const parts = visibleFacts(v, res).flatMap(([a, f]) => {
     const r = records(f).at(-1);
-    return r?.as_of ? [{ at: String(r.as_of), text: `${a}: ${reference({ ...r, sources: (r.sources ?? []).slice(0, 1) }).replace(/ \([^)]*\)$/, "").replace(/, (\d{4}-\d{2}-\d{2})$/, " $1")}` }] : [];
+    return r?.as_of ? [{ at: String(r.as_of), text: `${a}: ${reference({ ...r, sources: (r.sources ?? []).slice(0, 1).map((x) => readerSource(x, res.grant.agent)) }).replace(/ \([^)]*\)$/, "").replace(/, (\d{4}-\d{2}-\d{2})$/, " $1")}` }] : [];
   }).sort((x, y) => y.at.localeCompare(x.at)).map((x) => x.text);
   const title = String(v.note.fm.title ?? id);
   return `Cite as: (from your brain: ${title}${parts.length ? `; ${parts.slice(0, CITE_FACTS).join("; ")}${parts.length > CITE_FACTS ? `; and ${parts.length - CITE_FACTS} more` : ""}` : ""})`;
@@ -995,7 +995,7 @@ export function gardenerDisputes(root: string, agent: string) {
   const { rules, res } = requireGardener(root, agent, "open_disputes");
   const out = gardenerPackets(root, agent, res).map((p) => ({
     id: String(p.note.fm.id).split("/")[1], fact_key: p.note.fm.fact_key, status: p.note.fm.status, created: p.note.fm.created,
-    sides: sides(p).map((c, i) => ({ n: i + 1, value: c.value, as_of: c.as_of, verification: c.verification, sources: (c.sources ?? []).map(refString), ...(ownerSide(p, rules)(c) ? { owner_word: true } : {}) })),
+    sides: sides(p).map((c, i) => ({ n: i + 1, value: c.value, as_of: c.as_of, verification: c.verification, sources: (c.sources ?? []).map((x) => readerRef(refString(x), agent)), ...(ownerSide(p, rules)(c) ? { owner_word: true } : {}) })),
     suggestion: p.note.fm.suggestion,
   }));
   logRead(root, agent, "open_disputes", out.map((d) => String(d.fact_key).split("#")[0]));

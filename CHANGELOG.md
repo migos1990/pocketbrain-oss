@@ -14,6 +14,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- An assistant reading your pages no longer learns which of your other assistants filed a fact: it reads "An assistant's note" and `agent:[withheld]` where your own view keeps the name (G722, G723).
 - The question about a class you teach is on your home under **To answer**, with **Yes, I teach it**, **I'm taking it** and **No**, and it counts once in the number of things that wait for you. Once a page behind it is private, it asks without naming the class or the school (G715).
 - A fact an assistant filed without a checked source now says an assistant told it under its sentence ("An assistant's note, 2026-11-02"), and a surname guess says "Guessed from the names"; a page reads "No source given" only when nobody is known (G720, G721).
 - When you settle something on the settle screen, by a pick or by keeping both, the page's own text says it at once, not after the night run, so an assistant never reads the new value beside the old sentence (G707).

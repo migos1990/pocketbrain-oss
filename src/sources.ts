@@ -51,6 +51,36 @@ export const PUBLIC_SCHEMES = Object.keys(SCHEMES).filter((s) => !UNLISTED.has(s
 // Refs that name an agent's own memory, never Louis's word (write-quality N5).
 export const AGENT_MEMORY_SCHEMES = new Set(["instinct-mem", "town-wiki", "town-routine", "agent", "agent-relay", "agent-log"]);
 
+// The assistant an assistant ref names (G30: an agent never learns which other assistants exist;
+// G722): "agent:<name>/…" or "agent:<name>#…" its name, the one owner's old *-wiki/*-mem/*-routine
+// schemes theirs, and "" for a relay or log ref, which may name either side. Undefined for any
+// other ref.
+export function assistantOf(ref: string): string | undefined {
+  const s = schemeOf(ref);
+  if (!s || !AGENT_MEMORY_SCHEMES.has(s)) return undefined;
+  if (s === "town-wiki" || s === "town-routine") return "town";
+  if (s === "instinct-mem") return "instinct";
+  return s === "agent" ? (ref.slice(s.length + 1).split(/[/#]/)[0] ?? "").toLowerCase() : "";
+}
+// What a reader gets for a ref: another assistant's ref as this one, its own as it is (G722).
+export const ANOTHER_ASSISTANT = "agent:[withheld]";
+export function readerRef(ref: string, reader: string): string {
+  const a = assistantOf(ref);
+  return a === undefined || (a !== "" && a === reader.toLowerCase()) ? ref : ANOTHER_ASSISTANT;
+}
+export function readerSource(s: SourceRef, reader: string): SourceRef {
+  return typeof s === "string" ? readerRef(s, reader) : { ...s, ref: readerRef(s.ref, reader) };
+}
+// Every assistant ref in a text a reader gets, and a footnote's "<Name>'s note" for another
+// assistant (G723): the page's file keeps them for the owner, who sees which assistant filed what.
+const ASSISTANT_REF = /\b(?:agent|agent-relay|agent-log|town-wiki|town-routine|instinct-mem):(?!\[)[^\s,;)\]]+/g;
+export function readerText(text: string, reader: string): string {
+  const me = reader.toLowerCase();
+  const word = (seg: string) => seg.replace(/^([ \t]*)([A-Z][\w-]{0,39})'s note\b/, (m, pre: string, who: string) => who.toLowerCase() === me ? m : `${pre}An assistant's note`);
+  return text.replace(ASSISTANT_REF, (m) => readerRef(m, reader))
+    .replace(/^(\[\^[^\]\s]+\]:)([^\n]*)$/gm, (_m, label: string, rest: string) => `${label}${rest.split(";").map(word).join(";")}`);
+}
+
 export function refString(s: SourceRef): string {
   return typeof s === "string" ? s : s.ref;
 }

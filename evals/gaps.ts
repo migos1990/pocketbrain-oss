@@ -5,15 +5,29 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G723: {
+    closed: "claude/agent-ref-footnotes",
+    title: "A page's footnotes told an assistant which other assistant filed a fact",
+    severity: "medium",
+    finding: "Builder's slice audit of G720 (backlog 422): a footnote read Helper's note with its agent:helper ref in the page text every reader gets, though an agent never learns which other assistants exist (G30).",
+    fix: "scrubPage in src/view.ts, after the hidden-sentence pass, runs readerText (src/sources.ts): another assistant's ref reads agent:[withheld] and its footnote word An assistant's note; the reader's own stay, and the file the owner sees keeps every name. Test: test/assistant-refs-unnamed.test.ts. Eval: reader-never-sees-another-assistants-ref.",
+  },
+  G722: {
+    closed: "claude/agent-ref-footnotes",
+    title: "A reader's facts carried another assistant's raw ref, naming who filed them",
+    severity: "medium",
+    finding: "Same audit: readNote, cells, slice exports and search lines gave the planner sources [agent:helper/2026-11-02] on a fact helper filed, though agentRecord already strips by (G30).",
+    fix: "agentRecord maps every source through readerSource (src/sources.ts): another assistant's ref, or any relay or log ref, reads agent:[withheld]; renderNote's fact lines go through agentFact, so search and context packs do too. Test: test/assistant-refs-unnamed.test.ts. Eval: reader-never-sees-another-assistants-ref.",
+  },
   G721: {
-    closed: "claude/unverified-footnotes",
+    closed: "64362552",
     title: "The hub's surname guess was footnoted No source given, as if nobody knew where it came from",
     severity: "low",
     finding: "Mac sweep 2026-11-07: a person page's tie sentence rested on the hub's family guess (family.ts, G546; sources unverified, by the hub) and its footnote read No source given.",
     fix: "reference() in src/wiki.ts names a fact with no checked source by who filed it; the hub's inferred guess reads Guessed from the names, its hedged sentence kept (the owner's G546 ask). Test: test/unverified-footnotes.test.ts. Eval: surname-guess-footnote-says-guessed.",
   },
   G720: {
-    closed: "claude/unverified-footnotes",
+    closed: "64362552",
     title: "A fact an assistant filed as unverified was footnoted No source given, though an assistant told it",
     severity: "medium",
     finding: "Mac sweep 2026-11-07 (pages_ok 23 of 40): two people pages footnoted No source given under facts Town and Instinct had filed with the ref unverified, which write() allows with that verification.",

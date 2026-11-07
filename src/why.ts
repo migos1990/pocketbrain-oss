@@ -11,7 +11,7 @@ import { join } from "node:path";
 import type { Fact, FactRecord, Note, Sensitivity } from "./brain";
 import { isList, isDisputed, sensitivityRank } from "./brain";
 import { OWNER } from "./owner";
-import { refString, schemeOf, sourceRank } from "./sources";
+import { refString, schemeOf, sourceRank, readerRef } from "./sources";
 import { readJsonl } from "./util";
 
 export interface WhySource { ref: string; kind: string }
@@ -38,7 +38,8 @@ function record(r: FactRecord, w: WhyFor, ended?: string): WhyRecord {
   return {
     value: scrub(r.value), as_of: r.as_of, ...(r.by ? { by: writer(r.by, w) } : {}), ...(r.recorded ? { recorded: r.recorded } : {}),
     verification: r.verification, strength: strengthOf(r),
-    sources: (r.sources ?? []).map((x) => { const ref = refString(x); return { ref: String(scrub(ref)), kind: schemeOf(ref) ?? "?" }; }),
+    // Another assistant's ref names it (G722; builder's slice audit of PR 131): the owner sees it, an agent its own.
+    sources: (r.sources ?? []).map((x) => { const ref = refString(x); const shown = isOwner(w) ? ref : readerRef(ref, w.agent); return { ref: String(scrub(shown)), kind: schemeOf(ref) ?? "?" }; }),
     ...(r.last_confirmed ? { last_confirmed: r.last_confirmed } : {}), ...(ended ? { ended } : {}),
   };
 }
