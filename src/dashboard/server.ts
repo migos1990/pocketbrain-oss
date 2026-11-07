@@ -16,7 +16,9 @@ import { readCapped } from "../util";
 import { sessionFile, addAppPhone, useAppPhone, phoneName, endSignIns } from "./phone-app";
 import { join } from "node:path";
 import { loadRules } from "../rules";
-import { loadBrain } from "../brain";
+import { loadBrain, sensitivityRank } from "../brain";
+import { hubGate } from "../hub";
+import { waitingTeachAsks, answerTeach, type TeachAnswer } from "../teaching";
 import { carve, grantFor, records } from "../carve";
 import { renderView } from "../view";
 import { CoreError, ownerWhy, ownerDecide, ownerKeepBoth, ownerConflict, ownerConflicts } from "../core";
@@ -40,7 +42,7 @@ import { git } from "../git";
 import { recordOwnerTime } from "../measure";
 import { usagePage } from "./usage";
 import { peoplePage } from "./people";
-import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, pageSentences, type HeldValue, settleLeft, settleCard, settleNext, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
+import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, pageSentences, type HeldValue, settleLeft, settleCard, settleNext, changedPages, learnedThisWeek, backedUpWords, privateNow, teachKey } from "./home";
 import type { Note } from "../brain";
 import { ownerPage, askProse, askFact, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
@@ -131,6 +133,9 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   "org-no": () => true,
   "org-again": () => true,
   "org-undo": () => true,
+  // The teaching question on the home (G715): asked from pages below private, and the diary's Undo
+  // takes each filed fact back, like the org line above.
+  "teach-answer": () => true,
 };
 // Who a value goes to after Show, said as carve will serve it (audit v11, G645): another person's
 // private matter goes to the resolver alone, or to no assistant, never "your assistants".
@@ -749,6 +754,24 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           if (r.outcome === "kept") kept++;
         }
         return kept ? go("/home", { ok: APP_COPY.keptPrivate }) : go("/home", { err: "Nothing waiting there any more." });
+      }
+      if (action === "teach-answer") {
+        // One tap on the teaching question (src/teaching.ts answerTeach): found by its key, never by
+        // a code the form names; said back without the class once a page behind it is private.
+        const answer = form.answer as TeachAnswer;
+        if (!["teaches", "takes", "no"].includes(answer)) return go("/home", { err: "That isn't one of the answers." });
+        const ask = waitingTeachAsks(root).find((a) => teachKey(a.code) === form.ask);
+        if (!ask) return go("/home", { err: "Nothing waiting there any more." });
+        const at = diaryAt();
+        try {
+          hubGate(root, ["commit"]);
+          answerTeach(root, ask.code, answer);
+          const notes = loadBrain(root);
+          const named = [ask.org, ...ask.pages].every((id) => { const n = notes.find((x) => x.fm.id === id); return !!n && sensitivityRank(n.fm.sensitivity) < sensitivityRank("private"); });
+          const ok = answer === "no" ? (named ? `Got it. I won't ask about ${ask.code} again.` : "Got it. I won't ask about that class again.")
+            : named ? `${answer === "teaches" ? "You teach" : "You're taking"} ${ask.code} at ${ask.org_title}. Your pages say it now.` : `${answer === "teaches" ? "Saved that you teach it" : "Saved that you're taking it"}. Your pages say it now.`;
+          return go("/home", { ok, tok: newTokens(at) });
+        } catch (e) { return go("/home", { err: fail(e) }); }
       }
       if (action === "fix-everywhere") {
         // The belief radar's one tap (src/dashboard/home-beliefs.ts): every assistant gets the brain's

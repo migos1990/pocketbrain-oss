@@ -5,29 +5,36 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G715: {
+    closed: "claude/teach-ask",
+    title: "The question about a class the owner teaches had no place on his home and no kind in the asks count",
+    severity: "medium",
+    finding: "Coordinator, 2026-11-07, after G711: the teaching question was filed in inbox/teach/ but nothing showed it to the owner or counted it, so turning teach: { ask: true } on would have asked him nothing.",
+    fix: "src/waiting.ts ownerAsks counts each waiting question as kind teach, listed on the home; src/dashboard/home.ts lists it as a card under To answer, by a key that never names the class (teachKey), naming the class and school only while every page behind it is below private; src/dashboard/html-app.ts gives it Yes, I teach it / I'm taking it / No; /action/teach-answer (src/dashboard/server.ts) answers it with answerTeach, a done line with Undo. Test: test/teach-ask-home.test.ts.",
+  },
   G708: {
-    closed: "claude/box-sentences",
+    closed: "2c5890c0",
     title: "With no model key, the box bounced ordinary sentences about the owner",
     severity: "medium",
     finding: "Audit v12 'The first hour' and next-level D7: from an empty brain, seven of ten day-one sentences (\"I live in…\", \"I prefer meetings after 10\", \"My plate is ABC 123\", \"Our rent is 1,850 a month\", \"Remind me to renew the passport\", \"My dentist is Dr Lam, next visit 12 Dec\", \"I teach … on Tuesdays\") answered \"I didn't catch who or what that's about\": every shape wanted a named page as its subject, the catch-all read \"My dentist\" as a name, a reminder from the home had no page, and the thousands comma split \"1,850\" into two clauses. \"Hannah's number\" landed as attribute number, not phones.",
     fix: "src/owner-say.ts: \"I\", \"my\" and \"our\" sentences go on the owner's own page (selfPage: the page their full name names, else one titled owner.name): I live in (city), I prefer (prefers), I teach/run/lead (teaches, runs, leads… beside the role), my/our <attribute> is <value>; my <relation> is <Name> ties that person's page (relationship \"<owner>'s dentist\", found again by who is my dentist), and a following \"next visit 12 Dec\" is their next step; a reminder with no page goes on the owner's page; a comma inside a number never splits a clause; number, phone and mobile are phones. With a model, these sentences stay with the patterns, since the model is not told who \"I\" is. Tests: test/box-day-one.test.ts. Eval: box-day-one-own-sentences.",
   },
   G709: {
-    closed: "claude/box-sentences",
+    closed: "2c5890c0",
     title: "The facts a new brain starts with never reached the diary, so the home was empty on day one",
     severity: "low",
     finding: "Same audit: init wrote its notes in the brain's first commit, and the diary catch-up skips a brain's first commit, so the owner's home showed no memories until something new was learned.",
     fix: "src/init.ts appends a diary line per starting fact (firstRows in src/diary-catchup.ts) in the init commit itself. Tests: test/box-day-one.test.ts. Eval: init-facts-on-the-diary.",
   },
   G712: {
-    closed: "claude/teaching-tie",
+    closed: "33f88a7f",
     title: "On the owner's yes, nothing said he teaches the class, on his page or the school's",
     severity: "medium",
     finding: "Owner, 2026-11-07, on his school's org page: \"it should have understood by then that I teach there\"; his own page held only his employer, and no page tied him to the class or the class to the school.",
     fix: "src/teaching.ts answerTeach: Yes files the course page (title the code, org: the school, cited by the mails behind the ask and his tap) and his own teaches: (or takes:) fact naming it, never a second org fact; src/wiki.ts pageLead then says \"You teach X here.\" first on the school's page, \"You teach X at School.\" on his page and the course page, and lists the pages about the code on the course page, each dropped when its fact is out of the reader's view. Test: test/teaching-tie.test.ts. Eval: teach-yes-school-page-says-it.",
   },
   G711: {
-    closed: "claude/teaching-tie",
+    closed: "33f88a7f",
     title: "The brain never noticed the owner teaches a class, though its code recurs in pages from many mails with people at the school",
     severity: "medium",
     finding: "Owner, 2026-11-07, on his school's org page: \"this is a class number\"; a course code sat in the titles of pages filed from several mails whose senders' org facts all named the school, and nothing asked him.",
@@ -41,7 +48,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/core.ts ownerDecide and ownerKeepBoth, src/settle-inbox.ts settleInbox: renderTouchedPages right after the settle commit, as owner-say does. Test: test/settle-page-now.test.ts. Eval: settle-rewrites-page-now.",
   },
   G706: {
-    closed: "claude/ask-follow-up",
+    closed: "cec72246",
     title: "Ask answered a question about one fact with nothing, or with the whole page",
     severity: "medium",
     finding: "LinkedIn filming, 2026-11-07, demo brain: \"When do we freeze the Atlas beta?\" got \"Nothing on that yet. Tell me, and I'll keep it.\" though Atlas launch's next step says the beta freeze on 15 October, and \"What's next for Atlas launch?\" got the page's whole prose. The box only knew an attribute from the \"X's Y\" pattern, and found a page only by its full title.",
@@ -83,7 +90,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/wiki.ts pageLead: the owner's page among the members becomes the page's first sentence (\"You work as a lecturer at North College.\"), from his org fact (p-at-<owner>) and role fact (p-in-<owner>), never his name in the list, never his page as See also there; written only when every reader may see both. Test: test/org-page-ties.test.ts. Eval: org-page-owner-tie.",
   },
   G705: {
-    closed: "claude/settings-asks",
+    closed: "6a47b0db",
     title: "The home's Open Settings landed nowhere in particular: three numbers, two names, and no buttons on what it counted",
     severity: "medium",
     finding: "Owner's phone, 2026-11-07: the home said 6 under \"Needs a look in Settings\". Open Settings opened the top of Settings, whose memory line said \"52 need a look\" (the trust audit, nothing to tap) and whose list said \"Still open (11)\" (everything it shows, counted or not). The proposals the home counted said only \"say what's right in the box on your home\", and two counted kinds (new pages held past their day, a rules change) had no row at all. \"I don't know where to go to fix this.\"",

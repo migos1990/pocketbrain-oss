@@ -54,6 +54,11 @@ export const APP_COPY = {
   gardenerHead: "The Gardener looks tonight",
   settingsHead: "Needs a look in Settings",
   settingsHint: "These wait for you on Settings, where each has its own question.",
+  answerHead: "To answer",
+  answerHint: "Your mail suggests this. One tap, and your pages say it.",
+  teachYes: "Yes, I teach it",
+  teachTakes: "I'm taking it",
+  teachNo: "No",
   openSettings: "Open Settings",
   latelyHead: "Lately",
   seeThem: "See them",
@@ -339,6 +344,8 @@ function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   if (w.seen && w.look) return `<li class="card warn"><span class="what">${esc(w.what)}</span><ul class="look">${w.look.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${lock(w.stranger)}<div class="foot"><div class="acts">${w.verb === "kept private" ? "" : `<form method="post" action="/action/diary-keep">${hidden(csrf, { key: w.seen })}<button class="pill" aria-label="${esc(`${APP_COPY.keepPrivate}: ${w.what}`)}">${APP_COPY.keepPrivate}</button></form>`}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.letThem}: ${w.what}`)}">${APP_COPY.letThem}</button></form></div></div></li>`;
   if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/sign-in-again">${hidden(csrf, {})}<button class="pill solid" aria-label="${esc(`${APP_COPY.readIt}: ${w.what}`)}">${APP_COPY.readIt}</button></form></div></li>`;
   if (w.href === "/home?all=1") return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock()}<a class="pill solid" href="${esc(w.href)}">${APP_COPY.seeThem}</a></div></li>`;
+  // A question about a class (G715): its three answers, each its own tap.
+  if (w.teach) return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><div class="acts">${([["teaches", APP_COPY.teachYes, "pill solid"], ["takes", APP_COPY.teachTakes, "pill"], ["no", APP_COPY.teachNo, "pill"]] as const).map(([answer, label, cls]) => `<form method="post" action="/action/teach-answer">${hidden(csrf, { ask: w.teach!, answer })}<button class="${cls}" aria-label="${esc(`${label}: ${w.what}`)}">${esc(label)}</button></form>`).join("")}</div></div></li>`;
   if (onSettings(w)) return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><span></span><a class="pill" href="${esc(w.href)}">${APP_COPY.openSettings}</a></div></li>`;
   if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${w.meta ? `${esc(w.meta)} · ` : ""}${APP_COPY.gardener}</small></div></li>`;
   const verb = w.href.startsWith("/settle/m-") ? APP_COPY.decide : APP_COPY.settle;
@@ -375,6 +382,7 @@ const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<
 const isKept = (w: Waiting) => w.verb === "kept private";
 const held = (w: Waiting) => (!!w.seen && !isKept(w)) || w.href === "/home?all=1";
 const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
+const isQuestion = (w: Waiting) => !!w.teach;
 const group = (head: string, hint: string, cards: string[], n: number | null = cards.length) => cards.length ? `<h2 class="group">${esc(head)}${n === null ? "" : ` <b>${n}</b>`}</h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
 const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
 export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean; undo?: string } = {}): string {
@@ -384,8 +392,9 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const lines = v.all ? all : faceLines(all, faceRoom(v.waiting.length + v.gardener.length));
   const more = v.all ? 0 : all.length - lines.length + v.folded + v.earlierFolded;
   // Each heading carries its own count, and the two add up to the big number.
-  const settle = v.waiting.filter((w) => !held(w) && !isKept(w) && !onSettings(w)), hold = v.waiting.filter(held), elsewhere = v.waiting.filter(onSettings), kept = v.waiting.filter(isKept);
+  const settle = v.waiting.filter((w) => !held(w) && !isKept(w) && !onSettings(w) && !isQuestion(w)), questions = v.waiting.filter(isQuestion), hold = v.waiting.filter(held), elsewhere = v.waiting.filter(onSettings), kept = v.waiting.filter(isKept);
   const asks = group(APP_COPY.settleHead, APP_COPY.settleHint, settle.map((w) => waitingCard(w, csrf)), waitingTotal(settle))
+    + group(APP_COPY.answerHead, APP_COPY.answerHint, questions.map((w) => waitingCard(w, csrf)), waitingTotal(questions))
     + group(APP_COPY.heldHead, APP_COPY.heldHint, hold.map((w) => waitingCard(w, csrf)), waitingTotal(hold))
     + group(APP_COPY.settingsHead, APP_COPY.settingsHint, elsewhere.map((w) => waitingCard(w, csrf)), waitingTotal(elsewhere))
     // What the owner kept private, on the full list only: nothing waits, so no count (G630).

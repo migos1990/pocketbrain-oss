@@ -3,7 +3,8 @@
 // count the same items. Every open decision the hub won't file on its own (src/textline/items.ts
 // openItems, less src/filing.ts autoSaves and its queues), the other cards that wait for a tap, a
 // capture held past its day, and each value the serving hold keeps until the owner taps Show it
-// (src/seen.ts). The home lists conflicts, held mail and held values itself; the rest wait on
+// (src/seen.ts), and a question about a class the owner may teach (src/teaching.ts, G715). The
+// home lists conflicts, held mail, held values and the teaching questions itself; the rest wait on
 // Settings, and the home counts them under one heading that links there.
 // What counts here is the owner's to change (scripts/north-star.ts head); G626 rests on the
 // owner's "i trust u" of 2026-11-02 00:18Z and the coordinator's pick of option 1, as G618 did.
@@ -15,6 +16,7 @@ import { autoSaves, newQueues, heldByAccess, type Queues } from "./filing";
 import { heldCount } from "./capture";
 import { inboxConflicts } from "./settle-inbox";
 import { unseenFacts } from "./seen";
+import { waitingTeachAsks } from "./teaching";
 
 const DECISIONS = new Set(["dispute", "proposal", "held-answer"]);
 // Cards that ask for a tap but aren't a fact decision: held mail, a capture, an upkeep run, rules, spend.
@@ -28,6 +30,7 @@ export interface OwnerAsks {
   other: Item[]; // the other cards that ask
   stuck: number; // captures held past their day
   serving: number; // values the serving hold keeps for Show it
+  teach: number; // questions about a class the owner may teach, answered on the home
   total: number;
   settings: number; // asks the home doesn't list itself: they wait on Settings
   queues: Queues;
@@ -59,7 +62,9 @@ export function ownerAsks(root: string, now = new Date(), later = now): OwnerAsk
   if (stuck) by.held = stuck;
   const serving = unseenFacts(root).length;
   if (serving) by.held_by_serving = serving;
+  const teach = waitingTeachAsks(root).length;
+  if (teach) by.teach = teach;
   const total = Object.values(by).reduce((a, b) => a + b, 0);
-  const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + serving;
-  return { by, waiting, other, stuck, serving, total, settings: total - onHome, queues, homeConflicts, byAccess };
+  const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + serving + teach;
+  return { by, waiting, other, stuck, serving, teach, total, settings: total - onHome, queues, homeConflicts, byAccess };
 }

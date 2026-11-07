@@ -4,7 +4,9 @@
 // each line with Undo. Built from diary/*.jsonl (src/diary.ts), never from git log. The page itself is
 // html-home.ts; the words are the owner's (test/owner-copy.test.ts).
 import { ownerAsks, type OwnerAsks } from "../waiting";
-import { dateWordForms } from "../util";
+import { waitingTeachAsks } from "../teaching";
+import { HOME_COPY } from "./html-home";
+import { dateWordForms, sha256 } from "../util";
 import type { Note } from "../brain";
 import { isDisputed, sensitivityRank, loadBrain, type Sensitivity } from "../brain";
 import { records, scrubExact } from "../carve";
@@ -48,7 +50,7 @@ export interface HomeLine {
   attr?: string; // the attribute, for which lines lead the face (faceLines)
   kind?: string; // the diary row's kind, likewise
 }
-export interface Waiting { what: string; verb: string; href: string; n?: number; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
+export interface Waiting { what: string; verb: string; href: string; n?: number; teach?: string; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // teach: a teaching question's key, for its three taps (teachKey); seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
 export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string }
@@ -555,10 +557,19 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   const asking = settleCards(open.filter((c) => !c.held), inboxConflicts(root)).map((cs) => card(cs, "tap to settle"));
   // A message the relay held between two assistants: send it or not, on its own settle screen.
   const mail = comms(root).filter((m) => m.verdict === "held").map((m) => ({ what: `${cap(agentLabel(rules, m.from))}'s message to ${agentLabel(rules, m.to)} is held.`, verb: "tap to decide", href: `/settle/m-${m.id}` }));
+  // A question about a class the owner may teach (src/teaching.ts, G715), answered here with his
+  // three taps. It names the class and the school only while every page behind it is still below
+  // private, read now (invariant 16); else it asks without them.
+  const below = (id: string) => { const n = notes.get(id); return !!n && sensitivityRank(n.fm.sensitivity) < sensitivityRank("private"); };
+  const teach: Waiting[] = waitingTeachAsks(root).map((a) => ({ what: below(a.org) && a.pages.every(below) ? a.question : HOME_COPY.teachUnnamed, verb: "tap to answer", href: "/home", teach: teachKey(a.code) }));
   // What waits on Settings (src/waiting.ts): one card that counts it and links there (G626).
   const settings: Waiting[] = asks.settings > 0 ? [{ n: asks.settings, what: settingsWords(asks), verb: "on Settings", href: SETTINGS_HREF }] : [];
-  return { waiting: [...asking, ...mail, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
+  return { waiting: [...asking, ...mail, ...teach, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
+
+// A teaching question's key on the home's forms: never the course code itself, which the card
+// leaves out once a page behind it is private.
+export const teachKey = (code: string) => sha256(`teach:${code}`).slice(0, 16);
 
 // How many things the home lists as waiting on the owner: the one count the digest and the text
 // say too (conflicts to settle and held values to see; never the Gardener's, never an alert).
