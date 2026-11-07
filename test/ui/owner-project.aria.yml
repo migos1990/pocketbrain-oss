@@ -2,7 +2,7 @@
   - link "‹ Memory":
     - /url: /memory
   - link "Edit this page":
-    - /url: /note/projects/atlas-launch
+    - /url: /p/projects/atlas-launch?edit=1
     - text: Edit
   - heading "Atlas launch" [level=1]
   - paragraph: project · 2 sources

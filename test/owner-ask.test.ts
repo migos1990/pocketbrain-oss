@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The owner app's Ask tab as a chat (brief 2026-10-30, step 4), on the demo brain: what you asked
-// and what it answered stay on Ask, oldest first, for this sign-in only and in the hub's memory
-// only. After a write the turn keeps its Undo and an Open link to the page. The box's gate is
+// and what it answered stay on Ask, oldest first, in a chat kept on the hub (G716,
+// test/ask-chats.test.ts). After a write the turn keeps its Undo and an Open link to the page. The box's gate is
 // unchanged (ownerSay decides; no model decides). A turn made right after a sign-in may hold a
 // private value, so on a sign-in older than 10 minutes it isn't shown again.
 import { test, expect } from "bun:test";
@@ -48,7 +48,7 @@ test("Ask keeps the conversation, oldest first, with Undo and Open after a write
   } finally { delete process.env.PB_NOW; }
 }, 60_000);
 
-test("the conversation is this sign-in's only, and holds the last turns", async () => {
+test("a chat shows its last turns, and another sign-in opens the same chat (G716)", async () => {
   process.env.PB_NOW = DEMO_NOW;
   try {
     const { signIn } = await setup();
@@ -58,7 +58,7 @@ test("the conversation is this sign-in's only, and holds the last turns", async 
     expect(mine).toHaveLength(ASK_TURNS);
     expect(mine.at(-1)).toContain(`${ASK_TURNS + 1}`);
     const other = await signIn();
-    expect(turns((await other.req("GET", "/ask")).text)).toEqual([]);
+    expect(turns((await other.req("GET", "/ask")).text)).toEqual(mine);
   } finally { delete process.env.PB_NOW; }
 }, 60_000);
 

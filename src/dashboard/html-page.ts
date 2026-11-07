@@ -18,6 +18,7 @@ import { keptQuotes, itemRef } from "../quotes";
 import { sensitiveShape } from "../shape";
 import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
 import { appPage, composer } from "./html-app";
+import { editedOn, dayWords, yourNotes, NOTE_MAX } from "../page-notes";
 import { plain, shutBody, attrWords } from "./home";
 import { ownerConflicts } from "../core";
 import { inboxConflicts } from "../settle-inbox";
@@ -83,6 +84,13 @@ export const PAGE_COPY = {
   birthday: "{page}'s birthday",
   calendar: "Calendar",
   editShort: "Edit",
+  keepNote: "Keep it as a note",
+  editedBy: "Edited by you on {day}.",
+  notesHead: "Your notes",
+  notesHint: "Only you write here. Your assistants that see this page read it too.",
+  notesSave: "Save",
+  notesCancel: "Cancel",
+  notesSignIn: "Sign in again to edit this page.",
   roleAt: "{role} at {org}",
   lastMet: "Last met {day}",
   nextMeet: "Next: {what}, {day}",
@@ -106,6 +114,10 @@ const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w
 // Two inks on a page: the name big, the surname in the headline ink; the role line between two
 // rules; footnote numbers as small headline-ink blocks; what links here as one sentence.
 export const PAGE_CSS = `
+form.notes{display:flex;flex-direction:column;gap:8px;margin:0 0 18px}form.notes label{display:flex;flex-direction:column;gap:2px}form.notes label b{font-weight:900;font-size:15px;text-transform:uppercase}form.notes label small{font-size:14px;line-height:19px;color:var(--muted)}
+form.notes textarea{font:inherit;font-size:17px;line-height:24px;color:var(--text);background:var(--paper);border:2px solid var(--text);border-radius:0;padding:10px 12px;min-height:160px;width:100%;resize:vertical}
+form.notes .acts{display:flex;gap:18px;align-items:center}
+p.edited{font-size:13px;line-height:18px;color:var(--muted);margin:0 0 10px}
 .band{display:flex;flex-direction:column;gap:0;margin:0 0 14px}
 .band .bar{display:flex;justify-content:space-between;align-items:center;font-size:14px;line-height:20px;font-weight:500}
 .band .bar a{font-weight:700;display:inline-flex;align-items:center;min-height:44px}
@@ -409,7 +421,7 @@ function weekSection(s: State, w: Week, going: Note[], link: (n: Note) => string
   return `<h2 class="sec">${PAGE_COPY.bookNow}</h2>${parts.join("")}${quiet}${rest}`;
 }
 
-export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; undo?: string; fresh?: boolean } = {}): string {
+export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; undo?: string; fresh?: boolean; edit?: boolean } = {}): string {
   const fresh = !!o.fresh, closed = !fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
   const name = displayName(n.fm.id, n.fm.title);
   const first = callName(n.fm.id, name);
@@ -432,6 +444,14 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const details = closed ? "" : facts(s, n, fresh);
   const open = fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private") ? `<p class="kind">${PAGE_COPY.openPrivate}</p>` : "";
   const body = open + (closed ? `<p class="quiet">${PAGE_COPY.shutPage}</p>${signInAgain(csrf)}` : details.includes(PAGE_COPY.shut) || withheld ? `${proseOrEmpty()}${signInAgain(csrf)}` : proseOrEmpty());
+  // When the owner last changed this page's own notes by hand (G718).
+  const edited = closed ? undefined : editedOn(s.root, n.fm.id);
+  const editedLine = edited ? `<p class="kind edited">${esc(fill(PAGE_COPY.editedBy, { day: dayWords(edited) }))}</p>` : "";
+  const editor = !o.edit || closed ? "" : fresh
+    ? `<form class="notes" method="post" action="/action/page-notes-save">${hidden(csrf, { id: n.fm.id })}<label for="notes"><b>${PAGE_COPY.notesHead}</b><small>${PAGE_COPY.notesHint}</small></label><textarea id="notes" name="text" rows="8" maxlength="${NOTE_MAX}">${esc(yourNotes(n.body))}</textarea><div class="acts"><button class="pill solid">${PAGE_COPY.notesSave}</button><a class="pill" href="${href(n.fm.id)}">${PAGE_COPY.notesCancel}</a></div></form>`
+    : `<p class="quiet">${PAGE_COPY.notesSignIn}</p>${signInAgain(csrf)}`;
+  // A sentence the box caught no fact in can be kept as the owner's note on this page (G719).
+  const keep = !closed && o.said && o.reply?.kind === "say.didnt-catch" ? `<div class="chips"><form method="post" action="/action/page-note">${hidden(csrf, { id: n.fm.id, text: o.said })}<button>${PAGE_COPY.keepNote}</button></form></div>` : "";
   function proseOrEmpty() { return prose.trim() ? `<div class="prose">${prose}</div>` : `<p class="quiet">${esc(fill(PAGE_COPY.empty, { name: first }))}</p>`; }
   const area = String(n.fm.area ?? "");
   // A routine says whose it is: "Town's routine" (owner, 2026-11-03: "which agent does what").
@@ -440,7 +460,8 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   // A person's name in two lines, the surname in the headline ink; anything else in one.
   const words = name.split(/\s+/);
   const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
-  const editHref = `/note/${n.fm.id.split("/").map(encodeURIComponent).join("/")}`;
+  // Edit opens the page's own notes (G718), right after a sign-in only.
+  const editHref = `${href(n.fm.id)}?edit=1`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
 <div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}${meetLine(s, met, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
   const book = !closed && n.fm.id === ownerOf(s.rules, s.notes, ownerTitle(s.rules) ?? "")?.page ? bookSections(s, fresh) : "";
@@ -453,9 +474,9 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
   // Undo after an answer to the Gardener's line on an org: only that org's own answer (org-undo).
   const undoOrg = o.flash && o.undo && isOrg(n) ? `<div class="chips"><form method="post" action="/action/org-undo">${hidden(csrf, { id: n.fm.id, hash: o.undo })}<button>${PAGE_COPY.undo}</button></form></div>` : "";
-  const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}${undoOrg}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
+  const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}${keep}${undoOrg}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
   return appPage(name, "memory", `${band}
-${closed ? "" : describeCard(s, csrf, n)}${body}${closed ? "" : projectCard(s, n, fresh)}${book}${changedList}${overlapList}${mentionedList}
+${closed ? "" : describeCard(s, csrf, n)}${editor}${editedLine}${body}${closed ? "" : projectCard(s, n, fresh)}${book}${changedList}${overlapList}${mentionedList}
 ${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}
 ${pinned}`, { css: PAGE_CSS, wrap: "page" });
 }

@@ -32,6 +32,16 @@ export const APP_COPY = {
   askHidden: "Sign in again to see this answer.",
   routinesHint: "What your assistants do for you: the routines and jobs they wrote down.",
   open: "Open {title}",
+  aChat: "A chat",
+  newChat: "New chat",
+  earlierChats: "Earlier chats",
+  deleteChat: "Delete this chat",
+  chatDeleted: "Chat deleted.",
+  deleteSure: "Delete this chat? It can't be brought back.",
+  chatsHead: "Your chats",
+  noChats: "No chats yet. Ask anything to start one.",
+  chatTurns: "{n} questions",
+  chatTurn: "1 question",
   askHint: `Ask ${CHARACTER} about anyone or anything in your memory, or tell it what changed. It answers here.`,
   me: "You and your assistants",
   more: "{n} more on your mind",
@@ -179,6 +189,8 @@ form.box button{font:inherit;font-size:16px;font-weight:800;border:0;border-radi
 .you{border-top:0;margin:14px 0 0;padding:0 0 6px;font-weight:800;font-size:19px;line-height:25px}
 .you::before{content:"— "}
 .chips{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 14px}
+.chatbar{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 6px}.chatbar form{margin:0}
+.chats li{border-top:2px solid var(--text)}.chats a.chat{display:flex;flex-direction:column;gap:2px;padding:10px 0;min-height:56px;color:var(--text)}.chats a.chat b{font-weight:800;font-size:17px;line-height:23px;overflow-wrap:anywhere}.chats a.chat small{font-size:13px;line-height:18px;color:var(--muted)}
 .talk{list-style:none;margin:0;padding:0}.answer p{margin:0}.answer .cites{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0}.chips form{margin:0}
 ul{list-style:none;margin:0;padding:0}
 .mind{display:flex;flex-direction:column}
@@ -420,7 +432,10 @@ ${box(csrf, {}, APP_COPY.box)}`, { wrap: "chat" });
 // without what was asked (the owner may have typed the value), and the last one hidden has the tap
 // to sign in again (G637).
 export interface AskTurnView { said: string; reply: SayReply; title?: string; prose?: { html: string; cites: { href: string; label: string }[] } }
-export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { turns?: (AskTurnView | { hidden: true })[]; flash?: string } = {}): string {
+// Each chat (G716) keeps its own context: the box carries its id (t), "new" until its first turn.
+// New chat starts one, Earlier chats lists them, and a chat can be deleted.
+const chatBar = (csrf: string, chat: string | undefined, chats: number) => `<div class="chatbar">${chat !== "new" ? `<a class="pill" href="/ask?t=new">${APP_COPY.newChat}</a>` : ""}${chats ? `<a class="pill" href="/ask?list=1">${APP_COPY.earlierChats}</a>` : ""}${chat && chat !== "new" ? `<form method="post" action="/action/ask-delete" onsubmit="return confirm(${esc(JSON.stringify(APP_COPY.deleteSure))})">${hidden(csrf, { t: chat })}<button class="pill">${APP_COPY.deleteChat}</button></form>` : ""}</div>`;
+export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { turns?: (AskTurnView | { hidden: true })[]; flash?: string; chat?: string; chats?: number } = {}): string {
   const turns = o.turns ?? [];
   // One Sign in again on the page: under the newest hidden turn, unless the newest answer has its own.
   const end = turns.at(-1), lastHidden = end && !("hidden" in end) && end.reply.signin ? -1 : turns.findLastIndex((t) => "hidden" in t);
@@ -431,7 +446,7 @@ export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { t
     const acts = [
       t.reply.undo_token ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: t.reply.undo_token })}<button>${HOME_COPY.undo}</button></form>` : "",
       t.reply.undo_token && t.reply.page && t.title ? `<a class="open" href="${href(t.reply.page)}">${esc(fill(APP_COPY.open, { title: t.title }))}</a>` : "",
-      ...(last ? (t.reply.chips ?? []).map((c) => `<form method="post" action="/say">${hidden(csrf, { q: c.say, chip: "1", from: "ask" })}<button>${esc(c.label)}</button></form>`) : []),
+      ...(last ? (t.reply.chips ?? []).map((c) => `<form method="post" action="/say">${hidden(csrf, { q: c.say, chip: "1", from: "ask", ...(o.chat ? { t: o.chat } : {}) })}<button>${esc(c.label)}</button></form>`) : []),
     ].filter(Boolean);
     // An answer about a page is that page's own prose, with what it cites under it.
     const answer = t.prose ? `<div class="bubble answer"${last ? ' role="status"' : ""}><p>${t.prose.html}</p><p class="cites">${t.prose.cites.map((c) => `<a href="${esc(c.href)}">${esc(c.label)}</a>`).join("")}</p></div>` : `<p class="bubble"${last ? ' role="status"' : ""}>${esc(t.reply.text)}</p>`;
@@ -440,9 +455,16 @@ export function askPage(v: Pick<HomeView, "date" | "name">, csrf: string, o: { t
   const talk = turns.length ? `<ol class="talk">${turns.map(turn).join("")}</ol>` : `<p class="bubble">${APP_COPY.askHint}</p>`;
   // The box sits at the bottom, above the tabs, as in any chat (Louis, 2026-10-31), and the page
   // opens on the newest answer.
-  return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.ask, v.name)}
+  return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.ask, v.name)}${chatBar(csrf, o.chat, o.chats ?? 0)}
 ${talk}${o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : ""}
-${box(csrf, { from: "ask" }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo(0,document.body.scrollHeight)</script>" : ""}`, { wrap: "chat" });
+${box(csrf, { from: "ask", ...(o.chat ? { t: o.chat } : {}) }, APP_COPY.askBox)}${turns.length ? "<script>scrollTo(0,document.body.scrollHeight)</script>" : ""}`, { wrap: "chat" });
+}
+
+// Earlier chats (/ask?list=1), newest first: each its label (src/dashboard/server.ts chatLabel) and day.
+export interface ChatRow { id: string; label: string; day: string; turns: number }
+export function askListPage(v: Pick<HomeView, "date" | "name">, rows: ChatRow[]): string {
+  const list = rows.length ? `<ul class="chats">${rows.map((r) => `<li><a class="chat" href="/ask?t=${esc(r.id)}"><b>${esc(r.label)}</b><small>${esc(r.day)} · ${esc(r.turns === 1 ? APP_COPY.chatTurn : fill(APP_COPY.chatTurns, { n: r.turns }))}</small></a></li>`).join("")}</ul>` : `<p class="quiet">${APP_COPY.noChats}</p>`;
+  return appPage(APP_COPY.ask, "ask", `${header(v.date, APP_COPY.chatsHead, v.name)}<div class="chatbar"><a class="pill" href="/ask?t=new">${APP_COPY.newChat}</a></div>${list}`);
 }
 
 // Memory (/memory): the kinds with their counts, a kind's pages, a search, and this week's pages.

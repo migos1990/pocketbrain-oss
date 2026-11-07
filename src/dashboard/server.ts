@@ -18,6 +18,11 @@ import { join } from "node:path";
 import { loadRules } from "../rules";
 import { loadBrain, sensitivityRank } from "../brain";
 import { hubGate } from "../hub";
+import { addYourNote, setYourNotes } from "../page-notes";
+const PAGE_COPY_NOTE = { kept: "Kept as your note on this page.", saved: "Saved your notes." } as const;
+import { listChats, getChat, addTurn, deleteChat, isChatId, type Chat } from "../ask-threads";
+import { sayDay } from "../diary";
+import { ownerDay } from "../clock";
 import { waitingTeachAsks, answerTeach, type TeachAnswer } from "../teaching";
 import { carve, grantFor, records } from "../carve";
 import { renderView } from "../view";
@@ -46,7 +51,7 @@ import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, page
 import type { Note } from "../brain";
 import { ownerPage, askProse, askFact, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
-import { homePage, askPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
+import { homePage, askPage, askListPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
 import { parentOf as wikiParent } from "../wiki";
 import { findOverlaps, assistantOf } from "../overlap";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
@@ -136,6 +141,11 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   // The teaching question on the home (G715): asked from pages below private, and the diary's Undo
   // takes each filed fact back, like the org line above.
   "teach-answer": () => true,
+  // Deleting an Ask chat only takes away what the owner typed and was told (G716).
+  "ask-delete": () => true,
+  // A sentence the owner just typed on a page, kept there as their note (G719); editing the notes
+  // shows what is there already, so it needs a fresh sign-in (G718).
+  "page-note": () => true,
 };
 // Who a value goes to after Show, said as carve will serve it (audit v11, G645): another person's
 // private matter goes to the resolver alone, or to no assistant, never "your assistants".
@@ -266,10 +276,8 @@ export function flashOf(loc: string): { ok: string; err: string } {
   return { ok: one("ok"), err: one("err") };
 }
 
-// How many of Ask's turns a sign-in keeps (owner app step 4).
-export const ASK_TURNS = 20;
-// A follow-up on Ask carries the last answer's page while the conversation is warm: 30 minutes.
-export const ASK_FOLLOW_MS = 30 * 60_000;
+// How many of a chat's turns Ask shows (owner app step 4); the chat keeps more (src/ask-threads.ts).
+export const ASK_TURNS = 50;
 // privateThen: what of the turn's page or fact was already private or held when it was answered (G637).
 interface AskTurn { said: string; reply: SayReply; fresh: boolean; at: number; privateThen?: string[] }
 
@@ -347,11 +355,27 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // again. A read answer made on an older sign-in shows, unless something on its page or fact became
   // private or held only after it was answered. A hidden turn says so in its place, with the tap to
   // sign in again (G637).
-  const ask = (csrf: string, sid: string, flash?: string) => {
+  // Ask's chats (src/ask-threads.ts, G716): `t` opens one, "new" an empty one, none the newest;
+  // `list` lists them. A chat's label on an older sign-in names only pages not private now (G717).
+  const chatLabel = (c: Chat<AskTurn>, byId: Map<string, Note>, fresh: boolean): string => {
+    if (fresh && c.turns[0]) return c.turns[0].said.length > 60 ? `${c.turns[0].said.slice(0, 59)}…` : c.turns[0].said;
+    const ids = [...new Set(c.turns.flatMap((t) => t.reply.pages ?? [t.reply.page ?? t.reply.fact_key?.slice(0, t.reply.fact_key.lastIndexOf("#"))]).filter((x): x is string => !!x))];
+    const titles = ids.flatMap((id) => { const n = byId.get(id); return n && n.fm.sensitivity !== "secret" && !privateNow(n, "") ? [displayName(id, n.fm.title)] : []; }).slice(0, 3);
+    return titles.length ? titles.join(", ") : APP_COPY.aChat;
+  };
+  const ask = (csrf: string, sid: string, flash?: string, q = new URLSearchParams()) => {
     const rules = loadRules(root), fresh = freshSignIn(root, sid, now());
-    const day = now().getTime() - 86_400_000;
-    const all = (chats.get(sid) ?? []).filter((t) => t.at >= day);
     const notes = loadBrain(root, { shared: true }), byId = new Map(notes.map((n) => [n.fm.id, n]));
+    const kept = listChats<AskTurn>(root, now().getTime());
+    if (q.get("list") === "1") {
+      // The year only when it isn't this one: chats are kept 90 days, across a new year (review of #130).
+      const year = ownerDay(rules, now()).slice(0, 4);
+      const days = (at: number) => { const d = ownerDay(rules, new Date(at)); return d.startsWith(year) ? sayDay(d).replace(/ \d{4}$/, "") : sayDay(d); };
+      return new Response(askListPage({ date: dayWords(clock()), name: firstName(rules) }, kept.map((c) => ({ id: c.id, label: chatLabel(c, byId, fresh), day: days(c.updated), turns: c.turns.length }))), { headers: PAGE_HEADERS });
+    }
+    const t = q.get("t");
+    const chat = t === "new" ? undefined : isChatId(t) ? kept.find((c) => c.id === t) : kept[0];
+    const all = (chat?.turns ?? []).slice(-ASK_TURNS);
     const visible = (t: AskTurn) => {
       if (fresh) return true;
       if (t.fresh) return false;
@@ -369,7 +393,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const n = t.reply.kind === "say.lookup" && t.reply.page ? byId.get(t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {};
     };
     const turns = all.map((t) => visible(t) ? { ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}), ...prose(t) } : { hidden: true as const });
-    return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, flash }), { headers: PAGE_HEADERS });
+    return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, flash, chat: chat?.id ?? "new", chats: kept.length }), { headers: PAGE_HEADERS });
   };
   // The sheet a dashed mark opens: only for one of the owner's assistants that doesn't get the fact.
   // The area is offered only when sharing it would let that assistant get the fact.
@@ -410,7 +434,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   };
 
   // A page as the owner reads it (phone UI spec §2.2).
-  const pageScreen = (csrf: string, id: string, o: { said?: string; reply?: ReturnType<typeof ownerSay>; flash?: string; undo?: string; fresh?: boolean } = {}) => {
+  const pageScreen = (csrf: string, id: string, o: { said?: string; reply?: ReturnType<typeof ownerSay>; flash?: string; undo?: string; fresh?: boolean; edit?: boolean } = {}) => {
     const s = loadState(root);
     const n = s.notes.find((x) => x.fm.id === id);
     if (!n) return undefined;
@@ -542,9 +566,6 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
 
   // The chips the box last offered each sign-in (only those count as taps).
   const offered = new Map<string, Set<string>>();
-  // Ask's conversation per sign-in (owner app step 4): in this run's memory only, never on disk, the
-  // last ASK_TURNS turns, gone a day after the last one or when the sign-in ends.
-  const chats = new Map<string, AskTurn[]>();
   let lastOwnerMinute = "";
   async function handle(req: Request, hosts = allowedHosts, secure = false): Promise<Response> {
     const url = new URL(req.url);
@@ -659,21 +680,22 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       if (url.pathname === "/say") {
         // The composer lets a line break with Shift+Enter; the hub reads what was said as one line.
         const said = (form.q ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
-        let reply;
+        let reply, chat: Chat<AskTurn> | undefined;
         const fresh = freshSignIn(root, sid, now());
         try { // A chip counts as a tap only when the box offered that exact sentence to this sign-in;
         // anything else posted as a chip is read as typed words (coordinator, 2026-10-27).
         const chip = form.chip === "1" && !!offered.get(sid)?.has(said);
-        // On Ask, a follow-up carries the page this sign-in's last answer there was about.
-        const follows = form.from === "ask" ? (chats.get(sid) ?? []).filter((x) => x.at >= now().getTime() - ASK_FOLLOW_MS && x.reply.page).at(-1)?.reply.page : undefined;
+        // On Ask, a follow-up carries the page the chat's last answer about a page was about,
+        // within one chat, with no time limit (G716): a chat named by the form, else the newest one.
+        chat = form.from === "ask" ? form.t === "new" ? undefined : isChatId(form.t) ? getChat<AskTurn>(root, form.t, now().getTime()) : listChats<AskTurn>(root, now().getTime())[0] : undefined;
+        const follows = chat?.turns.filter((x) => x.reply.page).at(-1)?.reply.page;
         reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip, ...(form.from === "ask" ? { from: "ask" as const, ...(follows ? { follows } : {}) } : {}) }, chip ? undefined : boxModel(root));
         if (reply.chips?.length) offered.set(sid, new Set(reply.chips.map((c) => c.say))); } catch (e) { return go("/home", { err: fail(e) }); }
         if (form.page && reply.kind !== "say.unknown-name" && reply.kind !== "say.forgotten") { const r = pageScreen(csrf, reply.page ?? form.page, { said, reply, fresh }); if (r) return r; }
         if (form.from === "ask") {
           const byId = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n]));
-          const turns = [...(chats.get(sid) ?? []), { said, reply, fresh, at: now().getTime(), privateThen: privateParts(byId, { reply }) }].slice(-ASK_TURNS);
-          chats.set(sid, turns);
-          return ask(csrf, sid);
+          const saved = addTurn<AskTurn>(root, chat?.id, { said, reply, fresh, at: now().getTime(), privateThen: privateParts(byId, { reply }) }, now().getTime());
+          return ask(csrf, sid, undefined, new URLSearchParams({ t: saved.id }));
         }
         return home(csrf, said, reply, undefined, false, false, freshSignIn(root, sid, now()));
       }
@@ -719,7 +741,6 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       }
       if (action === "sign-in-again") {
         sessions.delete(sid);
-        chats.delete(sid);
         dropSession(root, sid, now());
         return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `pb_owner=; HttpOnly; Path=/; Max-Age=0`, "cache-control": "no-store" } });
       }
@@ -754,6 +775,20 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           if (r.outcome === "kept") kept++;
         }
         return kept ? go("/home", { ok: APP_COPY.keptPrivate }) : go("/home", { err: "Nothing waiting there any more." });
+      }
+      if (action === "page-note" || action === "page-notes-save") {
+        // The owner's own notes on a page (src/page-notes.ts, G718, G719): one owner commit.
+        const id = form.id ?? "", to = `/p/${id.split("/").map(encodeURIComponent).join("/")}`;
+        try {
+          hubGate(root, ["commit"]);
+          const ok = action === "page-note" ? addYourNote(root, id, form.text ?? "") : setYourNotes(root, id, form.text ?? "");
+          return go(to, { ok: action === "page-note" ? PAGE_COPY_NOTE.kept : ok === "No change." ? ok : PAGE_COPY_NOTE.saved });
+        } catch (e) { return go(loadBrain(root).some((n) => n.fm.id === id) ? to : "/memory", { err: fail(e) }); }
+      }
+      if (action === "ask-delete") {
+        // Delete a chat (G716): its file goes; nothing else held it.
+        deleteChat(root, form.t ?? "");
+        return go("/ask", { ok: APP_COPY.chatDeleted });
       }
       if (action === "teach-answer") {
         // One tap on the teaching question (src/teaching.ts answerTeach): found by its key, never by
@@ -897,7 +932,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     // The home is the front door (audit v4); the old overview is one tap away from it.
     if (p === "/overview") return withFlash(overview(s, csrf, url.searchParams));
     const op = p.match(/^\/p\/(.+)$/);
-    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()) }) ?? page("dash.no-note", "brain", { id: op[1]! });
+    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()), edit: url.searchParams.get("edit") === "1" }) ?? page("dash.no-note", "brain", { id: op[1]! });
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];
@@ -916,7 +951,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
     if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);
     if (p === "/let") return letSheet(csrf, url.searchParams) ?? page("dash.no-note", "brain", { id: url.searchParams.get("key")?.split("#")[0] ?? "" });
-    if (p === "/ask") return ask(csrf, sid, flashed);
+    if (p === "/ask") return ask(csrf, sid, flashed, url.searchParams);
     if (p === "/memory") return memory(url.searchParams, freshSignIn(root, sid, now()));
     const editor = s.rules.policy.owner_editor;
     if (p === "/agents") return withFlash(agentsPage(s, csrf, oauthCard(s, csrf, loadOAuth(root), listPending(root)) + editorCard(s, csrf, editor, editor ? editorCommits(root, editor) : [])));

@@ -69,10 +69,12 @@ export const DASHBOARD_PAGES: [string, string][] = [
   ["memory-search", "/memory?q=Maya"],
   ["memory-changes", "/memory?changes=week"],
   ["ask", "/ask"],
+  ["ask-chats", "/ask?list=1"],
   ["who", "/who"],
   ["let", "/let?key=projects%2Fproduct-discovery-course%23next_step&agent=gemini"],
   ["owner-page", "/p/people/maya-chen"],
   ["owner-project", "/p/projects/atlas-launch"],
+  ["owner-page-edit", "/p/people/maya-chen?edit=1"],
   ["settle", "/settle/c-0001"],
 ];
 
@@ -86,6 +88,7 @@ export const BUSY_PAGES: [string, string][] = [
   ["who-busy", "/who"],
   ["settle-mail-busy", "/settle/m-a"],
   ["ask-busy", "/ask"],
+  ["ask-chats-busy", "/ask?list=1"],
 ];
 
 // What the owner types into Ask before ask-busy is checked (a conversation: a question, then a write).
