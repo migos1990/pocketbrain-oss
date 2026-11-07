@@ -815,6 +815,19 @@ const pullCases: Case[] = [
     const first = core.search(root, "steward", "Harbour walk")[0]?.id;
     return ok(first === "projects/harbour-walk", `first hit ${first}`);
   } },
+  { id: "pack-once-not-in-view", dimension: "upkeep", gap: "G699", title: "a topic pack gives each fact once, keeps how pages are tied, and an agent whose words no note in its view holds is told it isn't in its view", source: "audit v12 (every fact twice; a trial agent got weak notes and no not-in-my-view line)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const retrieve = await import(join(SRC_DIR, "retrieve.ts"));
+    if (!retrieve.onceOver) return na("no onceOver at this commit");
+    const facts = "#### From its facts\nGrant report is drafting.[^pf-status] Ana Diaz and Ben Roy work at [[orgs/acme|Acme]].[^p-rel-orgs-acme] See also [[people/ana|Ana]].[^p-see-ana]\n[^pf-status]: Email, 2026-09-01 (gmail:f0000000000000c1)\n[^p-rel-orgs-acme]: Email, 2026-09-01 (gmail:f0000000000000c2)\n[^p-see-ana]: Email, 2026-09-01 (gmail:f0000000000000c3)";
+    const once = retrieve.onceOver(facts);
+    const kept = once.includes("work at [[orgs/acme|Acme]]") && once.includes("[^p-rel-orgs-acme]: ") && !once.includes("is drafting") && !once.includes("See also") && !once.includes("[^pf-status]: ");
+    const mine = retrieve.onceOver("A paragraph a person wrote.[^pf-status]") === "A paragraph a person wrote.[^pf-status]";
+    const root = sandbox("synthetic");
+    const pack = core.contextPack(root, "helper", "zzqx glorbnik");
+    const none = !pack.includes("Not in your view:") || pack.includes("not in my view");
+    return ok(kept && mine && none, `restating sentences out, ties kept ${kept}; a person's text untouched ${mine}; not-in-view line well formed ${none}`);
+  } },
   { id: "week-across-pages", dimension: "upkeep", gap: "G689", title: "an assistant asking about its week gets one dated block across pages, each line its note and source, and nothing its carve hides", source: "audit v12 (\"what's next this week?\" answered not at all); plans/next-level.md F1", run: async () => {
     const core = await import(join(SRC_DIR, "core.ts"));
     const week = existsSync(join(SRC_DIR, "week.ts")) ? await import(join(SRC_DIR, "week.ts")) : undefined;

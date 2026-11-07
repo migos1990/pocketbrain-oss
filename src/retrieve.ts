@@ -415,24 +415,67 @@ function bestChunks(idx: Index, d: Doc, qt: QueryTerm[], n: number): Chunk[] {
 
 // What context_pack returns for a topic: for each hit, its header and facts plus its best
 // matching paragraphs, in the note's own order, until the character budget is spent.
-export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNote?: number; budget?: number; synonyms?: boolean; semantic?: Semantic; keep?: (id: string) => boolean; first?: (id: string) => boolean } = {}): { text: string; ids: string[]; blocks: string[]; left: string[]; meaningOnly: boolean } {
+// The pack says each fact once (audit v12, G699): a note's facts reach the agent as its bullets,
+// so the hub's "From its facts" block drops the sentences that only restate one ([^pf-…]) and its
+// "See also" sentences ([^p-see-…], the Connected line's job), with their references and its
+// made-by line. What the bullets don't say (how its pages are tied, [^p-rel-…]) stays. A block
+// left with nothing goes. Other text, a person's own, is never touched.
+const FACTS_HEAD = /^#{1,6} From its facts\s*$/;
+const FOOTDEF = /^\[\^([^\]\s]+)\]:/;
+const RESTATES = /^(pf-|p-see-)/;
+export function onceOver(text: string): string {
+  const lines = text.split("\n");
+  // The made-by line on its own (chunkNote splits it off): the pack drops it as it does in the block.
+  if (text.trim() === "(Written by the hub from this page's facts.)") return "";
+  if (!FACTS_HEAD.test(lines[0] ?? "")) return text;
+  const kept: string[] = [], used = new Set<string>(), defs: string[] = [];
+  for (const l of lines.slice(1)) {
+    if (FOOTDEF.test(l)) { defs.push(l); continue; }
+    if (l.trim() === "(Written by the hub from this page's facts.)" || !l.trim()) continue;
+    const said = l.split(/(?<=[.!?](?:\[\^[^\]\s]+\])*)\s+/).filter((x) => {
+      const refs = [...x.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!);
+      return refs.some((r) => !RESTATES.test(r));
+    });
+    for (const x of said) for (const m of x.matchAll(/\[\^([^\]\s]+)\]/g)) used.add(m[1]!);
+    if (said.length) kept.push(said.join(" "));
+  }
+  if (!kept.length) return "";
+  return [lines[0], ...kept, ...defs.filter((d) => used.has(d.match(FOOTDEF)![1]!))].join("\n");
+}
+
+// The references of the sentences onceOver took out sit in their own paragraph: they go too,
+// unless something left in the pack still cites them.
+function unusedRefsOut(body: string[]): string[] {
+  const used = new Set(body.flatMap((b) => b.split("\n").filter((l) => !FOOTDEF.test(l)).flatMap((l) => [...l.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!))));
+  return body.map((b) => b.split("\n").filter((l) => { const id = l.match(FOOTDEF)?.[1]; return !id || !RESTATES.test(id) || used.has(id); }).join("\n")).filter((b) => b.trim());
+}
+
+export const WEAK_ONLY_NOTES = 3;
+export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNote?: number; budget?: number; synonyms?: boolean; semantic?: Semantic; keep?: (id: string) => boolean; first?: (id: string) => boolean } = {}): { text: string; ids: string[]; blocks: string[]; left: string[]; meaningOnly: boolean; weakOnly: boolean } {
   const { notes = 8, chunksPerNote = 3, budget = 8000, keep, first } = opts;
   const qt = queryTerms(q, opts.synonyms ?? true);
   // With a keep test (a topic that names someone, G503) the ranking is read further down, so the
   // notes kept are still the best of those that pass; the notes the name is the title of lead.
-  const hits = keep ? rank(idx, q, notes * 5, opts).filter((h) => keep(h.id)).sort((a, b) => Number(!!first?.(b.id)) - Number(!!first?.(a.id))).slice(0, notes) : rank(idx, q, notes, opts);
+  const ranked = keep ? rank(idx, q, notes * 5, opts).filter((h) => keep(h.id)).sort((a, b) => Number(!!first?.(b.id)) - Number(!!first?.(a.id))).slice(0, notes) : rank(idx, q, notes, opts);
+  // No note in the view holds any of the asker's own words, only related ones (G700): the head
+  // says so plainly, and three such notes are enough to show what was near.
+  const weakOnly = ranked.length > 0 && ranked.every((h) => h.strength === "weak" && !meaningOnly(h));
+  const hits = weakOnly ? ranked.slice(0, WEAK_ONLY_NOTES) : ranked;
   const parts: string[] = [];
   const ids: string[] = [];
   let used = 0;
   for (const h of hits) {
     const d = idx.docs.find((x) => x.id === h.id)!;
+    // The paragraphs worth giving: those with something the facts don't already say (G699).
+    const said = new Map(d.chunks.slice(1).map((c) => [c.chunk, onceOver(c.chunk.text)] as const).filter(([, t]) => t));
     // a short body comes whole; a long one (a running log) gives only its matching paragraphs
-    const short = d.chunks.slice(1).reduce((a, c) => a + c.chunk.text.length, 0) <= 800;
+    const short = [...said.values()].reduce((a, t) => a + t.length, 0) <= 800;
     // a long note found only by meaning has no matching paragraph: its first ones stand in
-    const best = short ? [] : bestChunks(idx, d, qt, chunksPerNote);
-    const chosen = new Set(short ? d.chunks.slice(1).map((c) => c.chunk) : best.length ? best : d.chunks.slice(1, 1 + chunksPerNote).map((c) => c.chunk));
-    const body = d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => c.chunk.text);
-    const omitted = d.chunks.length - 1 - body.length;
+    const best = short ? [] : bestChunks(idx, d, qt, chunksPerNote).filter((c) => said.has(c));
+    const chosen = new Set(short || !best.length ? [...said.keys()].slice(0, short ? undefined : chunksPerNote) : best);
+    const body = unusedRefsOut(d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => said.get(c.chunk)!));
+    // Paragraphs left out because they only restate facts are not more to read.
+    const omitted = said.size - chosen.size;
     const block = [d.chunks[0].chunk.text, whyLine(h), ...(body.length ? ["", ...body] : []), ...(omitted > 0 ? ["", `(${omitted} more paragraph${omitted > 1 ? "s" : ""} in this note; read \`${d.id}\` for all of it)`] : [])].join("\n");
     if (used && used + block.length > budget) break;
     parts.push(block);
@@ -442,5 +485,5 @@ export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNot
   // Matches the character budget left out, best first (the context budget names them, src/context.ts).
   const left = hits.slice(ids.length).map((h) => h.id);
   // Every match found only by meaning: none of the query's words is in the view (G372).
-  return { text: parts.join("\n\n"), ids, blocks: parts, left, meaningOnly: hits.length > 0 && hits.every(meaningOnly) };
+  return { text: parts.join("\n\n"), ids, blocks: parts, left, meaningOnly: hits.length > 0 && hits.every(meaningOnly), weakOnly };
 }

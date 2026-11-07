@@ -192,6 +192,7 @@ function packFor(root: string, agent: string, topic?: string, opts?: SearchOpts)
   const week = WEEK_TOPIC.test(topic) ? weekBlock(res, rules, keep) : undefined;
   if (week) head.push("", week.text);
   if (!p0.ids.length && !unnamed.length && !week) head.push("", "Nothing in your view matches. That doesn't mean the brain has nothing; it may be outside your slice.");
+  else if (p0.weakOnly) head.push("", `Not in your view: no note you hold uses the words you asked about. The ${p0.ids.length === 1 ? "note" : `${p0.ids.length} notes`} below share only related words. Unless one plainly answers it, say it isn't in your view ("not in my view") and ask ${ownerName(rules)}; don't answer from them.`);
   else if (p0.meaningOnly) head.push("", "None of your words is in any note in your view: the notes below are only similar in meaning. If none of them answers it, it isn't in your view; say so rather than guess.");
   // Each hit names the notes it links to and that link to it, so the next hop is one read away.
   p0.blocks = p0.blocks.map((b, i) => { const c = connectedLine(neighbours(res, p0.ids[i])), k = citeLine(res, p0.ids[i]); return [b, k, c].filter(Boolean).join("\n"); });

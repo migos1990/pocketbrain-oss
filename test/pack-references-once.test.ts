@@ -15,14 +15,18 @@ test("a section's heading is never repeated over the page's references", () => {
 });
 
 test("context_pack shows the hub's block once after the box writes a fact", () => {
+  const was = process.env.PB_NOW;
   process.env.PB_NOW = "2026-10-08T14:00:00Z";
+  try {
   const root = makeBrain();
   expect(ownerSay(root, "Jane Roy's next step is send the syllabus by Friday").kind).toBe("say.noted");
   const md = contextPack(root, "planner", "what's next with Jane");
   const at = md.indexOf("### Jane Roy"), end = md.indexOf("\n### ", at + 4);
   const jane = md.slice(at, end < 0 ? undefined : end);
-  // Her page's own text stays on top and the hub's block sits beneath it once (G682).
-  expect(jane.match(/#### From its facts/g) ?? []).toHaveLength(1);
+  // The hub's block is never repeated (G682); its sentences that only restate a listed fact are
+  // left out, so the next step is said once, in the facts (G699).
+  expect((jane.match(/#### From its facts/g) ?? []).length).toBeLessThanOrEqual(1);
   expect(jane).not.toContain("#### Earlier notes");
-  delete process.env.PB_NOW;
+  expect(jane.match(/send the syllabus by Friday/g) ?? []).toHaveLength(1);
+  } finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
 });

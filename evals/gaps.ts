@@ -75,6 +75,20 @@ export const GAPS: Record<string, Gap> = {
     finding: "Next-level D2, 2026-11-06 (\"every person page says when I last saw them and when I will\"): the calendar the owner consented to knew; the page said a last contact only when a capture had filed one, and never the next meeting.",
     fix: "src/upcoming.ts meetingsWith (an address the page holds among the guests, or the full name in the title) and src/dashboard/html-page.ts meetLine: \"Last met 2 Oct · Next: Export sample walkthrough, 9 Oct · 1 meeting so far this quarter\" under the person's name, drawn each time, never written, never a card; a private calendar's only right after a sign-in. Test: test/last-met-next-meeting.test.ts. Eval: calendar-last-met-next-meeting.",
   },
+  G700: {
+    closed: "ad99cd1",
+    title: "An agent whose words no note in its view holds got weak notes and no plain answer",
+    severity: "medium",
+    finding: "Audit v12: a trial agent asked about a page outside its view got unrelated notes matched only by related words, with no line saying it isn't in its view, so a guess read like an answer.",
+    fix: "src/retrieve.ts pack: when every hit is weak (none of the asker's own words, only related ones, not semantic), weakOnly keeps at most WEAK_ONLY_NOTES (3); src/core.ts packFor leads with \"Not in your view: ...\" telling it to answer \"not in my view\" unless one plainly answers. Test: test/pack-once.test.ts (G700). Eval: pack-once-not-in-view.",
+  },
+  G699: {
+    closed: "ad99cd1",
+    title: "Every context_pack carried each fact twice",
+    severity: "medium",
+    finding: "Audit v12: each note in a pack gave its facts as bullets and again as the hub's template sentences under \"From its facts\" (12 of 18 values duplicated on Atlas), with a reference line per sentence and \"See also\" sentences the Connected line already says.",
+    fix: "src/retrieve.ts onceOver/unusedRefsOut: in a topic pack the \"From its facts\" block keeps only sentences citing something other than a fact ([^pf-…]) or a See also ([^p-see-…]), so the pages-tied sentences stay; their unused references and the made-by line go; a person's own text is never touched. Test: test/pack-once.test.ts (G699). Eval: pack-once-not-in-view.",
+  },
   G690: {
     closed: "c415844a",
     title: "No restore was ever proven on a schedule, and the offsite copy was never read back",
