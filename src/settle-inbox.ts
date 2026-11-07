@@ -5,6 +5,8 @@
 // from the fact's live value is a conflict on the owner's home and settle screen, in the same shape
 // as a dispute (core.ts SettleCase). Picking the live value drops the proposal, picking the new one
 // accepts it (at its source's rank, with the tap recorded), and a typed value is the owner's word.
+import { renderTouchedPages } from "./wiki";
+import { clock } from "./clock";
 import { loadBrain, isDisputed, isList, sensitivityRank, type FactRecord } from "./brain";
 import { followArea } from "./area-follow";
 import { records } from "./carve";
@@ -65,6 +67,12 @@ export const inboxConflict = (root: string, id: string) => inboxConflicts(root).
 // n 1 keeps the live value (the proposal is dropped), n 2 takes the new one; a typed value is the
 // owner's own word and the proposal is dropped.
 export function settleInbox(root: string, id: string, choice: { n?: number; typed?: string }): void {
+  const began = new Date(Math.min(Date.now(), clock().getTime()) - 1000).toISOString(); // either clock: PB_NOW may stand in for today
+  settleInboxNow(root, id, choice);
+  // The page's text says the settled value now, not after the night writer (G707).
+  try { renderTouchedPages(root, began); } catch { /* the night run writes it */ }
+}
+function settleInboxNow(root: string, id: string, choice: { n?: number; typed?: string }): void {
   const c = inboxConflict(root, id);
   if (!c) throw new CoreError(409, "nothing to settle there any more");
   if (choice.typed) {

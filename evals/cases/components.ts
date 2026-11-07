@@ -844,6 +844,22 @@ const pullCases: Case[] = [
     const mine = line.test(helper) && line.test(steward), hidden = !helper.includes("Roof repair") && !helper.includes("wk-home"), whole = steward.includes("projects/wk-home");
     return ok(mine && hidden && whole, `dated line with its source ${mine}; a hidden page left out ${hidden}; the whole view has it ${whole}`);
   } },
+  { id: "settle-rewrites-page-now", dimension: "upkeep", gap: "G707", title: "a pick on the settle screen rewrites the page's text at once, so an assistant never reads the new value beside the old sentence", source: "filming on the demo brain 2026-11-07 (context_pack said 22 October, the page 15 October)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const { write } = await import(join(SRC_DIR, "write.ts"));
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    const root = sandbox("synthetic");
+    write(root, { agent: "planner", id: "people/jane-roy", attribute: "role", value: "Program director", as_of: "2026-09-01", sources: ["gmail:f00000000000000f"], source_type: "email", verification: "verified-by-source" });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const c = core.ownerConflicts(root).find((x: { fact_key: string }) => x.fact_key === "people/jane-roy#role");
+    if (!c) return na("no open conflict in this sandbox");
+    const side = c.sides.find((x: { value: unknown }) => x.value === "Program director");
+    if (!side) return na("no such side");
+    core.ownerDecide(root, c.id, side.n);
+    const body = String(core.readNote(root, "steward", "people/jane-roy")?.body ?? "");
+    const right = body.includes("Program director");
+    return ok(right, `the page's text says the picked value at once: ${right}`);
+  } },
   { id: "blind-suffix-has-digit", dimension: "carving", gap: "G710", title: "a blind writer's six-hex suffix always holds a digit, so the fold never reads it as a word and keeps the wrong page", source: "PR 116 CI 2026-11-07 (suffix cbcdff)", run: async () => {
     const w = await import(join(SRC_DIR, "write.ts"));
     const f = await import(join(SRC_DIR, "fold.ts"));

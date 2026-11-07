@@ -69,7 +69,8 @@ class Rig {
     await item.getByRole("button", { name: label, exact: true }).click();
     await this.page.waitForLoadState("load");
   }
-  lastCommit() { return sh(this.root, ["git", "log", "-1", "--format=%an|%s"]); }
+  // The newest commit but the page writer's own, which follows a settle at once (G707).
+  lastCommit() { return sh(this.root, ["git", "log", "-5", "--format=%an|%s"]).split("\n").find((l) => !/^hub\|hub: page text/.test(l)) ?? ""; }
   // The home's conflict over what's next: "Next for Atlas launch: … Or …?" when its values may show,
   // else "Two sources disagree on what's next for …" (G560). How many, and settle it by picking a side.
   async waiting() {

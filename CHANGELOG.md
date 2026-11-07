@@ -12,6 +12,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- When you settle something on the settle screen, by a pick or by keeping both, the page's own text says it at once, not after the night run, so an assistant never reads the new value beside the old sentence (G707).
 
 - Ask answers the one thing you asked: "What's next for Atlas launch?" says its next step, not the whole page, and "When do we freeze the Atlas beta?" finds the step that says the freeze instead of "Nothing on that yet", with the page and its source under the answer (G706).
 - Ask remembers who you were just asking about: after "who is Camille?", "is she my daughter?" is about Camille (docs/owner-home.md, G701).

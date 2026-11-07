@@ -37,7 +37,8 @@ test("what the owner means to do for someone is theirs too, and names the page i
   for (const [said, value] of cases) {
     const root = makeBrain();
     const r = ownerSay(root, said);
-    expect({ said, kind: r.kind }).toEqual({ said, kind: "say.noted" });
+    // A refusal says why in the diff (CI 2026-11-07 refused one case it never refused here).
+    expect({ said, kind: r.kind, why: r.kind === "say.noted" ? "" : r.text }).toEqual({ said, kind: "say.noted", why: "" });
     expect(r.text).toStartWith("Noted: You ");
     expect(String(step(root, "Jane Roy"))).toMatch(value);
   }

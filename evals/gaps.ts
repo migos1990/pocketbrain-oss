@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G707: {
+    closed: "331b0349",
+    title: "After a pick on the settle screen the page's text kept the old value until the night writer ran",
+    severity: "medium",
+    finding: "Filming on the demo brain, 2026-11-07: after settling c-0001 to 22 October, context_pack served next_step 22 October as current while the page's own text still said \"freeze the beta build on 15 October. A different value is waiting to be checked.\", so what an assistant read contradicted itself. A word in the box already rewrote the page at once; the settle screen's pick and keep both didn't.",
+    fix: "src/core.ts ownerDecide and ownerKeepBoth, src/settle-inbox.ts settleInbox: renderTouchedPages right after the settle commit, as owner-say does. Test: test/settle-page-now.test.ts. Eval: settle-rewrites-page-now.",
+  },
   G706: {
     closed: "claude/ask-follow-up",
     title: "Ask answered a question about one fact with nothing, or with the whole page",
