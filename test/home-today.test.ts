@@ -67,7 +67,7 @@ test("Settings lists what is open without a count, and says what files itself", 
   const h1 = text(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)![1]).trim();
   expect(h1).not.toMatch(/to decide/);
   expect(asked(root, s.now).length).toBeGreaterThan(0);
-  expect(html).toContain('<h2 id="needs">Still open');
+  expect(html).toContain('<h2 id="needs">Needs a look');
   // What the hub saves on its own is counted, not listed.
   expect(text(html)).toMatch(/24 facts from your captures and sources file on their own/);
 }, 120_000);
@@ -105,15 +105,17 @@ test("a refused save is said in the owner's words, never the text written for th
 }, 120_000);
 
 // The owner's framing (2026-10-24): one portable memory of himself for many assistants, so the
-// home page says what the memory is before what it asks.
-test("the home page opens with the memory itself: its facts, what changed, and how far to trust it", () => {
+// home page says what the memory is before what it asks. Its trust-audit count went (G705): it
+// read as a second "need a look" number beside the one the home counts.
+test("the home page opens with the memory itself: its facts and what changed", () => {
   const root = brain();
   const s = loadState(root);
   const html = overview(s, "x").body;
   const facts = s.notes.reduce((n, x) => n + Object.keys(x.fm.facts ?? {}).length, 0);
   const lede = text(html.slice(html.indexOf("</h1>"), html.indexOf('<div class="card">')));
   expect(lede.replace(" :", ":")).toContain(`Your memory: ${facts} facts, `);
-  expect(lede).toMatch(/\d+ changed this week\. (Nothing needs a look|\d+ needs? a look)\./);
+  expect(lede).toMatch(/\d+ changed this week\.\s*$/);
+  expect(lede).not.toMatch(/need/);
   expect(html).not.toContain('href="/spot"');
   expect(html).toContain('href="/brain"');
 }, 120_000);

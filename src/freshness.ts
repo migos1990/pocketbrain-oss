@@ -51,7 +51,7 @@ export function pastDate(value: unknown, asOf: string, now: string): boolean {
 
 // The day a fact that ends on its date (a next step, a due date, a deadline, any `until_date`
 // attribute) named, once that day has passed and nobody confirmed the fact on or after it.
-// The owner's "Still true" under Needs a look (`confirmFact`) confirms it, so the
+// The owner's "Still true" under the Brain's To recheck (`confirmFact`) confirms it, so the
 // fact reads current again until a later day it names passes.
 export function passedDay(r: FactRecord, spec: AttributeSpec, now: string): string | undefined {
   if (!(spec.ends_on_date || spec.shelf_life === "until_date") || typeof r.value !== "string") return undefined;

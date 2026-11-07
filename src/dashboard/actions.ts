@@ -2,12 +2,14 @@
 // What Louis can do from the dashboard. Each action is the same function the CLI calls, so
 // the dashboard adds no new way to change the brain; every change is a commit by the owner.
 import { clearWriteHold } from "../write-hold";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { loadRules } from "../rules";
 import { git } from "../git";
-import { decideProposal } from "../write";
+import { decideProposal, resolveEntity } from "../write";
+import { loadBrain, slugify } from "../brain";
+import { TYPE_FOLDER } from "../checks";
 import { decideHeld, fileTransport, type MailTransport } from "../relay";
 import { confirmHeldAnswer, ownerDecide, CoreError } from "../core";
 import { revokeTokens } from "../auth";
@@ -18,7 +20,8 @@ import { OWNER } from "../owner";
 import { addAgent } from "../addagent";
 import { bindClient, revokeClient, listPending, clientsOf, cutAtAuthServer, loadOAuth } from "../oauth";
 import { setFact, saveNoteText, saveNoteBody, saveSection, confirmFact, undoOwnerEdit, setEditor, revertCommit, forgetNote, bringBack, markNeverRight, markDone, forgetFact, hideNoteFrom, showNoteTo, setNoteSensitivity, answerDescribe, undoDescribe } from "./edit";
-import { decideCapture } from "../capture";
+import { decideCapture, releaseHeld } from "../capture";
+import { hubGate } from "../hub";
 import { recordReexplain, recordOwnerTime } from "../measure";
 import { setMonthlyCap } from "./usage";
 import { approveAsk, declineAsk, cancelAsks } from "../asks";
@@ -83,6 +86,31 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       const r = decideProposal(root, file, action === "proposal-accept" ? "accept" : "reject", undefined, shown);
       if (r.outcome === "refused") throw new CoreError(422, refusalWords(r.message));
       return action === "proposal-reject" ? `rejected ${file}` : r.message;
+    }
+    // A proposal by a name that fits a page and a new one (G603): the owner says which, and only
+    // then is it accepted; accepting it as it stands would only ask the same question again (G705).
+    case "proposal-place": {
+      const file = need("file"), to = need("to");
+      if (!/^[A-Za-z0-9._-]+\.yaml$/.test(file)) throw new CoreError(400, "bad proposal name");
+      const path = join(root, "inbox", file);
+      if (!existsSync(path)) throw new CoreError(404, `no proposal ${file}`);
+      const was = readFileSync(path, "utf8");
+      const p = YAML.parse(was) as { request?: { id?: unknown; title?: unknown; type?: unknown } };
+      const r = p?.request;
+      if (!r || r.id || typeof r.title !== "string" || typeof r.type !== "string" || !TYPE_FOLDER[r.type]) throw new CoreError(409, "This change already says which page it is for.");
+      const notes = loadBrain(root);
+      const fits = resolveEntity(notes, r.type, r.title).ambiguous ?? [];
+      if (!fits.length || (to !== "new" && !fits.includes(to))) throw new CoreError(400, "That page isn't one this name fits.");
+      // A new page never lands on one that has its slug already.
+      const ids = new Set(notes.map((n) => n.fm.id)), base = `${TYPE_FOLDER[r.type]}/${slugify(r.title)}`;
+      let id = base;
+      for (let k = 2; to === "new" && ids.has(id); k++) id = `${base}-${k}`;
+      r.id = to === "new" ? id : to;
+      writeFileSync(path, YAML.stringify(p, { aliasDuplicateObjects: false }));
+      let res: ReturnType<typeof decideProposal> | undefined;
+      try { res = decideProposal(root, file, "accept"); } finally { if (!res || res.outcome === "refused") writeFileSync(path, was); }
+      if (res.outcome === "refused") throw new CoreError(422, refusalWords(res.message));
+      return res.message;
     }
     case "mail-release":
     case "mail-drop":
@@ -169,6 +197,12 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       return answerDescribe(root, need("id"), action === "org-yes" ? "yes" : action === "org-no" ? "no" : "again");
     case "org-undo":
       return undoDescribe(root, need("id"), need("hash"));
+    // New pages held past their day (src/capture.ts HELD): the owner files them all now.
+    case "held-release": {
+      hubGate(root, ["commit"]); // a replica commits nothing but its own ops
+      const moved = releaseHeld(root, Number.MAX_SAFE_INTEGER);
+      return moved ? `${moved} new page${moved === 1 ? "" : "s"} moved back to be filed.` : "Nothing was held.";
+    }
     case "capture-release":
     case "capture-discard": {
       const r = decideCapture(root, need("file"), action === "capture-release" ? "release" : "discard");

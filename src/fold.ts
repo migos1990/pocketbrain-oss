@@ -42,7 +42,7 @@ const folder = (id: string) => id.slice(0, id.lastIndexOf("/"));
 // The page that stays: the plain id first (it was there before any blind writer; a blind writer's
 // suffix is six hex characters with a digit, never a word like "decade"), then the one more pages
 // link to (fewer repoints; the id assistants know stays), then the first made, then the id.
-const blindId = (id: string) => /-(?=[0-9a-f]*\d)[0-9a-f]{6}$/.test(id);
+export const blindId = (id: string) => /-(?=[0-9a-f]*\d)[0-9a-f]{6}$/.test(id);
 function keeper(notes: Note[]): (a: Note, b: Note) => number {
   const inbound = new Map<string, number>();
   for (const n of notes) for (const t of new Set(linksIn(n.body ?? ""))) inbound.set(t, (inbound.get(t) ?? 0) + 1);

@@ -4,7 +4,7 @@
 // every pass condition is checked in code (the leak oracle, the brain repo, HTTP status codes).
 // Robin's claim under test: a new agent gets only its slice and can't learn the rest by asking
 // or tricking another agent. Every case is permanent; a leak found here is a gap in gaps.ts.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, mkdtempSync, rmSync, symlinkSync, chmodSync, utimesSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, mkdtempSync, rmSync, symlinkSync, chmodSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import YAML from "yaml";
@@ -4512,4 +4512,46 @@ const jobsCases: Case[] = [
     } },
 ];
 
-export const redteamCases: Case[] = [...standingCases, ...samePersonCases, ...householdCases, ...gardenerCases, ...relayCases, ...injectionCases, ...storedRoutineCases, ...forgedCases, ...tokenCases, ...killCases, ...logCases, ...hubCases, ...dashCases, ...sliceCases, ...instinctCases, ...browserCases, ...browserDoorCases, ...fuzzCases, ...canaryCases, ...menubarCases, ...collaboratorCases, ...pullRtCases, ...beliefCases, ...memsyncScrubCases, ...replacedCases, ...accessCases, ...quoteCases, ...tripwireKeyCases, ...backupSecretCases, ...hiddenNameCases, ...edgeRtCases, ...sensitiveRound2Cases, ...matchCases, ...areaAfterAgentCases, ...settleShareCases, ...tightenCases, ...retrieveAgeCases, ...updatedShownCases, ...ownerWordCases, ...deckCases, ...expiryCases, ...restoreCases, ...copyCases, ...bigBodyCases, ...quizBudgetCases, ...batch30AuditCases, ...batch2021Cases, ...tokenAuditCases, ...tokenAudit2Cases, ...tokenAudit3Cases, ...tokenAudit4Cases, ...tokenAudit5Cases, ...leakTextCases, ...jobsCases];
+const quietMod = await opt("quiet.ts");
+const authMod = await opt("auth.ts");
+function quietReads(root: string, agent: string, everyHours: number, lastAgoHours: number, now: Date, n = 12) {
+  mkdirSync(join(root, "log"), { recursive: true });
+  const last = now.getTime() - lastAgoHours * 3_600_000;
+  appendFileSync(join(root, "log", "reads.jsonl"), Array.from({ length: n }, (_, i) => JSON.stringify({ at: new Date(last - (n - 1 - i) * everyHours * 3_600_000).toISOString(), agent, op: "search", ids: [], q: "x" })).join("\n") + "\n");
+}
+const quietCases: Case[] = [
+  { id: "rt-quiet-assistant-home-line", dimension: "escalation", kind: "attack", gap: "G697", source: "next-level F4",
+    title: "a connected assistant gone quiet is one line on the home, never an ask; nothing while it reads",
+    run: async () => {
+      if (!quietMod?.quietAssistants || !homeMod?.homeView || !authMod?.issueToken) return na("no quiet line at this commit");
+      const now = new Date();
+      const calmRoot = sandbox("synthetic"), root = sandbox("synthetic");
+      const rules = pb.rules.loadRules(root);
+      const agent = Object.keys(rules.policy.agents).find((a) => pb.rules.ownAssistant(rules, a) && (rules.policy.agents[a]!.status ?? "active") !== "paused");
+      if (!agent) return na("no assistant of the owner's in the sandbox");
+      for (const r of [calmRoot, root]) authMod.issueToken(r, agent);
+      quietReads(calmRoot, agent, 24, 3, now);
+      quietReads(root, agent, 24, 9 * 24, now);
+      const calm = homeMod.homeView(calmRoot, pb.rules.loadRules(calmRoot), pb.brain.loadBrain(calmRoot), now);
+      const v = homeMod.homeView(root, pb.rules.loadRules(root), pb.brain.loadBrain(root), now);
+      const steps: [string, boolean][] = [["nothing while it reads", calm.quiet === undefined], ["one line when quiet", /has not read your brain in 9 days/.test(v.quiet ?? "")], ["not counted", homeMod.waitingCount(root, now) === homeMod.waitingCount(calmRoot, now)]];
+      const bad = steps.filter(([, x]) => !x).map(([x]) => x);
+      return ok(!bad.length, bad.length ? `failed: ${bad.join("; ")}` : (v.quiet ?? ""));
+    } },
+  { id: "rt-quiet-own-habit", dimension: "escalation", kind: "attack", gap: "G698", source: "next-level F4",
+    title: "each assistant is quiet against its own habit: a daily reader after days, a weekly one not after nine",
+    run: async () => {
+      if (!quietMod?.usualGap) return na("no quiet line at this commit");
+      const H = 3_600_000, D = 24 * H;
+      const steps: [string, boolean][] = [
+        ["daily: three days", quietMod.quietAfter(quietMod.usualGap(Array.from({ length: 10 }, (_, i) => i * D))) === 3 * D],
+        ["hourly: a day at least", quietMod.quietAfter(quietMod.usualGap(Array.from({ length: 10 }, (_, i) => i * H))) === D],
+        ["weekly: two weeks at most", quietMod.quietAfter(quietMod.usualGap(Array.from({ length: 6 }, (_, i) => i * 7 * D))) === 14 * D],
+        ["too little history: nothing", quietMod.usualGap([0, D, 2 * D]) === undefined],
+      ];
+      const bad = steps.filter(([, x]) => !x).map(([x]) => x);
+      return ok(!bad.length, bad.length ? `failed: ${bad.join("; ")}` : "per-habit thresholds hold");
+    } },
+];
+
+export const redteamCases: Case[] = [...standingCases, ...samePersonCases, ...householdCases, ...gardenerCases, ...relayCases, ...injectionCases, ...storedRoutineCases, ...forgedCases, ...tokenCases, ...killCases, ...logCases, ...hubCases, ...dashCases, ...sliceCases, ...instinctCases, ...browserCases, ...browserDoorCases, ...fuzzCases, ...canaryCases, ...menubarCases, ...collaboratorCases, ...pullRtCases, ...beliefCases, ...memsyncScrubCases, ...replacedCases, ...accessCases, ...quoteCases, ...tripwireKeyCases, ...backupSecretCases, ...hiddenNameCases, ...edgeRtCases, ...sensitiveRound2Cases, ...matchCases, ...areaAfterAgentCases, ...settleShareCases, ...tightenCases, ...retrieveAgeCases, ...updatedShownCases, ...ownerWordCases, ...deckCases, ...expiryCases, ...restoreCases, ...copyCases, ...bigBodyCases, ...quizBudgetCases, ...batch30AuditCases, ...batch2021Cases, ...tokenAuditCases, ...tokenAudit2Cases, ...tokenAudit3Cases, ...tokenAudit4Cases, ...tokenAudit5Cases, ...leakTextCases, ...jobsCases, ...quietCases];

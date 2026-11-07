@@ -36,9 +36,11 @@ test("a fact pulled from an email asks one question, shows its words, and says w
   expect(text(c)).toContain("Room: B-204");
   expect(c).not.toContain("<b>B-204</b>");
   expect(c).toContain("the class moves to room B-204 from next week");
-  // Settings decides nothing (2026-10-27): it is held until after the finals, no buttons.
-  expect(c.indexOf("Room: B-204")).toBeLessThan(c.search(/Files on |Expires unconfirmed on |Waits for your own word/));
-  expect(c).not.toContain("proposal-accept");
+  // Nothing plans it, so the home counts it and it is asked here with its two taps, below the fact
+  // (G705: "Waits for your own word" left the owner nowhere to go).
+  expect(c.indexOf("Room: B-204")).toBeLessThan(c.indexOf("proposal-accept"));
+  expect(text(c)).toContain("Yes, remember it");
+  expect(text(c)).toContain("No, skip it");
   expect(c).not.toContain("capture inbox/");
 });
 

@@ -11,3 +11,5 @@ test/video-montage.test.ts
 test/public-sync-workflow.test.ts
 # Names only the files above read, which the docs may still name (test/excluded.ts):
 # names: PB_OSS_DEPLOY_KEY
+# Plans for posts and outreach, private to this repo:
+plans/

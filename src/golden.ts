@@ -51,8 +51,8 @@ export function staleWhy(root: string, id: string, attr: string, day = today()):
     : [r.review_after && r.review_after <= day ? "its review date passed" : shelf ? `last checked ${days(daysBetween(r.last_confirmed ?? r.as_of, day))} ago (shelf life ${shelf}d)` : "",
       !ends ? (dated ? `${attr} names a date but doesn't end on it (only ${DATED.slice(0, -1).join(", ")} and ${DATED.at(-1)} do)` : "")
         : !dated ? "no date in it ends it" : "confirmed since its date"].filter(Boolean).join("; ");
-  // Only a conflict asks the owner (G452): this waits under Needs a look.
-  return `${cause}; it waits under Needs a look, nothing asks`;
+  // Only a conflict asks the owner (G452): this waits under the Brain's To recheck.
+  return `${cause}; it waits under the Brain's To recheck, nothing asks`;
 }
 
 export function askOne(root: string, g: Golden, agent: string): GoldenRow {

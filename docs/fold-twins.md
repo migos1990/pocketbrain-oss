@@ -1,6 +1,6 @@
 # One thing, one page (fold twins)
 
-A writer that files a page into an area or level it can't see gets a new page every time it writes by that name: write() only matches a name against pages the writer can see, and a new page from a writer outside the wall gets a random suffix (`projects/garden-planning-ea6eea`), so the reply never says a hidden page exists (G28). One project then shows twice on Memory (owner's phone, 2026-11-03; G635).
+A writer that files a page into an area or level it can't see gets a new page every time it writes by that name: write() only matches a name against pages the writer can see, and a new page from a writer outside the wall gets a random suffix of six hex characters, always with a digit in it so the fold never reads it as a word (`projects/garden-planning-ea6eea`; G710), so the reply never says a hidden page exists (G28). One project then shows twice on Memory (owner's phone, 2026-11-03; G635).
 
 The hub sees everything, so it folds such twins (`src/fold.ts`):
 

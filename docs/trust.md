@@ -22,14 +22,14 @@ Two more lines say why the third bucket is what it is:
 ## Where you see it
 
 - `pocketbrain audit trust [--json] [--check N]` prints the whole report, and last week's numbers beside it (one row a day in `log/trust.jsonl`). `--check N` first reads N cited items, the ones checked longest ago first, and checks every fact citing each against the item's own words (still said: confirmed today; not said or gone: needs a look, with the reason). The value never changes.
-- The dashboard's Settings page, at the end of the memory line ("Your memory: 383 facts, 12 changed this week."): "9 need a look" (or "Nothing needs a look").
+- The dashboard's Settings page no longer prints this count (G705): beside the home's "Needs a look in Settings" it read as a second, bigger number of things to do. Its memory line says only "Your memory: 383 facts, 12 changed this week."
 - The nightly pass logs the same line (`trust:` in the hub log), and the probe flags it if the step fails (`trust` job).
 
 ## What the hub does on its own
 
 - **Recheck** (already nightly, docs/gardener.md): due and stale facts, and fresh single-source facts assistants read, are checked at their cited item, 20 items a night, plus 10 more checked for still existing.
 - **Backfill, nightly** (docs/sources-pull.md "Backfilling sources"): for every Gmail source, up to 20 facts with no live source are searched for in your mail; a mail that states the value and names the note becomes its source. Value unchanged, nothing from the mail kept, never a private value searched. It used to run only when you typed `pocketbrain sources backfill`. It starts report-only (the night log says how many could get a source) until `pocketbrain backfill on`.
-- Anything that needs a look waits under the Brain's "Needs a look" (Still true, Change); nothing asks about it. Only a conflict is asked, on the home.
+- Anything that needs a look waits under the Brain's "To recheck" (Still true, Change); nothing asks about it. Only a conflict is asked, on the home.
 
 ## A cited message must be one the hub read
 

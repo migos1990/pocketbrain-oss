@@ -65,7 +65,7 @@ The owner sets the top tiers. For everyone else the brain suggests, and the owne
 - **Suggested**: each suggestion with its reason. *Make close* (or *Make known*) applies exactly what was suggested; the level picker next to it starts on the suggested level, never on inner circle; Each suggestion names the addresses its counts came from and whether the owner confirmed each one or only a source did (a forged message can make an address source-verified). A click applies only the level that was on screen: if the signals moved since, it is refused and nothing changes. *Not now* hides that person at that level; a higher level is still suggested, and a dismissed close stays hidden until *Suggest again* or the note is replaced (kept in `log/standing/dismissed.json`, local, never committed; nothing is written to `rules/`).
 - **Your list**: everyone placed, inner circle first, with the addresses that are pinned. Change the level or authority, Remove, or pin a source-verified address the note already has (asks first: a forged message can put an address there).
 - **Add someone**: any person note not yet on the list, at any level. This is where the owner names their inner circle.
-- Settings' *Still open* shows one line when suggestions wait. On a replica the buttons say where standing is set and write nothing.
+- Settings' *Also here* shows one line when suggestions wait. On a replica the buttons say where standing is set and write nothing.
 
 ## Not built yet
 

@@ -93,7 +93,7 @@ export const OWNER_ERRORS = {
   "doctor.inbound": { where: "doctor", what: "Inbound from {names} not ingested yet (the server does it every {minutes} min)", fix: { run: "pocketbrain hub sync" } },
   "doctor.ops-waiting": { where: "doctor", what: "{n} op(s) not applied yet: {list}", fix: { run: "pocketbrain hub sync" } },
   "doctor.ops-queued": { where: "doctor", what: "{n} write(s) queued for {hub}, oldest {age}h ago", fix: { run: "pocketbrain hub sync" } },
-  "doctor.hub-alerts": { where: "doctor", what: "{n} hub alert(s) this week, latest: {check}: {from}", fix: { go: "Settings", path: "/overview", then: "and read Still open" } },
+  "doctor.hub-alerts": { where: "doctor", what: "{n} hub alert(s) this week, latest: {check}: {from}", fix: { go: "Settings", path: "/overview", then: "and read Also here" } },
   "doctor.replica-no-git": { where: "doctor", what: "{name} has no git address in rules/hub.yaml, so nobody can sync with it", fix: { read: "docs/hub.md", then: "and add its git: line in rules/hub.yaml" } },
   "doctor.replica-down": { where: "doctor", what: "{name} unreachable at {git}", fix: { first: "check that {name} is on and online", run: "pocketbrain hub sync" } },
   "doctor.hub-down": { where: "doctor", what: "The hub {name} is unreachable at {git}; agents fall back to their snapshots and writes here queue", fix: { run: "pocketbrain hub promote <this machine>", then: "if it stays down" } },

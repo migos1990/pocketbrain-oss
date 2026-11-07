@@ -60,7 +60,7 @@ test("Needs you and an assistant's notes go a page at a time", async () => {
   for (let i = 0; i < 250; i++) writeFileSync(join(root, "projects", `bulk-${String(i).padStart(4, "0")}.md`), course(root, i));
   const get = await signedIn(root);
   const home = await get("/overview");
-  expect(home.text).toMatch(/Still open \(60\)/);
+  expect(home.text).toContain(">Needs a look <b>60</b></h2>");
   expect(home.text).toMatch(/1–50 of \d+ open/);
   expect(home.text).toContain('href="/overview?page=2"');
   expect((await get("/overview?page=2")).text).toMatch(/51–\d+ of \d+ open/);

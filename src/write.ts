@@ -62,6 +62,10 @@ function sourceKey(s: SourceRef): string {
   return refString(s);
 }
 
+// A blind writer's six-hex suffix always holds a digit, so the fold (src/fold.ts blindId) never
+// reads it as a word like "decade" or "cbcdff" (G710): an all-letter one ends in a digit instead.
+export const blindSuffix = (hex: string) => /\d/.test(hex) ? hex : `${hex.slice(0, 5)}${parseInt(hex[5]!, 16) % 10}`;
+
 export function writeHash(factKey: string, value: unknown, asOf: string, sources: SourceRef[]): string {
   const src = sources.map(sourceKey).sort().join(",");
   return sha256(`${factKey}\n${compareKey(value)}\n${asOf}\n${src}`);
@@ -665,7 +669,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     // A writer that can't see every note gets a random suffix on every new note, so a name
     // taken by a note it can't see answers exactly like a fresh one (G28; the owner can change
     // this default). Anyone who sees everything keeps plain names.
-    if (!rules.policy.agents[req.agent]?.inside_wall) do id = `${folder}/${slug}-${sha256(id + Date.now() + Math.random()).slice(0, 6)}`; while (notes.some((x) => x.fm.id === id));
+    if (!rules.policy.agents[req.agent]?.inside_wall) do id = `${folder}/${slug}-${blindSuffix(sha256(id + Date.now() + Math.random()).slice(0, 6))}`; while (notes.some((x) => x.fm.id === id));
     while (notes.some((x) => x.fm.id === id)) id = `${folder}/${slug}-${n++}`;
     const fm: Frontmatter = {
       id, type, title: req.title!, area,

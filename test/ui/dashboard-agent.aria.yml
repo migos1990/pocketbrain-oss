@@ -65,10 +65,10 @@
         - cell "loaded its notes"
         - 'cell "3 notes: Product Discovery course, Claire Dubois, Antoine Lavoie"'
         - cell "2026-10-08 08:50"
-      - 'row "\"Kitchen renovation\" loaded its notes 4 notes: Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Tilehouse Supply 2026-10-08 08:28"':
+      - 'row "\"Kitchen renovation\" loaded its notes 4 notes: Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier 2026-10-08 08:28"':
         - cell "\"Kitchen renovation\""
         - cell "loaded its notes"
-        - 'cell "4 notes: Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Tilehouse Supply"'
+        - 'cell "4 notes: Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier"'
         - cell "2026-10-08 08:28"
       - 'row "\"Grace Liu\" 2 times loaded its notes 3 notes: Grace Liu, Karen Liu, Atlas launch 2026-10-08 08:06"':
         - cell "\"Grace Liu\" 2 times"
@@ -115,9 +115,9 @@
         - cell "Notes it was handed"
         - cell "Also"
     - rowgroup:
-      - row "2026-10-08 Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Tilehouse Supply, Antoine Lavoie, Claire Dubois, Grace Liu, Julie Tran, Karen Liu +7 6 searches":
+      - row "2026-10-08 Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Antoine Lavoie, Claire Dubois, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe +7 6 searches":
         - cell "2026-10-08"
-        - cell "Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Tilehouse Supply, Antoine Lavoie, Claire Dubois, Grace Liu, Julie Tran, Karen Liu +7"
+        - cell "Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Antoine Lavoie, Claire Dubois, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe +7"
         - cell "6 searches"
       - row "2026-10-07 Hire a senior designer, not two juniors, Three-month Pinecrest pilot, Chloé Gagnon, Priya Shah, Pinecrest pilot, Q1 roadmap 2 searches":
         - cell "2026-10-07"
@@ -716,11 +716,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Product Discovery course\""
         - cell "· Product Discovery course, Claire Dubois, Antoine Lavoie"
-      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Tilehouse Supply":
+      - row "2 h ago Claude · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Kitchen renovation\""
-        - cell "· Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Tilehouse Supply"
+        - cell "· Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier"
       - row "2 h ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Atlas launch":
         - cell "2 h ago"
         - cell "Claude"

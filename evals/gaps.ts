@@ -5,6 +5,55 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G710: {
+    closed: "6144bb49",
+    title: "A blind writer's suffix with no digit read as a word, so the fold kept the wrong page",
+    severity: "low",
+    finding: "PR 116's CI, 2026-11-07, fold-twins.test.ts: write() gives a page made by an agent outside the wall a random six-hex suffix, and src/fold.ts blindId knows such a page only by a digit in it, so an all-letter suffix (cbcdff, about 1 in 360) read as part of the name and the fold kept the blind page over the plain one.",
+    fix: "src/write.ts blindSuffix: an all-letter suffix ends in a digit instead; blindId is unchanged, so a word (decade) is still a word. Test: test/blind-suffix.test.ts. Eval: blind-suffix-has-digit.",
+  },
+  G704: {
+    closed: "db13a517",
+    title: "An org page said \"also comes up in the sources of\" once per page, the same sentence over and over",
+    severity: "low",
+    finding: "Owner's phone, 2026-11-07, his school's org page: two sentences in a row each said the school also comes up in the sources of a subject line.",
+    fix: "src/wiki.ts pageLead: one sentence naming all of them (still at most TIES), each cited by its own p-in label so a read drops it when any of those pages leaves view. Test: test/org-page-ties.test.ts, test/page-ties.test.ts. Eval: named-in-one-sentence.",
+  },
+  G703: {
+    closed: "db13a517",
+    title: "The people at an org were one work-at list, not said by how the owner knows them",
+    severity: "medium",
+    finding: "Owner, 2026-11-07, on his school's page: \"these are the people that I'm interacting with\"; the page listed five names who work there and nothing of who they are to him, though relationship facts can say it.",
+    fix: "src/wiki.ts pageLead: members with a short relationship value are grouped by it (\"Ana Diaz and Ben Roy work at North College: your colleagues.\"), each cited by their org fact (p-at-) and their relationship fact (p-in-, so a read drops it when that fact is hidden); the rest keep the work-at sentence. Test: test/org-page-ties.test.ts. Eval: org-page-people-by-relationship.",
+  },
+  G702: {
+    closed: "db13a517",
+    title: "An org page never said the owner's own tie to it",
+    severity: "medium",
+    finding: "Owner, 2026-11-07, on his school's page: \"it should have understood by then that I teach there\"; the owner's own org fact made him one more name in the work-at list, and his role was nowhere.",
+    fix: "src/wiki.ts pageLead: the owner's page among the members becomes the page's first sentence (\"You work as a lecturer at North College.\"), from his org fact (p-at-<owner>) and role fact (p-in-<owner>), never his name in the list, never his page as See also there; written only when every reader may see both. Test: test/org-page-ties.test.ts. Eval: org-page-owner-tie.",
+  },
+  G705: {
+    closed: "claude/settings-asks",
+    title: "The home's Open Settings landed nowhere in particular: three numbers, two names, and no buttons on what it counted",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-07: the home said 6 under \"Needs a look in Settings\". Open Settings opened the top of Settings, whose memory line said \"52 need a look\" (the trust audit, nothing to tap) and whose list said \"Still open (11)\" (everything it shows, counted or not). The proposals the home counted said only \"say what's right in the box on your home\", and two counted kinds (new pages held past their day, a rules change) had no row at all. \"I don't know where to go to fix this.\"",
+    fix: "src/dashboard/home.ts SETTINGS_HREF is /overview#needs; Settings' needsYou (src/dashboard/html.ts) splits what ownerAsks counts from the rest: Needs a look lists exactly those, each marked with how many it counts, its number the home's; the rest is under Also here, not counted. A counted proposal carries its taps (decideElsewhere: proposal-accept, proposal-reject; a name that fits two pages asks Same as X or Someone new, proposal-place, since accepting it as it stood only filed the same question again; review of #118: Someone new never lands on a page holding its slug, and a refused placement puts the proposal back as it was); held new pages have File them now (held-release, releaseHeld); a rules change links History. The trust count left Settings' memory line; the Brain's stale list is To recheck, so Needs a look means one thing.",
+  },
+  G697: {
+    closed: "claude/agent-quiet-line",
+    title: "The home never said a connected assistant had stopped reading the brain",
+    severity: "medium",
+    finding: "Next-level plan F4, 2026-11-06: an assistant that lost its connection or stopped calling the brain went unnoticed on the home; only the probe's daily self-check said so, as a hub alert, and Who knows showed \"Not read today\" the same for a weekly reader as for one gone silent.",
+    fix: "src/quiet.ts quietAssistants: each of the owner's own assistants that is connected (a live token or an OAuth sign-in) and not paused is measured against its own reading habit; the home shows one line under the count (quietLine, \"Planner has not read your brain in 9 days. Who knows has the details.\"), never counted as an ask, linking to Who knows, whose row says when it last read and how often it used to (quietWords). Nothing when every connected assistant read recently. Tests: test/quiet.test.ts. Eval: rt-quiet-assistant-home-line.",
+  },
+  G698: {
+    closed: "claude/agent-quiet-line",
+    title: "One fixed silence threshold for every assistant",
+    severity: "low",
+    finding: "Same plan: a single number either nags about an assistant that reads weekly or stays silent for days about one that reads every hour.",
+    fix: "usualGap in src/quiet.ts: reads closer than 30 minutes are one session; over the last 42 days the usual gap is the larger of the median and the 75th-percentile gap between sessions; quiet after three times that, never sooner than a day, always by two weeks; fewer than four sessions says nothing. Tests: test/quiet.test.ts. Eval: rt-quiet-own-habit.",
+  },
   G696: {
     closed: "f4c24273",
     title: "A person's page said Last met 2 Oct over prose saying last in touch 24 Sep, and a sensitive-shaped meeting title showed on the 30-day sign-in",

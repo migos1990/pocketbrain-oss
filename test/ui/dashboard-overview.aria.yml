@@ -10,7 +10,7 @@
   - paragraph:
     - link "Your memory":
       - /url: /brain
-    - text: ": 488 facts, 28 changed this week. Nothing needs a look."
+    - text: ": 488 facts, 28 changed this week."
   - list:
     - listitem:
       - link "Brain":
@@ -48,7 +48,10 @@
       - link "Spend":
         - /url: /usage
       - text: model spend and caps
-  - heading "Still open (1)" [level=2]
+  - heading "Needs a look" [level=2]
+  - text: Nothing needs a look. Conflicts wait on your home.
+  - heading "Also here" [level=2]
+  - paragraph: "Not counted on your home: your assistants' requests, alerts, and what files on its own."
   - text: "memory fix ChatGPT remembers \"course coordinator\" for Isabelle Roy: role ; your brain says registrar. Approve sends it the fix. 10 min ago"
   - button "Approve"
   - button "Decline"

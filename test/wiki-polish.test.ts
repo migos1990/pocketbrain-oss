@@ -164,7 +164,7 @@ test("the owner's new page lands in the personal area", async () => {
 // Mac, after file-all went on (2026-10-25 15:19Z): the home page's five were two "is status
 // still right?" checks, two new notes and a Gardener card whose reason named someone's health
 // detail in the open; none was a conflict (G403).
-test("a freshness check is never asked: it stays in Needs a look, file all on or not", () => {
+test("a freshness check is never asked: it stays in the Brain's To recheck, file all on or not", () => {
   const root = brain();
   const before = asked(root).length;
   const f = join(root, "people", "jane-roy.md");

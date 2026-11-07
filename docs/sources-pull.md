@@ -128,7 +128,7 @@ For mail and texts the capture records only `sender: known` or `sender: unknown`
 
 ## When a source moves
 
-On every pass the hub compares each item's version with the one it saw last (`log/sources/<name>.json`). An edited, deleted or cancelled item turns every fact citing the old version **due**: `review_after` is set to today, and `recheck: { why: "source changed" | "source gone", ref, at }` says why. No model decides this. The value stays as it is, and the fact shows as due in reads and in "Needs a look" until the owner decides. A later pull that repeats the value adds its source but doesn't clear the recheck. When the gone item was the fact's only source, the fact also stops claiming `verified-by-source`: it becomes `unverified`, and its `note` keeps "verified-by-source until <day>: source gone (<ref>)". A later read that finds the item saying the value again raises it back.
+On every pass the hub compares each item's version with the one it saw last (`log/sources/<name>.json`). An edited, deleted or cancelled item turns every fact citing the old version **due**: `review_after` is set to today, and `recheck: { why: "source changed" | "source gone", ref, at }` says why. No model decides this. The value stays as it is, and the fact shows as due in reads and in the Brain's "To recheck" until the owner decides. A later pull that repeats the value adds its source but doesn't clear the recheck. When the gone item was the fact's only source, the fact also stops claiming `verified-by-source`: it becomes `unverified`, and its `note` keeps "verified-by-source until <day>: source gone (<ref>)". A later read that finds the item saying the value again raises it back.
 
 ## The gardener checks claims through the hub
 

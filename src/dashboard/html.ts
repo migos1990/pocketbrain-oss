@@ -23,7 +23,8 @@ import { waitingCount, factSentence, privateNow } from "./home";
 import { sayDays } from "../diary";
 import { resolveEntity } from "../write";
 import { readCapture } from "../capture";
-import { trustReport, homeTrustLine } from "../trust";
+import { trustReport } from "../trust";
+import { ownerAsks } from "../waiting";
 import { getQuote } from "../quotes";
 import { verifyReadLog, type ReadEntry } from "../readlog";
 import { loadRules, gardeners, type Rules } from "../rules";
@@ -444,9 +445,12 @@ function actionItem(s: State, a: Action, csrf: string) {
 // Settings decides nothing (2026-10-27): a proposal that contradicts a value is settled on its own
 // screen (src/settle-inbox.ts); the rest say what happens to them and when, from the hub's own plan
 // (src/filing.ts queues): files on the day the hold ends, expires unconfirmed, or is set aside.
-// One the hub has no plan for waits for the owner's own word in the box.
+// One the hub has no plan for is counted on the home, so it is asked here, with its two taps
+// (G705: "it says six things need me, and I don't know where to go"); the box still works too.
 const QUEUES = new WeakMap<State, Queues>();
-function decideElsewhere(s: State, p: Proposal): string {
+const newOne = (p: Proposal) => p.request.type === "person" ? "Someone new" : "A new page";
+const placesFor = (s: State, p: Proposal): string[] => !p.request.id && p.request.title && p.request.type ? resolveEntity(s.notes, String(p.request.type), String(p.request.title)).ambiguous ?? [] : [];
+function decideElsewhere(s: State, p: Proposal, csrf: string, yes: string, no: string): string {
   const id = `p-${p.file.replace(/\.yaml$/, "")}`;
   if (inboxConflict(s.root, id)) return `<div class="ch"><div class="btns"><a class="btn" href="/settle/${esc(id)}">Settle it</a></div></div>`;
   const q = QUEUES.get(s);
@@ -454,8 +458,14 @@ function decideElsewhere(s: State, p: Proposal): string {
   const line = held ? `Files on ${shortDate(held)}, when the hold on your assistants' own proposals ends. Nothing to decide now.`
     : expires ? `Expires unconfirmed on ${shortDate(expires)}; the assistant can propose it again. Nothing to decide now.`
     : q?.setAside.has(p.file) ? "Set aside on the next tick: only a conflict asks you."
-    : "Waits for your own word: say what's right in the box on your home.";
-  return `<div class="sub">${esc(line)}</div>`;
+    : "";
+  if (line) return `<div class="sub">${esc(line)}</div>`;
+  // A name that fits a page and a new one: which it is, then saved there (G603, G705).
+  const fits = placesFor(s, p);
+  const taps = fits.length
+    ? [...fits.map((id, i) => button(csrf, "proposal-place", { file: p.file, to: id }, `Same as ${s.notes.find((n) => n.fm.id === id)?.fm.title ?? id}`, i ? "" : "go")), button(csrf, "proposal-place", { file: p.file, to: "new" }, newOne(p)), button(csrf, "proposal-reject", { file: p.file }, no)]
+    : [button(csrf, "proposal-accept", { file: p.file }, yes, "go"), button(csrf, "proposal-reject", { file: p.file }, no)];
+  return `<div class="ch"><div class="btns">${taps.join("")}</div></div><div class="sub">${esc("Or say what's right in the box on your home.")}</div>`;
 }
 
 function proposalItem(s: State, p: Proposal, csrf: string) {
@@ -473,6 +483,7 @@ function proposalItem(s: State, p: Proposal, csrf: string) {
     : p.evidence?.now ? { q: `Update ${factName(s.notes, key)}?`, yes: ["Use the new one", "Replaces the old value. The old one stays in the note's history."], no: ["Keep the old one", "Nothing changes."] }
     : r.id && r.attribute && val(r.value ?? "").length <= 50 && r.value !== undefined ? { q: `Save “${esc(val(r.value))}” as ${note}'s ${esc(plain(String(r.attribute)))}?`, yes: ["Save it", `Adds it to ${note}.`], no: ["Don’t save", "Nothing is saved."] }
     : r.id ? { q: `Add this to ${note}?`, yes: ["Save it", `Adds it to ${note}.`], no: ["Don’t save", "Nothing is saved."] }
+    : placesFor(s, p).length ? { q: `Is ${note} ${placesFor(s, p).map((id) => noteName(s.notes, id)).join(" or ")}, or ${newOne(p) === "Someone new" ? "someone new" : "a new page"}?`, yes: [newOne(p), `Starts the note ${note} with this.`], no: ["Don’t save", "Nothing is saved."] }
     : { q: `Start a note, ${note}?`, yes: ["Save it", `Starts the note ${note} with this.`], no: ["Don’t save", "Nothing is saved."] };
   // A new fact names its attribute ("Room: B-204"); an update already names it in the question.
   const named = r.attribute && r.attribute !== "open_question" && !p.evidence?.now ? `${esc(cap(String(r.attribute)))}: ` : "";
@@ -515,7 +526,7 @@ function proposalItem(s: State, p: Proposal, csrf: string) {
     const ask = p.evidence?.now ? question.q : risky ? "Remember this private detail?" : r.id ? `Remember this about ${note}?` : `Remember this as a new note, ${note}?`;
     const guess = /the model inferred it/.test(p.reason) ? `<div class="sub">${GUESS}</div>` : "";
     return `<div class="item decide glance"><div class="ch"><div class="ct">${ask}</div></div>
-${warnLine(s, p)}${shown}${guess}${decideElsewhere(s, p)}<details><summary>More</summary>${more.replace(`<div class="sub">${GUESS}</div>`, "").replace(does, "")}</details></div>`;
+${warnLine(s, p)}${shown}${guess}${decideElsewhere(s, p, csrf, p2.yes, p2.no)}<details><summary>More</summary>${more.replace(`<div class="sub">${GUESS}</div>`, "").replace(does, "")}</details></div>`;
   }
   // An assistant's card whose value or reason reads like health, money or legal (Mac, 2026-10-25: a
   // Gardener sensitivity review named someone's health detail on the home card): both one tap away,
@@ -529,7 +540,7 @@ ${warnLine(s, p)}${shown}${guess}${decideElsewhere(s, p)}<details><summary>More<
   // The question, then what it is about, then the answers (owner's phone, 2026-10-25: buttons above
   // the value asked him to decide before reading).
   return `<div class="item decide glance${asks ? " ask" : ""}"><div class="ch"><div class="ct">${titleShown}<small>${claimed ? `<span class="kind k-alert">${term("owner_message_registered")}</span> · ` : ""}${line}</small></div></div>
-${claimed ? `<div class="sub" style="color:var(--bad)">${why}</div>` : ""}${warnLine(s, p)}${valueHtml}${decideElsewhere(s, p)}<details><summary>${asks ? "Why it asks" : "More"}</summary>${moreShown.replace(does, "")}</details></div>`;
+${claimed ? `<div class="sub" style="color:var(--bad)">${why}</div>` : ""}${warnLine(s, p)}${valueHtml}${decideElsewhere(s, p, csrf, question.yes[0], question.no[0])}<details><summary>${asks ? "Why it asks" : "More"}</summary>${moreShown.replace(does, "")}</details></div>`;
 }
 
 // The mail a capture's proposal came from ("capture inbox/captures/x.md: ..."): its subject and its
@@ -572,51 +583,65 @@ function captureItem(s: State, c: State["captures"][number], csrf: string) {
 
 // Cards that can run to hundreds (proposals, clash alerts) are built only when their page is shown.
 function needsYou(s: State, csrf: string) {
-  const items: (string | (() => string))[] = [];
-  // An assistant's request waiting for a yes, first.
-  const extra: string[] = [];
+  // Two lists (G705). `asks`: exactly what the home counts under "Needs a look in Settings"
+  // (src/waiting.ts ownerAsks, less what the home lists itself), each row marked with how many it
+  // counts, so the section's number is the home's. `more`: the rest Settings shows, never counted.
+  const asks = keptFor(s.root, "owner-asks", s.key, () => ownerAsks(s.root, s.now));
+  const askRefs = new Set([...asks.waiting, ...asks.other].filter((i) => !asks.homeConflicts.has(i.ref)).map((i) => `${i.kind}:${i.ref}`));
+  const counted = (kind: string, ref: string) => askRefs.has(`${kind}:${ref}`);
+  const mark = (row: string, n = 1) => row.replace(/^<div class="([^"]*)"/, `<div class="$1" data-ask="${n}"`);
+  type Row = string | (() => string);
+  const ask: Row[] = [], more: Row[] = [];
   const u = usageItem(s.root);
-  if (u) items.push(`<div class="item"><div class="what"><span class="kind">model spend</span>${esc(u.title)}</div><div class="acts"><a class="btn" href="/usage">Open</a></div></div>`);
+  if (u) { const row = `<div class="item"><div class="what"><span class="kind">model spend</span>${esc(u.title)}</div><div class="acts"><a class="btn" href="/usage">Open</a></div></div>`; if (asks.by.usage) ask.push(mark(row)); else more.push(row); }
   const people = peopleNeedsYou(s.root, s.notes);
-  if (people) items.push(people);
-  for (const a of s.asks.filter((x) => x.state === "waiting" && x.candidates.length)) extra.push(askItem(s, a, csrf));
-  for (const a of waitingActions(s.root)) extra.push(actionItem(s, a, csrf));
+  if (people) more.push(people);
+  for (const a of s.asks.filter((x) => x.state === "waiting" && x.candidates.length)) more.push(askItem(s, a, csrf));
+  for (const a of waitingActions(s.root)) more.push(actionItem(s, a, csrf));
   for (const agent of latchedAgents(s.root))
-    extra.push(`<div class="item"><div class="what"><span class="kind k-alert">mail requests stopped</span><b>${agentName(s.rules, agent)}</b> asked to send a mail carrying a value it can't see. Its requests are refused until you let it ask again; look at the alert first.</div><div class="acts">${button(csrf, "act-unlatch", { agent }, "Let it ask again", "", `Let ${agentLabel(s.rules, agent)} ask to send mail again?`)}</div></div>`);
+    more.push(`<div class="item"><div class="what"><span class="kind k-alert">mail requests stopped</span><b>${agentName(s.rules, agent)}</b> asked to send a mail carrying a value it can't see. Its requests are refused until you let it ask again; look at the alert first.</div><div class="acts">${button(csrf, "act-unlatch", { agent }, "Let it ask again", "", `Let ${agentLabel(s.rules, agent)} ask to send mail again?`)}</div></div>`);
   // One guess, then proposals only (src/write-hold.ts, G680): a trusted assistant that wrote a value
   // it can't see writes proposals until the owner lets it write again.
   for (const h of heldWriters(s.root))
-    extra.push(`<div class="item"><div class="what"><span class="kind k-alert">proposals only</span><b>${agentName(s.rules, h.agent)}</b> wrote a value it can't see on ${esc(shortDate(h.at))}. Since then its writes go to you as proposals; look at the alert first.</div><div class="acts">${button(csrf, "write-unhold", { agent: h.agent }, "Let it write again", "", `Let ${agentLabel(s.rules, h.agent)} write again?`)}</div></div>`);
+    more.push(`<div class="item"><div class="what"><span class="kind k-alert">proposals only</span><b>${agentName(s.rules, h.agent)}</b> wrote a value it can't see on ${esc(shortDate(h.at))}. Since then its writes go to you as proposals; look at the alert first.</div><div class="acts">${button(csrf, "write-unhold", { agent: h.agent }, "Let it write again", "", `Let ${agentLabel(s.rules, h.agent)} write again?`)}</div></div>`);
+  for (const c of s.memsync) more.push(memsyncItem(s, c, csrf));
   // What the hub files on its own isn't listed (src/filing.ts autoSaves); the page says how many.
   const { saves, queues } = keptFor(s.root, "autosaves", s.key, () => { const queues = newQueues(); return { saves: autoSaves(s.root, s.now, s, queues), queues }; });
   QUEUES.set(s, queues);
   const asked = s.proposals.filter((p) => !saves.has(p.file));
   // What changes or questions something the owner has comes before what only adds.
   const rank = (p: Proposal) => (p.request.retract || p.evidence?.now ? 1 : p.request.attribute === "open_question" && p.request.id ? 0 : 2);
-  for (const p of [...asked].sort((a, b) => rank(a) - rank(b))) items.push(() => proposalItem(s, p, csrf));
-  for (const m of s.held) items.push(() => heldItem(s, m, csrf));
+  for (const p of [...asked].sort((a, b) => rank(a) - rank(b))) (counted("proposal", p.file) ? ask : more).push(counted("proposal", p.file) ? () => mark(proposalItem(s, p, csrf)) : () => proposalItem(s, p, csrf));
+  // A relayed answer waiting for the owner's confirmation (conflicts are asked on the home).
+  for (const d of s.disputes.filter((x) => x.status === "answer-held")) (counted("held-answer", d.id) ? ask : more).push(counted("held-answer", d.id) ? () => mark(disputeItem(s, d, csrf)) : () => disputeItem(s, d, csrf));
   // Captures held because they read like instructions: the owner reads the words here, nowhere else.
-  for (const c of s.captures) items.push(() => captureItem(s, c, csrf));
-  for (const c of s.memsync) extra.push(memsyncItem(s, c, csrf));
-  items.splice((u ? 1 : 0) + (people ? 1 : 0), 0, ...extra);
-  // Conflicts are asked on the home and settled on their own screen (ownerConflicts in src/core.ts),
-  // never here; only a relayed answer waiting for the owner's confirmation is listed (outside review v5).
-  for (const d of s.disputes.filter((x) => x.status === "answer-held")) items.push(() => disputeItem(s, d, csrf));
+  for (const c of s.captures) (counted("capture", c.file) ? ask : more).push(counted("capture", c.file) ? () => mark(captureItem(s, c, csrf)) : () => captureItem(s, c, csrf));
+  // New pages a source proposed over its daily count, still held past their day (src/capture.ts).
+  if (asks.stuck) ask.push(mark(`<div class="item"><div class="what"><span class="kind">held new pages</span>${asks.stuck} new page${asks.stuck === 1 ? "" : "s"} from your sources ${asks.stuck === 1 ? "has" : "have"} waited past ${asks.stuck === 1 ? "its" : "their"} day.<div class="sub">A source starts at most a few new pages a day; the rest wait here.</div></div><div class="acts">${button(csrf, "held-release", {}, "File them now")}</div></div>`, asks.stuck));
+  // rules/ touched outside the owner's own commits (src/textline/items.ts).
+  for (const r of asks.other.filter((i) => i.kind === "rules"))
+    ask.push(mark(`<div class="item"><div class="what"><span class="kind k-alert">rules</span>${esc(r.key.startsWith("rules:dirty:") ? `Your rules folder changed outside a commit: ${r.ref}. Was it you?` : `An assistant committed to your rules (${r.ref}); assistants never do.`)}</div><div class="acts"><a class="btn" href="/history">Open history</a></div></div>`));
+  // Held mail is asked on the home; it is here too, with its words.
+  for (const m of s.held) more.push(() => heldItem(s, m, csrf));
   const latest = s.upkeep[0];
+  // One row per finding, as src/textline/items.ts counts them.
+  for (const e of (latest?.escalate ?? []).filter((x) => !x.includes("[open-dispute]"))) {
+    const row = `<div class="item"><div class="what"><span class="kind">upkeep</span>${finding(e)}</div><div class="acts"><a class="btn" href="/upkeep">Open</a></div></div>`;
+    if (asks.by.upkeep && !latest!.undone) ask.push(mark(row)); else more.push(row);
+  }
   // Checks after agent writes (src/aftercheck.ts): possible clashes and privacy suggestions, last 7 days.
   const week = new Date(s.now.getTime() - 7 * 86_400_000).toISOString();
   for (const a of s.alerts.filter((x) => (x.check === "write_conflict" || x.check === "classify_review") && String(x.at) >= week)) {
     const id = String(a.from ?? "").split("#")[0];
-    items.push(() => `<div class="item"><div class="what"><span class="kind">${term(a.check)}</span>${withNames(s.notes, String(a.detail ?? a.from ?? ""))} <span class="sub" title="${esc(a.at)}">${ago(String(a.at), s.now)}, after a write by ${agentName(s.rules, a.agent ?? "?")}</span></div><div class="acts"><a class="btn" href="/p/${id.split("/").map(encodeURIComponent).join("/")}">Open</a></div></div>`);
+    more.push(() => `<div class="item"><div class="what"><span class="kind">${term(a.check)}</span>${withNames(s.notes, String(a.detail ?? a.from ?? ""))} <span class="sub" title="${esc(a.at)}">${ago(String(a.at), s.now)}, after a write by ${agentName(s.rules, a.agent ?? "?")}</span></div><div class="acts"><a class="btn" href="/p/${id.split("/").map(encodeURIComponent).join("/")}">Open</a></div></div>`);
   }
   // The gardener (src/gardener.ts): its token used outside its hours, or the ant CLI not working.
   for (const a of s.alerts.filter((x) => (x.check === "gardener_hours" || x.check === "gardener_ant") && String(x.at) >= week))
-    items.push(`<div class="item"><div class="what"><span class="kind">${term(a.check)}</span>${a.check === "gardener_hours" ? hoursWords(s, a) : esc(String(a.detail ?? a.from ?? "")).replace(/`([^`]+)`/g, "<code>$1</code>")} <span class="sub" title="${esc(a.at)}">${ago(String(a.at), s.now)}</span></div><div class="acts"><a class="btn" href="/agent/${encodeURIComponent(String(a.agent ?? "gardener"))}">Open</a></div></div>`);
-  for (const e of (latest?.escalate ?? []).filter((x) => !x.startsWith("[open-dispute]")))
-    items.push(`<div class="item"><div class="what"><span class="kind">upkeep</span>${finding(e)}</div><div class="acts"><a class="btn" href="/upkeep">Open</a></div></div>`);
+    more.push(`<div class="item"><div class="what"><span class="kind">${term(a.check)}</span>${a.check === "gardener_hours" ? hoursWords(s, a) : esc(String(a.detail ?? a.from ?? "")).replace(/`([^`]+)`/g, "<code>$1</code>")} <span class="sub" title="${esc(a.at)}">${ago(String(a.at), s.now)}</span></div><div class="acts"><a class="btn" href="/agent/${encodeURIComponent(String(a.agent ?? "gardener"))}">Open</a></div></div>`);
   // Held until their day (src/filing.ts): counted up top, so the day shows whatever page a row is on.
   const heldAt = [...queues.held.values()].sort();
-  return { items, saving: s.proposals.length - asked.length, held: { n: heldAt.length, at: heldAt[0] } };
+  const n = ask.length - (asks.stuck ? 1 : 0) + asks.stuck;
+  return { ask, more, n, saving: s.proposals.length - asked.length, held: { n: heldAt.length, at: heldAt[0] } };
 }
 
 // One line per assistant in the owner's words: what it did today, what it sees, its off switches.
@@ -638,6 +663,13 @@ function barTile(s: State): string {
 <div class="item"><div class="what">${b.sinceFix ? `<b>${b.sinceFix.days} day${b.sinceFix.days === 1 ? "" : "s"}</b> since the last hand fix<div class="sub">${esc(b.sinceFix.date)}: ${esc(b.sinceFix.what.slice(0, 120))}</div>` : "<b>No hand fix</b> logged yet"}</div></div>
 <div class="item"><div class="what">${drill}</div></div>${b.open.length ? `<div class="item"><div class="what"><span class="kind k-alert">open</span>${b.open.map(esc).join(", ")}</div></div>` : ""}</div>`;
 }
+
+// One name for what waits on Settings (G705): the home's heading is "Needs a look in Settings"
+// (APP_COPY.settingsHead) and links here, to the section holding exactly what it counted.
+const NEEDS_HEAD = "Needs a look";
+const NEEDS_HINT = "What your home counts. Each one has its own question.";
+const MORE_HEAD = "Also here";
+const MORE_HINT = "Not counted on your home: your assistants' requests, alerts, and what files on its own.";
 
 // The pages behind Settings (outside review v5: no tab bar; the home is the front door).
 const SETTINGS: [string, string, string][] = [["/brain", "Brain", "every note, search, edit"], ["/agents", "Assistants", "who connects, their switches and keys"], ["/map", "Who sees what", "each assistant's view"], ["/people", "Who matters", "the people you hear from"], ["/activity", "Activity", "reads, writes and relayed mail"], ["/history", "History", "every change, with Undo"], ["/digest", "Digest", "the daily summary"], ["/upkeep", "Upkeep", "the nightly checks"], ["/usage", "Spend", "model spend and caps"]];
@@ -698,8 +730,9 @@ export function overview(s: State, csrf: string, q = new URLSearchParams()): Pag
   // Settings (the home's link): the pages behind it, everything still open one by one, what the hub
   // filed on its own with Undo, then the assistants and the weekly numbers folded away. Nothing here
   // is counted: the home's list is the only count (src/dashboard/home.ts waitingCount).
-  const { items: needs, saving, held } = needsYou(s, csrf);
-  const needPage = paged(needs, Number(q.get("page")) || 1, 50);
+  const { ask, more, n, saving, held } = needsYou(s, csrf);
+  const askPage = paged(ask, Number(q.get("page")) || 1, 50);
+  const morePage = paged(more, Number(q.get("more")) || 1, 50);
   const render = (x: string | (() => string)) => (typeof x === "string" ? x : x());
   const paused = s.agents.filter((a) => a.status === "paused").map((a) => esc(a.label));
   // What the memory is (owner, 2026-10-24: one portable memory of himself for many assistants):
@@ -708,13 +741,14 @@ export function overview(s: State, csrf: string, q = new URLSearchParams()): Pag
   const recs = s.notes.flatMap((n) => Object.values(n.fm.facts ?? {}) as { recorded?: string }[]);
   const changed = recs.filter((r) => String(r?.recorded ?? "") >= week).length;
   const trust = keptFor(s.root, "trust", s.key, () => trustReport(s.root, { notes: s.notes }));
-  const memory = `<p class="sub"><a href="/brain" style="display:inline-block;padding:10px 0">Your memory</a>: ${trust.facts} facts, ${changed} changed this week. ${esc(homeTrustLine(trust))}</p>`;
+  const memory = `<p class="sub"><a href="/brain" style="display:inline-block;padding:10px 0">Your memory</a>: ${trust.facts} facts, ${changed} changed this week.</p>`;
   const filed = filedItems(s, csrf);
   const saved = saving ? `<p class="sub">${saving} fact${saving === 1 ? "" : "s"} from your captures and sources file${saving === 1 ? "s" : ""} on ${saving === 1 ? "its" : "their"} own on the next tick.</p>` : "";
   const heldLine = held.n && held.at ? `<p class="sub">${esc(`${held.n} of your assistants' proposals ${held.n === 1 ? "files" : "file"} on ${shortDate(held.at)}, when the hold ends. Nothing to decide now.`)}</p>` : "";
   const links = `<ul class="rows settings">${SETTINGS.map(([h, l, w]) => `<li><a href="${h}">${esc(l)}</a> <span class="sub">${esc(w)}</span></li>`).join("")}</ul>`;
   const body = `<h1 title="Settings">Settings${paused.length ? `<span class="h1-sub"> · ${paused.join(", ")} paused</span>` : ""}</h1>${memory}<div class="card">${links}</div>
-<h2 id="needs">Still open${needs.length ? ` (${needs.length})` : ""}</h2>${saved}${heldLine}${needs.length ? `<div class="card">${needPage.rows.map(render).join("")}</div>${pager(needPage, (n) => withParam("/overview", q, "page", n), "open")}` : '<div class="card empty">Nothing open. Conflicts wait on your home.</div>'}
+<h2 id="needs">${esc(NEEDS_HEAD)}${n ? ` <b>${n}</b>` : ""}</h2>${n ? `<p class="sub">${esc(NEEDS_HINT)}</p><div class="card">${askPage.rows.map(render).join("")}</div>${pager(askPage, (k) => withParam("/overview", q, "page", k), "open")}` : '<div class="card empty">Nothing needs a look. Conflicts wait on your home.</div>'}
+${more.length ? `<h2 id="more">${esc(MORE_HEAD)}</h2><p class="sub">${esc(MORE_HINT)}</p>${saved}${heldLine}<div class="card">${morePage.rows.map(render).join("")}</div>${pager(morePage, (k) => withParam("/overview", q, "more", k), "more")}` : `${saved}${heldLine}`}
 ${filed ? `<h2>Filed for you this week</h2><div class="card">${filed}</div>` : ""}
 ${jobsSection(s.root, s.now)}
 <details class="more"><summary>Your assistants, activity and weekly numbers</summary>

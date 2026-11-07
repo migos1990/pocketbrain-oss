@@ -27,8 +27,9 @@ import { sensitiveShape, sensitiveName } from "../shape";
 import type { Mark } from "./marks";
 import { yourToDo } from "../wiki";
 import { lateJobs, lateLine } from "../heartbeat";
+import { quietAssistants, quietLine, quietWords } from "../quiet";
 // Settings, where what the home doesn't list itself waits (the dashboard's overview).
-export const SETTINGS_HREF = "/overview";
+export const SETTINGS_HREF = "/overview#needs";
 
 export interface HomeLine {
   token: string;
@@ -50,7 +51,7 @@ export interface HomeLine {
 export interface Waiting { what: string; verb: string; href: string; n?: number; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
-export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string }
+export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string }
 
 export const SINCE_CAP = 7;
 // The face of On your mind (canvas "final direction", Louis 2026-10-31: the home was a log): six
@@ -572,7 +573,7 @@ const SETTINGS_KINDS: [string, string, string][] = [
   ["held_by_capture", "note about a person to check", "notes about people to check"],
   ["held-answer", "answer to check", "answers to check"],
   ["capture", "capture to check", "captures to check"],
-  ["held", "capture held past its day", "captures held past their day"],
+  ["held", "new page held past its day", "new pages held past their day"],
   ["upkeep", "upkeep finding", "upkeep findings"],
   ["rules", "rules change", "rules changes"],
   ["usage", "spending notice", "spending notices"],
@@ -684,6 +685,7 @@ export function assistantReads(root: string, rules: Rules, now: Date, notes: Not
   const byId = new Map(notes.map((n) => [n.fm.id, n]));
   const title = (id: string) => !fresh && byId.get(id)?.fm.sensitivity === "secret" ? ONLY_YOU : displayName(id, byId.get(id)?.fm.title === undefined ? undefined : String(byId.get(id)!.fm.title));
   const entries = readEntriesSince(root, new Date(now.getTime() - 26 * 3_600_000).toISOString(), (at) => ownerDay(rules, at) === day);
+  const quiet = quietAssistants(root, rules, now);
   return Object.entries(rules.policy.agents).filter(([k, a]) => ownAssistant(rules, k) && a.status !== "paused")
     .map(([k, a]) => {
       const mine = entries.filter((e) => e.agent === k);
@@ -694,7 +696,8 @@ export function assistantReads(root: string, rules: Rules, now: Date, notes: Not
         if (last && last.what.replace(/ \(\d+ times\)$/, "") === l.what && last.told === l.told) { const n = Number(last.what.match(/\((\d+) times\)$/)?.[1] ?? 1) + 1; last.what = `${l.what} (${n} times)`; }
         else asked.push(l);
       }
-      return { agent: k, name: agentTitle(rules, k), today: mine.length, ...(asked.length ? { asked: asked.slice(0, ASKS_PER_ASSISTANT), ...(asked.length > ASKS_PER_ASSISTANT ? { askedMore: asked.length - ASKS_PER_ASSISTANT } : {}) } : {}) };
+      const q = quiet.find((x) => x.agent === k);
+      return { agent: k, name: agentTitle(rules, k), today: mine.length, ...(q ? { quiet: quietWords(q) } : {}), ...(asked.length ? { asked: asked.slice(0, ASKS_PER_ASSISTANT), ...(asked.length > ASKS_PER_ASSISTANT ? { askedMore: asked.length - ASKS_PER_ASSISTANT } : {}) } : {}) };
     }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -735,6 +738,9 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
     // One line only when a scheduled job is late or failing (src/heartbeat.ts, G691); nothing when all
     // is well. Not an ask: it adds nothing to the count and has no card.
     ...((): { late?: string } => { const l = lateLine(lateJobs(root, now), now); return l ? { late: l } : {}; })(),
+    // One line when a connected assistant has gone quiet by its own habit (src/quiet.ts, G697, G698):
+    // not an ask, nothing added to the count, gone once it reads again.
+    ...((): { quiet?: string } => { const l = quietLine(quietAssistants(root, rules, now), (a) => agentTitle(rules, a)); return l ? { quiet: l } : {}; })(),
   };
 }
 

@@ -25,7 +25,7 @@ test("Settings gives a held new private page from the capture agent its dated li
   expect(html).toMatch(/Files on Oct 30/);
 });
 
-// The real brain's Still open runs past one page (50 rows); the held ones sort after the others,
+// The real brain's list on Settings runs past one page (50 rows); the held ones sort after the others,
 // so their dated line sat on a later page. The count and the day lead the list instead.
 test("Settings says up top how many assistant proposals are held and the day they file", () => {
   const root = makeBrain();
@@ -36,6 +36,6 @@ test("Settings says up top how many assistant proposals are held and the day the
   Bun.spawnSync(["git", "add", "-A"], { cwd: root });
   Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "proposals"], { cwd: root });
   const html = overview({ ...loadState(root), now: DURING }, "x").body;
-  const top = html.slice(html.indexOf('<h2 id="needs">'), html.indexOf('<div class="card">', html.indexOf('<h2 id="needs">')));
+  const top = html.slice(html.indexOf('<h2 id="more">'), html.indexOf('<div class="card">', html.indexOf('<h2 id="more">')));
   expect(top).toContain("1 of your assistants&#39; proposals files on Oct 30, when the hold ends. Nothing to decide now.");
 });

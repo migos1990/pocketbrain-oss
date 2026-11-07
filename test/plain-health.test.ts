@@ -18,7 +18,7 @@ test("the hub's own checks are named by what happened, in plain words", () => {
 
 // Mac use-it pass, 2026-10-25: one project showed twice in Needs a look ("conflicting next steps");
 // it was two of its facts, each row under the same title. A page's facts sit together, its title once.
-test("Needs a look names a page once, its facts together under it", async () => {
+test("To recheck names a page once, its facts together under it", async () => {
   const { makeBrain } = await import("./fixture");
   const { loadState } = await import("../src/dashboard/data");
   const { brainResults } = await import("../src/dashboard/html-brain");
@@ -30,7 +30,7 @@ test("Needs a look names a page once, its facts together under it", async () => 
   const f = join(root, "projects", "course-a.md");
   writeFileSync(f, readFileSync(f, "utf8").replace("as_of: 2026-10-01", "as_of: 2026-06-01").replace("recorded: 2026-10-01 }\n", "recorded: 2026-10-01 }\n  status: { value: On hold, as_of: 2026-06-02, sources: [\"gmail:f000000000000004\"], verification: verified-by-source, by: planner, recorded: 2026-10-01 }\n"));
   const html = brainResults(loadState(root), "x");
-  const look = html.slice(html.indexOf("Needs a look"));
+  const look = html.slice(html.indexOf("To recheck"));
   expect((look.match(/>Course A</g) ?? []).length).toBe(1);
   expect(look).toContain("Next step");
   expect(look).toContain("Status");

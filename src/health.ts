@@ -92,7 +92,7 @@ export function brainHealth(root: string, notes: Note[] = loadBrain(root), now =
   const g = graphCounts(notes);
   const lines: HealthLine[] = [
     { key: "unsourced", label: "Facts with no live source", count: unsourced, of: facts, fix: "run pocketbrain sources backfill <source>: a fact your mail still states gets that mail as its source" },
-    { key: "stale", label: "Stale facts that change over time", count: stale, of: volatile, fix: `mark them Still true or change them under the Brain's Needs a look` },
+    { key: "stale", label: "Stale facts that change over time", count: stale, of: volatile, fix: `mark them Still true or change them under the Brain's To recheck` },
     { key: "old-disputes", label: `Conflicts open more than ${DISPUTE_DAYS} days`, count: oldOpen, of: open.length, fix: `settle them from Waiting on you on the home` },
     { key: "unread", label: `Notes no assistant read in ${UNUSED_DAYS} days`, count: aged.filter((n) => !used.has(n.fm.id)).length, of: aged.length,
       since: logDays < UNUSED_DAYS ? (logSince?.slice(0, 10) ?? "never") : undefined, fix: "nothing by hand: the nightly pass forgets their facts past shelf life (pocketbrain undo --run brings one back)" },

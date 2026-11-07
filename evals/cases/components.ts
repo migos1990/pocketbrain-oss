@@ -831,6 +831,46 @@ const pullCases: Case[] = [
     const mine = line.test(helper) && line.test(steward), hidden = !helper.includes("Roof repair") && !helper.includes("wk-home"), whole = steward.includes("projects/wk-home");
     return ok(mine && hidden && whole, `dated line with its source ${mine}; a hidden page left out ${hidden}; the whole view has it ${whole}`);
   } },
+  { id: "blind-suffix-has-digit", dimension: "carving", gap: "G710", title: "a blind writer's six-hex suffix always holds a digit, so the fold never reads it as a word and keeps the wrong page", source: "PR 116 CI 2026-11-07 (suffix cbcdff)", run: async () => {
+    const w = await import(join(SRC_DIR, "write.ts"));
+    const f = await import(join(SRC_DIR, "fold.ts"));
+    if (!w.blindSuffix || !f.blindId) return na("no blind suffix rule at this commit");
+    const s = w.blindSuffix("cbcdff");
+    return ok(/\d/.test(s) && f.blindId(`projects/garden-${s}`) && !f.blindId("projects/decade"), `cbcdff becomes ${s}`);
+  } },
+  { id: "org-page-owner-tie", dimension: "upkeep", gap: "G702", title: "an org page opens with the owner's own tie to it from his role and org facts, never his name in the list of who works there", source: "owner 2026-11-07 (his school's page didn't say he teaches there)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    const rec = (value: string, m: string) => ({ value, sources: [`gmail:${m}`], verification: "verified-by-source", by: "planner", recorded: "2026-10-05" });
+    const org = { fm: { id: "orgs/north-college", type: "org", title: "North College", sensitivity: "personal" }, body: "" };
+    const me = { fm: { id: "people/robin-vale", type: "person", title: "Robin Vale", sensitivity: "personal", facts: { role: rec("lecturer", "f00000000000e001") } }, body: "" };
+    const byId = new Map([org, me].map((n) => [n.fm.id, n]));
+    const lead = wiki.pageLead(org, { hidden: () => false, blind: () => false, names: new Map(), byId, ownerPage: me.fm.id, members: [{ id: me.fm.id, recs: [rec("[[orgs/north-college]]", "f00000000000e001")] }] });
+    const text = String(lead?.text ?? "");
+    const right = text.startsWith("You work as a lecturer at North College.") && !text.includes("Robin Vale");
+    return ok(right, text.slice(0, 80));
+  } },
+  { id: "org-page-people-by-relationship", dimension: "upkeep", gap: "G703", title: "the people at an org are said by how the owner knows them, from their relationship facts, then the rest who work there", source: "owner 2026-11-07 (these are the people I'm interacting with)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    const rec = (value: string, m: string) => ({ value, sources: [`gmail:${m}`], verification: "verified-by-source", by: "planner", recorded: "2026-10-05" });
+    const org = { fm: { id: "orgs/north-college", type: "org", title: "North College", sensitivity: "personal" }, body: "" };
+    const p = (id: string, title: string, rel?: string) => ({ fm: { id, type: "person", title, sensitivity: "personal", facts: rel ? { relationship: rec(rel, "f00000000000e002") } : {} }, body: "" });
+    const ps = [p("people/ana-diaz", "Ana Diaz", "colleague"), p("people/ben-roy", "Ben Roy", "colleague"), p("people/dan-poe", "Dan Poe")];
+    const byId = new Map([org, ...ps].map((n) => [n.fm.id, n]));
+    const lead = wiki.pageLead(org, { hidden: () => false, blind: () => false, names: new Map(), byId, members: ps.map((x) => ({ id: x.fm.id, recs: [rec("[[orgs/north-college]]", "f00000000000e003")] })) });
+    const text = String(lead?.text ?? "");
+    const right = text.includes("[[people/ana-diaz|Ana Diaz]] and [[people/ben-roy|Ben Roy]] work at North College: your colleagues.") && text.includes("[[people/dan-poe|Dan Poe]] works at North College.");
+    return ok(right, text.replace(/\[\^[^\]]+\]/g, "").slice(0, 160));
+  } },
+  { id: "named-in-one-sentence", dimension: "upkeep", gap: "G704", title: "the pages whose sources name a page are one sentence, not one each", source: "owner 2026-11-07 (his school's page: the same sentence twice)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    const rec = (m: string) => ({ value: "x", sources: [`gmail:${m}`], verification: "verified-by-source", by: "planner", recorded: "2026-10-05" });
+    const pg = (id: string, title: string, type = "project") => ({ fm: { id, type, title }, body: "" });
+    const org = pg("orgs/north-college", "North College", "org"), a = pg("projects/exam-due", "Intra exam due"), c = pg("projects/session-moved", "Session moved");
+    const byId = new Map([org, a, c].map((n) => [n.fm.id, n]));
+    const lead = wiki.pageLead(org, { hidden: () => false, blind: () => false, names: new Map(), byId, namedIn: [{ from: a.fm.id, rec: rec("f00000000000e004") }, { from: c.fm.id, rec: rec("f00000000000e005") }] });
+    const n = String(lead?.text ?? "").match(/also comes up in the sources of/g)?.length ?? 0;
+    return ok(n === 1, `${n} such sentences`);
+  } },
   { id: "calendar-last-met-next-meeting", dimension: "upkeep", gap: "G694", title: "a person's meetings come from the consented calendar's cache: by an address on their page or their full name in a title, the last before today, the next from today, the count so far this quarter", source: "next-level D2 (every person page says when I last saw them and when I will)", run: async () => {
     const up = await import(join(SRC_DIR, "upcoming.ts"));
     if (!up.meetingsWith) return na("no meetings at this commit");

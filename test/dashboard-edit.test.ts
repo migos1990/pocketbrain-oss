@@ -154,7 +154,7 @@ test("Brain home: kinds with counts, what changed this week, what needs a look; 
   expect(home.text).toContain("<span>People</span><b>2</b>");
   expect(home.text).toContain("Changed this week");
   expect(home.text).toContain("Next step, edited by you");
-  expect(home.text).toContain("Needs a look");
+  expect(home.text).toContain("To recheck");
   const r = await req("GET", "/brain/results?q=coordinator");
   expect(r.status).toBe(200);
   expect(r.text).toContain('href="/p/people/jane-roy"');

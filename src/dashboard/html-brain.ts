@@ -105,7 +105,7 @@ export function brainResults(s: State, csrf: string, q = "", kind?: string, page
 <div class="b-kinds">${kinds.map((k) => `<a class="b-kind" href="/brain?kind=${encodeURIComponent(k.folder)}" title="${esc(k.folder)}/"><span>${esc(k.label)}</span><b>${k.count}</b></a>`).join("") || '<div class="empty">No notes yet. Run <code>pocketbrain init</code> or import from Notion.</div>'}</div>
 <div class="b-head"><h2>Changed this week</h2><a class="sub" href="/history">See every change</a></div>
 <div class="card b-list">${changeRows || '<div class="empty">Nothing changed in the last 7 days. Changes your assistants save show up here.</div>'}</div>
-<div class="b-head"><h2>Needs a look${stale.length ? ` (${stale.length})` : ""}</h2></div>
+<div class="b-head"><h2>To recheck${stale.length ? ` (${stale.length})` : ""}</h2></div>
 <div class="card b-list">${staleRows || '<div class="empty">Everything has been checked recently.</div>'}</div>${forgottenSection(s, csrf)}`;
 }
 

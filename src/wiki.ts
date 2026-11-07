@@ -630,6 +630,16 @@ export const TIES = 3;
 // "at" where a project's people work, "with" who else is on a person's project, "too" who else is
 // at a person's org. `base` are the page's own facts the sentence rests on, each member's `recs`
 // the facts that put that member in it.
+// How the owner knows someone as a plain noun, for "…: your colleagues." (G703): "a student",
+// "Robin's TA" and "the kitchen contractor" read as one; a value that says what they do ("works
+// with Robin on Atlas", "hosts the book club") or whose they are ("Priya's peer") never does.
+const FUNCTION_WORD = /\b(?:the|a|an|with|on|in|at|for|of|from|to|and|or|by|as|about|who|that)\b/i;
+export function nounOf(v: string, owner: string[]): string | undefined {
+  let w = v.trim().replace(/^(?:a|an|the|your|my)\s+/i, "");
+  for (const o of owner) w = w.replace(new RegExp(`^${o.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:'s|’s)\\s+`, "i"), "");
+  if (!w || DID.test(w) || FUNCTION_WORD.test(w) || /['’]s\b/.test(w) || w.split(/\s+/).length > 3) return undefined;
+  return w;
+}
 export type Related = { kind: "on" | "at" | "with" | "too"; group: string; base: FactRecord[]; members: { id: string; recs: FactRecord[] }[] };
 // At most this many such sentences on a page; a person's names at most RELATED_NAMES pages, an
 // org's or a project's twice that, and a tie with more says nothing rather than some of them.
@@ -684,17 +694,51 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   const called = lines.length && short ? short : String(n.fm.title ?? n.fm.id);
   // The people whose org fact names this page, each cited by that fact's sources: a page they
   // link to links back, from facts, never guessed.
-  const members = (o.members ?? []).filter((m) => m.id !== n.fm.id && o.byId.has(m.id) && !o.blind(m.id)).sort((a, b) => String(o.byId.get(a.id)!.fm.title ?? a.id).localeCompare(String(o.byId.get(b.id)!.fm.title ?? b.id))).slice(0, 12);
+  const T = String(n.fm.title ?? n.fm.id);
+  const slug = (id: string) => id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase(); // never another fact's label: a read drops it by the page it names (G607)
+  const cite = (lab: string, recs: FactRecord[]) => { if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text: [...new Set(recs.map(reference))].join("; ") }); return `[^${lab}]`; };
+  // One value of another page's fact, as plain words, when this page may say it (G702, G703).
+  const said = (id: string, attr: string) => {
+    const f = o.byId.get(id)?.fm.facts?.[attr];
+    if (!f || isDisputed(f) || o.hidden(`${id}#${attr}`)) return undefined;
+    const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)) && typeof r.value === "string");
+    const v = recs.length === 1 ? String(recs[0]!.value).trim() : "";
+    return v && /^[\p{L}][\p{L} '’-]*$/u.test(v) && v.split(/\s+/).length <= 4 && !findSecret(v) ? { v, recs } : undefined;
+  };
+  // The people whose org fact names this page, each cited by that fact's sources: a page they
+  // link to links back, from facts, never guessed.
+  const all = (o.members ?? []).filter((m) => m.id !== n.fm.id && o.byId.has(m.id) && !o.blind(m.id)).sort((a, b) => String(o.byId.get(a.id)!.fm.title ?? a.id).localeCompare(String(o.byId.get(b.id)!.fm.title ?? b.id)));
+  // The owner's own tie opens the page, from his own role and org facts, never his name in the list
+  // (owner, 2026-11-07: "it should have understood by then that I teach there"; G702).
+  const own = o.ownerPage && !o.self ? all.find((m) => m.id === o.ownerPage) : undefined;
+  if (own) {
+    const role = said(own.id, "role");
+    const r = role?.v;
+    const how = !r ? `You work at ${T}.` : /^(?:a|an|the)\s/i.test(r) ? `You are ${r} at ${T}.` : /^\p{Ll}+$/u.test(r) ? `You work as ${/^[aeiou]/i.test(r) ? "an" : "a"} ${r} at ${T}.` : titleRole(r) ? `You are the ${r} at ${T}.` : `You work as ${r} at ${T}.`;
+    // The role's own label (p-in-<owner>): a read drops the sentence once that fact is hidden too.
+    lines.unshift(`${how}${cite(`p-at-${slug(own.id)}`, own.recs)}${role ? cite(`p-in-${slug(own.id)}`, role.recs) : ""}`);
+  }
+  const members = all.filter((m) => m.id !== o.ownerPage).slice(0, 12);
   if (members.length) {
-    const labs: string[] = [];
+    const list = (ms: typeof members) => { const l = ms.map((m) => `[[${m.id}|${o.byId.get(m.id)!.fm.title ?? m.id}]]`); return l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]!; };
+    // Said by how the owner knows them (their relationship fact, a few plain words), then the rest
+    // (G703): "Ana Diaz and Ben Roy work at North College: your colleagues."
+    const groups = new Map<string, { word: string; ms: typeof members; recs: Map<string, FactRecord[]> }>();
+    const rest: typeof members = [];
     for (const m of members) {
-      const text = [...new Set(m.recs.map(reference))].join("; ");
-      const lab = `p-at-${m.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
-      if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
-      if (!labs.includes(lab)) labs.push(lab);
+      const rel = said(m.id, "relationship");
+      const word = rel ? nounOf(rel.v, o.owner ?? []) : undefined;
+      if (!rel || !word) { rest.push(m); continue; }
+      const g = groups.get(word.toLowerCase()) ?? groups.set(word.toLowerCase(), { word, ms: [], recs: new Map() }).get(word.toLowerCase())!;
+      g.ms.push(m); g.recs.set(m.id, rel.recs);
     }
-    const links = members.map((m) => `[[${m.id}|${o.byId.get(m.id)!.fm.title ?? m.id}]]`);
-    lines.push(`${links.length > 1 ? `${links.slice(0, -1).join(", ")} and ${links.at(-1)} work` : `${links[0]} works`} at ${n.fm.title ?? n.fm.id}.${labs.map((l) => `[^${l}]`).join("")}`);
+    const plural = (w: string) => w.replace(/(\p{L}+)$/u, (x) => /(?:s|x|z|ch|sh)$/i.test(x) ? `${x}es` : /[^aeiou]y$/i.test(x) ? `${x.slice(0, -1)}ies` : `${x}s`);
+    for (const g of [...groups.values()].sort((a, b) => b.ms.length - a.ms.length || a.word.localeCompare(b.word))) {
+      const one = g.ms.length === 1;
+      const labs = g.ms.map((m) => `${cite(`p-at-${slug(m.id)}`, m.recs)}${cite(`p-in-${slug(m.id)}`, g.recs.get(m.id)!)}`).join("");
+      lines.push(`${list(g.ms)} ${one ? "works" : "work"} at ${T}: your ${one ? g.word : plural(g.word)}.${labs}`);
+    }
+    if (rest.length) lines.push(`${list(rest)} ${rest.length > 1 ? "work" : "works"} at ${T}.${rest.map((m) => cite(`p-at-${slug(m.id)}`, m.recs)).join("")}`);
   }
   // How the pages it links are tied to each other (G685-G687), each sentence linking every page it
   // names and cited by every fact behind it (label p-rel-<group>, which a read checks against
@@ -742,12 +786,9 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   if (by.size && ties) {
     const ids = [...by.keys()].sort(byTitle).slice(0, ties);
     ties -= ids.length;
-    for (const id of ids) {
-      const text = [...new Set(by.get(id)!.map(reference))].join("; ");
-      const lab = `p-in-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; // never another fact's label: a read drops it by the page it names (G607)
-      if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
-      lines.push(`${called} also comes up in the sources of ${link(id)}.[^${lab}]`);
-    }
+    // One sentence for all of them, never one each (owner, 2026-11-07; G704).
+    const names = ids.map(link);
+    lines.push(`${called} also comes up in the sources of ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}.${ids.map((id) => cite(`p-in-${slug(id)}`, by.get(id)!)).join("")}`);
   }
   // Pages whose facts link this one (and, on the owner's own page, their decisions and money that
   // nothing else links): "See also", cited by those facts' sources (outside review v5, midday:
@@ -756,7 +797,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   const also = new Map<string, FactRecord[]>();
   // On the owner's own page only a person whose own fact says how they are related to him (family,
   // relationship) links back: that is about him, as his mail is not (G624, G546).
-  for (const x of o.seeAlso ?? []) if (x.from !== n.fm.id && (!o.self || (FAMILY_ATTRS.has(x.attr ?? "") && o.byId.get(x.from)?.fm.type === "person")) && !shownYet.has(x.from) && o.byId.has(x.from) && !o.blind(x.from) && (x.rec.sources ?? []).length) also.set(x.from, [...(also.get(x.from) ?? []), x.rec]);
+  for (const x of o.seeAlso ?? []) if (x.from !== n.fm.id && !(own && x.from === own.id) && (!o.self || (FAMILY_ATTRS.has(x.attr ?? "") && o.byId.get(x.from)?.fm.type === "person")) && !shownYet.has(x.from) && o.byId.has(x.from) && !o.blind(x.from) && (x.rec.sources ?? []).length) also.set(x.from, [...(also.get(x.from) ?? []), x.rec]);
   if (also.size && ties) {
     const ids = [...also.keys()].sort(byTitle).slice(0, ties);
     ties -= ids.length;

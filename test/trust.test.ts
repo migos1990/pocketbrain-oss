@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { makeBrain } from "./fixture";
 import { loadBrain, type FactRecord } from "../src/brain";
 import { liveRecords } from "../src/health";
-import { factTrust, trustReport, trustText, trustLine, homeTrustLine, recordTrust } from "../src/trust";
+import { factTrust, trustReport, trustText, trustLine, recordTrust } from "../src/trust";
 import { loadRules } from "../src/rules";
 import { nightBackfill, nightBackfillLine } from "../src/backfill";
 import { memoryCheck, unseenChanges, state as syncState } from "../src/memsync";
@@ -78,7 +78,6 @@ test("each live fact lands in one bucket: checked only by the owner's word or th
   expect(t.unsourced.total).toBe(3); // the flagged role, the inferred city, the Notion-only hobby
   expect(trustLine(t)).toBe("2 checked against their source, 4 need a look, 3 not checked yet.");
   // On home it ends the memory line, which already says "facts" (decide-wall bar).
-  expect(homeTrustLine(t)).toBe("4 need a look.");
 });
 
 test("what the audit prints carries counts only: no value, title or note id", () => {

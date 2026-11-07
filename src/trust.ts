@@ -177,10 +177,6 @@ export function trustLine(t: TrustReport): string {
   return `${t.checked} checked against their source, ${t.look} need${t.look === 1 ? "s" : ""} a look${t.unchecked ? `, ${t.unchecked} not checked yet` : ""}.`;
 }
 
-// Settings says one number (Clearer decision cards, 2026-10-25: the wall is at its word budget).
-export function homeTrustLine(t: TrustReport): string {
-  return t.look ? `${t.look} need${t.look === 1 ? "s" : ""} a look.` : "Nothing needs a look.";
-}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 export function trustText(t: TrustReport, weekAgo?: TrustRow): string {

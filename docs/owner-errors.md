@@ -82,7 +82,7 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `doctor.inbound` | Inbound from {names} not ingested yet (the server does it every {minutes} min). Fix: run pocketbrain hub sync. |
 | `doctor.ops-waiting` | {n} op(s) not applied yet: {list}. Fix: run pocketbrain hub sync. |
 | `doctor.ops-queued` | {n} write(s) queued for {hub}, oldest {age}h ago. Fix: run pocketbrain hub sync. |
-| `doctor.hub-alerts` | {n} hub alert(s) this week, latest: {check}: {from}. Fix: open the dashboard's Settings page, and read Still open. |
+| `doctor.hub-alerts` | {n} hub alert(s) this week, latest: {check}: {from}. Fix: open the dashboard's Settings page, and read Also here. |
 | `doctor.replica-no-git` | {name} has no git address in rules/hub.yaml, so nobody can sync with it. Fix: read docs/hub.md, and add its git: line in rules/hub.yaml. |
 | `doctor.replica-down` | {name} unreachable at {git}. Fix: check that {name} is on and online, then run pocketbrain hub sync. |
 | `doctor.hub-down` | The hub {name} is unreachable at {git}; agents fall back to their snapshots and writes here queue. Fix: run pocketbrain hub promote <this machine>, if it stays down. |

@@ -6,7 +6,7 @@ What stayed moved:
 
 - The hub's own filing (a capture's or source's fact files itself with Undo, a contradiction is filed as a conflict, an outside assistant's unanswered proposal expires) and "Conflicts wait for the Gardener": [filing.md](filing.md), code in `src/filing.ts` and `src/gardener-hold.ts`.
 - Conflicts: [owner-home.md](owner-home.md) (`ownerConflicts`, `inboxConflicts`).
-- A past date is an upkeep `past-date` finding; a stale fact stays under the Brain's "Needs a look".
+- A past date is an upkeep `past-date` finding; a stale fact stays under the Brain's "To recheck".
 - No assistant may be named `auto-decide` or `hub`: those names mark the hub's own commits (G426, `src/rules.ts`).
 
 The design as it was is in git history.

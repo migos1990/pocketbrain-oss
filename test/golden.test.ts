@@ -41,14 +41,14 @@ describe("pocketbrain golden", () => {
 
   test("a stale or due fact says why, and that nothing asks the owner about it, without its value", () => {
     const root = makeBrain();
-    // Freshness is never asked, file all on or not (G452, outside review v5): it waits under Needs a look.
+    // Freshness is never asked, file all on or not (G452, outside review v5): it waits under the Brain's To recheck.
     writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: ask }\n");
     const f = join(root, "projects", "course-a.md");
     const orig = readFileSync(f, "utf8");
     writeFileSync(f, orig.replace("value: Grade the midterm, as_of: 2026-10-01", "value: Grade the midterm by 2026-10-05, as_of: 2026-10-01"));
     const dated = runGolden(root, { agent: "planner" }).rows.find((x) => x.id === "w01")!;
     expect(dated.why).toContain("its date passed 3 days ago");
-    expect(dated.why).toContain("it waits under Needs a look, nothing asks");
+    expect(dated.why).toContain("it waits under the Brain's To recheck, nothing asks");
     // No date in it, just old: due by its shelf life, asked as Still the plan?
     writeFileSync(f, orig.replace("as_of: 2026-10-01, sources", "as_of: 2026-09-20, sources"));
     const old = runGolden(root, { agent: "planner" });

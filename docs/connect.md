@@ -40,7 +40,7 @@ pocketbrain token --revoke cursor
 
 ## Try it
 
-Ask the app: *"Remember that I prefer short answers."* It saves that with its source. While the app is on trial, what it saves is a proposal, and no screen asks you to approve it: you're asked only about conflicts ([filing.md](filing.md)). The dashboard's Settings lists it under **Still open** with what happens to it (an unanswered one expires after two weeks). To let this one in, run `pocketbrain inbox --accept <file>` with the `inbox/…yaml` file the app was told it went to; to let the app's saves in from now on, `pocketbrain agent tier <app> core`. Then ask a **second** app *"What do you know about how I like answers?"* It knows. That's the point: what one assistant learns, the others know next time.
+Ask the app: *"Remember that I prefer short answers."* It saves that with its source. While the app is on trial, what it saves is a proposal, and no screen asks you to approve it: you're asked only about conflicts ([filing.md](filing.md)). The dashboard's Settings lists it under **Also here** with what happens to it (an unanswered one expires after two weeks). To let this one in, run `pocketbrain inbox --accept <file>` with the `inbox/…yaml` file the app was told it went to; to let the app's saves in from now on, `pocketbrain agent tier <app> core`. Then ask a **second** app *"What do you know about how I like answers?"* It knows. That's the point: what one assistant learns, the others know next time.
 
 ## When your computer sleeps
 

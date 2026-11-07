@@ -101,7 +101,7 @@ test("each line is one number with its one fix, no fact value, and last week's n
   expect(text).toContain("## Brain health");
   expect(text).toContain("- Facts with no live source: 33% (2 of 6; last week 33%). Fix: run pocketbrain sources backfill");
   expect(text).toContain(`- Stale facts that change over time: 67% (2 of 3; last week`);
-  expect(text).toContain(`Fix: mark them Still true or change them under the Brain's Needs a look.`);
+  expect(text).toContain(`Fix: mark them Still true or change them under the Brain's To recheck.`);
   expect(text).toContain(`- Conflicts open more than 7 days: 50% (1 of 2`);
   expect(text).toContain(`Fix: settle them from Waiting on you on the home.`);
   for (const secret of ["Editor", "Acme", "Chair", "+1514", "gmail:f0", "Ann", "Ben"]) expect(text).not.toContain(secret);

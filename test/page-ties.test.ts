@@ -64,7 +64,7 @@ test("G624 two pages citing one mail tie only when that mail names the page", ()
   expect(body(root, "people/cy-moss")).toContain("[[people/ana-diaz|Ana Diaz]]");
 });
 
-test("G624 a page names at most three pages its sources tie it to, each in its own sentence", () => {
+test("G624 a page names at most three pages its sources tie it to, in one sentence (G704)", () => {
   const root = makeBrain();
   person(root, "ben-okafor", "Ben Okafor", fact("role", "analyst", "gmail:f0000000000000b0"));
   for (const [i, who] of ["Ann Lake", "Cal Dunn", "Dee Ray", "Eli Novak", "Fay Wong"].entries()) {
@@ -77,6 +77,7 @@ test("G624 a page names at most three pages its sources tie it to, each in its o
   const ben = body(root, "people/ben-okafor");
   const tied = ["Ann Lake", "Cal Dunn", "Dee Ray", "Eli Novak", "Fay Wong"].filter((w) => ben.includes(`|${w}]]`));
   expect(tied.length).toBe(3);
-  // One sentence each: no list of pages joined by commas or "and".
-  expect(ben).not.toMatch(/\]\](, | and )\[\[people\//);
+  // One sentence for them all, not one each (owner, 2026-11-07, on his school's page: the same
+  // sentence said twice read as a bug; G704).
+  expect(ben.match(/also comes up in the sources of/g)?.length).toBe(1);
 });

@@ -395,7 +395,9 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   // What was just done: one quiet line, with Undo when the diary can take it back (G631).
   const reply = o.done && o.flash && !o.reply ? `<div class="done" role="status">${DONE}<span>${esc(o.flash)}</span>${o.undo ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: o.undo })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${o.flash}`)}">${HOME_COPY.undo}</button></form>` : ""}</div>` : replyHtml(csrf, o);
   // A late or failing job: one quiet line under the count, linking to Settings' list (G691).
-  const late = v.late ? `<a class="late" role="status" href="/overview#jobs">${esc(v.late)}</a>` : "";
+  const late = (v.late ? `<a class="late" role="status" href="/overview#jobs">${esc(v.late)}</a>` : "")
+    // An assistant gone quiet by its own habit: the same quiet shape, to Who knows (G697).
+    + (v.quiet ? `<a class="late" role="status" href="/who">${esc(v.quiet)}</a>` : "");
   return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}${late}
 ${reply}
 ${asks}${mems.length ? `${asks ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
@@ -591,7 +593,7 @@ ${search}${below}`);
 // (See as), what its own memory has wrong with Fix everywhere; then Settings.
 export interface WhoExtras { flash?: string; memory?: { pages: number; people: number; learned: number; backup?: string; drill?: string }; trial?: string[]; shorts?: Record<string, string>; colours?: Record<string, string> }
 export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
-  const readLine = (r: HomeView["reads"][number]) => r.today === 0 ? APP_COPY.readNot : r.today === 1 ? APP_COPY.readOnce : fill(APP_COPY.readTimes, { n: r.today });
+  const readLine = (r: HomeView["reads"][number]) => r.quiet ? r.quiet : r.today === 0 ? APP_COPY.readNot : r.today === 1 ? APP_COPY.readOnce : fill(APP_COPY.readTimes, { n: r.today });
   const wrongLine = (r: HomeView["reads"][number], l: WrongLine) => `<li class="line wrong"><div class="t"><a href="${href(l.page)}">${esc(l.what)}</a><small>${esc(l.said !== undefined ? fill(HOME_COPY.remembers, { name: r.name, said: l.said, now: l.now ?? "" }) : fill(HOME_COPY.remembersQuiet, { name: r.name }))}</small></div>${l.fixing ? `<span class="state">${HOME_COPY.onItsWay}</span>` : `<form method="post" action="/action/fix-everywhere">${hidden(csrf, { key: l.key })}<button aria-label="${esc(`${HOME_COPY.fix}: ${l.what}`)}">${HOME_COPY.fix}</button></form>`}</li>`;
   const trial = new Set(o.trial ?? []);
   // One card per assistant: its letter, today's reads, how much it sees (See as), what it has wrong

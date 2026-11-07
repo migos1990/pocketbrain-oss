@@ -379,7 +379,7 @@ What it found, and what changed:
 
 ## On the dashboard
 
-Corrections waiting for the owner are cards under Still open on Settings, with Approve and Decline (the same as
+Corrections waiting for the owner are cards under Also here on Settings, with Approve and Decline (the same as
 `memsync approve|decline`). A fix the agent couldn't apply, or still gets wrong when asked again,
 shows as "memory fix stuck" with a link to that assistant.
 

@@ -30,7 +30,7 @@ questions:
 - **watch**: found and shown, but due for a recheck.
 - **fail**: not in the top 5, outside the view, not shown, the wrong answer, or stale or disputed.
 
-A stale or due row also says why, and that nothing asks you about it, for example `next_step is stale: the agent would serve an old answer; its date passed 9 days ago; it waits under Needs a look, nothing asks`. The causes are: its date passed, its review date passed, last checked N days ago against its shelf life, no date in it ends it, it names a date but its attribute doesn't end on one (only `next_step`, `due` and `deadline` do), or it was confirmed since its date.
+A stale or due row also says why, and that nothing asks you about it, for example `next_step is stale: the agent would serve an old answer; its date passed 9 days ago; it waits under the Brain's To recheck, nothing asks`. The causes are: its date passed, its review date passed, last checked N days ago against its shelf life, no date in it ends it, it names a date but its attribute doesn't end on one (only `next_step`, `due` and `deadline` do), or it was confirmed since its date.
 
 The output names ids, ranks and freshness only, never a question, an answer or a value. Asking doesn't count as the assistant's reads, so its read counts and brain-first stay its own. The sample brain (`examples/brain/evals/weekly.yaml`) carries five synthetic questions. With `PB_BRAIN` set, the eval run checks the owner's file the same way, on a copy of the brain, as `e2e-loop-golden-owner-<id>`.
 
