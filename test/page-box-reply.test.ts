@@ -64,6 +64,8 @@ test("G728 the same sentence sent again on the same page is read once: one commi
     expect(commits(s.root) - before).toBe(1);
     for (const x of [a, b, c]) expect(x.text).toContain("DG of Lakeshore College");
     expect(n).toBe(1);
+    // A sentence the model read cites owner:<day>/home/read; it is the owner's edit all the same (G735).
+    expect(c.text).toContain("Edited by you on 8 Oct.");
     // The box's arrow sends once: a second tap while it is sending does nothing.
     expect(a.text).toContain("if(f.classList.contains('sending')){e.preventDefault();return}");
   } finally { delete process.env.PB_NOW; }
@@ -77,6 +79,16 @@ test("G734 only a live fact the owner typed counts as edited by you; the arrow u
     const s = await setup();
     const rec = (extra: Record<string, unknown>) => ({ fm: { id: ID, facts: { role: { value: "DG", sources: ["owner:2026-10-01/home"], ...extra } } } }) as unknown as Note;
     expect(editedOn(s.root, ID, rec({}))).toBe("2026-10-01");
+    // The box's other channels: a sentence the model read, a chip the owner tapped (G735).
+    for (const ref of ["owner:2026-10-01/home/read", "owner:2026-10-01/home/chip"]) {
+      const n2 = { fm: { id: ID, facts: { role: { value: "DG", sources: [ref] } } } } as unknown as Note;
+      expect(editedOn(s.root, ID, n2)).toBe("2026-10-01");
+    }
+    // Not the owner's notes import or a settle pick.
+    for (const ref of ["owner:2026-10-01/notes", "owner:2026-10-01/settle-x", "owner:2026-10-01/homework"]) {
+      const n3 = { fm: { id: ID, facts: { role: { value: "DG", sources: [ref] } } } } as unknown as Note;
+      expect(editedOn(s.root, ID, n3)).toBeUndefined();
+    }
     expect(editedOn(s.root, ID, rec({ valid_to: "2026-10-05" }))).toBeUndefined();
     expect(editedOn(s.root, ID, rec({ retired: "2026-10-05" }))).toBeUndefined();
     expect((await s.req("GET", P)).text).toContain("addEventListener('pageshow'");

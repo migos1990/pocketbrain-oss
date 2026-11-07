@@ -70,7 +70,8 @@ export function addYourNote(root: string, id: string, said: string): string {
 export const dayWords = (day: string) => sayDay(day).replace(new RegExp(` ${today().slice(0, 4)}$`), "");
 
 // The day the owner last changed a page by hand, if ever: its notes (Edit, Keep it as a note), or a
-// fact typed in the box, whose record cites the owner's word from the box (owner:<day>/home, G727).
+// fact typed in the box, whose record cites the owner's word from the box (owner:<day>/home, or
+// /home/read when the box's model read it and /home/chip for a tapped chip; G727, G735).
 export function editedOn(root: string, id: string, n?: Note): string | undefined {
   // The owner's day from the commit's Day: trailer (today(), so PB_TODAY and the owner's clock hold).
   const msg = git(root, ["log", "-1", "--format=%B", "-E", "--grep=^Kind: owner-page-(edit|note)$", "--", `${id}.md`]);
@@ -81,5 +82,5 @@ export function editedOn(root: string, id: string, n?: Note): string | undefined
 // The days of the live facts on a page the owner typed in the box (a value since replaced or
 // retired no longer counts).
 function boxDays(n: Note): string[] {
-  return liveRecords(n).flatMap(({ r }) => (r.sources ?? []).flatMap((s) => refString(s).match(/^(?:owner|louis):(\d{4}-\d{2}-\d{2})\/home$/)?.[1] ?? []));
+  return liveRecords(n).flatMap(({ r }) => (r.sources ?? []).flatMap((s) => refString(s).match(/^(?:owner|louis):(\d{4}-\d{2}-\d{2})\/home(?:\/(?:read|chip))?$/)?.[1] ?? []));
 }

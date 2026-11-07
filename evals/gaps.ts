@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G735: {
+    closed: "claude/edited-by-read",
+    title: "A fact the box's model read never made the page say Edited by you",
+    severity: "medium",
+    finding: "Use-it on the Mac, 2026-11-07: on a person page the role the owner typed showed, but not Edited by you; with a box model the fact cites owner:<day>/home/read (and a tapped chip owner:<day>/home/chip), which boxDays did not match.",
+    fix: "boxDays in src/page-notes.ts matches owner:<day>/home with an optional /read or /chip. Test: test/page-box-reply.test.ts.",
+  },
   G733: {
     closed: "1cb48346",
     title: "Two pages with the same last name shared one footnote, so one name showed the other's source",
@@ -27,21 +34,21 @@ export const GAPS: Record<string, Gap> = {
     fix: "pageLead in src/wiki.ts writes on the owner's own page one sentence per area for the owner's live projects and one for the owner's standing decisions (\"Your work projects: A and B.\"), each name cited by that page's own facts; never a page more private than that page or one a reader of that page can't see, and all of an area's pages or none (at most 12). Test: test/owner-page-projects.test.ts. Eval: orphan-project-linked-from-owner-page.",
   },
   G734: {
-    closed: "claude/page-box-reply",
+    closed: "4194f70c",
     title: "A box value since replaced still said Edited by you, and the arrow could stay locked",
     severity: "low",
     finding: "Review of #132: boxDays counted every record of a fact, ended and retired ones too; and the composer's sending mark was never cleared, so a page the browser showed again from its back-forward cache kept a dead arrow.",
     fix: "boxDays in src/page-notes.ts reads liveRecords only; COMPOSER_JS clears the sending mark on pageshow. Test: test/page-box-reply.test.ts.",
   },
   G727: {
-    closed: "claude/page-box-reply",
+    closed: "4194f70c",
     title: "A sentence on a page was saved, but its answer was drawn at the page's foot behind the box, so nothing seemed to happen",
     severity: "high",
     finding: 'Owner, 2026-11-07, on a person page on his phone: "submit doesnt work". The box had filed his sentence as his word for the role, but the page came back at its top with the reply under References, behind the pinned box.',
     fix: "ownerPage in src/dashboard/html-page.ts draws the reply, its Undo and Keep it as a note inside the pinned area above the box; editedOn in src/page-notes.ts also counts a live fact the owner typed in the box (owner:<day>/home), so the page says Edited by you on <day>. Test: test/page-box-reply.test.ts.",
   },
   G728: {
-    closed: "claude/page-box-reply",
+    closed: "4194f70c",
     title: "The same sentence tapped several times was read, and written, several times",
     severity: "medium",
     finding: "Same: with no answer in sight he tapped six times in ten seconds; the hub ran six model readings and made three owner commits and three diary rows, one per slightly different reading.",
