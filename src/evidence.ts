@@ -8,6 +8,7 @@ import { readJsonl, sha256 } from "./util";
 import type { Note, FactRecord, SourceRef } from "./brain";
 import type { WriteRequest } from "./checks";
 import { refString } from "./sources";
+import { clock } from "./clock";
 
 export const verifyLog = (root: string) => join(root, "log", "sources", "verify.jsonl");
 // Which claim a verdict was for, without keeping the claim's words in the log.
@@ -42,7 +43,9 @@ export function evidenceFor(root: string, req: WriteRequest, notes: Note[]): Evi
   const cited = new Set(out.now?.sources ?? []);
   if (refs.some((r) => cited.has(r)) && req.value !== undefined) {
     const key = claimKey(typeof req.value === "string" ? req.value : JSON.stringify(req.value));
-    const since = new Date(Date.now() - VERDICT_DAYS * 86_400_000).toISOString();
+    // The hub's clock, as the verdicts were dated by it: PB_NOW stands in for today (CI 2026-11-07, a
+    // verdict dated 2026-10-08 aged out of the wall clock's 30 days and every proposal lost it).
+    const since = new Date(clock().getTime() - VERDICT_DAYS * 86_400_000).toISOString();
     const last = new Map<string, Evidence["verified"][number]>();
     for (const e of readJsonl<{ at: string; agent: string; ref: string; result: string; claim?: string; withheld?: string }>(verifyLog(root)))
       if (e.agent === req.agent && e.claim === key && refs.includes(e.ref) && cited.has(e.ref) && e.at >= since && e.result !== "unreachable")
