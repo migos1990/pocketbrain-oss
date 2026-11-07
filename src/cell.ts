@@ -225,7 +225,7 @@ export function cellText(v: CarveResult["visible"] extends Map<string, infer V> 
 
 function cellNote(v: CarveResult["visible"] extends Map<string, infer V> ? V : never, agent: string, res: CarveResult): Note {
   const facts = Object.fromEntries(visibleFacts(v, res).map(([attr, f]) => [attr, agentFact(f, agent, res)]));
-  const fm = { ...v.note.fm, facts: Object.keys(facts).length ? facts : undefined, updated: shownUpdated(v, res), by: undefined, history: undefined, legacy: undefined } as unknown as Note["fm"];
+  const fm = { ...v.note.fm, facts: Object.keys(facts).length ? facts : undefined, updated: shownUpdated(v, res), by: undefined, history: undefined, legacy: undefined, opening: undefined } as unknown as Note["fm"];
   // Decision links point only at notes in the slice; the rest become "redacted".
   const f = fm as unknown as Record<string, unknown>;
   for (const k of ["superseded_by", "supersedes", "merged_into"]) if (f[k] !== undefined) {

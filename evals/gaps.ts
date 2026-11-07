@@ -6,7 +6,7 @@ export interface Gap { title: string; severity: "critical" | "high" | "medium" |
 
 export const GAPS: Record<string, Gap> = {
   G715: {
-    closed: "claude/teach-ask",
+    closed: "d80ebb53",
     title: "The question about a class the owner teaches had no place on his home and no kind in the asks count",
     severity: "medium",
     finding: "Coordinator, 2026-11-07, after G711: the teaching question was filed in inbox/teach/ but nothing showed it to the owner or counted it, so turning teach: { ask: true } on would have asked him nothing.",
@@ -25,6 +25,20 @@ export const GAPS: Record<string, Gap> = {
     severity: "low",
     finding: "Same audit: init wrote its notes in the brain's first commit, and the diary catch-up skips a brain's first commit, so the owner's home showed no memories until something new was learned.",
     fix: "src/init.ts appends a diary line per starting fact (firstRows in src/diary-catchup.ts) in the init commit itself. Tests: test/box-day-one.test.ts. Eval: init-facts-on-the-diary.",
+  },
+  G714: {
+    closed: "claude/model-opening",
+    title: "Nothing kept a model's paragraph to what the page's cited sentences say, or took it from a reader who can't see a fact behind it",
+    severity: "high",
+    finding: "The owner's yes to a model-written opening, 2026-11-07, came with conditions: no new facts, and the paragraph goes when a fact behind it is hidden from the reader. wiki_sync's checks caught made-up names and numbers only, and a paragraph with one reference per sentence would lose only that sentence.",
+    fix: "src/wiki.ts openingProblem: every name, number and longer word is in the sentences it cites (or the title and the owner's name), a few joining words aside; no marker or link inside it. Its labels go after it all together, so view.ts drops it whole for a reader missing any of them; wiki_sync refuses one that some reader of the page wouldn't get whole, and the page writer leaves it out once it no longer fits. No agent's cell carries fm.opening (src/cell.ts cellNote): it reaches a reader only through the page's text, where the read judges it. Test: test/model-opening.test.ts. Eval: opening-refuses-word-beyond-cited.",
+  },
+  G713: {
+    closed: "claude/model-opening",
+    title: "A page's facts read as separate sentences, and no checked way existed for a model to tie them together",
+    severity: "medium",
+    finding: "Owner, 2026-11-07, on his school's page: the brain should already understand who he interacts with there; he typed yes to a short model-written opening that ties the page's facts together, under the wiki_sync line checks, report-only first.",
+    fix: "The Gardener's wiki_sync takes opening: { text, labels } on its own; the page keeps it as fm.opening and the page writer puts it first in its block, under the owner's own text, while it still fits what the block says. last_run lists openings_due (orgs first); the night prompt has a step for it. Report-only until pocketbrain wiki opening on (its own switch beside wiki sync). Test: test/model-opening.test.ts. Eval: opening-ties-demo-school.",
   },
   G712: {
     closed: "33f88a7f",
@@ -97,14 +111,14 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/dashboard/home.ts SETTINGS_HREF is /overview#needs; Settings' needsYou (src/dashboard/html.ts) splits what ownerAsks counts from the rest: Needs a look lists exactly those, each marked with how many it counts, its number the home's; the rest is under Also here, not counted. A counted proposal carries its taps (decideElsewhere: proposal-accept, proposal-reject; a name that fits two pages asks Same as X or Someone new, proposal-place, since accepting it as it stood only filed the same question again; review of #118: Someone new never lands on a page holding its slug, and a refused placement puts the proposal back as it was); held new pages have File them now (held-release, releaseHeld); a rules change links History. The trust count left Settings' memory line; the Brain's stale list is To recheck, so Needs a look means one thing.",
   },
   G697: {
-    closed: "claude/agent-quiet-line",
+    closed: "b7b625f1",
     title: "The home never said a connected assistant had stopped reading the brain",
     severity: "medium",
     finding: "Next-level plan F4, 2026-11-06: an assistant that lost its connection or stopped calling the brain went unnoticed on the home; only the probe's daily self-check said so, as a hub alert, and Who knows showed \"Not read today\" the same for a weekly reader as for one gone silent.",
     fix: "src/quiet.ts quietAssistants: each of the owner's own assistants that is connected (a live token or an OAuth sign-in) and not paused is measured against its own reading habit; the home shows one line under the count (quietLine, \"Planner has not read your brain in 9 days. Who knows has the details.\"), never counted as an ask, linking to Who knows, whose row says when it last read and how often it used to (quietWords). Nothing when every connected assistant read recently. Tests: test/quiet.test.ts. Eval: rt-quiet-assistant-home-line.",
   },
   G698: {
-    closed: "claude/agent-quiet-line",
+    closed: "b7b625f1",
     title: "One fixed silence threshold for every assistant",
     severity: "low",
     finding: "Same plan: a single number either nags about an assistant that reads weekly or stays silent for days about one that reads every hour.",
@@ -209,35 +223,35 @@ export const GAPS: Record<string, Gap> = {
     fix: "Right now is the week (Louis, 2026-11-06 decision card): src/week.ts weekOf over every page shown, past due, each of the coming seven days, coming up, next steps with no date (a step that names its day goes on it; one whose day went by leaves), the calendar's events with the page they name; then the projects no line names. Private pages, facts and events after a sign-in only. Test: test/week.test.ts (G688).",
   },
   G678: {
-    closed: "claude/false-conflicts-2",
+    closed: "09fe8e09",
     title: "The same notice from two mails, its parts in another order, was asked as a conflict",
     severity: "medium",
     finding: "Owner's phone, 2026-11-06: \"What's next\" between two long paraphrases of one service notice (22 Oct and 3 Nov), the same words with the parts in another order and \"you want\" added. G662's valueKey keeps word order, so a clause moved to the end made two values.",
     fix: "nearSame (src/normalize.ts): ten words or more, one side's stemmed words all in the other, the other adding at most three words that only address the reader (no quantifier or modal), 75% of the shorter in the same order, the same numbers and negations; a pure reorder (who does what) never folds. Never for the owner's own word. The write's same-value check, filing's differs, the inbox's conflict list and upkeep's both-hold report use it. Tests: test/false-conflicts-2.test.ts.",
   },
   G674: {
-    closed: "claude/false-conflicts-2",
+    closed: "09fe8e09",
     title: "An org's name in another case was asked as a conflict against the link to its page",
     severity: "medium",
     finding: "Owner's phone, 2026-11-06: \"What is <person>'s org?\" between a lower-case school name (an assistant's link to the org page it made, titled in lower case) and the same name in its usual case from a mail. The mail's side was a name written as a link to no page, so its comparison key was not the page's id and a case difference became a conflict.",
     fix: "pageLink (src/write.ts): a field with normalize: link takes a name the way it takes the link, the page whose title or alias that name is when exactly one page the writer is shown has it; the write, filing (differs) and the inbox's conflict list compare that. A hidden page never resolves (contract row). Tests: test/false-conflicts-2.test.ts, test/contracts/write.contract.test.ts.",
   },
   G675: {
-    closed: "claude/false-conflicts-2",
+    closed: "09fe8e09",
     title: "Two next steps from one mail of one day were asked as a conflict",
     severity: "medium",
     finding: "Owner's phone, 2026-11-06: \"What's next for <project>?\" between an agreement to sign and an interview date, both from one mail of the same day. Both hold; the one-sender rule (G662) needed a sender key the older capture records lack.",
     fix: "oneSender is true when every ref is the same item; the write keeps both values of one item of one day in one value joined by \"; \" (step 4), and a part it holds said again adds nothing. Money, health and legal still ask. Tests: test/false-conflicts-2.test.ts.",
   },
   G676: {
-    closed: "claude/false-conflicts-2",
+    closed: "09fe8e09",
     title: "\"Not sure, keep both\" didn't stick",
     severity: "high",
     finding: "Owner's phone, 2026-11-06: the card on a person's relationship came back about ten times after keep both. Keep both only cleared the conflict beside the live value, so the same value said again opened a new one; and a proposal the owner turned down was proposed again the next day as a new file and a new card.",
     fix: "keptBothWith (src/write.ts): two values the owner kept both of never open a conflict again on that fact, from any source; the other joins history. propose(): an assistant's own turned-down value for the same fact is a noop. Upkeep step 8d lists any open conflict on a kept pair (asked-again-after-keep-both, report-only). Tests: test/false-conflicts-2.test.ts, test/contracts/write.contract.test.ts.",
   },
   G677: {
-    closed: "claude/false-conflicts-2",
+    closed: "09fe8e09",
     title: "The owner's own word was asked against an assistant's guess",
     severity: "high",
     finding: "Owner's phone, 2026-11-06: \"You said, 2 Nov\" against an assistant's guess at how the owner knows a person. By the conflict order the owner's word comes first; an assistant's own word dated the same day or later still opened a conflict, and its proposal was a card on the settle screen.",
@@ -363,14 +377,14 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/wiki.ts: a role, org, city or other noun attribute is never said as a deed (NOUN_ATTRIBUTE), and the owner's to-do on a page says \"You owe Ben the sample.\" (yourToDo, now shared with the home); src/dashboard/home.ts and src/owner-say.ts: a person's org reads \"works at\" (orgNew, orgChanged, orgSettled) and org is \"workplace\" in other lines; src/dashboard/html-page.ts: Who sees and its list name assistants by agentTitle, Details say attributes in words and days as \"10 Aug 2026\"; src/dashboard/html.ts: Filed for you says the decided proposal as a home line with its source (filedWords). test/screens-read-right.test.ts.",
   },
   G662: {
-    closed: "claude/false-conflicts",
+    closed: "a0d1bd12",
     title: "Values that both hold were asked as a conflict, and the cards said too little",
     severity: "high",
     finding: "Owner's phone, 2026-11-03: \"this is not 1 or the other\". A project's status from two mails of one sender on the same day (\"beta testing\", then \"build 5 is ready to test\") was a step 7 conflict, since a same-day value never counted as newer; the same sentence from two mails ten days apart, a capital letter and \"retain\" against \"be retained\" apart, was a conflict, since only the exact key counted as the same value and a run of next steps never let a newer mail replace one its mail had verified; that sentence was boilerplate from a developer notice sent by a \"<product>-noreply\" address, which the machine-sender check missed (it matched no-reply only at the start); and two of three conflict cards on the home had no \"Two emails disagree\" line, since the line came only with values short enough to show.",
     fix: "valueKey/sameValue (src/normalize.ts): a value of five words or more compares by its content words, stemmed, numbers and negations kept; the write path and filing compare values with it. One sender's two pulled items of one day update (src/write.ts, filing.ts sameKindLater), told apart from two senders by a sender_key hash on the capture record (src/capture.ts senderKey/oneSender, src/pull.ts); money, health and legal still ask. filing.ts lets a newer pulled mail step a merge: latest run past a verified value (G513 for runs). machineSender matches a no-reply word anywhere in the address's name. home.ts gives every conflict card its source line. Upkeep's both-hold-conflict lists old conflicts whose sides both hold, report-only. Tests: test/false-conflicts.test.ts, test/bulk-mail-skip.test.ts, test/owner-settle.test.ts, test/demo-brain.test.ts (a one-sender pair in the demo's week files with no card; its three two-sender conflicts still ask).",
   },
   G661: {
-    closed: "claude/audit11-ceilings-rows",
+    closed: "eb43cc05",
     title: "Hearsay with the verb first filed as the owner's word, and two guards had no ceilings rows",
     severity: "low",
     finding: "Audit v8, v10 finding 6 and v11 (Low): \"Jane is the dean, says Paul\" filed as the owner's word, since the trailing hearsay shape wanted the name before the verb; the order guard outside a preference (speaksToReader) and the box's hearsay shapes had no ceilings rows, against the Ceilings law.",
@@ -416,7 +430,7 @@ export const GAPS: Record<string, Gap> = {
     severity: "high",
     finding: "Audit v11 carve soak, seed 7057, frozen in test/fixtures/carve-seeds/seed-7057: dax excludes money/satinyl-vopun by name, yet context_pack {topic: \"Satinyl Vopun\"} hands dax that note's place and detail values (full token).",
     fix: "Not the context_pack path: read and search handed dax the same values. The seed holds money/satinyl-vopun-dup, the same page filed twice (same folder, type, title and area), and the by-name exclude named only the first, so the twin carried every value the owner hid (the merge code already refused to fold them for that reason). carve() now widens a grant's by-name exclude to the page's twins (withTwins in src/carve.ts), excluded by name like the page, so the twin answers exactly like a missing one. Seed 7057 guards it (meta.json has no gap); a row in test/contracts/carve.contract.test.ts. A twin the agent created itself (by) stays visible, or its own new page would vanish and confirm a guessed hidden title (slice audit F1, a must-never row). Known limits: a slice's own exclude (rules/slices.yaml) doesn't follow twins; two different things sharing a title and area are both held (over-hold); the dashboard's Who sees this (html-page.ts, html-brain.ts) and ask-to-see (asks.ts askable) read the exclude list directly, so they don't name a twin as the hidden page's (slice audit L1, L2).",
-    closed: "claude/audit11-g657",
+    closed: "73b1b125",
   },
   G647: {
     closed: "29d97517",
@@ -447,7 +461,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/dashboard/server.ts appDoorLog: one line per call in .git/pb-app-door.jsonl (when, door, status, cookie or not, the refusal's one-line reason; never a key, nonce or cookie; the last 500), printed by pocketbrain dashboard phones log. mobile/src/hub.ts: fresh tries a dropped call once more, says offline only when the hub didn't answer twice, and any other status as { error } (freshWords); pageClears: a page that loads clears the message (App.tsx). Test: test/app-door-log.test.ts.",
   },
   G655: {
-    closed: "claude/gardener-session-errors",
+    closed: "9afc12f5",
     title: "An old reference on a page blocked every Gardener wiki_sync of that page",
     severity: "low",
     finding: "Gardener night run 2026-11-03: wiki_sync on three people pages was refused with \"reference 2 cites gmail:<id>, which no current fact of this page cites\" though the call passed only references the page's facts cite. The drift check ran over every footnote already on the page, so one stale reference refused each retry, and the page never got its summary.",

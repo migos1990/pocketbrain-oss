@@ -20,7 +20,7 @@ import { runChecks, redactSecrets, findInjection, findSecret, refShapeOk, approv
 import { normalizeValue, compareKey } from "./normalize";
 import { sourceRank, refString, normalizeRef, isExactLouisRef } from "./sources";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
-import { renderTouchedPages, applyRewrite, ungrounded, summaryOf, isPersonAuthor, isPersonCommit, partAuthors, pageFindings, pageChanges, footnotes, refsIn, parentOf, sectionWithRefs, reference } from "./wiki";
+import { renderTouchedPages, openingProblem, hubLead, leadSentences, ownerWordsOf, applyRewrite, ungrounded, summaryOf, isPersonAuthor, isPersonCommit, partAuthors, pageFindings, pageChanges, footnotes, refsIn, parentOf, sectionWithRefs, reference } from "./wiki";
 import { hiddenNeedles } from "./needles";
 import { findCarried } from "./match";
 import { cellChangesSince, cellGeneration, cellsOn, freshCell, rulesHash } from "./cell";
@@ -1103,6 +1103,10 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
     if (text.includes("\n")) throw new CoreError(400, `reference ${label} is one line`);
     return { label, text };
   });
+  if (body.opening !== undefined) {
+    if (summary !== undefined || sectionsIn.length || references.length) throw new CoreError(400, "send an opening on its own, without a summary, sections or references");
+    return syncOpening(root, agent, res, hub, id, body.opening);
+  }
   if (summary === undefined && !sectionsIn.length) throw new CoreError(400, "give a summary, sections, or both");
   const notes = loadBrain(root);
   // Only a page whose text the Gardener may read; any other answers like a missing one.
@@ -1186,6 +1190,52 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
   saveNote(root, after);
   const failed = commitPaths(root, [note.path], `reflect:auto wiki: ${id}\n\nWhy: ${would.slice(0, 4).join("; ")}, because ${because}; facts unchanged.\nAgent: ${agent}\nKind: wiki-sync\nFact-Keys: ${id}`, agent);
   if (failed) throw new CoreError(500, `couldn't save: ${failed}`);
+  return { id, applied: true, changed: would };
+}
+
+// A model's opening paragraph for one page (owner's yes 2026-11-07, G713, G714): it may only
+// reword the sentences the page writer says there now, names the labels of those it rests on, and
+// reaches a reader only while every one of them does. Report-only until `pocketbrain wiki opening on`.
+function syncOpening(root: string, agent: string, res: CarveResult, hub: Rules, id: string, raw: unknown) {
+  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : undefined;
+  const text = typeof o?.text === "string" ? o.text.trim() : "";
+  const labels = Array.isArray(o?.labels) && o!.labels.every((l) => typeof l === "string") ? [...new Set(o!.labels as string[])] : undefined;
+  if (!text || !labels) throw new CoreError(400, "opening is { text: one to three sentences, labels: the labels of the page's sentences it rests on }");
+  if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(text)) throw new CoreError(400, "opening: plain text");
+  const notes = loadBrain(root);
+  const v = res.visible.get(id);
+  const note = v?.body ? notes.find((n) => n.fm.id === id) : undefined;
+  if (!note) throw new CoreError(404, `no note ${id}`);
+  const lead = hubLead(note);
+  if (!lead) throw new CoreError(422, "this page has no text from its facts yet; there is nothing to tie together");
+  const why = openingProblem(text, labels, lead, [String(note.fm.title ?? ""), ...(note.fm.aliases ?? []), ...ownerWordsOf(hub)]);
+  if (why) throw new CoreError(422, `opening: ${why}`);
+  const inj = findInjection(text);
+  if (inj) throw new CoreError(422, `the text ${inj}`);
+  const secret = findSecret(text);
+  if (secret) throw new CoreError(422, `the text contains ${secret}`);
+  // Every reader of the page, the Gardener too, gets the paragraph whole as the read would give it,
+  // or it isn't written: a fact behind it is out of someone's view.
+  const marks = labels.map((l) => `[^${l}]`).join("");
+  const defs = footnotes(note.body).notes.map((x) => `[^${x.label}]: ${x.text}`).join("\n");
+  const probe = `${text}${marks}\n\n${lead}\n\n${defs}\n`;
+  const readers = Object.keys(hub.policy.agents).filter((a) => a !== agent);
+  for (const a of [agent, ...readers]) {
+    const r = a === agent ? res : carve(notes, hub, grantFor(hub, a), { flags: false });
+    const x = r.visible.get(id);
+    if (!x?.body) continue;
+    if (!scrubPage(probe, x, r).includes(`${text}${marks}`)) throw new CoreError(422, "opening: it rests on a fact someone who reads this page can't see; tie together only sentences every reader gets");
+  }
+  const would = [`opening paragraph: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`];
+  const on = (hub.policy as { wiki?: { opening?: boolean } }).wiki?.opening === true;
+  recordRun(root, { agent, op: "wiki_sync", id, applied: on, changes: 1 } as Parameters<typeof recordRun>[1]);
+  if (!on) return { id, applied: false, would, why: `report-only until ${ownerName(hub)} turns the opening paragraphs on (pocketbrain wiki opening on)` };
+  if (note.fm.opening?.text === text && JSON.stringify(note.fm.opening.labels) === JSON.stringify(labels)) return { id, applied: false, would: [], why: "nothing changes" };
+  const began = new Date(Math.min(Date.now(), clock().getTime()) - 1000).toISOString();
+  saveNote(root, { ...note, fm: { ...note.fm, opening: { text, labels, by: agent, on: today() } } });
+  const failed = commitPaths(root, [note.path], `reflect:auto wiki: opening for ${id}\n\nWhy: ${agent} tied ${labels.length} of the page's own sentences together in one paragraph; every name, number and word is in the sentences it cites, and it reaches only a reader who sees all of them.\nAgent: ${agent}\nKind: wiki-sync\nFact-Keys: ${id}`, agent);
+  if (failed) throw new CoreError(500, `couldn't save: ${failed}`);
+  try { renderTouchedPages(root, began); } catch { /* the night run writes it */ }
   return { id, applied: true, changed: would };
 }
 
@@ -1484,10 +1534,33 @@ export function gardenerLast(root: string, agent: string) {
   // backfill's work list (backlog 377).
   const wiki = wikiMissing(root, res);
   const wiki_missing = wiki.slice(0, WIKI_MISSING_MAX), wiki_missing_total = wiki.length;
-  if (!last) return { at: null, run: null, proposals: [], decided, waiting, conflicts_to_weigh, wiki_missing, wiki_missing_total };
+  // Pages whose hub text says two or more things and has no opening paragraph yet, or one that no
+  // longer fits it, orgs first (G713): the opening step's work list.
+  const openings_due = openingsDue(res, loadBrain(root));
+  if (!last) return { at: null, run: null, proposals: [], decided, waiting, conflicts_to_weigh, wiki_missing, wiki_missing_total, openings_due };
   const proposals = readJsonl<{ at: string; agent: string; outcome: string; key?: string }>(join(root, "log", "writes.jsonl"))
     .filter((w) => w.agent === agent && w.outcome === "inbox" && w.at >= last.at && inView(res, w.key ?? "")).map((w) => w.key ?? "");
-  return { at: last.at, run: last.run, proposals, decided, waiting, conflicts_to_weigh, wiki_missing, wiki_missing_total };
+  return { at: last.at, run: last.run, proposals, decided, waiting, conflicts_to_weigh, wiki_missing, wiki_missing_total, openings_due };
+}
+
+const OPENINGS_DUE_MAX = 10;
+const OPENING_ORDER: Record<string, number> = { org: 0, project: 1, person: 2 };
+// The hub's own note decides (a cell's copy carries no opening: it reaches a reader only through
+// the page's text, where a read judges it); only pages the Gardener reads with their text count.
+function openingsDue(res: CarveResult, notes: Note[]): string[] {
+  const byId = new Map(notes.map((n) => [n.fm.id, n]));
+  const out: { id: string; rank: number }[] = [];
+  for (const v of res.visible.values()) {
+    const rank = OPENING_ORDER[String(v.note.fm.type)];
+    const n = byId.get(v.note.fm.id);
+    if (rank === undefined || !v.body || !n) continue;
+    const lead = hubLead(n);
+    if (new Set(leadSentences(lead).values()).size < 2) continue;
+    const op = n.fm.opening?.text;
+    if (op && n.body.includes(op)) continue;
+    out.push({ id: v.note.fm.id, rank });
+  }
+  return out.sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id)).slice(0, OPENINGS_DUE_MAX).map((x) => x.id);
 }
 
 const WIKI_MISSING_MAX = 15;

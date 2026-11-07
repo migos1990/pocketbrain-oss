@@ -263,7 +263,7 @@ A Gardener can run every night and still do nothing useful: with no source conne
 
 ## Wiki sync
 
-The Gardener's `wiki_sync` tool rewrites a page's summary and sections from the page's own facts. It is report-only until the owner runs `pocketbrain wiki sync on`. What the hub checks before a rewrite lands is in [wiki.md](wiki.md#the-gardener-keeps-pages-in-sync). The nightly pass also writes up to 3 pages that have no summary yet (step 8, after its proposals so page writing never reframes them), from `last_run`'s `wiki_missing`, and the hub refuses any name or number none of the page's facts hold.
+The Gardener's `wiki_sync` tool rewrites a page's summary and sections from the page's own facts. It is report-only until the owner runs `pocketbrain wiki sync on`. What the hub checks before a rewrite lands is in [wiki.md](wiki.md#the-gardener-keeps-pages-in-sync). The nightly pass also writes up to 3 pages that have no summary yet (step 8, after its proposals so page writing never reframes them), from `last_run`'s `wiki_missing`, and the hub refuses any name or number none of the page's facts hold. Step 8b writes one opening paragraph for the pages in `last_run`'s `openings_due`, only in the words of the page's own sentences; it is report-only until the owner runs `pocketbrain wiki opening on` ([wiki.md](wiki.md#an-opening-paragraph)).
 
 ## What an org is
 

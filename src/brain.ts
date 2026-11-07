@@ -62,6 +62,7 @@ export interface Frontmatter {
   title: string;
   summary?: string; // one line under the title (src/wiki.ts)
   summary_facts?: string[]; // the facts wiki_sync wrote the summary from (view.ts summaryShown, G608)
+  opening?: { text: string; labels: string[]; by: string; on: string }; // a model's opening paragraph, placed by the page writer while it still fits (src/wiki.ts openingProblem, G713)
   aliases?: string[];
   parent?: string; // the page above this one in the wiki tree (src/wiki.ts)
   area: string;

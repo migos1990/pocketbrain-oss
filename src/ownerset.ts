@@ -110,7 +110,15 @@ export function setDashboardTailnet(root: string, on: boolean, devices: string[]
 // what it would change (docs/wiki.md). Off until the owner says so.
 export function setWikiSync(root: string, mode: string): string {
   if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki sync on | off");
-  return setRulesKeys(root, "policy.yaml", { wiki: { sync: mode === "on" } }, `wiki sync ${mode}`);
+  return editRules(root, "policy.yaml", (doc) => { doc.setIn(["wiki", "sync"], mode === "on"); }, `wiki sync ${mode}`);
+}
+
+// `pocketbrain wiki opening on|off`: whether a page takes the Gardener's opening paragraph or the
+// Gardener's wiki_sync only reports it (src/wiki.ts openingProblem, G713). Off until the owner says
+// so. Kept beside wiki sync under `wiki:`, so turning one on leaves the other as it was.
+export function setWikiOpening(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki opening on | off");
+  return editRules(root, "policy.yaml", (doc) => { doc.setIn(["wiki", "opening"], mode === "on"); }, `wiki opening ${mode}`);
 }
 
 // `pocketbrain machine-mail on|off`: whether the nightly pass sets aside the held facts assistants

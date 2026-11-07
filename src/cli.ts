@@ -51,7 +51,7 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { setAsideMachineMail } from "./receipt-pages";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -324,6 +324,7 @@ const USAGE = `pocketbrain <command>
   machine-mail | machine-mail on|off   count the held facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
+  wiki opening on|off                whether a page takes the Gardener's opening paragraph or it only reports it (policy.yaml; docs/wiki.md)
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
                                      (policy.yaml; docs/sources-pull.md)
   aftercheck classify on|off [--cap <$>]  the second-opinion classifier after an agent's write, and its own monthly cap (docs/aftercheck.md)
@@ -1558,7 +1559,8 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     if (args[0] === "links") return ownerSet(() => setLinkNames(root, args[1] ?? ""));
     if (args[0] === "family") return ownerSet(() => setFamilyLinks(root, args[1] ?? ""));
     if (args[0] === "parents") return ownerSet(() => setPageParents(root, args[1] ?? ""));
-    if (args[0] !== "sync") { console.error("wiki sync on | off, wiki links on | off, wiki family on | off, or wiki parents on | off"); return 2; }
+    if (args[0] === "opening") return ownerSet(() => setWikiOpening(root, args[1] ?? ""));
+    if (args[0] !== "sync") { console.error("wiki sync on | off, wiki opening on | off, wiki links on | off, wiki family on | off, or wiki parents on | off"); return 2; }
     return ownerSet(() => setWikiSync(root, args[1] ?? ""));
   }
   if (cmd === "gardener") {

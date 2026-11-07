@@ -1240,4 +1240,59 @@ const teachCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases];
+// ------------------------------------------------- a model's opening paragraph (G713, G714) -----
+// The demo brain's school page (Lakeshore College) as the page writer says it, with the opening
+// paragraphs turned on: the Gardener ties its people together in one paragraph from the page's own
+// sentences, and a word those sentences don't say (what the TA does, from the TA's own page) is refused.
+async function openingBrain(): Promise<{ root: string; core: Record<string, any>; wiki: Record<string, any> } | undefined> {
+  const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+  const wiki = await import(join(SRC_DIR, "wiki.ts"));
+  if (!existsSync(demo) || !wiki.openingProblem) return undefined;
+  const d = await import(demo), core = await import(join(SRC_DIR, "core.ts"));
+  const root = sandbox("synthetic");
+  Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+  d.copyBase(root);
+  wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  const f = join(root, "rules", "policy.yaml");
+  writeFileSync(f, readFileSync(f, "utf8") + "\nwiki: { opening: true }\n");
+  Bun.spawnSync(["git", "-c", "user.name=owner", "-c", "user.email=owner@pocketbrain.local", "commit", "-qam", "owner: wiki opening on"], { cwd: root });
+  return { root, core, wiki };
+}
+const SCHOOL = "orgs/lakeshore-college";
+const atGardenerHour = async <T>(f: () => T | Promise<T>): Promise<T> => {
+  const was = process.env.PB_NOW;
+  process.env.PB_NOW = "2026-10-08T07:30:00Z";
+  try { return await f(); } finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+};
+function schoolLabels(wiki: Record<string, any>, root: string): string[] {
+  const n = pb.brain.loadBrain(root).find((x: any) => x.fm.id === SCHOOL);
+  const said: Map<string, string> = wiki.leadSentences(wiki.hubLead(n));
+  return [...said].filter(([, t]) => /your students\.|your TA\./.test(t)).map(([l]) => l);
+}
+
+const openingCases: Case[] = [
+  { id: "opening-ties-demo-school", dimension: "upkeep", gap: "G713", kind: "benign", title: "the Gardener's opening paragraph on the demo school's page ties its people together from the page's own sentences, under the owner's own text", source: "owner 2026-11-07 (yes to a model-written opening, his school's page first)", run: async () => {
+    const b = await openingBrain();
+    if (!b) return na("no opening paragraphs at this commit");
+    const { root, core, wiki } = b;
+    const labels = schoolLabels(wiki, root);
+    const text = "At Lakeshore College, Antoine Lavoie is your TA and Ethan Brooks, Fatima Diallo, Jacob Stein, Lucas Bergeron, Mei Lin and Sarah Kim are your students.";
+    const r = await atGardenerHour(() => core.gardenerWikiSync(root, "gardener", { id: SCHOOL, opening: { text, labels } }));
+    const page = readFileSync(join(root, `${SCHOOL}.md`), "utf8").split(/^---$/m).slice(2).join("---");
+    const block = page.split("## From its facts\n")[1] ?? "";
+    const right = r.applied === true && block.startsWith(text) && page.indexOf("Robin teaches the evening Product Discovery course") < page.indexOf(text);
+    return ok(right, `${r.applied ? "applied" : `not applied (${r.why ?? ""})`}; ${labels.length} labels; opens the hub's block: ${block.startsWith(text)}`);
+  } },
+  { id: "opening-refuses-word-beyond-cited", dimension: "upkeep", gap: "G714", kind: "attack", title: "an opening that says what the TA does, which no sentence it cites says, is refused and nothing is written", source: "owner 2026-11-07 (no new facts in a model-written paragraph)", run: async () => {
+    const b = await openingBrain();
+    if (!b) return na("no opening paragraphs at this commit");
+    const { root, core, wiki } = b;
+    const labels = schoolLabels(wiki, root);
+    let refused = "";
+    try { await atGardenerHour(() => core.gardenerWikiSync(root, "gardener", { id: SCHOOL, opening: { text: "At Lakeshore College, Antoine Lavoie grades the weekly reflections of your students.", labels } })); } catch (e) { refused = String((e as Error).message); }
+    const n = pb.brain.loadBrain(root).find((x: any) => x.fm.id === SCHOOL);
+    return ok(/grades|weekly|reflections/.test(refused) && !n?.fm.opening, refused ? `refused: ${refused.slice(0, 120)}` : "written");
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases];

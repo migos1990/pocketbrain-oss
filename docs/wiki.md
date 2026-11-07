@@ -141,6 +141,19 @@ A mail's subject and sender are never stored, so the brain notices a class only 
 
 The night pass only counts the classes it would ask about ("1 class you may teach, from 4 people at 1 school") until `rules/policy.yaml` says `teach: { ask: true }`.
 
+## An opening paragraph
+
+Your Gardener may write one short paragraph that ties a page's facts together (owner's yes, 2026-11-07). It sends it with `wiki_sync` as `opening: { text, labels }`, on its own; `last_run`'s `openings_due` lists the pages that need one, orgs first. The hub takes it only when:
+
+- it is one to three sentences, at most 400 characters, with no reference marker or link in it;
+- its labels name at least two of the sentences the hub writes on that page now (the `[^p-at-…]`, `[^pf-…]` labels at their ends);
+- every name, number and longer word in it is in those sentences, the page's title or your name, but for a few joining words ("alongside", "where"), so it can't add a fact or a guess (`openingProblem` in `src/wiki.ts`);
+- every reader of the page would get it whole.
+
+The page keeps it (`opening:` in its frontmatter) and the page writer puts it first in its own block, under your own text, each time it writes the page, as long as it still fits what the block says; once it doesn't (a fact behind it changed or was hidden from some reader), it is left out and the page is listed again. Its labels go after it all together, so an assistant from whom any fact behind it is hidden gets none of it, and keeps the rest of the page.
+
+It is off until you run `pocketbrain wiki opening on`: until then `wiki_sync` checks the paragraph and reports what it would write. `pocketbrain wiki opening off` turns it off again; it is its own switch, beside `wiki sync`.
+
 ## Code
 
 `src/wiki.ts` provides `summaryOf`, `parentOf`, `pageTree`, `ancestors`, `sections`, `footnotes`, `wikiLint` and `renderTouchedPages` (the page writer; both called from `src/upkeep.ts`), `recentUpdates`, and `applyRewrite`, `partAuthors` and `pageFindings` for `gardenerWikiSync` in `src/core.ts`. The dashboard's note page draws them (`src/dashboard/html-brain.ts`). `adoptHandEdits`, `scanHandEdits` and `isPersonAuthor` handle hand edits (called from `src/start.ts` and `src/digest.ts`). The tests are in `test/wiki*.test.ts` and `test/page-writer.test.ts`.

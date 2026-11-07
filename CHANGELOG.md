@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### Before you update
 
+- Your Gardener can now write a short opening paragraph on a page that ties its facts together (G713). It is off: each night the Gardener's wiki_sync only reports what it would write. Run `pocketbrain wiki opening on` when you want pages to take it, and `pocketbrain wiki opening off` to go back.
 - The night pass can now notice a class you teach (G711). It is off: each night it only counts the classes it would ask you about. Add `teach: { ask: true }` to `rules/policy.yaml` when you want the question on your home.
 - Upkeep now counts the held facts your assistants filed from receipts and other no-reply mail before this update, and changes nothing. Run `pocketbrain machine-mail` to see the count, and `pocketbrain machine-mail on` to set them aside, each with Undo on your home (G668).
 - The phone app's Face ID now only makes the phone's own live sign-in fresh, and no longer counts its 30 days again: 30 days after pairing, the app asks for a new sign-in link to pair once more. Update the app (it ships over the air) with the hub, or Face ID answers "pair again" until it does (G642).
@@ -131,6 +132,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A page can open with one short paragraph that ties what its facts say together ("You work as a lecturer at North College, alongside your colleagues Ana Diaz and Ben Roy."). Your Gardener writes it, only in the words of the page's own sentences: a name, number or word they don't say is refused, so it never adds a fact. It sits under your own text, and an assistant that can't see one of the facts behind it gets none of it (docs/wiki.md "An opening paragraph", G713, G714).
 - A fact named by a person or page name that fits a page you have as well as a new one waits on Settings for you to say which, and is no longer counted as a question on your home. A fact that already landed on one of those pages (from that same source) is no longer put back in your inbox when the hub restarts (G603).
 - A fact the hub put back in your inbox when it restarted keeps the assistant or source it came from, so it files or waits by that one's rules. Before, it waited as "your own material" (G601).
 - A memory or fact proposed twice with the same value now files or waits the same way as the first one. Before, the second one waited as "your own material" and counted as something to decide (G600).

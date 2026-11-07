@@ -91,7 +91,7 @@ test("upkeep_run, sleep_run, changes_since and last_run are the gardener's alone
   expect((await mcp(root, town, "tools/list")).result.tools.map((t: any) => t.name)).not.toContain("upkeep_run");
   expect((await mcp(root, town, "tools/call", { name: "upkeep_run", arguments: {} })).result.isError).toBe(true);
 
-  expect((await call(root, g, "GET", "/v1/gardener/last")).json).toEqual({ at: null, run: null, proposals: [], decided: [], waiting: 0, conflicts_to_weigh: 0, wiki_missing: ["people/jane-roy", "people/paul-advisor", "projects/course-a", "money/main-bank"], wiki_missing_total: 4 });
+  expect((await call(root, g, "GET", "/v1/gardener/last")).json).toEqual({ at: null, run: null, proposals: [], decided: [], waiting: 0, conflicts_to_weigh: 0, wiki_missing: ["people/jane-roy", "people/paul-advisor", "projects/course-a", "money/main-bank"], wiki_missing_total: 4, openings_due: [] });
   expect((await mcp(root, g, "tools/list")).result.tools.map((t: any) => t.name)).toEqual(expect.arrayContaining(["upkeep_run", "sleep_run", "changes_since", "last_run"]));
   const before = await call(root, town, "POST", "/v1/remember", { id: "people/jane-roy", attribute: "role", value: "Dean", ...SRC });
   expect(before.json.outcome).toBe("committed");

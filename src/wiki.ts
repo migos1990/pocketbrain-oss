@@ -194,6 +194,48 @@ export function ungrounded(text: string, ground: string): string[] {
   return [...out];
 }
 
+// A model's opening paragraph (owner's yes 2026-11-07, G713, G714): one to three sentences that
+// tie a page's facts together, written only from the sentences the page writer already says there.
+// It names the labels of the sentences it rests on, at least two, all of them in the hub's text now;
+// every name and number it says is in those sentences, the page's title or the owner's name, and so
+// is every longer word but a few joining ones ("alongside", "where"). It carries no reference or
+// link of its own: its labels go after it, all together, so a read drops it whole once any fact
+// behind it is hidden from that reader (view.ts withoutHiddenSentences). Undefined when it fits,
+// else why it doesn't.
+const JOINING = new Set(("alongside along among where which while whose through together also both their there these those other with within about after before since until because into from your yours".split(" ")));
+export const OPENING_MAX = 400;
+const stem = (w: string) => fold(w).slice(0, 5);
+export function leadSentences(lead: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of lead.split("\n")) {
+    if (/^\[\^[^\]\s]+\]:/.test(line)) continue;
+    for (const s of line.match(/[^\n]*?(?:\[\^[^\]\s]+\])+/g) ?? [])
+      for (const m of s.matchAll(/\[\^([^\]\s]+)\]/g)) out.set(m[1]!, `${out.get(m[1]!) ?? ""} ${s.replace(/\[\^[^\]\s]+\]/g, "")}`.trim());
+  }
+  return out;
+}
+const linkTitles = (t: string) => t.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, "$1").replace(/\[\[([^\]]+)\]\]/g, "$1");
+export function openingProblem(text: string, labels: string[], lead: string, also: string[] = []): string | undefined {
+  if (!text.trim() || text.length > OPENING_MAX || /\n/.test(text)) return `one paragraph on one line, at most ${OPENING_MAX} characters`;
+  if (/\[\^|\[\[|\]\]/.test(text)) return "no reference or link in the text: name the sentences it rests on in labels";
+  if ((text.match(/[.!?](?=\s|$)/g) ?? []).length > 3) return "at most three sentences";
+  if (!/[.!?]$/.test(text.trim())) return "end it with a full stop";
+  const ls = [...new Set(labels)];
+  if (ls.length > 16 || ls.some((l) => !/^[A-Za-z0-9_-]{1,60}$/.test(l))) return "labels: at most 16, each a label the page's text uses";
+  const said = leadSentences(lead);
+  const missing = ls.filter((l) => !said.has(l));
+  if (missing.length) return `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} no label of a sentence on this page now`;
+  const from = [...new Set(ls.map((l) => said.get(l)!))];
+  if (from.length < 2) return "it ties together at least two of the page's sentences; one sentence is said already";
+  const ground = linkTitles([...from, ...also].join("\n"));
+  const made = ungrounded(text, ground);
+  if (made.length) return `${made.slice(0, 5).map((w) => `"${w}"`).join(", ")} ${made.length === 1 ? "is" : "are"} in none of the sentences it cites`;
+  const have = new Set(ground.split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(stem));
+  const words = [...new Set([...text.matchAll(/\p{L}{5,}/gu)].map((m) => m[0]))].filter((w) => !JOINING.has(fold(w)) && !ALWAYS.has(fold(w)) && !have.has(stem(w)));
+  if (words.length) return `${words.slice(0, 5).map((w) => `"${w}"`).join(", ")} ${words.length === 1 ? "is" : "are"} in none of the sentences it cites; reword only what they say`;
+  return undefined;
+}
+
 export interface WikiFinding { rule: string; key: string; kind: "review"; detail: string }
 
 const isPage = (n: Note) => summaryOf(n) !== undefined || parentOf(n) !== undefined;
@@ -937,6 +979,23 @@ export interface PageWrite { written: string[]; kept: string[]; commit?: string 
 
 // Pages whose file a commit since `since` changed, rewritten in one commit by the hub. Called by
 // upkeep every night and by scripts/north-star.ts. Run twice, the second run commits nothing.
+// The owner's names as the page writer says them, longest first.
+export function ownerWordsOf(rules: Rules): string[] {
+  const owner = [ownerTitle(rules), ...[rules.policy.owner?.name, ...(rules.policy.owner?.aliases ?? [])].map((x) => String(x ?? "").trim())].filter((x): x is string => !!x && x !== "the owner");
+  owner.push(...owner.map((x) => x.split(" ")[0]).filter((x) => x.length > 1));
+  return [...new Set(owner)].sort((a, b) => b.length - a.length);
+}
+
+// The hub's own block on a page as it stands, without a model's opening on top of it: the text the
+// next opening may reword (G713).
+export function hubLead(n: Note): string {
+  const secs = sections(footnotes(n.body).text);
+  const block = secs.find((x) => x.heading === undefined && x.text.includes(MADE)) ?? secs.find((x) => x.heading === FACTS && x.text.includes(MADE));
+  const text = block ? block.text.split(MADE)[0]!.trim() : "";
+  const op = n.fm.opening?.text;
+  return op ? text.split("\n").filter((l) => !l.startsWith(op)).join("\n").trim() : text;
+}
+
 export function renderTouchedPages(root: string, since: string): PageWrite {
   const role = hubRole(root).mode;
   if (role === "replica") return { written: [], kept: [] };
@@ -1070,9 +1129,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
   for (const p of [...pages]) for (const [id, rs] of relOf) if (rs.some((r) => [...r.base, ...r.members.flatMap((m) => m.used)].some((u) => u.from === p.fm.id))) { const q = byId.get(id); if (q && !pages.includes(q) && active(q)) { pages.push(q); via.add(q.path); } }
   // A page named by a touched page's sources is written again with it.
   for (const p of [...pages]) for (const [id, xs] of namedIn) if (xs.some((x) => x.from === p.fm.id)) { const q = byId.get(id); if (q && !pages.includes(q) && PAGE_DIRS.has(id.split("/")[0]) && q.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(q.fm.status))) { pages.push(q); via.add(q.path); } }
-  const owner = [ownerTitle(rules), ...[rules.policy.owner?.name, ...(rules.policy.owner?.aliases ?? [])].map((x) => String(x ?? "").trim())].filter((x): x is string => !!x && x !== "the owner");
-  owner.push(...owner.map((x) => x.split(" ")[0]).filter((x) => x.length > 1));
-  const ownerWords = [...new Set(owner)].sort((a, b) => b.length - a.length);
+  const ownerWords = ownerWordsOf(rules);
   const written: string[] = [], kept: string[] = [];
   for (const n of pages) {
     const readers = views.filter((v) => v.visible.get(n.fm.id)?.body);
@@ -1097,6 +1154,10 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
       .map((r) => ({ kind: r.kind, group: r.group, base: r.base.map((u) => u.rec), members: r.members.filter((m) => okPage(m.id) && m.used.every(okU)).map((m) => ({ id: m.id, recs: m.used.map((u) => u.rec) })) }))
       .filter((r) => r.members.length);
     const lead = pageLead(n, { related, hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
+    // A model's opening (G713) goes first in the hub's block while it still fits what the block says.
+    const op = lead && n.fm.opening;
+    if (lead && op && typeof op.text === "string" && Array.isArray(op.labels) && !openingProblem(op.text, op.labels.map(String), lead.text, [String(n.fm.title ?? ""), ...(n.fm.aliases ?? []), ...ownerWords]))
+      lead.text = `${op.text}${[...new Set(op.labels.map(String))].map((l) => `[^${l}]`).join("")}\n\n${lead.text}`;
     if (!lead) {
       // Nothing left to say (an Undo took the last fact out): the writer's own opening goes with its
       // references, so the page never keeps stating a value it no longer holds (UI thread, 2026-10-27).
