@@ -2,7 +2,7 @@
 // The wiki shape of a note, read-only (docs/wiki.md): a one-line `summary:`, a `parent:` and the
 // page tree computed from parents (never stored), sections from `## ` headings, and Markdown
 // footnotes for refs. Every field is optional; a note without them reads as it always did.
-import { MONTHS_SHORT } from "./util";
+import { MONTHS_SHORT, nameAt } from "./util";
 import { linksIn, parseNote, isDisputed, isList, loadBrain, saveNote, sensitivityRank, today, CONTENT_DIRS, type Note, type FactRecord, type Fact } from "./brain";
 import { git, gitRun, gitTime } from "./git";
 import { findSecret, redactSecrets } from "./checks";
@@ -712,7 +712,7 @@ export type Related = { kind: "on" | "at" | "with" | "too"; group: string; base:
 // At most this many such sentences on a page; a person's names at most RELATED_NAMES pages, an
 // org's or a project's twice that, and a tie with more says nothing rather than some of them.
 export const RELATED = 4, RELATED_NAMES = 6;
-export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; attr?: string; rec: FactRecord }[]; related?: Related[]; said?: string; self?: boolean; ownerPage?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
+export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; attr?: string; rec: FactRecord }[]; related?: Related[]; said?: string; elsewhere?: Set<string>; self?: boolean; ownerPage?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
   const lines: string[] = [], refs: { label: string; text: string }[] = [];
   const seen = new Map<string, Set<string>>(); // page named -> labels of the facts whose source names it
   // Links in a sentence written by the id they resolve to, so every reader resolves them; one some
@@ -749,7 +749,18 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // waiting to be checked keeps its own sentence.
   const role = facts.findIndex((x) => x.attr === "role"), org = facts.findIndex((x) => x.attr === "org");
   if (n.fm.type === "person" && role >= 0 && org >= 0 && [role, org].every((i) => facts[i]!.vals.length === 1 && !facts[i]!.waits)) {
-    const both = { attr: "role+org", vals: [facts[role]!.vals[0]!, facts[org]!.vals[0]!], labs: [...new Set([...facts[role]!.labs, ...facts[org]!.labs])], waits: false };
+    // A role that already names its org ("organiser of the Option Voisins board") is said once,
+    // the org's name in it linking its page, never "… Option Voisins board at Option Voisins"
+    // (owner's phone, 2026-11-07; G729).
+    const r = facts[role]!.vals[0]!, ov = facts[org]!.vals[0]!;
+    const m = ov.match(/^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]$/);
+    const oid = m ? o.resolve?.(m[1]!.trim()) ?? m[1]!.trim() : o.resolve?.(ov.trim());
+    const oname = String((oid && o.byId.get(oid)?.fm.title) ?? m?.[2] ?? (m ? "" : ov)).trim();
+    const at = r.includes("[[") ? -1 : nameAt(r, oname);
+    const labs = [...new Set([...facts[role]!.labs, ...facts[org]!.labs])];
+    const both = at >= 0
+      ? { attr: "role", vals: [oid && o.byId.has(oid) ? `${r.slice(0, at)}[[${oid}|${r.slice(at, at + oname.length)}]]${r.slice(at + oname.length)}` : r], labs, waits: false }
+      : { attr: "role+org", vals: [r, ov], labs, waits: false };
     facts.splice(Math.max(role, org), 1);
     facts.splice(Math.min(role, org), 1, both);
   }
@@ -924,8 +935,10 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     const one = names.length === 1;
     lines.push(`${r.kind === "on" ? `${list} ${one ? "is" : "are"} on ${to(r.group)}` : r.kind === "at" ? `${list} ${one ? "works" : "work"} at ${to(r.group)}` : r.kind === "with" ? `${called} is on ${to(r.group)} with ${list}` : `Also at ${to(r.group)}: ${list}`}.[^${lab}]`);
   }
-  // A page the text already links isn't named again in the sources line.
-  const linked = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
+  // A page the text already links isn't named again in the sources line, nor one the page's other
+  // text links (an "Earlier notes" line "Related: …", the Gardener's prose): said twice, the tie
+  // reads as filler (owner's phone, 2026-11-07; G730).
+  const linked = new Set([...[...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]), ...(o.elsewhere ?? [])]);
   for (const id of linked) seen.delete(id);
   // Pages its sources tie it to (G624, the owner's page on his phone): none on the owner's own
   // page, and never the owner's page on another, since every source names him; on any other page
@@ -941,7 +954,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   }
   // The other way: pages whose facts cite a source that names this one, cited by that fact's
   // sources, so a page named in someone's mail links back to them from the same evidence.
-  const shownNow = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
+  const shownNow = new Set([...[...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]), ...(o.elsewhere ?? [])]);
   const by = new Map<string, FactRecord[]>();
   for (const x of o.self ? [] : o.namedIn ?? []) if (x.from !== n.fm.id && x.from !== o.ownerPage && !shownNow.has(x.from) && o.byId.has(x.from) && !o.blind(x.from)) by.set(x.from, [...(by.get(x.from) ?? []), x.rec]);
   if (by.size && ties) {
@@ -954,7 +967,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // Pages whose facts link this one (and, on the owner's own page, their decisions and money that
   // nothing else links): "See also", cited by those facts' sources (outside review v5, midday:
   // 25 pages with a lead and no link in).
-  const shownYet = new Set([...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]));
+  const shownYet = new Set([...[...lines.join(" ").matchAll(/\[\[([^\]|]+)/g)].map((m) => m[1]), ...(o.elsewhere ?? [])]);
   const also = new Map<string, FactRecord[]>();
   // On the owner's own page only a person whose own fact says how they are related to him (family,
   // relationship) links back: that is about him, as his mail is not (G624, G546).
@@ -1205,6 +1218,8 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     // ever text the owner typed (src/owner-say.ts); one the writer moved there is Earlier notes.
     const f = footnotes(n.body), secs = sections(f.text);
     const said = plainWords(secs.filter((x) => x.heading !== undefined && !OLD_HEADS.has(x.heading) && x.heading !== EARLIER && x.heading !== YOURS).map((x) => x.text).join("\n"));
+    // The pages the page's other text links (not the hub's block, nor the old sections it drops).
+    const elsewhere = new Set(secs.filter((x) => !(x.heading !== undefined && OLD_HEADS.has(x.heading)) && !x.text.includes(MADE)).flatMap((x) => linksIn(x.text)).map((l) => resolve(l.trim()) ?? l.trim()));
     // The ties between pages it links (G685-G687): every fact behind a sentence said to every
     // reader, and no page in it more private than this one.
     const okU = (u: Used) => !hiddenKeys.has(`${u.from}#${u.attr}`) && sensitivityRank(byId.get(u.from)!.fm.sensitivity) <= rank && (!u.rec.sensitivity || sensitivityRank(u.rec.sensitivity) <= rank);
@@ -1212,7 +1227,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     const related: Related[] = (relOf.get(n.fm.id) ?? []).filter((r) => okPage(r.group) && r.base.every(okU))
       .map((r) => ({ kind: r.kind, group: r.group, base: r.base.map((u) => u.rec), members: r.members.filter((m) => okPage(m.id) && m.used.every(okU)).map((m) => ({ id: m.id, recs: m.used.map((u) => u.rec) })) }))
       .filter((r) => r.members.length);
-    const lead = pageLead(n, { related, hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
+    const lead = pageLead(n, { related, hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, elsewhere, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
     // A model's opening (G713) goes first in the hub's block while it still fits what the block says.
     const op = lead && n.fm.opening;
     if (lead && op && typeof op.text === "string" && Array.isArray(op.labels) && !openingProblem(op.text, op.labels.map(String), lead.text, [String(n.fm.title ?? ""), ...(n.fm.aliases ?? []), ...ownerWords]))

@@ -8,23 +8,19 @@
     - listitem:
       - link "Hire a senior designer, not two juniors":
         - /url: /b/notes/decisions%2F2026-09-15-hire-senior-designer
-      - text: "decisions/2026-09-15-hire-senior-designer · decision #### From its facts The chose of Hire a senior designer, not two juniors is one senior designer.[^pf-chose] On Hire a senior designer, not two juniors, the why:"
-    - listitem:
-      - link "Weekly Atlas review on Wednesdays":
-        - /url: /b/notes/decisions%2F2026-10-01-weekly-team-review
-      - text: "decisions/2026-10-01-weekly-team-review · decision #### From its facts The chose of Weekly Atlas review on Wednesdays is a 30-minute review every Wednesday.[^pf-chose] The why of Weekly Atlas review on Wednesday"
+      - text: decisions/2026-09-15-hire-senior-designer · decision Decided on 2026-09-15 for the [[projects/designer-hire]], with [[people/maya-chen]] and [[people/priya-shah]].[^1]
     - listitem:
       - link "Senior designer hire":
         - /url: /b/notes/projects%2Fdesigner-hire
       - text: "projects/designer-hire · project #### From its facts Senior designer hire is final round.[^pf-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for"
     - listitem:
-      - link "Harbourline Software":
-        - /url: /b/notes/orgs%2Fharbourline
-      - text: "orgs/harbourline · org #### From its facts Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/priya-shah|Priya Shah"
-    - listitem:
       - link "Atlas launch":
         - /url: /b/notes/projects%2Fatlas-launch
       - text: "projects/atlas-launch · project #### From its facts Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3"
+    - listitem:
+      - link "Harbourline Software":
+        - /url: /b/notes/orgs%2Fharbourline
+      - text: "orgs/harbourline · org #### From its facts Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/priya-shah|Priya Shah"
     - listitem:
       - link "Kenji Watanabe":
         - /url: /b/notes/people%2Fkenji-watanabe
@@ -46,13 +42,17 @@
         - /url: /b/notes/people%2Fhannah-becker
       - text: "people/hannah-becker · person #### From its facts Hannah Becker is the QA lead at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] How you know Hannah: on the Atlas team.[^pf-re"
     - listitem:
+      - link "Daniel Okoro":
+        - /url: /b/notes/people%2Fdaniel-okoro
+      - text: "people/daniel-okoro · person #### From its facts Daniel Okoro is the staff engineer at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Daniel works with you on Atlas.[^pf-rela"
+    - listitem:
       - link "Sofia Marquez":
         - /url: /b/notes/people%2Fsofia-marquez
       - text: "people/sofia-marquez · person #### From its facts Sofia Marquez is the senior product marketing manager at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Sofia works with you"
     - listitem:
-      - link "Daniel Okoro":
-        - /url: /b/notes/people%2Fdaniel-okoro
-      - text: "people/daniel-okoro · person #### From its facts Daniel Okoro is the staff engineer at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Daniel works with you on Atlas.[^pf-rela"
+      - link "Weekly Atlas review on Wednesdays":
+        - /url: /b/notes/decisions%2F2026-10-01-weekly-team-review
+      - text: decisions/2026-10-01-weekly-team-review · decision Decided on 2026-10-01 for the [[projects/atlas-launch]], with [[people/omar-haddad]] and [[people/maya-chen]] and [[people/hannah-becker]].[^1]
     - listitem:
       - link "Omar Haddad":
         - /url: /b/notes/people%2Fomar-haddad

@@ -14,6 +14,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- A person's page says a role that already names its org once ("Organiser of the North College board meeting", not "… at North College" after it), in its text and in the line under the name; its area chip shows the area's label, a short area in capitals, or nothing when it would only repeat the org; and it no longer says someone "also comes up in the sources of" a page the page already links (G729 to G732).
 - Your own page now lists your live projects and the decisions that still stand, one sentence per area ("Your work projects: Atlas launch and Q1 roadmap."), so a project nothing else ties to is still one tap from your page. An assistant that can't see one of them doesn't get that sentence at all (G725, G726).
 - A sentence typed in a page's box now answers right above the box, where you are looking, and the page says **Edited by you on <day>.** when it changed a fact, also when your box reads with a model; the same sentence sent twice is read once (G727, G728, G735).
 - An assistant reading your pages no longer learns which of your other assistants filed a fact: it reads "An assistant's note" and `agent:[withheld]` where your own view keeps the name (G722, G723).

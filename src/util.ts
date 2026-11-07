@@ -23,6 +23,20 @@ export function hasWord(text: string, word: string, edge = "\\p{L}"): boolean {
 // (docs/perf.md). Words whose first token isn't plain ASCII, or that start with a separator, are
 // always tried, so the matches are exactly those of the patterns.
 const foldToken = (s: string) => s.replace(/\u017F/g, "s").replace(/\u212A/g, "k").toLowerCase(); // the two non-ASCII letters /iu folds to ASCII
+
+// Where `name` stands as whole words in `text`, case and accents aside (a role "… d'Option
+// Voisins" names the org Option Voisins; G729), or -1. Same length as `text`, so the index is
+// `text`'s.
+const foldChar = (c: string) => c.normalize("NFD")[0]!.toLowerCase();
+export function nameAt(text: string, name: string): number {
+  const n = name.trim();
+  if (n.length < 3) return -1;
+  const fold = (s: string) => s.split("").map(foldChar).join("");
+  return fold(text).search(new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(fold(n))}(?![\\p{L}\\p{N}])`, "u"));
+}
+// The initials of a name of two or more words ("Option Voisins" -> "OV").
+export const initialsOf = (name: string) => { const w = name.trim().split(/[\s-]+/).filter((x) => /^\p{L}/u.test(x)); return w.length > 1 ? w.map((x) => foldChar(x[0]!).toUpperCase()).join("") : ""; };
+
 // A word's key: its first two tokens when both are plain ASCII (adjacent tokens in the text),
 // else the first; common first words ("the", a first name) would otherwise match most texts.
 // Undefined when the word must always be tried.

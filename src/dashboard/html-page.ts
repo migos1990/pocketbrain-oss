@@ -31,7 +31,7 @@ import { ownerOf, ownerTitle } from "../capture";
 import { ownerBook } from "./owner-book";
 import { WEEK_CAPS, type Week, type WeekLine } from "../week";
 import { sourceWord } from "../wiki";
-import { escapeRe } from "../util";
+import { escapeRe, nameAt, initialsOf } from "../util";
 import { loadCalendar, meetingsWith, type Meetings } from "../upcoming";
 
 export const PAGE_COPY = {
@@ -275,6 +275,16 @@ function projectCard(s: State, n: Note, fresh: boolean): string {
   return open ? `<a class="project" href="/settle/${esc(open.id)}">${inner}</a>` : `<div class="project">${inner}</div>`;
 }
 
+function areaChip(s: State, n: Note, area: string, line: string | undefined): string {
+  if (!area) return "";
+  const label = String(s.rules.policy.areas?.[area]?.label ?? "").trim();
+  const chip = label || (area.length <= 3 ? area.toUpperCase() : area.charAt(0).toUpperCase() + area.slice(1));
+  const orgId = (() => { const f = n.fm.facts?.org; const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined; const m = r ? String(r.value ?? "").match(/\[\[([^\]|]+)/) : null; return m?.[1]?.trim(); })();
+  const names = [orgId ? s.notes.find((x) => x.fm.id === orgId)?.fm.title : undefined, n.fm.type === "org" ? n.fm.title : undefined].map((x) => String(x ?? "").trim()).filter(Boolean);
+  const said = (x: string) => !!line && nameAt(line, x) >= 0;
+  return names.some((o) => (said(o) || o === n.fm.title) && (chip.toLowerCase() === o.toLowerCase() || chip === initialsOf(o))) ? "" : chip;
+}
+
 // What a person does, under their name (canvas Person board: "QA lead at Harbourline · Montréal"):
 // their role, where they work, their city, each only where Details would show it. None known: the
 // page's kind and sources, as before.
@@ -286,7 +296,8 @@ function personLine(s: State, n: Note, fresh: boolean, closed: boolean): string 
     return r && !r.valid_to && (fresh || !shut(n, r)) ? plain(r.value, (x) => { const t = s.notes.find((m) => m.fm.id === x)?.fm.title; return t === undefined ? undefined : String(t); }) : "";
   };
   const [role, org, city] = [one("role"), one("org"), one("city")];
-  const what = role && org ? fill(PAGE_COPY.roleAt, { role, org }) : role || org;
+  // A role that already names its org says it once (owner's phone, 2026-11-07; G731).
+  const what = role && org ? (nameAt(role, org) >= 0 ? role : fill(PAGE_COPY.roleAt, { role, org })) : role || org;
   return [what, city].filter(Boolean).join(" · ") || undefined;
 }
 
@@ -456,6 +467,10 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const keep = !closed && o.said && o.reply?.kind === "say.didnt-catch" ? `<div class="chips"><form method="post" action="/action/page-note">${hidden(csrf, { id: n.fm.id, text: o.said })}<button>${PAGE_COPY.keepNote}</button></form></div>` : "";
   function proseOrEmpty() { return prose.trim() ? `<div class="prose">${prose}</div>` : `<p class="quiet">${esc(fill(PAGE_COPY.empty, { name: first }))}</p>`; }
   const area = String(n.fm.area ?? "");
+  // The area's chip: its label in policy, a short slug ("ov") in capitals, never a lone "Ov"; none
+  // when it only repeats the org the line under the name already says (owner's phone, 2026-11-07;
+  // G732).
+  const chip = areaChip(s, n, area, personLine(s, n, fresh, closed));
   // A routine says whose it is: "Town's routine" (owner, 2026-11-03: "which agent does what").
   const runsIn = (x: Note) => x.fm.type === "capability" && assistantOf(x.fm.id) ? agentTitle(s.rules, assistantOf(x.fm.id)) : undefined;
   const kind = runsIn(n) ? `${whose(runsIn(n)!)} ${PAGE_COPY.routine}` : String(n.fm.type ?? kindLabel(folderOf(n.fm.id)));
@@ -465,7 +480,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   // Edit opens the page's own notes (G718), right after a sign-in only.
   const editHref = `${href(n.fm.id)}?edit=1`;
   const band = `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a>${closed ? "" : `<a href="${editHref}" aria-label="${PAGE_COPY.edit}">${PAGE_COPY.editShort}</a>`}</div>
-<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}${meetLine(s, met, fresh)}</div></div>${area ? `<div class="chips"><span class="chip">${esc(area.charAt(0).toUpperCase() + area.slice(1))}</span></div>` : ""}</header>`;
+<div class="head"><div><h1>${title}</h1><p class="kind">${esc(personLine(s, n, fresh, closed) ?? `${kind} · ${count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count })}`)}</p>${closed ? "" : orgLine(s, n, fresh)}${meetLine(s, met, fresh)}</div></div>${chip ? `<div class="chips"><span class="chip">${esc(chip)}</span></div>` : ""}</header>`;
   const book = !closed && n.fm.id === ownerOf(s.rules, s.notes, ownerTitle(s.rules) ?? "")?.page ? bookSections(s, fresh) : "";
   const changedList = lines.length ? `<h2 class="sec">${PAGE_COPY.changed}</h2><ul>${lines.map((l) => line(l, csrf, n.fm.id)).join("")}</ul>` : "";
   // Routines that may do the same job as this one (G641): the others, linked; a secret page only

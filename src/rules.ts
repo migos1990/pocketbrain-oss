@@ -69,7 +69,7 @@ export interface Policy {
   agents: Record<string, AgentPolicy>;
   // Every agent's token budget per call (src/context.ts, docs/hub.md "Context budget").
   context_budget?: Record<string, number>;
-  areas: Record<string, { owner?: string }>;
+  areas: Record<string, { owner?: string; label?: string }>;
   resolver?: string;
   // The agent that reads Louis's texts (default: the resolver). Its citations of his messages
   // register them, below private, and each one shows in the digest for Louis to see.

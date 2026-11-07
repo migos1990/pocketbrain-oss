@@ -45,7 +45,9 @@ test("while another live process holds the lock, the hub's tick decides nothing 
   await other.exited;
   expect(runAuto(root, days(4)).length).toBe(1);
   expect(runAuto(root, days(4))).toEqual([]);
-});
+  // Two decide passes, a hand run and a child process: 7.4 s on a busy CI runner (PR 135), past
+  // bun's 5 s default, and a timed-out test's tail then failed "between tests".
+}, 30_000);
 
 test("a lock left by a process that died is taken over, and the lock is gone after a run", () => {
   const root = brain();

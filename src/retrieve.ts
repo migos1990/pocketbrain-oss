@@ -473,9 +473,15 @@ export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNot
     // a long note found only by meaning has no matching paragraph: its first ones stand in
     const best = short ? [] : bestChunks(idx, d, qt, chunksPerNote).filter((c) => said.has(c));
     const chosen = new Set(short || !best.length ? [...said.keys()].slice(0, short ? undefined : chunksPerNote) : best);
-    const body = unusedRefsOut(d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => said.get(c.chunk)!));
-    // Paragraphs left out because they only restate facts are not more to read.
-    const omitted = said.size - chosen.size;
+    // A paragraph of references only travels with the sentences that cite it, wherever the note
+    // was cut: a long note's matching paragraph keeps its references, and they aren't more to read
+    // (a shorter "From its facts" once moved the cut and left [^p-rel-…] cited but undefined; G699).
+    const refsOnly = (t: string) => t.split("\n").every((l) => FOOTDEF.test(l) || !l.trim());
+    const cites = new Set([...chosen].flatMap((c) => [...said.get(c)!.matchAll(/\[\^([^\]\s]+)\](?!:)/g)].map((m) => m[1]!)));
+    const carried = [...said].filter(([c, t]) => !chosen.has(c) && refsOnly(t)).map(([, t]) => t.split("\n").filter((l) => cites.has(l.match(FOOTDEF)?.[1] ?? "")).join("\n")).filter((t) => t.trim());
+    const body = unusedRefsOut([...d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => said.get(c.chunk)!), ...carried]);
+    // Paragraphs left out because they only restate facts, or only hold references, are not more to read.
+    const omitted = [...said].filter(([c, t]) => !chosen.has(c) && !refsOnly(t)).length;
     const block = [d.chunks[0].chunk.text, whyLine(h), ...(body.length ? ["", ...body] : []), ...(omitted > 0 ? ["", `(${omitted} more paragraph${omitted > 1 ? "s" : ""} in this note; read \`${d.id}\` for all of it)`] : [])].join("\n");
     if (used && used + block.length > budget) break;
     parts.push(block);

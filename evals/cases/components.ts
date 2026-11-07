@@ -1394,4 +1394,26 @@ const ownerListCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases, ...unnamedCases, ...ownerListCases];
+// A person page on the demo brain says a role that names its org once (G729, G730).
+const polishCases: Case[] = [
+  { id: "role-naming-org-said-once", dimension: "upkeep", gap: "G729", kind: "benign", title: "a demo person whose role names Harbourline Software reads it once, the name linking the org page, never followed by at Harbourline Software", source: "owner's phone 2026-11-07 (a role that named its org said at the org again)", run: async () => {
+    const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+    const util = await import(join(SRC_DIR, "util.ts"));
+    if (!existsSync(demo) || !util.nameAt) return na("no role-names-org check at this commit");
+    const d = await import(demo), wiki = await import(join(SRC_DIR, "wiki.ts"));
+    const root = sandbox("synthetic");
+    Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+    d.copyBase(root);
+    const n = pb.brain.loadBrain(root).find((x: any) => x.fm.type === "person" && /harbourline/.test(JSON.stringify(x.fm.facts?.org ?? "")) && x.fm.facts?.role);
+    if (!n) return na("no demo person at Harbourline with a role");
+    n.fm.facts.role = { ...n.fm.facts.role, value: "organiser of the Harbourline Software offsite" };
+    pb.brain.saveNote(root, n);
+    Bun.spawnSync(["git", "-c", "user.name=capture", "-c", "user.email=capture@pocketbrain.local", "commit", "-qam", "capture: a role"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const page = readFileSync(join(root, `${n.fm.id}.md`), "utf8");
+    const once = page.includes("organiser of the [[orgs/harbourline|Harbourline Software]] offsite.") && !/offsite at \[\[orgs\/harbourline/.test(page);
+    return ok(once, `${n.fm.id}: ${page.match(/^.*offsite.*$/m)?.[0]?.slice(0, 200) ?? "no role sentence"}`);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases, ...unnamedCases, ...ownerListCases, ...polishCases];
