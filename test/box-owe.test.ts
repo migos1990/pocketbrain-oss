@@ -42,14 +42,19 @@ test("what the owner means to do for someone is theirs too, and names the page i
     expect(r.text).toStartWith("Noted: You ");
     expect(String(step(root, "Jane Roy"))).toMatch(value);
   }
-});
+  // Five brains and five commits: on a busy CI runner this passed bun's 5s default, which kills the
+  // commit in flight and makes the last sentence read as refused (CI run 42342174826).
+}, 60_000);
 
-test("a to-do that names nobody the brain holds starts no page and writes nothing", () => {
+test("a to-do that names someone the brain doesn't hold starts no page and writes nothing", () => {
   const root = makeBrain();
   const before = loadBrain(root).length;
-  for (const said of ["I need to buy milk", "I owe Zed Quill fifty dollars"]) {
-    const r = ownerSay(root, said);
-    expect(r.kind).not.toBe("say.noted");
-  }
+  expect(ownerSay(root, "I owe Zed Quill fifty dollars").kind).not.toBe("say.noted");
   expect(loadBrain(root).length).toBe(before);
 });
+
+test("a to-do that names no one is the owner's own, on their page (G708)", async () => {
+  const { root } = await makeDemoBrain();
+  expect(ownerSay(root, "I need to buy milk").kind).toBe("say.noted");
+  expect(String(step(root, "Robin Lefebvre"))).toBe("need to buy milk");
+}, 60_000);

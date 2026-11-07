@@ -128,14 +128,14 @@ export function sayCases(): Case[] {
     },
     {
       id: "say-checks-owed-no-model", dimension: "writes", source: "synthetic",
-      title: "with no model, the brief's sentence \"I owe Ben the sample by tomorrow\" is a next step on Ben's page, and a to-do naming nobody writes nothing (G557)",
+      title: "with no model, the brief's sentence \"I owe Ben the sample by tomorrow\" is a next step on Ben's page, and a to-do naming someone the brain doesn't hold writes nothing (G557; a to-do naming no one is the owner's own since G708)",
       run: async () => {
         const root = sandbox("synthetic", (r) => writeFileSync(join(r, "people", "ben-carter.md"), "---\nid: people/ben-carter\ntype: person\ntitle: Ben Carter\naliases:\n  - Ben\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-09-01\nupdated: 2026-09-01\nby: owner\n---\n"));
         const r: Reply = box.ownerSay(root, "I owe Ben the sample by tomorrow");
         const before = brainMod.loadBrain(root).length;
-        const none: Reply = box.ownerSay(root, "I need to buy milk");
+        const none: Reply = box.ownerSay(root, "I owe Zed Quill fifty dollars");
         const step = factOf(root, "Ben Carter", "next_step");
-        return ok(r.kind === "say.noted" && step.startsWith("owe ben the sample by") && none.kind !== "say.noted" && brainMod.loadBrain(root).length === before, `${r.kind}: next step "${step}"; "buy milk" ${none.kind}`);
+        return ok(r.kind === "say.noted" && step.startsWith("owe ben the sample by") && none.kind !== "say.noted" && brainMod.loadBrain(root).length === before, `${r.kind}: next step "${step}"; "owe Zed Quill" ${none.kind}`);
       },
     },
     {

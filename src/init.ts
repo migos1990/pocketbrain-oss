@@ -23,7 +23,9 @@ import { compareKey, normalizeValue } from "./normalize";
 import { issueToken } from "./auth";
 import { git } from "./git";
 import { escapeRe } from "./util";
-import { DEFAULT_TZ } from "./clock";
+import { DEFAULT_TZ, clock } from "./clock";
+import { appendDiary } from "./diary";
+import { firstRows } from "./diary-catchup";
 import { OWNER, OWNER_CONFIRMED, ownerRef as ownerRefOf } from "./owner";
 
 export const DEFAULT_AGENT = "assistant";
@@ -726,6 +728,10 @@ export function initBrain(root: string, o: InitOptions): InitResult {
   for (const [k, v] of Object.entries(ctx.report)) report.push(`## ${k} (${v.length})`, "", ...v.map((x) => `- ${x}`), "");
   mkdirSync(join(root, "import"), { recursive: true });
   writeFileSync(join(root, "import", "INIT-REPORT.md"), report.join("\n"));
+
+  // What the brain starts with is on the owner's diary from day one, in the same commit (G709).
+  const at = clock().toISOString();
+  for (const n of loaded) for (const row of firstRows(n, at, "owner")) appendDiary(root, row, today().slice(0, 7));
 
   // One commit for the whole start, authored by the owner. The brain carries its format (src/format.ts).
   writeFileSync(join(root, FORMAT_FILE), formatLine(FORMAT));

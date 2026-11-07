@@ -78,6 +78,12 @@ function rowsFor(before: Note | undefined, after: Note, at: string, author: stri
   return out;
 }
 
+// A brain's first facts, as diary lines (G709): `init` writes them in its own commit, since the
+// catch-up below never reads a brain's first commit.
+export function firstRows(note: Note, at: string, author: string): DiaryRow[] {
+  return rowsFor(undefined, note, at, author, "").map(({ commit: _c, ...r }) => r as DiaryRow);
+}
+
 export interface CatchUp {
   commits: number; // commits read this run
   rows: number; // diary lines added (or that would be, on a dry run)

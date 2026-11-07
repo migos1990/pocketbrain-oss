@@ -236,7 +236,8 @@ test("the same seeds give the same notes every time", () => {
   initBrain(b, o);
   const files = allFiles(a).filter((f) => !f.startsWith("views/"));
   expect(allFiles(b).filter((f) => !f.startsWith("views/"))).toEqual(files);
-  for (const f of files) expect(readFileSync(join(b, f), "utf8")).toBe(readFileSync(join(a, f), "utf8"));
+  // The diary's lines carry the time and an undo token of their own run (G709); the notes are the same.
+  for (const f of files.filter((x) => !x.startsWith("diary/"))) expect(readFileSync(join(b, f), "utf8")).toBe(readFileSync(join(a, f), "utf8"));
 });
 
 // ---------- unit ----------

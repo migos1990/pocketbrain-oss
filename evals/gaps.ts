@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G708: {
+    closed: "claude/box-sentences",
+    title: "With no model key, the box bounced ordinary sentences about the owner",
+    severity: "medium",
+    finding: "Audit v12 'The first hour' and next-level D7: from an empty brain, seven of ten day-one sentences (\"I live in…\", \"I prefer meetings after 10\", \"My plate is ABC 123\", \"Our rent is 1,850 a month\", \"Remind me to renew the passport\", \"My dentist is Dr Lam, next visit 12 Dec\", \"I teach … on Tuesdays\") answered \"I didn't catch who or what that's about\": every shape wanted a named page as its subject, the catch-all read \"My dentist\" as a name, a reminder from the home had no page, and the thousands comma split \"1,850\" into two clauses. \"Hannah's number\" landed as attribute number, not phones.",
+    fix: "src/owner-say.ts: \"I\", \"my\" and \"our\" sentences go on the owner's own page (selfPage: the page their full name names, else one titled owner.name): I live in (city), I prefer (prefers), I teach/run/lead (teaches, runs, leads… beside the role), my/our <attribute> is <value>; my <relation> is <Name> ties that person's page (relationship \"<owner>'s dentist\", found again by who is my dentist), and a following \"next visit 12 Dec\" is their next step; a reminder with no page goes on the owner's page; a comma inside a number never splits a clause; number, phone and mobile are phones. With a model, these sentences stay with the patterns, since the model is not told who \"I\" is. Tests: test/box-day-one.test.ts. Eval: box-day-one-own-sentences.",
+  },
+  G709: {
+    closed: "claude/box-sentences",
+    title: "The facts a new brain starts with never reached the diary, so the home was empty on day one",
+    severity: "low",
+    finding: "Same audit: init wrote its notes in the brain's first commit, and the diary catch-up skips a brain's first commit, so the owner's home showed no memories until something new was learned.",
+    fix: "src/init.ts appends a diary line per starting fact (firstRows in src/diary-catchup.ts) in the init commit itself. Tests: test/box-day-one.test.ts. Eval: init-facts-on-the-diary.",
+  },
   G712: {
     closed: "claude/teaching-tie",
     title: "On the owner's yes, nothing said he teaches the class, on his page or the school's",

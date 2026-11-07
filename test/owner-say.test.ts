@@ -24,7 +24,7 @@ test("patterns", () => {
   const d = "2026-10-26";
   expect(parseTell("Jane Roy is now program director", d)).toMatchObject({ name: "Jane Roy", attribute: "role", value: "program director" });
   expect(parseTell("Jane works at Bay Institute", d)).toMatchObject({ name: "Jane", attribute: "org", value: "Bay Institute" });
-  expect(parseTell("Jane's phone number is 514 555 0199", d)).toMatchObject({ name: "Jane", attribute: "phone_number", value: "514 555 0199" });
+  expect(parseTell("Jane's phone number is 514 555 0199", d)).toMatchObject({ name: "Jane", attribute: "phones", value: "514 555 0199" }); // her phones, as the brain calls them (G708)
   expect(parseTell("Course A: next step is send the room plan", d)).toMatchObject({ name: "Course A", attribute: "next_step", value: "send the room plan" });
   expect(parseTell("met Jane yesterday", d)).toMatchObject({ name: "Jane", attribute: "last_contact", value: "2026-10-25" });
   expect(parseTell("Ana isn't at North College anymore, she moved to Bay Institute last week", d)).toMatchObject({ name: "Ana", attribute: "org", value: "Bay Institute", when: { as_of: "2026-10-19", approx: true, phrase: "last week" } });

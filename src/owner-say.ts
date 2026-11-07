@@ -23,6 +23,7 @@ import { renderTouchedPages, MADE } from "./wiki";
 import { clock } from "./clock";
 import { ownerConflicts, ownerDecide } from "./core";
 import { forgetPerson } from "./forget";
+import { ownerOf, ownerTitle } from "./capture";
 import { forgetNote } from "./dashboard/edit";
 import { plain, attrWords, isVerbAttribute, lineWords, yourToDo, privateNow, shutBody, type LineKey } from "./dashboard/home";
 import { findSecret, SENSITIVE_WORDS, thirdPartySensitive } from "./checks";
@@ -113,7 +114,8 @@ export function whoIs(name: string, notes: Note[], page?: Note, o: { any?: boole
 // negated: the owner said what it isn't ("not dean"); nothing is kept from that clause.
 // remind: "remind me to <x>": the page is the one <x> names (found in ownerSay, which has the pages).
 // id: the page it was found as, when that was settled before the name (a reminder's page).
-export interface Told { name: string; attribute: string; value: string; when?: When; guessed?: boolean; negated?: boolean; remind?: boolean; id?: string }
+// own: about the owner themself, on their own page, started for them when there is none yet (G708).
+export interface Told { name: string; attribute: string; value: string; when?: When; guessed?: boolean; negated?: boolean; remind?: boolean; id?: string; own?: boolean }
 const NEGATION = /^(not|no longer|never)\b/i;
 const snake = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 const clean = (v: string) => v.trim().replace(/[.!]+$/, "").trim();
@@ -135,6 +137,16 @@ function todoVerb(v: string): string {
   return w === "'ve got to" ? "have got to" : w === "'m going to" || w === "am going to" ? "are going to" : w;
 }
 
+// The owner themself: "I", "my" and "our" sentences name no page; sayOnce puts them on the owner's
+// own page (G708). A relationship value says the owner by this mark; sayOnce writes their name.
+export const SELF = "\u0000owner";
+const RELATION = /^(?:wife|husband|spouse|partner|son|daughter|kids?|child|children|mom|mum|mother|dad|father|brother|sister|cousin|uncle|aunt|nephew|niece|grandmother|grandfather|boss|manager|assistant|colleague|friend|neighbou?r|landlord|landlady|dentist|doctor|physician|gp|therapist|physio|lawyer|notary|accountant|banker|advisor|adviser|mechanic|vet|coach|tutor|teacher|trainer|hairdresser|barber|pharmacist|plumber|electrician|contractor|realtor|agent)$/i;
+// What an attribute is called in a sentence and in the brain: "Hannah's number" is her phones.
+const SAID_AS: Record<string, string> = { number: "phones", phone: "phones", phone_number: "phones", cell: "phones", mobile: "phones", cell_number: "phones", email: "emails", email_address: "emails", birthday: "birthday", address: "address", home_town: "city", hometown: "city" };
+const brainAttr = (attr: string) => SAID_AS[attr] ?? attr;
+// "I teach X", "I run the lab": what the owner does, beside their role, never over it.
+const OWN_VERBS: Record<string, string> = { teach: "teaches", coach: "coaches", lead: "leads", run: "runs", manage: "manages", chair: "chairs", direct: "directs", head: "heads", own: "owns" };
+
 // One clause: "<name>'s <attribute> is <value>", "<project>: next step is <value>", "met <name>",
 // "<name> moved to / works at / joined / is now at <value>", "<name> is (now) <value>".
 export function parseClause(clause: string, d = today()): Told | undefined {
@@ -145,11 +157,24 @@ export function parseClause(clause: string, d = today()): Told | undefined {
   // page of the person it names (found like a reminder's), in their words (G557).
   // The verb stays ("need to send Jane the slides"), so the home can say it as "You need to send…" (G623).
   if ((m = clean(clause).match(/^I(?: (owe|promised|need to|have to|must|should|have got to|am going to)|(['’]ve got to|['’]m going to)) (.+)$/i))) return { name: "", attribute: "next_step", value: clean(`${todoVerb(m[1] ?? m[2]!)} ${m[3]!}`), remind: true };
+  // The owner themself (G708). A "next visit 12 Dec" after a person's clause is that person's next step,
+  // its day kept in its words (it says when, not when it was said).
+  if ((m = clean(clause).match(/^(?:(?:the|her|his|their) )?next (visit|appointment|meeting|session|call|check-?up|cleaning|class|lesson|review) (?:is )?(.+)$/i))) return { name: "they", attribute: "next_step", value: clean(`${m[1]!.toLowerCase()} ${m[2]!}`) };
+  if ((m = clean(clause).match(/^I (?:live|am living|['’]m living) in (.+)$/i))) return { name: SELF, attribute: "city", value: clean(m[1]!) };
+  if ((m = clean(clause).match(/^I(?: really)? (?:prefer|['’]d rather|would rather) (.+)$/i))) return { name: SELF, attribute: "prefers", value: clean(m[1]!) };
+  if ((m = clean(clause).match(/^I (teach|coach|lead|run|manage|chair|direct|head|own) (.+)$/i)) && (/^(?:teach|coach)$/i.test(m[1]!) || /^(?:the|a|an|our|my) /i.test(m[2]!))) return { name: SELF, attribute: OWN_VERBS[m[1]!.toLowerCase()]!, value: clean(m[2]!) };
+  if ((m = clean(clause).match(/^(?:my|our) ([a-z][a-z ]{1,30}?) (?:is|are) (?:now )?(.+)$/i))) {
+    const rel = m[1]!.trim(), v = clean(m[2]!);
+    // "My dentist is Dr Lam": the person's page says whose dentist they are.
+    if (RELATION.test(rel) && nameShaped(v)) return { name: v, attribute: "relationship", value: `${SELF}'s ${rel.toLowerCase()}` };
+    if (NEGATION.test(v)) return { name: SELF, attribute: brainAttr(snake(rel)), value: v, negated: true };
+    return { name: SELF, attribute: brainAttr(snake(rel)), value: v };
+  }
   const { rest, when } = whenOf(clean(clause), d);
   const c = rest.replace(/^(so |and |but |actually,? )/i, "").trim();
   if ((m = c.match(/^(.+?)\s*:\s*(?:the )?next step is (?:to )?(.+)$/i))) return { name: m[1]!, attribute: "next_step", value: clean(m[2]!), when };
   if ((m = c.match(/^(?:I )?(?:met|saw|called|phoned|spoke (?:with|to)|talked (?:with|to)|caught up with|had (?:coffee|lunch|dinner|breakfast|drinks|a call|a meeting|a chat) with) (?:with )?(.+?)(?: (?:about|for|at|in|on|to|over|after|before) .*)?$/i))) return { name: m[1]!, attribute: "last_contact", value: (when ?? { as_of: d }).as_of, when };
-  if ((m = c.match(/^(.+?)['’]s ([a-z][a-z ]{1,30}?) is (?:now )?(.+)$/i)) || (m = c.match(/^(his|her|their|its) ([a-z][a-z ]{1,30}?) is (?:now )?(.+)$/i))) return { name: m[1]!, attribute: snake(m[2]!), value: clean(m[3]!), when, ...(NEGATION.test(m[3]!) ? { negated: true } : {}) };
+  if ((m = c.match(/^(.+?)['’]s ([a-z][a-z ]{1,30}?) is (?:now )?(.+)$/i)) || (m = c.match(/^(his|her|their|its) ([a-z][a-z ]{1,30}?) is (?:now )?(.+)$/i))) return { name: m[1]!, attribute: brainAttr(snake(m[2]!)), value: clean(m[3]!), when, ...(NEGATION.test(m[3]!) ? { negated: true } : {}) };
   if ((m = c.match(/^(.+?) (?:is not|isn['’]t|is no longer|was not|wasn['’]t|is never) (?:an? |the )?(.+)$/i))) return { name: m[1]!, attribute: "role", value: clean(m[2]!), when, negated: true };
   if ((m = c.match(/^(.+?) (?:has )?(?:moved to|works at|work at|joined|is now at|is at|now works at) (?:the )?(.+)$/i))) return { name: m[1]!, attribute: "org", value: clean(m[2]!), when };
   // What someone does: "he runs the new lab" is a role in the owner's words.
@@ -167,10 +192,14 @@ export function parseTell(text: string, d = today()): Told | undefined {
   return parseTells(text, d).filter((t) => !t.negated).at(-1);
 }
 
+// Where a sentence splits into clauses: a comma (never one inside a number, "1,850"), a semicolon,
+// "and", "but".
+const CLAUSE_BREAK = /;|(?<!\d),|,(?!\d{3}(?!\d))|\s+(?:and|but)\s+/i;
+
 // Every clause that parses, in order; a pronoun is the first clause's name. A negated clause is kept
 // in the list (marked) so the box can say it kept nothing, never written.
 export function parseTells(text: string, d = today()): Told[] {
-  const parts = text.split(/[,;]|\s+(?:and|but)\s+/i).map((s) => s.trim()).filter(Boolean);
+  const parts = text.split(CLAUSE_BREAK).map((s) => s.trim()).filter(Boolean);
   const capital = parts[0]?.match(/^([A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)*)/u)?.[1]?.replace(/['’]s$/, "");
   const out: Told[] = [];
   parts.forEach((part, i) => {
@@ -335,14 +364,19 @@ export function boxModel(root: string): Model | undefined {
   try { return modelFor(root, SAY_STEP, OWNER); } catch { return undefined; }
 }
 
-// The box with a model. Forget, send, a tapped chip (a sentence the box itself wrote) and a sentence
-// holding a secret's shape or a secret's name are read by the patterns alone and never sent.
+// A clause the patterns read as the owner's own ("I live in…", "my dentist is…"): the model is told
+// nothing about who "I" is, so the patterns keep it (G708).
+const aboutSelf = (x: Told) => x.name === SELF || x.value.includes(SELF);
+
+// The box with a model. Forget, send, a tapped chip (a sentence the box itself wrote), a sentence
+// holding a secret's shape or a secret's name, and one about the owner themself are read by the
+// patterns alone and never sent.
 export async function ownerSayModel(root: string, text: string, o: SayOptions = {}, model?: Model): Promise<SayReply> {
   const t = text.trim();
   const intent = intentOf(t);
   // A health, school, legal or money sentence goes only to a model allowed private notes.
   const sensitive = SENSITIVE_WORDS.test(t) && sensitivityRank(model?.config.max_sensitivity ?? "personal") < sensitivityRank("private");
-  if (!model || !t || o.chip || intent === "forget" || intent === "act" || /^new page in /i.test(t) || findSecret(t) || sensitive || parseTells(t).some((x) => SECRET_ATTRIBUTE.test(x.attribute))) return ownerSay(root, t, o);
+  if (!model || !t || o.chip || intent === "forget" || intent === "act" || /^new page in /i.test(t) || findSecret(t) || sensitive || parseTells(t).some((x) => SECRET_ATTRIBUTE.test(x.attribute) || aboutSelf(x))) return ownerSay(root, t, o);
   let reading: Reading | undefined;
   try { reading = await readSentence(root, t, model, o.page); } catch { reading = undefined; }
   return ownerSay(root, t, { ...o, reading });
@@ -582,7 +616,14 @@ function sayOnce(root: string, text: string, o: SayOptions = {}): SayReply {
   if (np && !Object.hasOwn(rules.policy.areas ?? {}, np[1]!)) return { kind: "say.didnt-catch", text: say("say.didnt-catch") };
   const sentence = np ? np[2]! : t;
   const all = r?.kind === "tell" ? r.facts : parseTells(sentence);
-  const tells = all.filter((x) => !x.negated).map((x) => x.remind ? remindOf(x, sentence, notes, page) : x).filter((x): x is Told => !!x);
+  // "I", "my", "our": the owner's own page, by their name; with none yet, a page by their name (G708).
+  const me = selfPage(rules, notes);
+  const self = (x: Told): Told => {
+    const value = x.value.replaceAll(SELF, me ? String(me.fm.title) : ownerTitle(rules) ?? ownerName(rules));
+    if (x.name !== SELF) return { ...x, value };
+    return me ? { ...x, value, name: String(me.fm.title), id: me.fm.id } : { ...x, value, name: ownerTitle(rules) ?? ownerName(rules), own: true };
+  };
+  const tells = all.filter((x) => !x.negated).map((x) => { if (!x.remind) return x; const r = remindOf(x, sentence, notes, page); return r === undefined ? { ...x, name: SELF, remind: false } : r; }).filter((x): x is Told => !!x).map(self);
   if (!tells.length) return all.length && all.every((x) => x.negated) ? { kind: "say.negated", text: say("say.negated") } : { kind: "say.didnt-catch", text: say("say.didnt-catch") };
   const areaFor = (unknown: string) => np?.[1] ?? defaultArea(rules, notes, sentence, unknown, page);
   // The catch-all read "<name> is <value>" as a role: the owner says so before it's their word.
@@ -610,6 +651,14 @@ function sayOnce(root: string, text: string, o: SayOptions = {}): SayReply {
     const known = x.id ? now.find((n) => n.fm.id === x.id) : undefined;
     const who: Who = known ? { page: known } : whoIs(x.name, now, page);
     if ("page" in who) { replies.push(tell(root, rules, who.page, x, ch, o.fresh)); continue; }
+    // The owner's own page, started by their first sentence about themself: never "did you mean".
+    if (x.own) {
+      const mine = selfPage(rules, now);
+      const area = mine ? undefined : Object.hasOwn(rules.policy.areas ?? {}, "personal") ? "personal" : areaFor(x.name);
+      if (!mine && !area) return newPage(rules, x.name, sentence);
+      replies.push(tell(root, rules, mine ?? ({ fm: { id: "", title: x.name, type: "person", area, sensitivity: "personal" }, body: "", path: "" } as unknown as Note), x, ch, o.fresh));
+      continue;
+    }
     if (who.near.length) return unknownName(who, sentence);
     // Not a name ("the meeting", "it", a pronoun with no page to mean): no page is started.
     if (!nameShaped(who.unknown)) { replies.push({ kind: "say.didnt-catch", text: say("say.didnt-catch") }); continue; }
@@ -645,18 +694,28 @@ function leftOut(sentence: string, kept: Told[]): string[] {
   if (!kept.length) return [];
   const words = (s: string) => (s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length > 1 && !SMALL_WORD.test(w));
   const seen = new Set(kept.flatMap((x) => [...words(x.value), ...words(x.when?.phrase ?? ""), ...(x.attribute === "last_contact" ? words(x.name) : [])]));
-  return sentence.replace(/[.!]+$/, "").split(/[,;]|\s+(?:and|but)\s+/i).map((p) => p.trim()).filter((p) => words(p).length >= 2 && !words(p).some((w) => seen.has(w)));
+  return sentence.replace(/[.!]+$/, "").split(CLAUSE_BREAK).map((p) => p.trim()).filter((p) => words(p).length >= 2 && !words(p).some((w) => seen.has(w)));
 }
 
 // "remind me to call Jane tomorrow": a next step on the page it names, else the page the owner is on.
-function remindOf(x: Told, sentence: string, notes: Note[], page?: Note): Told | undefined {
+// null: it names someone the brain doesn't hold, so it is no one's to-do yet; undefined: it names
+// no page at all, so it is the owner's own (G708).
+function remindOf(x: Told, sentence: string, notes: Note[], page?: Note): Told | null | undefined {
   // A full name in it decides: a page by that name, or nothing ("call Jane Doe" is not Jane Roy's).
   for (const n of x.value.match(/\p{Lu}[\p{L}'’-]+(?:\s+\p{Lu}[\p{L}'’-]+)+/gu) ?? []) {
     const who = whoIs(n, notes);
-    return "page" in who ? { ...x, name: String(who.page.fm.title), id: who.page.fm.id, remind: false } : undefined;
+    return "page" in who ? { ...x, name: String(who.page.fm.title), id: who.page.fm.id, remind: false } : null;
   }
   const target = namedIn(x.value, notes)[0] ?? (namedIn(sentence, notes)[0] ?? page);
   return target ? { ...x, name: String(target.fm.title), id: target.fm.id, remind: false } : undefined;
+}
+
+// The owner's own person page: the one their full name (owner.name or an alias) names, else the one
+// titled with owner.name itself.
+function selfPage(rules: Rules, notes: Note[]): Note | undefined {
+  const id = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
+  const name = ownerName(rules).trim().toLowerCase();
+  return (id ? notes.find((n) => n.fm.id === id) : undefined) ?? notes.find((n) => n.fm.type === "person" && current(n) && String(n.fm.title).trim().toLowerCase() === name);
 }
 
 function newPage(rules: Rules, name: string, sentence: string): SayReply {
