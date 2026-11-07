@@ -61,6 +61,7 @@ import { drillWords, lastRestoreDrill } from "../restore-drill";
 import { readDiary, shownValue } from "../diary";
 import { inboxConflict, inboxConflicts, settleInbox } from "../settle-inbox";
 import { ownerSay, ownerSayModel, boxModel, type SayReply } from "../owner-say";
+import type { Model } from "../model";
 import { undoFact } from "../undo";
 import { fixEverywhere } from "../beliefs";
 import { withRadar } from "./home-beliefs";
@@ -83,7 +84,7 @@ const BACKGROUND = /^\/(map\/grid|fga\/grid|brain\/results)$/;
 // owner's Tailscale login, the only identity the `tailscale serve` path lets in.
 // devices: the tailnet addresses (100.x) of the owner's own devices that may open it; none, none do.
 type Tailnet = { address?: string; name?: string; login?: string; devices?: string[] };
-export interface DashboardOptions { port?: number; hostname?: string; loginKey?: string; transport?: () => MailTransport; modelFor?: ModelFor; tailnet?: boolean | Tailnet; tailnetLogin?: string; tailnetDevices?: string[]; now?: () => Date }
+export interface DashboardOptions { port?: number; hostname?: string; loginKey?: string; transport?: () => MailTransport; modelFor?: ModelFor; boxModel?: Model; tailnet?: boolean | Tailnet; tailnetLogin?: string; tailnetDevices?: string[]; now?: () => Date }
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 // Compared as bytes: two strings of the same length can differ in bytes (non-ASCII), and
@@ -566,6 +567,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
 
   // The chips the box last offered each sign-in (only those count as taps).
   const offered = new Map<string, Set<string>>();
+  // The same sentence sent again on the same screen within a minute is read once (G728): a phone's
+  // arrow tapped while the box was still reading sent it six times. Any button pressed in between
+  // (an Undo, say) clears it, so the owner can say it again on purpose.
+  const sayOnce = new Map<string, { at: number; run: Promise<Awaited<ReturnType<typeof ownerSayModel>>> }>();
+  const SAY_ONCE_MS = 60_000;
   let lastOwnerMinute = "";
   async function handle(req: Request, hosts = allowedHosts, secure = false): Promise<Response> {
     const url = new URL(req.url);
@@ -689,7 +695,15 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         // within one chat, with no time limit (G716): a chat named by the form, else the newest one.
         chat = form.from === "ask" ? form.t === "new" ? undefined : isChatId(form.t) ? getChat<AskTurn>(root, form.t, now().getTime()) : listChats<AskTurn>(root, now().getTime())[0] : undefined;
         const follows = chat?.turns.filter((x) => x.reply.page).at(-1)?.reply.page;
-        reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip, ...(form.from === "ask" ? { from: "ask" as const, ...(follows ? { follows } : {}) } : {}) }, chip ? undefined : boxModel(root));
+        const read = () => ownerSayModel(root, said, { page: form.page || undefined, fresh, chip, ...(form.from === "ask" ? { from: "ask" as const, ...(follows ? { follows } : {}) } : {}) }, chip ? undefined : opts.boxModel ?? boxModel(root));
+        if (chip || form.from === "ask" || !said) reply = await read();
+        else {
+          const key = [sid, form.page ?? "", said].join("\0"), t = now().getTime();
+          for (const [k, v] of sayOnce) if (t - v.at >= SAY_ONCE_MS) sayOnce.delete(k);
+          const was = sayOnce.get(key);
+          if (was) reply = await was.run;
+          else { const run = read(); sayOnce.set(key, { at: t, run }); run.catch(() => sayOnce.delete(key)); reply = await run; }
+        }
         if (reply.chips?.length) offered.set(sid, new Set(reply.chips.map((c) => c.say))); } catch (e) { return go("/home", { err: fail(e) }); }
         if (form.page && reply.kind !== "say.unknown-name" && reply.kind !== "say.forgotten") { const r = pageScreen(csrf, reply.page ?? form.page, { said, reply, fresh }); if (r) return r; }
         if (form.from === "ask") {
@@ -700,6 +714,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         return home(csrf, said, reply, undefined, false, false, freshSignIn(root, sid, now()));
       }
       const action = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : "";
+      if (action) for (const k of sayOnce.keys()) if (k.startsWith(`${sid}\0`)) sayOnce.delete(k);
       // Undo from a diary line (src/undo.ts): a forward write, back to the home with what happened.
       // A held message, from its settle screen: send it as it is, or keep it back.
       if (action === "settle-mail") {

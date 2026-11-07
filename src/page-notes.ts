@@ -6,12 +6,14 @@
 // "Your notes" where it is (src/wiki.ts). The page says when the owner last changed them.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadBrain, today } from "./brain";
+import { loadBrain, today, type Note } from "./brain";
 import { git } from "./git";
 import { saveNoteText } from "./dashboard/edit";
 import { sections } from "./wiki";
 import { CoreError } from "./core";
 import { sayDay } from "./diary";
+import { liveRecords } from "./health";
+import { refString } from "./sources";
 
 export const YOUR_NOTES = "Your notes";
 export const NOTE_MAX = 2000;
@@ -67,9 +69,17 @@ export function addYourNote(root: string, id: string, said: string): string {
 // "8 Oct", with the year only when it isn't this year's.
 export const dayWords = (day: string) => sayDay(day).replace(new RegExp(` ${today().slice(0, 4)}$`), "");
 
-// The day the owner last changed a page's notes by hand, if ever.
-export function editedOn(root: string, id: string): string | undefined {
+// The day the owner last changed a page by hand, if ever: its notes (Edit, Keep it as a note), or a
+// fact typed in the box, whose record cites the owner's word from the box (owner:<day>/home, G727).
+export function editedOn(root: string, id: string, n?: Note): string | undefined {
   // The owner's day from the commit's Day: trailer (today(), so PB_TODAY and the owner's clock hold).
   const msg = git(root, ["log", "-1", "--format=%B", "-E", "--grep=^Kind: owner-page-(edit|note)$", "--", `${id}.md`]);
-  return msg.match(/^Day: (\d{4}-\d{2}-\d{2})$/m)?.[1];
+  const days = [msg.match(/^Day: (\d{4}-\d{2}-\d{2})$/m)?.[1], ...(n ? boxDays(n) : [])].filter((d): d is string => !!d);
+  return days.sort().at(-1);
+}
+
+// The days of the live facts on a page the owner typed in the box (a value since replaced or
+// retired no longer counts).
+function boxDays(n: Note): string[] {
+  return liveRecords(n).flatMap(({ r }) => (r.sources ?? []).flatMap((s) => refString(s).match(/^(?:owner|louis):(\d{4}-\d{2}-\d{2})\/home$/)?.[1] ?? []));
 }

@@ -117,6 +117,8 @@ export const PAGE_CSS = `
 form.notes{display:flex;flex-direction:column;gap:8px;margin:0 0 18px}form.notes label{display:flex;flex-direction:column;gap:2px}form.notes label b{font-weight:900;font-size:15px;text-transform:uppercase}form.notes label small{font-size:14px;line-height:19px;color:var(--muted)}
 form.notes textarea{font:inherit;font-size:17px;line-height:24px;color:var(--text);background:var(--paper);border:2px solid var(--text);border-radius:0;padding:10px 12px;min-height:160px;width:100%;resize:vertical}
 form.notes .acts{display:flex;gap:18px;align-items:center}
+/* The box's answer, pinned with it (G727). */
+.pinned .said{max-height:38vh;overflow:auto;background:var(--paper);margin-bottom:6px}.pinned .said .you{display:none}.pinned .said .chips{margin:0 0 6px}
 p.edited{font-size:13px;line-height:18px;color:var(--muted);margin:0 0 10px}
 .band{display:flex;flex-direction:column;gap:0;margin:0 0 14px}
 .band .bar{display:flex;justify-content:space-between;align-items:center;font-size:14px;line-height:20px;font-weight:500}
@@ -445,7 +447,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const open = fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private") ? `<p class="kind">${PAGE_COPY.openPrivate}</p>` : "";
   const body = open + (closed ? `<p class="quiet">${PAGE_COPY.shutPage}</p>${signInAgain(csrf)}` : details.includes(PAGE_COPY.shut) || withheld ? `${proseOrEmpty()}${signInAgain(csrf)}` : proseOrEmpty());
   // When the owner last changed this page's own notes by hand (G718).
-  const edited = closed ? undefined : editedOn(s.root, n.fm.id);
+  const edited = closed ? undefined : editedOn(s.root, n.fm.id, n);
   const editedLine = edited ? `<p class="kind edited">${esc(fill(PAGE_COPY.editedBy, { day: dayWords(edited) }))}</p>` : "";
   const editor = !o.edit || closed ? "" : fresh
     ? `<form class="notes" method="post" action="/action/page-notes-save">${hidden(csrf, { id: n.fm.id })}<label for="notes"><b>${PAGE_COPY.notesHead}</b><small>${PAGE_COPY.notesHint}</small></label><textarea id="notes" name="text" rows="8" maxlength="${NOTE_MAX}">${esc(yourNotes(n.body))}</textarea><div class="acts"><button class="pill solid">${PAGE_COPY.notesSave}</button><a class="pill" href="${href(n.fm.id)}">${PAGE_COPY.notesCancel}</a></div></form>`
@@ -474,7 +476,10 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const mentionedList = mentioned.replace(`<h2>${PAGE_COPY.mentioned}</h2>`, `<h2 class="sec">${PAGE_COPY.mentioned}</h2>`);
   // Undo after an answer to the Gardener's line on an org: only that org's own answer (org-undo).
   const undoOrg = o.flash && o.undo && isOrg(n) ? `<div class="chips"><form method="post" action="/action/org-undo">${hidden(csrf, { id: n.fm.id, hash: o.undo })}<button>${PAGE_COPY.undo}</button></form></div>` : "";
-  const pinned = `${replyHtml(csrf, { ...o, page: n.fm.id })}${keep}${undoOrg}<div class="pinned">${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
+  // What the box answered sits with the box, where the owner is looking, not at the page's foot
+  // behind it: the page comes back at its top, with what changed already in it (G727).
+  const said = `${replyHtml(csrf, { ...o, page: n.fm.id })}${keep}${undoOrg}`;
+  const pinned = `<div class="pinned">${said ? `<div class="said">${said}</div>` : ""}${composer(csrf, { page: n.fm.id }, fill(PAGE_COPY.box, { name: first }), { label: fill(PAGE_COPY.box, { name: first }), send: PAGE_COPY.send })}</div>`;
   return appPage(name, "memory", `${band}
 ${closed ? "" : describeCard(s, csrf, n)}${editor}${editedLine}${body}${closed ? "" : projectCard(s, n, fresh)}${book}${changedList}${overlapList}${mentionedList}
 ${details ? `<details><summary>${PAGE_COPY.details}</summary>${details}</details>` : ""}${who}
