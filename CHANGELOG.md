@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### Before you update
 
+- The night pass can now notice a class you teach (G711). It is off: each night it only counts the classes it would ask you about. Add `teach: { ask: true }` to `rules/policy.yaml` when you want the question on your home.
 - Upkeep now counts the held facts your assistants filed from receipts and other no-reply mail before this update, and changes nothing. Run `pocketbrain machine-mail` to see the count, and `pocketbrain machine-mail on` to set them aside, each with Undo on your home (G668).
 - The phone app's Face ID now only makes the phone's own live sign-in fresh, and no longer counts its 30 days again: 30 days after pairing, the app asks for a new sign-in link to pair once more. Update the app (it ships over the air) with the hub, or Face ID answers "pair again" until it does (G642).
 - Upkeep can now put a project page under the project it is part of (G640). It is off: each night it only counts the pages it would place. Run `pocketbrain wiki parents on` when you want them placed, and `pocketbrain wiki parents off` to go back to counting.
@@ -14,6 +15,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 ### What you see
 - When you settle something on the settle screen, by a pick or by keeping both, the page's own text says it at once, not after the night run, so an assistant never reads the new value beside the old sentence (G707).
 
+- When a course code keeps coming up in pages filed from your mail, with people at one school behind the same mails, the brain asks you once: "You seem to teach PROD 20410 at North College. Right?" Nothing is filed before you answer. Yes files a page for the course under the school and your own word that you teach it, never touching your employer; the school's page then opens "You teach PROD 20410 here.", your page and the course page say it too, and the course page lists the pages about it. No is remembered, and that code is never asked again (docs/wiki.md "A class you teach", G711, G712).
 - Ask answers the one thing you asked: "What's next for Atlas launch?" says its next step, not the whole page, and "When do we freeze the Atlas beta?" finds the step that says the freeze instead of "Nothing on that yet", with the page and its source under the answer (G706).
 - Ask remembers who you were just asking about: after "who is Camille?", "is she my daughter?" is about Camille (docs/owner-home.md, G701).
 - An org page opens with your own tie to it ("You work as a lecturer at North College."), from your own role and org, instead of listing you among the people there. The people there are said by how you know them when their page says it ("…: your colleagues."), and the pages whose sources name it are one sentence, not the same sentence once per page (G702, G703, G704).

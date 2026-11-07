@@ -1164,4 +1164,60 @@ const contactsCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases];
+// ---------------------------------------------------------------- a class you teach (G711, G712) -----
+// The demo brain on 30 September with two pages titled by a made-up course code, each filed from a
+// mail that also filed a Lakeshore College student's org fact: the brain should ask once, in the
+// owner's words, file nothing before the answer, and on Yes say it on the school's page.
+async function teachBrain(): Promise<{ root: string; t: Record<string, any> } | undefined> {
+  const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+  if (!existsSync(demo) || !existsSync(join(SRC_DIR, "teaching.ts"))) return undefined;
+  const d = await import(demo), t = await import(join(SRC_DIR, "teaching.ts"));
+  const root = sandbox("synthetic");
+  Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+  d.copyBase(root);
+  const mailOf = (id: string) => String(pb.carve.records(note(root, id)?.fm.facts?.org ?? [])[0]?.sources?.[0] ?? "");
+  const page = (slug: string, title: string, step: string, mail: string) => writeFileSync(join(root, "projects", `${slug}.md`), `---\nid: projects/${slug}\ntype: project\ntitle: "${title}"\narea: teaching\nsensitivity: personal\nstatus: active\ncreated: 2026-09-28\nupdated: 2026-09-28\nby: planner\nfacts:\n  next_step: { value: "${step}", as_of: 2026-09-28, sources: ["${mail}"], verification: verified-by-source, by: planner, recorded: 2026-09-28 }\n---\n`);
+  page("pdc-410-midterm", "PDC 410: midterm reflections due Oct 13", "return the midterm reflections by 2026-10-13", mailOf("people/mei-lin"));
+  page("pdc-410-room", "PDC 410: room moved to B-216", "teach in room B-216 on 2026-10-06", mailOf("people/fatima-diallo"));
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=planner", "-c", "user.email=planner@pocketbrain.local", "commit", "-qm", "planner: the course mails"], { cwd: root });
+  return { root, t };
+}
+
+const teachCases: Case[] = [
+  { id: "teach-ask-once-nothing-filed", dimension: "upkeep", gap: "G711", kind: "benign", title: "a course code in pages from two mails, with people at one school behind the same mails, is one ask in the owner's words; nothing is filed before the answer, and it is never asked twice", source: "owner 2026-11-07 (his school's page: I teach there, and this is a class number)", run: async () => {
+    const b = await teachBrain();
+    if (!b) return na("no teaching detector at this commit");
+    const { root, t } = b;
+    const before = Bun.spawnSync(["git", "rev-parse", "HEAD:projects"], { cwd: root }).stdout.toString().trim();
+    t.raiseTeachAsks(root); t.raiseTeachAsks(root);
+    const asks = t.teachAsks(root);
+    const after = Bun.spawnSync(["git", "rev-parse", "HEAD:projects"], { cwd: root }).stdout.toString().trim();
+    const right = asks.length === 1 && asks[0].question === "You seem to teach PDC 410 at Lakeshore College. Right?" && asks[0].status === "waiting" && before === after;
+    return ok(right, `${asks.length} ask(s): ${asks[0]?.question ?? "none"}; pages ${before === after ? "unchanged" : "changed"}`);
+  } },
+  { id: "teach-yes-school-page-says-it", dimension: "upkeep", gap: "G712", kind: "benign", title: "Yes files the course page and the owner's own word that he teaches it, never touching his employer; the school's page then opens with it", source: "owner 2026-11-07 (it should have understood by then that I teach there)", run: async () => {
+    const b = await teachBrain();
+    if (!b) return na("no teaching detector at this commit");
+    const { root, t } = b;
+    t.raiseTeachAsks(root);
+    t.answerTeach(root, "PDC 410", "teaches");
+    const me = pb.brain.loadBrain(root).find((n: any) => n.fm.type === "person" && JSON.stringify(n.fm.facts?.teaches ?? "").includes("projects/pdc-410"));
+    const employer = String(pb.carve.records(me?.fm.facts?.org ?? [])[0]?.value ?? "");
+    // The owner's own text stays on top; the hub's paragraph under it opens with the class.
+    const school = (readFileSync(join(root, "orgs", "lakeshore-college.md"), "utf8").split("## From its facts\n")[1] ?? "").trim();
+    const right = !!me && employer === "[[orgs/harbourline]]" && school.startsWith("You teach [[projects/pdc-410|PDC 410]] here.") && !existsSync(join(root, "disputes"));
+    return ok(right, `${me ? "teaches filed" : "no teaches fact"}; employer ${employer}; school page opens: ${school.split("\n")[0]!.replace(/\[\^[^\]]+\]/g, "").slice(0, 80)}`);
+  } },
+  { id: "teach-no-never-asked-again", dimension: "upkeep", gap: "G711", kind: "benign", title: "No is remembered: the code is never asked again and no page is filed", source: "owner 2026-11-07", run: async () => {
+    const b = await teachBrain();
+    if (!b) return na("no teaching detector at this commit");
+    const { root, t } = b;
+    t.raiseTeachAsks(root);
+    t.answerTeach(root, "PDC 410", "no");
+    t.raiseTeachAsks(root);
+    const st = t.teachAsks(root).map((a: any) => a.status);
+    return ok(st.join() === "no" && !existsSync(join(root, "projects", "pdc-410.md")), `asks ${st.join() || "none"}`);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases];

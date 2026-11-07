@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G712: {
+    closed: "claude/teaching-tie",
+    title: "On the owner's yes, nothing said he teaches the class, on his page or the school's",
+    severity: "medium",
+    finding: "Owner, 2026-11-07, on his school's org page: \"it should have understood by then that I teach there\"; his own page held only his employer, and no page tied him to the class or the class to the school.",
+    fix: "src/teaching.ts answerTeach: Yes files the course page (title the code, org: the school, cited by the mails behind the ask and his tap) and his own teaches: (or takes:) fact naming it, never a second org fact; src/wiki.ts pageLead then says \"You teach X here.\" first on the school's page, \"You teach X at School.\" on his page and the course page, and lists the pages about the code on the course page, each dropped when its fact is out of the reader's view. Test: test/teaching-tie.test.ts. Eval: teach-yes-school-page-says-it.",
+  },
+  G711: {
+    closed: "claude/teaching-tie",
+    title: "The brain never noticed the owner teaches a class, though its code recurs in pages from many mails with people at the school",
+    severity: "medium",
+    finding: "Owner, 2026-11-07, on his school's org page: \"this is a class number\"; a course code sat in the titles of pages filed from several mails whose senders' org facts all named the school, and nothing asked him.",
+    fix: "src/teaching.ts findTeaching (code only, no model, reads only what the brain holds since mail subjects are never stored): a course code in the titles or values of live pages cited by two or more mails, with two or more people whose org fact names one school cited by those same mails, never his employer, a code already a page, or one already answered; raiseTeachAsks files one question per code in inbox/teach/ (\"You seem to teach X at School. Right?\"), nothing else, and never asks it twice; No is kept so it is never asked again. The night run only counts it until policy.yaml says teach: { ask: true }. Test: test/teaching-tie.test.ts. Evals: teach-ask-once-nothing-filed, teach-no-never-asked-again.",
+  },
   G707: {
     closed: "331b0349",
     title: "After a pick on the settle screen the page's text kept the old value until the night writer ran",

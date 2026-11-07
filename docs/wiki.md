@@ -131,6 +131,16 @@ Links go both ways for an assistant too (`src/links.ts`). `read` returns `links_
 
 `read` takes an optional `section` (a `## ` heading). It returns only that section and the references it cites. An unknown section is a 404 (`GET /v1/notes/<id>?section=<heading>` on the JSON API). `context_pack` still ranks whole notes; ranking by section is not built yet.
 
+## A class you teach
+
+A mail's subject and sender are never stored, so the brain notices a class only from what it already holds (src/teaching.ts, code only, no model). A course code (two to five capitals, then three to six digits: "PROD 20410", "MATH101") that sits in the titles or values of live pages cited by two or more mails, with two or more people whose org fact names one school cited by those same mails, is one question: "You seem to teach PROD 20410 at North College. Right?" It is never asked about your employer, about a code that is already a page, about one your page already says you teach or take, or twice. The question lives in `inbox/teach/<code>.yaml`; no page changes before you answer.
+
+- **Yes** files a page titled with the code (`org:` the school, cited by the mails behind the question and your tap) and your own word `teaches: [[projects/<code>]]` on your page. Your employer's `org` fact is never touched, so nothing conflicts. The school's page then opens "You teach PROD 20410 here.", your page says "You teach PROD 20410 at North College.", and the course page says it to you and lists the pages about the code ("About it: …"). Each sentence drops for a reader who can't see a fact behind it.
+- **I'm taking it** does the same with `takes:`.
+- **No** is kept in the question's file, and that code is never asked again.
+
+The night pass only counts the classes it would ask about ("1 class you may teach, from 4 people at 1 school") until `rules/policy.yaml` says `teach: { ask: true }`.
+
 ## Code
 
 `src/wiki.ts` provides `summaryOf`, `parentOf`, `pageTree`, `ancestors`, `sections`, `footnotes`, `wikiLint` and `renderTouchedPages` (the page writer; both called from `src/upkeep.ts`), `recentUpdates`, and `applyRewrite`, `partAuthors` and `pageFindings` for `gardenerWikiSync` in `src/core.ts`. The dashboard's note page draws them (`src/dashboard/html-brain.ts`). `adoptHandEdits`, `scanHandEdits` and `isPersonAuthor` handle hand edits (called from `src/start.ts` and `src/digest.ts`). The tests are in `test/wiki*.test.ts` and `test/page-writer.test.ts`.

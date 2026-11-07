@@ -3,6 +3,7 @@
 // links and dates on its own, each fix its own revertable commit tagged reflect:auto, and
 // recheck facts against live sources. Any contradiction is escalated, never resolved.
 // No LLM in v1: every pass here is a rule.
+import { raiseTeachAsks } from "./teaching";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -207,6 +208,16 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   {
     const o = findOverlaps(notes);
     if (o.length) add({ rule: "routine-overlap", key: "routine-overlap", kind: "review", detail: `${o.length} group${o.length === 1 ? "" : "s"} of assistants' routines may do the same job; \`pocketbrain overlaps\` lists them` });
+  }
+
+  // 1c3b. A class the owner teaches (src/teaching.ts, G711): a course code in pages from several
+  //      mails with people at one school behind them is one question for the owner. Report-only
+  //      until policy.yaml says `teach: { ask: true }` (the owner's typed word): a count under a key
+  //      that is no page's id. On, it files the question in inbox/teach/ and nothing else.
+  {
+    const on = (rules.policy as { teach?: { ask?: boolean } }).teach?.ask === true;
+    const t = raiseTeachAsks(root, { apply: on });
+    if (t.length) add({ rule: on ? "teach-asked" : "teach-would-ask", key: on ? "teach-asked" : "teach-would-ask", kind: "review", detail: `${t.length} class${t.length === 1 ? "" : "es"} you may teach${on ? ": a question waits for you" : `, from ${t.reduce((a, x) => a + x.people.length, 0)} people at ${new Set(t.map((x) => x.org)).size} school${new Set(t.map((x) => x.org)).size === 1 ? "" : "s"}; the question waits for \`teach: { ask: true }\``}` });
   }
 
   // 1c4. One thing's pages under it (src/wiki.ts parentPlan, G640): a project page named "X: …", or

@@ -687,9 +687,57 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   }
   // The full name once, then the first name.
   const short = firstName(n);
+  // A class the owner teaches or takes (G712, src/teaching.ts), said with its school when every
+  // reader may see the course's org fact: "You teach [[projects/prod-20410|PROD 20410]] at
+  // [[orgs/north-college|North College]]."
+  const schoolOf = (course: string) => {
+    const c = o.byId.get(course);
+    const f = c?.fm.facts?.org;
+    if (!c || !f || isDisputed(f) || o.blind(course) || o.hidden(`${course}#org`)) return undefined;
+    const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)));
+    const to = [...new Set(recs.flatMap((r) => [...shown(r.value).matchAll(/\[\[([^\]|]+)/g)].map((m) => o.resolve?.(m[1]!) ?? m[1]!)))];
+    return to.length === 1 && o.byId.has(to[0]!) && !o.blind(to[0]!) ? { org: to[0]!, recs } : undefined;
+  };
+  const CLASS_VERB: Record<string, string> = { teaches: "teach", takes: "take" };
+  // On the course page itself: "You teach PROD 20410 at North College.", in place of its org fact's
+  // sentence, cited by both facts (G712).
+  const meNow = o.ownerPage && !o.self && !o.blind(o.ownerPage) ? o.byId.get(o.ownerPage) : undefined;
+  const classOf = (attr: string) => {
+    const f = meNow?.fm.facts?.[attr];
+    if (!f || isDisputed(f) || o.hidden(`${meNow!.fm.id}#${attr}`)) return undefined;
+    const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)));
+    return { recs, ids: [...new Set(recs.flatMap((r) => [...shown(r.value).matchAll(/\[\[([^\]|]+)/g)].map((m) => o.resolve?.(m[1]!) ?? m[1]!)))] };
+  };
+  const mine = Object.keys(CLASS_VERB).map((a) => ({ a, c: classOf(a) })).find((x) => x.c?.ids.includes(n.fm.id));
+  const course = mine ? schoolOf(n.fm.id) : undefined;
   for (const x of facts) {
+    if (course && x.attr === "org") {
+      const lab = `p-in-${meNow!.fm.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+      if (!refs.some((r) => r.label === lab)) refs.push({ label: lab, text: [...new Set(mine!.c!.recs.map(reference))].join("; ") });
+      lines.push(`You ${CLASS_VERB[mine!.a]} ${n.fm.title ?? n.fm.id} at [[${course.org}|${o.byId.get(course.org)!.fm.title ?? course.org}]].${x.labs.map((l) => `[^${l}]`).join("")}[^${lab}]`);
+      continue;
+    }
+    const verb = o.self ? CLASS_VERB[x.attr] : undefined;
+    const ids = verb ? [...new Set(records(n.fm.facts![x.attr]!).filter(live).flatMap((r) => [...shown(r.value).matchAll(/\[\[([^\]|]+)/g)].map((m) => o.resolve?.(m[1]!) ?? m[1]!)))].filter((id) => o.byId.has(id) && !o.blind(id)) : [];
+    if (verb && ids.length) {
+      const parts = ids.map((id) => { const sc = schoolOf(id); return `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]${sc ? ` at [[${sc.org}|${o.byId.get(sc.org)!.fm.title ?? sc.org}]]` : ""}`; });
+      lines.push(`You ${verb} ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0]}.${x.labs.map((l) => `[^${l}]`).join("")}${ids.map((id) => { const sc = schoolOf(id); return sc ? `[^p-at-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}]` : ""; }).join("")}`);
+      for (const id of ids) { const sc = schoolOf(id); const lab = `p-at-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; if (sc && !refs.some((r) => r.label === lab)) refs.push({ label: lab, text: [...new Set(sc.recs.map(reference))].join("; ") }); }
+      continue;
+    }
     const said = linkWords(sentence(n, x.attr, x.vals, o.owner, o.spec?.(x.attr), lines.length && short ? short : undefined));
     lines.push(`${said}${x.labs.map((l) => `[^${l}]`).join("")}${x.waits ? " A different value is waiting to be checked." : ""}`);
+  }
+  // The pages whose title names the course ("PROD 20410: intra exam due …") gather on it (G712).
+  if (course) {
+    const code = String(n.fm.title ?? "");
+    const on = code.length >= 5 ? [...o.byId.values()].filter((p) => p.fm.id !== n.fm.id && p.fm.type !== "person" && p.fm.type !== "org" && !o.blind(p.fm.id) && String(p.fm.title ?? "").includes(code) && !["archived", "merged", "superseded"].includes(String(p.fm.status))).sort((a, b) => String(a.fm.title).localeCompare(String(b.fm.title))) : [];
+    // All of them or none: a list cut by the alphabet would read as all of them.
+    const cited = on.map((p) => ({ p, recs: Object.keys(p.fm.facts ?? {}).filter((a) => !o.hidden(`${p.fm.id}#${a}`)).flatMap((a) => { const f = p.fm.facts![a]!; return isDisputed(f) ? [] : records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity))); }) })).filter((x) => x.recs.length);
+    if (cited.length && cited.length <= 2 * RELATED_NAMES) {
+      const l = cited.map((x) => `[[${x.p.fm.id}|${x.p.fm.title ?? x.p.fm.id}]]`);
+      lines.push(`About it: ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${cited.map((x) => { const lab = `p-see-${x.p.fm.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; if (!refs.some((r) => r.label === lab)) refs.push({ label: lab, text: [...new Set(x.recs.map(reference))].join("; ") }); return `[^${lab}]`; }).join("")}`);
+    }
   }
   const called = lines.length && short ? short : String(n.fm.title ?? n.fm.id);
   // The people whose org fact names this page, each cited by that fact's sources: a page they
@@ -717,6 +765,19 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     const how = !r ? `You work at ${T}.` : /^(?:a|an|the)\s/i.test(r) ? `You are ${r} at ${T}.` : /^\p{Ll}+$/u.test(r) ? `You work as ${/^[aeiou]/i.test(r) ? "an" : "a"} ${r} at ${T}.` : titleRole(r) ? `You are the ${r} at ${T}.` : `You work as ${r} at ${T}.`;
     // The role's own label (p-in-<owner>): a read drops the sentence once that fact is hidden too.
     lines.unshift(`${how}${cite(`p-at-${slug(own.id)}`, own.recs)}${role ? cite(`p-in-${slug(own.id)}`, role.recs) : ""}`);
+  }
+  // The classes the owner teaches or takes at this school open the page before his work tie (G712):
+  // "You teach [[projects/prod-20410|PROD 20410]] here.", cited by his fact (p-in-<owner>) and the
+  // course's org fact (p-at-<course>), each checked again when a reader reads it.
+  const me = o.ownerPage && !o.self && !o.blind(o.ownerPage) ? o.byId.get(o.ownerPage) : undefined;
+  for (const [attr, verb] of me ? Object.entries(CLASS_VERB).reverse() : []) {
+    const f = me!.fm.facts?.[attr];
+    if (!f || isDisputed(f) || o.hidden(`${me!.fm.id}#${attr}`)) continue;
+    const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)));
+    const here = [...new Set(recs.flatMap((r) => [...shown(r.value).matchAll(/\[\[([^\]|]+)/g)].map((m) => o.resolve?.(m[1]!) ?? m[1]!)))].filter((id) => o.byId.has(id) && schoolOf(id)?.org === n.fm.id);
+    if (!here.length) continue;
+    const l = here.map((id) => `[[${id}|${o.byId.get(id)!.fm.title ?? id}]]`);
+    lines.unshift(`You ${verb} ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]} here.${cite(`p-in-${slug(me!.fm.id)}`, recs)}${here.map((id) => cite(`p-at-${slug(id)}`, schoolOf(id)!.recs)).join("")}`);
   }
   const members = all.filter((m) => m.id !== o.ownerPage).slice(0, 12);
   if (members.length) {
@@ -797,7 +858,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   const also = new Map<string, FactRecord[]>();
   // On the owner's own page only a person whose own fact says how they are related to him (family,
   // relationship) links back: that is about him, as his mail is not (G624, G546).
-  for (const x of o.seeAlso ?? []) if (x.from !== n.fm.id && !(own && x.from === own.id) && (!o.self || (FAMILY_ATTRS.has(x.attr ?? "") && o.byId.get(x.from)?.fm.type === "person")) && !shownYet.has(x.from) && o.byId.has(x.from) && !o.blind(x.from) && (x.rec.sources ?? []).length) also.set(x.from, [...(also.get(x.from) ?? []), x.rec]);
+  for (const x of o.seeAlso ?? []) if (x.from !== n.fm.id && !(own && x.from === own.id) && !(course && x.from === o.ownerPage) && (!o.self || (FAMILY_ATTRS.has(x.attr ?? "") && o.byId.get(x.from)?.fm.type === "person")) && !shownYet.has(x.from) && o.byId.has(x.from) && !o.blind(x.from) && (x.rec.sources ?? []).length) also.set(x.from, [...(also.get(x.from) ?? []), x.rec]);
   if (also.size && ties) {
     const ids = [...also.keys()].sort(byTitle).slice(0, ties);
     ties -= ids.length;
