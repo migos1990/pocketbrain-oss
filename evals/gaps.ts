@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G706: {
+    closed: "claude/ask-follow-up",
+    title: "Ask answered a question about one fact with nothing, or with the whole page",
+    severity: "medium",
+    finding: "LinkedIn filming, 2026-11-07, demo brain: \"When do we freeze the Atlas beta?\" got \"Nothing on that yet. Tell me, and I'll keep it.\" though Atlas launch's next step says the beta freeze on 15 October, and \"What's next for Atlas launch?\" got the page's whole prose. The box only knew an attribute from the \"X's Y\" pattern, and found a page only by its full title.",
+    fix: "src/owner-say.ts slotOf matches the question's words to a fact's name (twice) and its shown value, one clear best or none; namedIn's short option names a non-person page by its title's first word written as a name, used only when no page is named in full, and the lookup picks the page with the best fact. src/dashboard/html-page.ts askFact cites the page and the fact's source and day under the answer.",
+  },
+  G701: {
+    closed: "694350b3",
+    title: "An Ask follow-up that named nobody answered as if the first question was never asked",
+    severity: "medium",
+    finding: "Owner's phone 2026-11-06: on Ask, 'who is emma?' then 'is she my daughter?' answered 'Nothing on that yet', since each question was read alone.",
+    fix: "src/owner-say.ts follows: on Ask, a question with a pronoun that matched nothing is read again with the page the last answer on that screen was about (src/dashboard/server.ts, ASK_FOLLOW_MS); a named question still answers about the name. test/ask-follow-up.test.ts.",
+  },
   G710: {
     closed: "6144bb49",
     title: "A blind writer's suffix with no digit read as a word, so the fold kept the wrong page",

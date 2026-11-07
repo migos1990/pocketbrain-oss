@@ -393,6 +393,26 @@ function about(page: Note, title: (id: string) => string | undefined, fresh?: bo
   return facts.length ? facts.join(" ") : `${name}, and nothing else yet.`;
 }
 
+// The fact a question asks about when it names no attribute the patterns read (G706): "What's next
+// for Atlas launch?" is its next step, "When do we freeze the Atlas beta?" the fact whose value says
+// the freeze. A word of the fact's name counts twice a word of its value; a value is matched only
+// where it may be shown, so a hidden value is never found by a guess. One clear best fact, or none.
+const ASK_STOP = new Set(["what", "whats", "when", "where", "who", "whos", "which", "how", "does", "did", "the", "for", "about", "with", "our", "and", "are", "was", "were", "will", "would", "should", "can", "could", "tell", "know", "this", "that", "there", "have", "has", "any", "anything", "something", "its", "it's", "you", "your", "his", "her", "their", "them", "they", "she", "him", "from", "into", "then", "than", "now", "yet", "still", "again", "please"]);
+const askWords = (x: string) => x.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3);
+function slotOf(page: Note, q: string, fresh?: boolean): { k: string; n: number } | undefined {
+  const named = new Set(namesOf(page).flatMap(askWords));
+  const asked = [...new Set(askWords(q))].filter((w) => !ASK_STOP.has(w) && !named.has(w));
+  if (!asked.length) return undefined;
+  const hit = (w: string, ws: string[]) => ws.some((x) => x === w || (w.length >= 4 && (x.startsWith(w) || w.startsWith(x)) && Math.min(x.length, w.length) >= 4));
+  const scored = Object.entries(page.fm.facts ?? {}).map(([k, f]) => {
+    const keyWords = k.split("_").filter((x) => x.length >= 3);
+    const shown = !isDisputed(f) && (fresh || !closedFact(page, f));
+    const valueWords = shown ? askWords(String(([] as unknown[]).concat(valueOf(f) as unknown).join(" "))) : [];
+    return { k, n: asked.filter((w) => hit(w, keyWords)).length * 2 + asked.filter((w) => hit(w, valueWords)).length };
+  }).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  return scored.length && (scored.length === 1 || scored[0]!.n > scored[1]!.n) ? scored[0] : undefined;
+}
+
 function answer(page: Note, attr: string | undefined, notes: Note[], fresh?: boolean): SayReply {
   const name = String(page.fm.title), id = page.fm.id;
   const title = (x: string) => { const t = notes.find((n) => n.fm.id === x)?.fm.title; return t === undefined ? undefined : String(t); };
@@ -406,20 +426,31 @@ function answer(page: Note, attr: string | undefined, notes: Note[], fresh?: boo
     const f = page.fm.facts![key]!;
     if (isDisputed(f)) return { kind: "say.answer-waiting", page: id, text: say("say.answer-waiting", { name, attr: words }) };
     if (closedFact(page, f) && !fresh) return signin;
-    return { kind: "say.answer", page: id, text: say(isVerbAttribute(key) ? "say.answer-verb" : "say.answer", { name, attr: words, value: plain(valueOf(f), title) }) };
+    // "Its next step is to freeze the beta", never "is freeze the beta" (G706).
+    const v = plain(valueOf(f), title), step = /(^|_)steps?$/.test(key) && /^\p{Ll}/u.test(v) && !/^to\s/i.test(v);
+    return { kind: "say.answer", page: id, fact_key: `${id}#${key}`, text: say(isVerbAttribute(key) ? "say.answer-verb" : "say.answer", { name, attr: words, value: step ? `to ${v}` : v }) };
   }
   return { kind: "say.lookup", page: id, text: say("say.lookup", { what: about(page, title, fresh) }) };
 }
 
 // Pages the sentence names by title, alias or (one person's) first name, in the order it names them.
-function namedIn(text: string, notes: Note[], o: { any?: boolean } = {}): Note[] {
+function namedIn(text: string, notes: Note[], o: { any?: boolean; short?: boolean } = {}): Note[] {
   const word = (x: string) => new RegExp(`(^|[^\\p{L}])${x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^\\p{L}])`, "iu");
   const pages = notes.filter(o.any ? askable : live);
   const at = (p: Note) => Math.min(...namesOf(p).map((x) => text.search(word(x))).filter((i) => i >= 0), Infinity);
   const firsts = new Map<string, Note[]>();
   for (const p of pages) if (p.fm.type === "person") for (const x of namesOf(p)) { const f = x.split(/\s+/)[0]!.toLowerCase(); if (f.length > 2) firsts.set(f, [...new Set([...(firsts.get(f) ?? []), p])]); }
   const byFirst = (p: Note) => Math.min(...namesOf(p).map((x) => x.split(/\s+/)[0]!.toLowerCase()).filter((f) => firsts.get(f)?.length === 1).map((f) => text.search(word(f))).filter((i) => i >= 0), Infinity);
-  return pages.map((p) => ({ p, i: Math.min(at(p), byFirst(p)) })).filter((x) => x.i < Infinity).sort((a, b) => a.i - b.i).map((x) => x.p);
+  // With `short`, a page that isn't a person by its title's first word, written as a name ("the
+  // Atlas beta" names Atlas launch and Atlas beta scope, G706); the lookup picks between them.
+  const byHead = (p: Note) => {
+    if (!o.short || p.fm.type === "person") return Infinity;
+    const h = String(p.fm.title).split(/\s+/);
+    if (h.length < 2 || h[0]!.length < 4 || ASK_STOP.has(h[0]!.toLowerCase())) return Infinity;
+    const cap = h[0]![0]!.toUpperCase() + h[0]!.slice(1);
+    return text.search(new RegExp(`(^|[^\\p{L}])${cap.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^\\p{L}])`, "u"));
+  };
+  return pages.map((p) => ({ p, i: Math.min(at(p), byFirst(p), ...[byHead(p)].filter((i) => i >= 0)) })).filter((x) => x.i < Infinity).sort((a, b) => a.i - b.i).map((x) => x.p);
 }
 
 // Where a page the box starts lives (Louis, 2026-10-29, G474): the area of a page the sentence
@@ -441,10 +472,21 @@ function defaultArea(rules: Rules, notes: Note[], sentence: string, unknown: str
 // reading: what the model read the sentence as, already checked (ownerSayModel); without one the
 // fixed patterns read it.
 // from: "ask" when the words came from Ask, which answers in its own voice (G649).
-export interface SayOptions { page?: string; channel?: string; fresh?: boolean; chip?: boolean; reading?: Reading; from?: "ask" }
+// follows: on Ask, the page the last answer on that screen was about (plans/ask-sessions.md).
+export interface SayOptions { page?: string; channel?: string; fresh?: boolean; chip?: boolean; reading?: Reading; from?: "ask"; follows?: string }
+
+// Words that point back at whoever the last answer was about ("is she my daughter?").
+const BACK = /\b(she|he|they|her|him|his|hers|them|their|theirs|elle|il|lui|sa|son|ses)\b/i;
 
 export function ownerSay(root: string, text: string, o: SayOptions = {}): SayReply {
-  const reply = sayOnce(root, text, o);
+  let reply = sayOnce(root, text, o);
+  // A follow-up on Ask that names nobody is about the page the last answer was about (owner's
+  // phone, 2026-11-06: "who is emma?" then "is she my daughter?" answered as if never asked). A
+  // question that names someone answers about them, so this is tried only when nothing matched.
+  if (o.from === "ask" && o.follows && !o.page && !reply.page && BACK.test(text)) {
+    const again = sayOnce(root, text, { ...o, page: o.follows });
+    if (again.page) reply = again;
+  }
   // Ask is for asking: a word it can't place says so there, not the write box's hint (G649).
   return o.from === "ask" && reply.kind === "say.didnt-catch" ? { kind: "say.ask-nothing", text: say("say.ask-nothing") } : reply;
 }
@@ -519,10 +561,15 @@ function sayOnce(root: string, text: string, o: SayOptions = {}): SayReply {
       if ("page" in who) return answer(who.page, asked.attr, notes, o.fresh);
       if (who.near.length) return unknownName(who, t);
     }
-    const named = namedIn(q, notes, { any: true });
-    const target = named.length === 1 ? named[0]! : page && !named.length ? page : undefined;
+    const full = namedIn(q, notes, { any: true });
+    // Pages named in full come first; a short name only when none is (G706). Of several, the one
+    // with a fact the question clearly asks about.
+    const named = full.length ? full : namedIn(q, notes, { any: true, short: true });
+    const slots = named.map((p) => ({ p, s: slotOf(p, q, o.fresh) })).filter((x) => x.s).sort((a, b) => b.s!.n - a.s!.n);
+    const best = named.length > 1 && slots.length && (slots.length === 1 || slots[0]!.s!.n > slots[1]!.s!.n) ? slots[0]!.p : undefined;
+    const target = named.length === 1 ? named[0]! : best ?? (page && !named.length ? page : undefined);
     if (!target) return { kind: "say.no-match", text: say("say.no-match") };
-    return answer(target, asked?.attr, notes, o.fresh);
+    return answer(target, asked?.attr || (slots.find((x) => x.p === target)?.s ?? slotOf(target, q, o.fresh))?.k, notes, o.fresh);
   }
   // "Paul told me Jane is the dean" is Paul's word, not the owner's: the box never files it as the
   // owner's, nor as anything about Paul (re-audit 2026-10-30, G528). The chip says the fact alone,

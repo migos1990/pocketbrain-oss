@@ -11,7 +11,7 @@ import type { HomeLine } from "./home";
 import type { SayReply } from "../owner-say";
 import { wikiBody, wikiLinks } from "./html-brain";
 import { displayName, sayDay, sayDays } from "../diary";
-import { connections, audience, kindLabel, folderOf } from "./browse";
+import { connections, audience, kindLabel, folderOf, sourceWords } from "./browse";
 import { agentTitle, whose, byWhose, cap } from "./labels";
 import { refString } from "../sources";
 import { keptQuotes, itemRef } from "../quotes";
@@ -480,4 +480,17 @@ export function askProse(s: State, n: Note, fresh: boolean): AskProse | undefine
   const title = (id: string) => displayName(id, s.notes.find((x) => x.fm.id === id)?.fm.title);
   const count = sourceCount(n) || notes.size;
   return { html, cites: [{ href: href(n.fm.id), label: displayName(n.fm.id, n.fm.title) }, ...linked.map((id) => ({ href: href(id), label: title(id) })), ...(count ? [{ href: href(n.fm.id), label: count === 1 ? PAGE_COPY.oneSource : fill(PAGE_COPY.sources, { n: count }) }] : [])] };
+}
+
+// An Ask answer that is one fact (G706): the sentence, then the page and where the fact came from,
+// in words and its day, as the page's own Details say it.
+export function askFact(s: State, n: Note, key: string, text: string, fresh: boolean): AskProse | undefined {
+  if (!fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
+  const f = n.fm.facts?.[key];
+  if (!f) return undefined;
+  const r = (isList(f) ? f.items.filter((i) => !i.valid_to).at(-1) : f) as FactRecord | undefined;
+  const from = r ? sourceWords(r.sources) : "";
+  const t = r?.as_of ? Date.parse(`${String(r.as_of).slice(0, 10)}T12:00:00Z`) : NaN;
+  const day = Number.isNaN(t) ? "" : new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return { html: esc(text), cites: [{ href: href(n.fm.id), label: displayName(n.fm.id, n.fm.title) }, ...(from ? [{ href: href(n.fm.id), label: `From ${from}${day ? `, ${day}` : ""}` }] : [])] };
 }

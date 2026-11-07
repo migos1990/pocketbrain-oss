@@ -248,7 +248,9 @@ test("a search never downloads: no model means off, and the loader is told local
     expect(seen).toEqual([{ remote: false, local: empty, o: { dtype: "q8", local_files_only: true } }]);
     expect(env.allowRemoteModels).toBe(false);
   } finally { globalThis.fetch = keep; }
-});
+  // Loading the real library and building a brain took just over bun's 5 s default under a busy gate
+  // run (6.0 s, twice); the test waits on no timer, so it gets room rather than a rerun.
+}, 30_000);
 
 test("doctor says whether semantic search is on, and why not", async () => {
   const { doctor } = await import("../src/doctor");

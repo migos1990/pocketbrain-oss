@@ -42,7 +42,7 @@ import { usagePage } from "./usage";
 import { peoplePage } from "./people";
 import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, pageSentences, type HeldValue, settleLeft, settleCard, settleNext, changedPages, learnedThisWeek, backedUpWords, privateNow } from "./home";
 import type { Note } from "../brain";
-import { ownerPage, askProse, sideWords } from "./html-page";
+import { ownerPage, askProse, askFact, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
 import { parentOf as wikiParent } from "../wiki";
@@ -263,6 +263,8 @@ export function flashOf(loc: string): { ok: string; err: string } {
 
 // How many of Ask's turns a sign-in keeps (owner app step 4).
 export const ASK_TURNS = 20;
+// A follow-up on Ask carries the last answer's page while the conversation is warm: 30 minutes.
+export const ASK_FOLLOW_MS = 30 * 60_000;
 // privateThen: what of the turn's page or fact was already private or held when it was answered (G637).
 interface AskTurn { said: string; reply: SayReply; fresh: boolean; at: number; privateThen?: string[] }
 
@@ -328,7 +330,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const key = t.reply.fact_key, page = t.reply.page ?? key?.slice(0, key.lastIndexOf("#"));
     if (!page) return [];
     const n = byId.get(page);
-    if (key) { const a = key.slice(key.lastIndexOf("#") + 1); return privateNow(n, a) ? [a] : []; }
+    // One fact (G706): private now, or a value held unseen since, as for a whole page below.
+    if (key) { const a = key.slice(key.lastIndexOf("#") + 1), f = n?.fm.facts?.[a]; return privateNow(n, a) || (f && records(f).some((r) => !!r.unseen && !r.valid_to)) ? [a] : []; }
     return [...(privateNow(n, "") ? [""] : []), ...Object.keys(n?.fm.facts ?? {}).filter((a) => privateNow(n, a) || records(n!.fm.facts![a]!).some((r) => !!r.unseen && !r.valid_to))];
   };
   // A read answer built for an older sign-in: owner-say.ts answers a private page or fact with
@@ -353,7 +356,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const titles = new Map(notes.map((n) => [n.fm.id, displayName(n.fm.id, n.fm.title)]));
     // An answer about a page shows that page's prose as the page is now (askProse in html-page.ts).
     let st: ReturnType<typeof loadState> | undefined;
-    const prose = (t: AskTurn) => { const n = t.reply.kind === "say.lookup" && t.reply.page ? byId.get(t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {}; };
+    const prose = (t: AskTurn) => {
+      // One fact (G706): the sentence with its page and its source; a page: its prose.
+      const key = t.reply.kind === "say.answer" && t.reply.fact_key?.split("#") || undefined;
+      const fact = key && byId.get(key[0]!);
+      if (fact) { const p = askFact(st ??= loadState(root, now()), fact, key[1]!, t.reply.text, fresh); return p ? { prose: p } : {}; }
+      const n = t.reply.kind === "say.lookup" && t.reply.page ? byId.get(t.reply.page) : undefined; const p = n ? askProse(st ??= loadState(root, now()), n, fresh) : undefined; return p ? { prose: p } : {};
+    };
     const turns = all.map((t) => visible(t) ? { ...t, ...(t.reply.page && titles.has(t.reply.page) ? { title: titles.get(t.reply.page) } : {}), ...prose(t) } : { hidden: true as const });
     return new Response(askPage({ date: dayWords(clock()), name: firstName(rules) }, csrf, { turns, flash }), { headers: PAGE_HEADERS });
   };
@@ -650,7 +659,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         try { // A chip counts as a tap only when the box offered that exact sentence to this sign-in;
         // anything else posted as a chip is read as typed words (coordinator, 2026-10-27).
         const chip = form.chip === "1" && !!offered.get(sid)?.has(said);
-        reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip, ...(form.from === "ask" ? { from: "ask" as const } : {}) }, chip ? undefined : boxModel(root));
+        // On Ask, a follow-up carries the page this sign-in's last answer there was about.
+        const follows = form.from === "ask" ? (chats.get(sid) ?? []).filter((x) => x.at >= now().getTime() - ASK_FOLLOW_MS && x.reply.page).at(-1)?.reply.page : undefined;
+        reply = await ownerSayModel(root, said, { page: form.page || undefined, fresh, chip, ...(form.from === "ask" ? { from: "ask" as const, ...(follows ? { follows } : {}) } : {}) }, chip ? undefined : boxModel(root));
         if (reply.chips?.length) offered.set(sid, new Set(reply.chips.map((c) => c.say))); } catch (e) { return go("/home", { err: fail(e) }); }
         if (form.page && reply.kind !== "say.unknown-name" && reply.kind !== "say.forgotten") { const r = pageScreen(csrf, reply.page ?? form.page, { said, reply, fresh }); if (r) return r; }
         if (form.from === "ask") {
