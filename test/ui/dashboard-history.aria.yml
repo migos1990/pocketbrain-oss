@@ -9,7 +9,7 @@
   - link "Brain":
     - /url: /brain
   - heading "What changed this week" [level=1]
-  - text: 150 saves in the last 7 days See the brain on
+  - text: 156 saves in the last 7 days See the brain on
   - textbox "See the brain on"
   - button "Go"
   - heading "Today" [level=2]
@@ -110,6 +110,8 @@
     - /url: /history/people/kenji-watanabe
   - link "Maya Chen People The hub edited the notes text 17:30":
     - /url: /history/people/maya-chen
+  - link "Robin Lefebvre People The hub edited the notes text 17:30":
+    - /url: /history/people/robin-lefebvre
   - link "Sofia Marquez People The hub edited the notes text 17:30":
     - /url: /history/people/sofia-marquez
   - link "Atlas launch Projects The hub edited the notes text 17:30":
@@ -143,6 +145,8 @@
     - /url: /history/people/helene-lefebvre
   - link "Marc Lefebvre People The hub edited the notes text 21:10":
     - /url: /history/people/marc-lefebvre
+  - link "Robin Lefebvre People The hub edited the notes text 21:10":
+    - /url: /history/people/robin-lefebvre
   - link "Valérie Roy People The hub edited the notes text 21:10":
     - /url: /history/people/valerie-roy
   - link "Mom's move Projects The hub edited the notes text 21:10":
@@ -151,6 +155,8 @@
     - /url: /history/projects/moms-move
   - link "Priya Shah People The hub edited the notes text 17:30":
     - /url: /history/people/priya-shah
+  - link "Robin Lefebvre People The hub edited the notes text 17:30":
+    - /url: /history/people/robin-lefebvre
   - link "Guest lectures Projects The hub edited the notes text 17:30":
     - /url: /history/projects/guest-lecture-series
   - link "Pinecrest pilot Projects The hub edited the notes text 17:30":
@@ -172,6 +178,8 @@
     - /url: /history/people/sam-patel
   - link "Laila Haddad People The hub edited the notes text 17:30":
     - /url: /history/people/laila-haddad
+  - link "Robin Lefebvre People The hub edited the notes text 17:30":
+    - /url: /history/people/robin-lefebvre
   - link "Senior designer hire Projects The hub edited the notes text 17:30":
     - /url: /history/projects/designer-hire
   - link "Q1 roadmap Projects The hub edited the notes text 17:30":
@@ -237,6 +245,8 @@
     - /url: /history/people/daniel-okoro
   - link "Marcus Webb People The hub edited the notes text 17:30":
     - /url: /history/people/marcus-webb
+  - link "Robin Lefebvre People The hub edited the notes text 17:30":
+    - /url: /history/people/robin-lefebvre
   - 'link "Emma Wilson People auto-decide changed last contact Last contact: 2026-08-25 to 2026-10-04 17:30"':
     - /url: /history/people/emma-wilson
   - 'link "Book club, November Projects auto-decide changed next step Next step: finish the book to finish the book before the 25th 17:30"':
@@ -262,6 +272,8 @@
     - /url: /history/people/nina-petrova
   - link "Ravi Menon People The hub edited the notes text 17:30":
     - /url: /history/people/ravi-menon
+  - link "Robin Lefebvre People The hub edited the notes text 17:30":
+    - /url: /history/people/robin-lefebvre
   - link "Atlas launch Projects The hub edited the notes text 17:30":
     - /url: /history/projects/atlas-launch
   - 'link "Red River climbing trip Projects auto-decide changed next step Next step: book the cabin to book the cabin for 9 to 16 April 17:30"':

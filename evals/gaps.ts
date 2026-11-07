@@ -5,6 +5,27 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G733: {
+    closed: "claude/owner-page-projects",
+    title: "Two pages with the same last name shared one footnote, so one name showed the other's source",
+    severity: "low",
+    finding: "Builder's slice audit of G725 (backlog 423): projects/atlas and decisions/atlas both cite p-see-atlas, and the writer kept the first page's references for both, so the owner's page cited the decision by the project's mail.",
+    fix: "cite() in pageLead (src/wiki.ts) merges the references of every fact cited under one label, so a shared label carries both pages' sources; a read checks every page linked under it (view.ts), so it can only drop more. Test: test/owner-page-projects.test.ts. Eval: same-last-name-pages-keep-own-source.",
+  },
+  G726: {
+    closed: "claude/owner-page-projects",
+    title: "The owner's list of projects could shrink to the ones a reader may see",
+    severity: "medium",
+    finding: "Same: a list of the owner's projects that dropped only the names a reader can't see would read to that reader as all of them, and say which page is missing by its gap.",
+    fix: "Each name in the list cites its page's facts under p-see-<page>, which scrubPage in src/view.ts checks against that page (out of view, or a fact there hidden whose reference it carries), and a read drops the whole sentence when any label in it is hidden, as it does the colleagues sentence (G703). Test: test/owner-page-projects.test.ts. Eval: orphan-project-linked-from-owner-page.",
+  },
+  G725: {
+    closed: "claude/owner-page-projects",
+    title: "Projects and decisions with no person, org or project fact had no page linking them",
+    severity: "medium",
+    finding: "North star 2026-11-07: 7 projects and 1 decision held no fact naming a person, org or project, so no page linked them and pages_ok could never count them.",
+    fix: "pageLead in src/wiki.ts writes on the owner's own page one sentence per area for the owner's live projects and one for the owner's standing decisions (\"Your work projects: A and B.\"), each name cited by that page's own facts; never a page more private than that page or one a reader of that page can't see, and all of an area's pages or none (at most 12). Test: test/owner-page-projects.test.ts. Eval: orphan-project-linked-from-owner-page.",
+  },
   G723: {
     closed: "claude/agent-ref-footnotes",
     title: "A page's footnotes told an assistant which other assistant filed a fact",

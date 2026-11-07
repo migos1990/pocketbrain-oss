@@ -14,6 +14,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- Your own page now lists your live projects and the decisions that still stand, one sentence per area ("Your work projects: Atlas launch and Q1 roadmap."), so a project nothing else ties to is still one tap from your page. An assistant that can't see one of them doesn't get that sentence at all (G725, G726).
 - An assistant reading your pages no longer learns which of your other assistants filed a fact: it reads "An assistant's note" and `agent:[withheld]` where your own view keeps the name (G722, G723).
 - Ask keeps chats: **New chat** starts one with its own context, **Earlier chats** lists them, and each stays across sign-ins and restarts until you delete it or leave it for 90 days. A follow-up about "she" or "it" stays inside its chat, however long ago (G716, G717).
 - **Edit** on a page opens your own notes on it, and a sentence on a page that names no fact can be kept as a note with **Keep it as a note**; the page then says **Edited by you on 8 Oct.** (G718, G719).

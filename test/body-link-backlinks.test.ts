@@ -42,12 +42,15 @@ test("G670 no back-link from text with no reference, from the hub's own lead, or
   page(root, "people", "robin-vale", "person", "Robin Vale", { area: "personal", facts: fact("city", "Halifax", "gmail:f000000000000009") });
   // Uncited text: nothing to cite the back-link by.
   page(root, "projects", "office-move", "project", "Office move", { facts: fact("status", "planning", "gmail:f00000000000000d"), text: "## Earlier notes\n[[Kim Roux]] books the movers for the office.\n" });
-  // A page whose text names the owner gives his page no See also (G624: his page says his facts).
+  // A page whose text names the owner gives the owner's page no See also (G624: it says its own facts).
   page(root, "projects", "garden", "project", "Garden plan", { area: "personal", facts: fact("status", "planning", "gmail:f00000000000000f"), text: cited("[[Robin Vale]] wants raised beds this spring.", "gmail:f000000000000010") });
   commit(root);
   renderTouchedPages(root, SINCE);
   expect(body(root, "people/kim-roux")).not.toContain("Office move");
-  expect(body(root, "people/robin-vale")).not.toContain("Garden plan");
+  // His page lists the project among his own (G725), cited by its status fact, never a See also
+  // cited by the text that names him.
+  expect(body(root, "people/robin-vale")).not.toContain("See also");
+  expect(body(root, "people/robin-vale")).not.toContain("gmail:f000000000000010");
   // The hub's own lead links pages from facts; those already link back as facts do, never twice.
   const twice = renderTouchedPages(root, SINCE);
   expect(twice.written).toEqual([]);

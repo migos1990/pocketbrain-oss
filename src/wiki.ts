@@ -469,6 +469,8 @@ export function adoptHandEdits(root: string): HandEdits {
 // them sees the page named, so no reader learns from prose what its view withholds.
 
 const WRITER = "hub";
+// A project or decision that no longer stands is not listed among the owner's own (G725).
+const DONE = new Set(["archived", "merged", "superseded", "done", "closed", "cancelled", "canceled", "completed"]);
 const PAGE_DIRS = new Set(["people", "orgs", "projects", "decisions", "notes"]);
 // Contact details are facts, not sentences (and an address in prose is easy to copy on).
 const NOT_PROSE = /^(email|emails|phone|phones|mobile|address|home_address|handle|aliases?)$/;
@@ -810,7 +812,14 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // link to links back, from facts, never guessed.
   const T = String(n.fm.title ?? n.fm.id);
   const slug = (id: string) => id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase(); // never another fact's label: a read drops it by the page it names (G607)
-  const cite = (lab: string, recs: FactRecord[]) => { if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text: [...new Set(recs.map(reference))].join("; ") }); return `[^${lab}]`; };
+  // Two pages with the same last name (projects/atlas, decisions/atlas) share a label: its
+  // reference then carries both pages' sources, never only the first's (G733, backlog 423).
+  const cite = (lab: string, recs: FactRecord[]) => {
+    const have = refs.find((x) => x.label === lab), add = [...new Set(recs.map(reference))];
+    if (!have) refs.push({ label: lab, text: add.join("; ") });
+    else { const was = have.text.split("; "); have.text = [...new Set([...was, ...add])].join("; "); }
+    return `[^${lab}]`;
+  };
   // One value of another page's fact, as plain words, when this page may say it (G702, G703).
   const said = (id: string, attr: string) => {
     const f = o.byId.get(id)?.fm.facts?.[attr];
@@ -866,6 +875,31 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
       lines.push(`${list(g.ms)} ${one ? "works" : "work"} at ${T}: your ${one ? g.word : plural(g.word)}.${labs}`);
     }
     if (rest.length) lines.push(`${list(rest)} ${rest.length > 1 ? "work" : "works"} at ${T}.${rest.map((m) => cite(`p-at-${slug(m.id)}`, m.recs)).join("")}`);
+  }
+  // The owner's own page lists his live projects and standing decisions (G725, north star
+  // 2026-11-07: pages holding no person, org or project fact had no page linking them), one
+  // sentence per area when they span more than one: "Your work projects: [[projects/atlas|Atlas]]
+  // and …". Never a page more private than his, or one some reader of his page can't see; each
+  // name cited by that page's own facts (p-see-<page>, which a read checks against that page:
+  // view.ts). All of them or none (G703, G726): past 2 * RELATED_NAMES an area says nothing, and a
+  // read drops the whole sentence when one of its pages or facts is hidden from the reader.
+  if (o.self) {
+    const rank = sensitivityRank(n.fm.sensitivity);
+    for (const [type, word] of [["project", "projects"], ["decision", "decisions"]] as const) {
+      const cited = [...o.byId.values()].filter((p) => p.fm.type === type && PAGE_DIRS.has(p.fm.id.split("/")[0]!) && !DONE.has(String(p.fm.status)) && !o.blind(p.fm.id) && sensitivityRank(p.fm.sensitivity) <= rank)
+        .map((p) => ({ p, recs: Object.entries(p.fm.facts ?? {}).filter(([a, f]) => !NOT_PROSE.test(a) && !isDisputed(f) && !o.hidden(`${p.fm.id}#${a}`)).flatMap(([, f]) => records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= rank) && r.value !== undefined && r.value !== null)) }))
+        .filter((x) => x.recs.length);
+      const areas = new Map<string, typeof cited>();
+      for (const x of cited) { const a = String(x.p.fm.area ?? ""); (areas.get(a) ?? areas.set(a, []).get(a)!).push(x); }
+      for (const [area, xs] of [...areas].sort(([a], [b]) => a.localeCompare(b))) {
+        if (xs.length > 2 * RELATED_NAMES) continue;
+        // Decisions newest first, projects by name.
+        xs.sort((a, b) => type === "decision" ? String(b.p.fm.decided_on ?? b.p.fm.created ?? "").localeCompare(String(a.p.fm.decided_on ?? a.p.fm.created ?? "")) || String(a.p.fm.title).localeCompare(String(b.p.fm.title)) : String(a.p.fm.title ?? a.p.fm.id).localeCompare(String(b.p.fm.title ?? b.p.fm.id)));
+        const l = xs.map((x) => `[[${x.p.fm.id}|${x.p.fm.title ?? x.p.fm.id}]]`);
+        const what = areas.size > 1 && /^[a-z][a-z -]{0,30}$/i.test(area) ? `${area.toLowerCase()} ${word}` : word;
+        lines.push(`Your ${what}: ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${[...new Set(xs.map((x) => cite(`p-see-${slug(x.p.fm.id)}`, x.recs)))].join("")}`);
+      }
+    }
   }
   // How the pages it links are tied to each other (G685-G687), each sentence linking every page it
   // names and cited by every fact behind it (label p-rel-<group>, which a read checks against
@@ -1026,8 +1060,9 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
   const rules = loadRules(root);
   const notes = loadBrain(root);
   const byId = new Map(notes.map((n) => [n.fm.id, n]));
-  // The owner's own page lists no other pages (G624): every source names him, so a list there is
-  // whatever mail came in, not what is true of him. It is written every run, touched or not (G627),
+  // The owner's own page lists no pages its sources name (G624): every source names him, so a list there is
+  // whatever mail came in, not what is true of him; his own projects and decisions it does list, from
+  // the pages themselves (G725). It is written every run, touched or not (G627),
   // so a rule change reaches it the next night; text that comes out the same is not written.
   const self = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
   const pages = touchedPages(root, notes, since, self);

@@ -1347,4 +1347,51 @@ const unnamedCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases, ...unnamedCases];
+// A project or decision no person, org or project fact ties to is still reached (G725, G726).
+const ownerListCases: Case[] = [
+  { id: "orphan-project-linked-from-owner-page", dimension: "upkeep", gap: "G725", kind: "benign", title: "a demo project and a decision holding no person, org or project fact get a link in from the owner's own page, and ChatGPT, once it can't see one of the listed pages, reads no part of that sentence", source: "north star 2026-11-07 (7 projects and 1 decision with no page linking them)", run: async () => {
+    const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+    const ns = join(SRC_DIR, "..", "scripts", "north-star.ts");
+    if (!existsSync(demo) || !existsSync(ns)) return na("no demo brain or north star at this commit");
+    const d = await import(demo), wiki = await import(join(SRC_DIR, "wiki.ts")), core = await import(join(SRC_DIR, "core.ts")), star = await import(ns);
+    if (!star.inboundLinks) return na("no inbound-link count at this commit");
+    const root = sandbox("synthetic");
+    Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+    d.copyBase(root);
+    const f = (value: string, ref: string) => `{ value: ${value}, as_of: 2026-10-05, sources: ["${ref}"], verification: self-reported, by: capture, recorded: 2026-10-05 }`;
+    writeFileSync(join(root, "projects", "bike-shed.md"), `---\nid: projects/bike-shed\ntype: project\ntitle: Bike shed\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-05\nupdated: 2026-10-05\nby: capture\nfacts:\n  next_step: ${f("order the cedar boards", "gmail:000000000000e1f7")}\n---\n`);
+    writeFileSync(join(root, "decisions", "2026-10-05-keep-the-van.md"), `---\nid: decisions/2026-10-05-keep-the-van\ntype: decision\ntitle: Keep the van\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-05\nupdated: 2026-10-05\nby: capture\ndecided_on: 2026-10-05\nfacts:\n  chose: ${f("keep it one more winter", "gmail:000000000000e1f7")}\n---\n`);
+    Bun.spawnSync(["git", "-c", "user.name=capture", "-c", "user.email=capture@pocketbrain.local", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=capture", "-c", "user.email=capture@pocketbrain.local", "commit", "-qm", "capture: two pages"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const inbound = star.inboundLinks(pb.brain.loadBrain(root));
+    const linked = ["projects/bike-shed", "decisions/2026-10-05-keep-the-van"].filter((id) => (inbound.get(id) ?? 0) > 0);
+    // Gemini reads work only and never reads the owner's page, so ChatGPT reads it after one listed
+    // project moves to an area ChatGPT has no slice for.
+    const pf = join(root, "projects", "bike-shed.md");
+    writeFileSync(pf, readFileSync(pf, "utf8").replace("area: personal", "area: garage"));
+    Bun.spawnSync(["git", "-c", "user.name=capture", "-c", "user.email=capture@pocketbrain.local", "commit", "-qam", "capture: moved"], { cwd: root });
+    let body = "";
+    try { body = String((core.readNote(root, "chatgpt", "people/robin-lefebvre") as any)?.body ?? ""); } catch { /* not in view */ }
+    const leak = /Bike shed|Your personal projects/.test(body);
+    return ok(linked.length === 2 && !!body && !leak, `linked in: ${linked.length}/2; ChatGPT read the owner's page: ${!!body}; a part of the hidden sentence: ${leak}`);
+  } },
+  { id: "same-last-name-pages-keep-own-source", dimension: "upkeep", gap: "G733", kind: "benign", title: "a demo decision ending in the same name as a demo project (decisions/atlas-launch, projects/atlas-launch): the owner's page footnote for that name carries both pages' sources, never only the first's", source: "builder's slice audit of G725, 2026-11-07 (backlog 423)", run: async () => {
+    const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+    if (!existsSync(demo)) return na("no demo brain at this commit");
+    const d = await import(demo), wiki = await import(join(SRC_DIR, "wiki.ts"));
+    const root = sandbox("synthetic");
+    Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+    d.copyBase(root);
+    writeFileSync(join(root, "decisions", "atlas-launch.md"), `---\nid: decisions/atlas-launch\ntype: decision\ntitle: Atlas launch call\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-05\nupdated: 2026-10-05\nby: capture\ndecided_on: 2026-10-05\nfacts:\n  chose: { value: launch in spring, as_of: 2026-10-05, sources: ["gmail:000000000000e1f5"], verification: self-reported, by: capture, recorded: 2026-10-05 }\n---\n`);
+    Bun.spawnSync(["git", "-c", "user.name=capture", "-c", "user.email=capture@pocketbrain.local", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=capture", "-c", "user.email=capture@pocketbrain.local", "commit", "-qm", "capture: a decision"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const me = readFileSync(join(root, "people", "robin-lefebvre.md"), "utf8");
+    if (!me.includes("[[decisions/atlas-launch|")) return na("the owner's page lists no decisions at this commit");
+    const def = me.match(/^\[\^p-see-atlas-launch\]: (.*)$/m)?.[1] ?? "";
+    return ok(def.includes("gmail:000000000000e1f5") && def.includes("gmail:000000000000d027"), `p-see-atlas-launch: ${def.slice(0, 160)}`);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases, ...unnamedCases, ...ownerListCases];

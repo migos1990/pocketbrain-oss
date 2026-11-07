@@ -85,10 +85,10 @@
         - cell "loaded its notes"
         - 'cell "4 notes: Maya Chen, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Senior designer hire"'
         - cell "2026-10-08 07:22"
-      - 'row "\"Atlas launch\" 2 times loaded its notes 6 notes: Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez +2 2026-10-08 07:00"':
+      - 'row "\"Atlas launch\" 2 times loaded its notes 5 notes: Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Robin Lefebvre +1 2026-10-08 07:00"':
         - cell "\"Atlas launch\" 2 times"
         - cell "loaded its notes"
-        - 'cell "6 notes: Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez +2"'
+        - 'cell "5 notes: Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Robin Lefebvre +1"'
         - cell "2026-10-08 07:00"
       - 'row "\"Pinecrest pilot\" loaded its notes 5 notes: Pinecrest pilot, Three-month Pinecrest pilot, Chloé Gagnon, Ben Carter +1 2026-10-07 07:22"':
         - cell "\"Pinecrest pilot\""
@@ -115,17 +115,17 @@
         - cell "Notes it was handed"
         - cell "Also"
     - rowgroup:
-      - row "2026-10-08 Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Harbourline Software, Tilehouse Supply, Antoine Lavoie, Claire Dubois, Grace Liu, Hannah Becker +14 6 searches":
+      - row "2026-10-08 Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Harbourline Software, Tilehouse Supply, Antoine Lavoie, Claire Dubois, Grace Liu, Isabelle Roy +13 6 searches":
         - cell "2026-10-08"
-        - cell "Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Harbourline Software, Tilehouse Supply, Antoine Lavoie, Claire Dubois, Grace Liu, Hannah Becker +14"
+        - cell "Weekly Atlas review on Wednesdays x2, Atlas launch x2, Atelier Boréal for the kitchen, Atlas beta scope, Hire a senior designer, not two juniors, Atelier Boréal, Harbourline Software, Tilehouse Supply, Antoine Lavoie, Claire Dubois, Grace Liu, Isabelle Roy +13"
         - cell "6 searches"
       - row "2026-10-07 Hire a senior designer, not two juniors, Three-month Pinecrest pilot, Harbourline Software, Aisha Rahman, Ben Carter, Chloé Gagnon, Priya Shah, Pinecrest pilot, Q1 roadmap 2 searches":
         - cell "2026-10-07"
         - cell "Hire a senior designer, not two juniors, Three-month Pinecrest pilot, Harbourline Software, Aisha Rahman, Ben Carter, Chloé Gagnon, Priya Shah, Pinecrest pilot, Q1 roadmap"
         - cell "2 searches"
-      - row "2026-10-06 Mom moves in December, Household taxes, Anne Ellis, Hélène Lefebvre, Jordan Ellis, Marc Lefebvre, Valérie Roy, Mom's move 1 search":
+      - row "2026-10-06 Mom moves in December, Household taxes, Hélène Lefebvre, Jordan Ellis, Marc Lefebvre, Robin Lefebvre, Valérie Roy, Mom's move 1 search":
         - cell "2026-10-06"
-        - cell "Mom moves in December, Household taxes, Anne Ellis, Hélène Lefebvre, Jordan Ellis, Marc Lefebvre, Valérie Roy, Mom's move"
+        - cell "Mom moves in December, Household taxes, Hélène Lefebvre, Jordan Ellis, Marc Lefebvre, Robin Lefebvre, Valérie Roy, Mom's move"
         - cell "1 search"
       - row "2026-10-05 Harbourline Software, Grace Liu, Julie Tran, Karen Liu, Kenji Watanabe, Priya Shah, Atlas launch, Q1 roadmap 2 searches":
         - cell "2026-10-05"
@@ -701,7 +701,7 @@
         - cell "5/5"
         - cell "yes"
   - heading "Most read" [level=2]
-  - text: Atlas launch 4× Weekly Atlas review on Wednesdays 3× Q1 roadmap 3× Priya Shah 3× Harbourline Software 3× Atlas beta scope 2× Sofia Marquez 2× Omar Haddad 2× Hannah Becker 2× Maya Chen 2× Julie Tran 2× Kenji Watanabe 2×
+  - text: Atlas launch 4× Weekly Atlas review on Wednesdays 3× Q1 roadmap 3× Priya Shah 3× Harbourline Software 3× Atlas beta scope 2× Sofia Marquez 2× Maya Chen 2× Julie Tran 2× Kenji Watanabe 2× Grace Liu 2× Karen Liu 2×
   - heading "Recent reads" [level=2]
   - table:
     - rowgroup:
@@ -736,11 +736,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Maya Chen\""
         - cell "· Maya Chen, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Senior designer hire"
-      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker":
+      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Robin Lefebvre, Sofia Marquez":
         - cell "3 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Atlas launch\""
-        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker"
+        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Robin Lefebvre, Sofia Marquez"
       - row "27 h ago Claude · loaded its notes \"Pinecrest pilot\" · Pinecrest pilot, Three-month Pinecrest pilot, Chloé Gagnon, Ben Carter, Aisha Rahman":
         - cell "27 h ago"
         - cell "Claude"
@@ -751,21 +751,21 @@
         - cell "Claude"
         - cell "· loaded its notes \"Priya Shah\""
         - cell "· Priya Shah, Q1 roadmap, Hire a senior designer, not two juniors, Harbourline Software"
-      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Jordan Ellis, Valérie Roy +2":
+      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Robin Lefebvre, Jordan Ellis +2":
         - cell "2 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Mom's move\""
-        - cell "· Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Jordan Ellis, Valérie Roy +2"
+        - cell "· Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Robin Lefebvre, Jordan Ellis +2"
       - row "3 days ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Atlas launch, Harbourline Software":
         - cell "3 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
         - cell "· Grace Liu, Karen Liu, Atlas launch, Harbourline Software"
-      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Priya Shah, Kenji Watanabe":
+      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
         - cell "3 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Julie Tran, Priya Shah, Kenji Watanabe"
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
       - row "6 days ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker +2":
         - cell "6 days ago"
         - cell "Claude"

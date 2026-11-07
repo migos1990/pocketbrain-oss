@@ -70,11 +70,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Maya Chen\""
         - cell "· Maya Chen, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Senior designer hire"
-      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker":
+      - row "3 h ago Claude · loaded its notes \"Atlas launch\" · Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Robin Lefebvre, Sofia Marquez":
         - cell "3 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Atlas launch\""
-        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Sofia Marquez, Omar Haddad, Hannah Becker"
+        - cell "· Atlas launch, Atlas beta scope, Weekly Atlas review on Wednesdays, Robin Lefebvre, Sofia Marquez"
       - row "7 h ago gardener · open disputes · Atlas launch, Grace Liu, Kitchen renovation":
         - cell "7 h ago"
         - cell "gardener"
@@ -95,30 +95,30 @@
         - cell "Claude"
         - cell "· loaded its notes \"Priya Shah\""
         - cell "· Priya Shah, Q1 roadmap, Hire a senior designer, not two juniors, Harbourline Software"
-      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Jordan Ellis, Valérie Roy +2":
+      - row "2 days ago Claude · loaded its notes \"Mom's move\" · Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Robin Lefebvre, Jordan Ellis +2":
         - cell "2 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Mom's move\""
-        - cell "· Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Jordan Ellis, Valérie Roy +2"
+        - cell "· Mom's move, Hélène Lefebvre, Mom moves in December, Marc Lefebvre, Robin Lefebvre, Jordan Ellis +2"
       - row "3 days ago Gemini · loaded its notes \"Product Discovery course\"":
         - cell "3 days ago"
         - cell "Gemini"
         - cell "· loaded its notes \"Product Discovery course\""
-      - row "3 days ago ChatGPT · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier, Simone Laurent, Ahmed Saleh +2":
+      - row "3 days ago ChatGPT · loaded its notes \"Kitchen renovation\" · Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier, Simone Laurent, Robin Lefebvre +2":
         - cell "3 days ago"
         - cell "ChatGPT"
         - cell "· loaded its notes \"Kitchen renovation\""
-        - cell "· Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier, Simone Laurent, Ahmed Saleh +2"
+        - cell "· Kitchen renovation, Atelier Boréal for the kitchen, Atelier Boréal, Luc Gauthier, Simone Laurent, Robin Lefebvre +2"
       - row "3 days ago Claude · loaded its notes \"Grace Liu\" · Grace Liu, Karen Liu, Atlas launch, Harbourline Software":
         - cell "3 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
         - cell "· Grace Liu, Karen Liu, Atlas launch, Harbourline Software"
-      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Priya Shah, Kenji Watanabe":
+      - row "3 days ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
         - cell "3 days ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Julie Tran, Priya Shah, Kenji Watanabe"
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
       - row "6 days ago ChatGPT · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch, Hire a senior designer, not two juniors, Weekly Atlas review on Wednesdays, Harbourline Software +1":
         - cell "6 days ago"
         - cell "ChatGPT"
