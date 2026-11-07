@@ -1295,4 +1295,32 @@ const openingCases: Case[] = [
   } },
 ];
 
-export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases];
+// A fact with no checked source names who told it on the demo brain's pages (G720, G721).
+const tellerCases: Case[] = [
+  { id: "unverified-footnote-names-teller", dimension: "upkeep", gap: "G720", kind: "benign", title: "an assistant's fact filed as unverified on a demo person's page is footnoted as an assistant's note, never by its name, and no footnote reads No source given", source: "Mac sweep 2026-11-07 (two people pages footnoted No source given under an assistant's facts)", run: async () => {
+    const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!existsSync(demo) || !wiki.referenceForms) return na("no teller footnotes at this commit");
+    const d = await import(demo);
+    const root = sandbox("synthetic");
+    Bun.spawnSync(["rm", "-rf", root]); mkdirSync(root, { recursive: true });
+    d.copyBase(root);
+    const n = pb.brain.loadBrain(root).find((x: any) => x.fm.type === "person" && !/robin/.test(x.fm.id) && !x.fm.facts?.hobby);
+    if (!n) return na("no demo person page");
+    (n.fm.facts ??= {}).hobby = { value: "sailing", as_of: "2026-10-06", sources: ["unverified"], verification: "unverified", by: "town", recorded: "2026-10-06" };
+    pb.brain.saveNote(root, n);
+    Bun.spawnSync(["git", "-c", "user.name=town", "-c", "user.email=town@pocketbrain.local", "commit", "-qam", "town: a hobby"], { cwd: root });
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const page = readFileSync(join(root, `${n.fm.id}.md`), "utf8");
+    const named = /^\[\^pf-hobby\]: An assistant's note, 2026-10-06$/m.test(page) && !/town/i.test(page.split(/^---$/m).slice(2).join("---"));
+    return ok(named && !page.includes("No source given"), `${n.fm.id}: assistant's note, unnamed: ${named}; No source given: ${page.includes("No source given")}`);
+  } },
+  { id: "surname-guess-footnote-says-guessed", dimension: "upkeep", gap: "G721", kind: "benign", title: "the hub's surname guess keeps its hedged sentence and is footnoted as guessed from the names", source: "Mac sweep 2026-11-07 (a family guess footnoted No source given)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.referenceForms) return na("no teller footnotes at this commit");
+    const t = wiki.reference({ value: "[[people/robin-lefebvre]]", as_of: "2026-11-01", sources: ["unverified"], verification: "unverified", confidence: "inferred", by: "hub", recorded: "2026-11-01" });
+    return ok(t === "Guessed from the names, 2026-11-01", t);
+  } },
+];
+
+export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases];

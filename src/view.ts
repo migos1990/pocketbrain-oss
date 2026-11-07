@@ -11,7 +11,7 @@ import type { CarveResult, Visible } from "./carve";
 import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFor } from "./carve";
 import { needleFor, findCarried, type Needle } from "./match";
 import { escapeRe, tokenIndex } from "./util";
-import { summaryOf, reference } from "./wiki";
+import { summaryOf, referenceForms } from "./wiki";
 import { headCommit } from "./git";
 import { visibleStanding, standingLine } from "./standing";
 import { tokensOf, fitBlocks, cutLine, contextBudget } from "./context";
@@ -93,7 +93,7 @@ function hiddenLabels(v: Visible, attrs: Set<string>, defs: Map<string, string>)
     out.add(`p-${slug(attr)}`);
     const f = v.note.fm.facts?.[attr];
     const recs: FactRecord[] = [...(f ? (isList(f) ? f.items : [f as FactRecord]) : []), ...((v.note.fm.history?.[attr] ?? []) as FactRecord[])];
-    const said = recs.map((r) => reference(r));
+    const said = recs.flatMap((r) => referenceForms(r));
     for (const [label, def] of defs) if (!label.startsWith("pf-") && said.some((x) => def.includes(x))) out.add(label);
   }
   return out;
@@ -155,7 +155,7 @@ function hiddenThere(x: Visible, res: CarveResult, def: string | undefined, attr
   for (const a of attrs) {
     const f = x.note.fm.facts?.[a];
     const recs: FactRecord[] = [...(f ? (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]) : []), ...((x.note.fm.history?.[a] ?? []) as FactRecord[])];
-    if (def === undefined || recs.some((r) => def.includes(reference(r)))) return true;
+    if (def === undefined || recs.some((r) => referenceForms(r).some((x) => def.includes(x)))) return true;
   }
   return false;
 }

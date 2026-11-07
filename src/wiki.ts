@@ -545,10 +545,34 @@ export function sourceWord(ref: string): string {
   if (who) return `${who.charAt(0).toUpperCase()}${who.slice(1)}'s note`;
   return SOURCE_WORD[scheme] ?? (scheme ? `${scheme.charAt(0).toUpperCase()}${scheme.slice(1).replace(/-/g, " ")}` : "Source");
 }
+// Who stands behind a fact with no checked source (Mac sweep 2026-11-07: "No source given" under
+// facts an assistant had filed as unverified): an assistant's note, never which one (G720), the owner's own
+// word, or the hub's guess from two names (family.ts, G546; G721). Undefined when nobody is known.
+function teller(r: FactRecord): string | undefined {
+  const by = String(r.by ?? "").trim();
+  if (!by) return undefined;
+  if (/^(owner|louis)$/i.test(by)) return SOURCE_WORD.owner;
+  if (/^(hub|reflect)$/i.test(by)) return r.confidence === "inferred" ? "Guessed from the names" : undefined;
+  // Never the assistant's name: page text reaches every reader, and an agent never learns which
+  // other assistants exist (agentRecord strips by; G30; builder's slice audit of G720).
+  return SOURCE_WORD.agent;
+}
 export function reference(r: FactRecord): string {
   const refs = (r.sources ?? []).map((s) => normalizeRef(refString(s)));
   const ids = refs.filter((x) => x.includes(":"));
-  return `${refs.length ? sourceWord(refs[0]) : SOURCE_WORD.unverified}, ${r.as_of}${ids.length ? ` (${ids.join(", ")})` : ""}`;
+  const unchecked = refs.every((x) => x === "unverified");
+  const word = unchecked ? teller(r) ?? SOURCE_WORD.unverified : sourceWord(refs[0]!);
+  return `${word}, ${r.as_of}${ids.length ? ` (${ids.join(", ")})` : ""}`;
+}
+// Every way a page may still say this fact's reference: today's, and the one a writer before G720
+// wrote ("No source given" for a fact with no checked source). A read matches a footnote to a hidden
+// fact by these (view.ts), so a page not yet rewritten still drops that fact's sentence.
+export function referenceForms(r: FactRecord): string[] {
+  const now = reference(r);
+  const refs = (r.sources ?? []).map((s) => normalizeRef(refString(s)));
+  const ids = refs.filter((x) => x.includes(":"));
+  const was = `${refs.length ? sourceWord(refs[0]!) : SOURCE_WORD.unverified}, ${r.as_of}${ids.length ? ` (${ids.join(", ")})` : ""}`;
+  return was === now ? [now] : [now, was];
 }
 // Text as bare lower-case words, for "does the page already say this": no references, links read
 // as their words, punctuation as spaces.

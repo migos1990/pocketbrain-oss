@@ -344,7 +344,8 @@ test("page writer: a longer text in the owner's commit stays on top, the facts' 
   expect(b).toContain("## From its facts\nAna Diaz works as coach tennis at North College.");
   // Every reference says what kind of source it is.
   expect(b).toMatch(/^\[\^pf-org\]: Notion import, 2026-10-05 \(notion:import\/2026-09-15\)$/m);
-  expect(b).toMatch(/^\[\^pf-hobby\]: No source given, 2026-10-05$/m);
+  // A fact with no checked source says an assistant told it, never which one (G720).
+  expect(b).toMatch(/^\[\^pf-hobby\]: An assistant's note, 2026-10-05$/m);
 });
 
 test("upkeep takes reference markers out of every summary, whoever wrote it; an assistant's note names the assistant", async () => {

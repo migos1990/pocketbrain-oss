@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G721: {
+    closed: "claude/unverified-footnotes",
+    title: "The hub's surname guess was footnoted No source given, as if nobody knew where it came from",
+    severity: "low",
+    finding: "Mac sweep 2026-11-07: a person page's tie sentence rested on the hub's family guess (family.ts, G546; sources unverified, by the hub) and its footnote read No source given.",
+    fix: "reference() in src/wiki.ts names a fact with no checked source by who filed it; the hub's inferred guess reads Guessed from the names, its hedged sentence kept (the owner's G546 ask). Test: test/unverified-footnotes.test.ts. Eval: surname-guess-footnote-says-guessed.",
+  },
+  G720: {
+    closed: "claude/unverified-footnotes",
+    title: "A fact an assistant filed as unverified was footnoted No source given, though an assistant told it",
+    severity: "medium",
+    finding: "Mac sweep 2026-11-07 (pages_ok 23 of 40): two people pages footnoted No source given under facts Town and Instinct had filed with the ref unverified, which write() allows with that verification.",
+    fix: "reference() says who told it (An assistant's note, never which one, as page text reaches every reader; Your note) when every source is unverified or there is none; No source given only when nobody is known. A read matches an old footnote to a hidden fact by both wordings (referenceForms, view.ts), so a page not yet rewritten still drops its sentence. citedProse and write() unchanged. Test: test/unverified-footnotes.test.ts. Eval: unverified-footnote-names-teller.",
+  },
   G715: {
     closed: "d80ebb53",
     title: "The question about a class the owner teaches had no place on his home and no kind in the asks count",
@@ -27,14 +41,14 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/init.ts appends a diary line per starting fact (firstRows in src/diary-catchup.ts) in the init commit itself. Tests: test/box-day-one.test.ts. Eval: init-facts-on-the-diary.",
   },
   G714: {
-    closed: "claude/model-opening",
+    closed: "c7f455f7",
     title: "Nothing kept a model's paragraph to what the page's cited sentences say, or took it from a reader who can't see a fact behind it",
     severity: "high",
     finding: "The owner's yes to a model-written opening, 2026-11-07, came with conditions: no new facts, and the paragraph goes when a fact behind it is hidden from the reader. wiki_sync's checks caught made-up names and numbers only, and a paragraph with one reference per sentence would lose only that sentence.",
     fix: "src/wiki.ts openingProblem: every name, number and longer word is in the sentences it cites (or the title and the owner's name), a few joining words aside; no marker or link inside it. Its labels go after it all together, so view.ts drops it whole for a reader missing any of them; wiki_sync refuses one that some reader of the page wouldn't get whole, and the page writer leaves it out once it no longer fits. No agent's cell carries fm.opening (src/cell.ts cellNote): it reaches a reader only through the page's text, where the read judges it. Test: test/model-opening.test.ts. Eval: opening-refuses-word-beyond-cited.",
   },
   G713: {
-    closed: "claude/model-opening",
+    closed: "c7f455f7",
     title: "A page's facts read as separate sentences, and no checked way existed for a model to tie them together",
     severity: "medium",
     finding: "Owner, 2026-11-07, on his school's page: the brain should already understand who he interacts with there; he typed yes to a short model-written opening that ties the page's facts together, under the wiki_sync line checks, report-only first.",

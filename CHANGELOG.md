@@ -15,6 +15,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 - The question about a class you teach is on your home under **To answer**, with **Yes, I teach it**, **I'm taking it** and **No**, and it counts once in the number of things that wait for you. Once a page behind it is private, it asks without naming the class or the school (G715).
+- A fact an assistant filed without a checked source now says an assistant told it under its sentence ("An assistant's note, 2026-11-02"), and a surname guess says "Guessed from the names"; a page reads "No source given" only when nobody is known (G720, G721).
 - When you settle something on the settle screen, by a pick or by keeping both, the page's own text says it at once, not after the night run, so an assistant never reads the new value beside the old sentence (G707).
 
 - The box takes sentences about you, with no model key: "I live in Toronto", "I prefer meetings after 10", "My plate is ABC 123", "Our rent is 1,850 a month" and "Remind me to renew the passport" go on your own page, and "My dentist is Dr Lam, next visit 12 Dec" ties Dr Lam to you and notes the visit, so "who is my dentist" finds them. A person's "number" is their phones. A new brain's first facts are on your home from day one (docs/owner-home.md, G708, G709).
