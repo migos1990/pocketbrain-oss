@@ -46,7 +46,7 @@ test("an online phone the hub can't ping twice in a row is one problem line, by 
   expect(tailnetProblems(root)).toEqual([]); // one miss is a blip
   await tick(root, ts, 5, said);
   expect(tailnetProblems(root)).toEqual([{ name: "tailnet", detail: LINE }]);
-  expect(ts.calls).toContainEqual(["ping", "-c", "1", "--timeout", "5s", PHONE]);
+  expect(ts.calls).toContainEqual(["ping", "--until-direct=false", "-c", "1", "--timeout", "5s", PHONE]);
   expect(said.filter((t) => t.includes("tailnet"))).toEqual([]); // report-only: the menu bar, no notification
   const file = readFileSync(join(root, "log", "watchdog.json"), "utf8");
   expect(file).not.toContain(PHONE);
@@ -75,4 +75,31 @@ test("with no tailnet dashboard set up the watchdog doesn't call tailscale at al
   await tick(root, ts, 0); await tick(root, ts, 5);
   expect(ts.calls).toEqual([]);
   expect(tailnetProblems(root)).toEqual([]);
+});
+
+// fb492813 live, 2026-11-08 15:12Z/15:17Z: the line rose while the phone answered. `tailscale ping`
+// waits for a direct path by default (--until-direct=true), so with -c 1 a pong over a DERP relay,
+// which an idle iPhone often answers with first, exits 1 "direct connection not established".
+// A pong by any path is the phone answering (G743).
+const real = (args: string[]) => args.includes("--until-direct=false")
+  ? { code: 0, out: `pong from phone (${PHONE}) via DERP(tor) in 41ms` }
+  : { code: 1, out: `pong from phone (${PHONE}) via DERP(tor) in 41ms\ndirect connection not established` };
+
+test("a phone that answers over a relay is reachable: no miss, no line (G743)", async () => {
+  const root = brain();
+  const calls: string[][] = [];
+  const run = (args: string[]) => { calls.push(args); return args[0] === "status" ? { code: 0, out: status([{ ip: PHONE, os: "iOS", online: true }]) } : real(args); };
+  await tick(root, { run, calls }, 0); await tick(root, { run, calls }, 5); await tick(root, { run, calls }, 10);
+  expect(tailnetProblems(root)).toEqual([]);
+  expect(watchdogState(root).tailnet_fails ?? 0).toBe(0);
+  expect(calls.filter((c) => c[0] === "ping").every((c) => c.includes("--until-direct=false") && c.at(-1) === PHONE)).toBe(true);
+});
+
+test("the tailnet line never reaches a Mac notification, on any day, through the watchdog's own osascript either (G741, G743)", async () => {
+  const root = brain(), ran: string[][] = [];
+  const ts = tailscale({ peers: [{ ip: PHONE, os: "iOS", online: true }], ping: () => false });
+  const go = (m: number) => watchdogTick(root, { url: "http://127.0.0.1:8787", run: (a) => { ran.push(a); return { code: 0, out: "" }; }, uid: 501, fetch: ok, platform: "darwin", now: at(m), tailscale: ts.run });
+  for (const m of [0, 5, 60 * 24, 60 * 24 + 5, 60 * 48]) await go(m);
+  expect(tailnetProblems(root)).toHaveLength(1);
+  expect(ran.filter((a) => a[0] === "osascript" && a.join(" ").includes("tailnet"))).toEqual([]);
 });

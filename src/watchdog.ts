@@ -47,6 +47,8 @@ function outsideChecks(root: string, now: Date): Problem[] {
 // status calls online (an offline phone is just not in use); a phone that fails two runs in a row
 // is one problem line, by kind of device only, never its name or address (G741). Report-only for
 // now: the menu bar and log/watchdog.json show it, no Mac notification (QUIET).
+// A pong by any path counts: tailscale ping waits for a direct path by default, and with -c 1 a
+// pong over a DERP relay, which an idle phone often answers with first, exits 1 (G743).
 const TAILNET_MISSES = 2;
 const TAILNET_LINE = "tailnet: the hub can't reach your phone; toggle Tailscale on the phone first, restart it on the Mac only if that fails";
 const QUIET = new Set(["tailnet"]);
@@ -60,7 +62,7 @@ function tailnetCheck(root: string, ts: TailscaleRun, s: State): { problem?: Pro
   if (st.BackendState !== "Running") return { fails: 0 };
   const phones = Object.values(st.Peer ?? {}).filter((p) => p.Online && /^(ios|android)$/i.test(p.OS ?? "")).map((p) => p.TailscaleIPs?.find((ip) => listed.has(ip))).filter((ip): ip is string => !!ip);
   if (!phones.length) return { fails: 0 };
-  const failed = phones.some((ip) => ts(["ping", "-c", "1", "--timeout", "5s", ip]).code !== 0);
+  const failed = phones.some((ip) => ts(["ping", "--until-direct=false", "-c", "1", "--timeout", "5s", ip]).code !== 0);
   const fails = failed ? (s.tailnet_fails ?? 0) + 1 : 0;
   return { fails, ...(fails >= TAILNET_MISSES ? { problem: { name: "tailnet", detail: TAILNET_LINE } } : {}) };
 }

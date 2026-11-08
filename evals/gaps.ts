@@ -5,12 +5,19 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G743: {
+    closed: "claude/tailnet-direct",
+    title: "The tailnet line rose while the phone answered over a relay",
+    severity: "medium",
+    finding: "Mac 2026-11-08 after fb492813: the watchdog counted misses at 15:12Z and 15:17Z and raised the tailnet line while the Mac's own tailscale pings got pongs in 8 to 75 ms. tailscale ping defaults to --until-direct=true, so with -c 1 a pong over a DERP relay exits 1 with direct connection not established; an idle iPhone often answers via relay first.",
+    fix: "src/watchdog.ts tailnetCheck pings with --until-direct=false, so a pong by any path counts. The tailnet line stays out of Mac notifications (QUIET), now also tested through the watchdog's own osascript across days. Tests: test/tailnet-watch.test.ts.",
+  },
   G741: {
     closed: "claude/tailnet-watch",
     title: "A tailnet that was up and silent for 19 hours went unnoticed",
     severity: "medium",
     finding: "Mac 2026-11-07/08: tailscale status said the owner's phone was online with no health warning while the phone's own Tailscale had a stuck receive path (a magicsock receive error); the phone app showed Still waiting for your hub for about 19 hours, and toggling Tailscale on the phone fixed it. Nothing on the hub or the watchdog checked that the phone could actually be reached.",
-    fix: "src/watchdog.ts tailnetCheck: each watchdog run pings (tailscale ping -c 1 --timeout 5s, tailnet only) each phone in dashboard_tailnet_devices that status calls online; two failed runs in a row are one problem line naming only the kind of device, shown in the menu bar and log/watchdog.json, never a notification (report-only). Offline phones are never pinged. Tests: test/tailnet-watch.test.ts, eval watchdog-tailnet-silent-phone.",
+    fix: "src/watchdog.ts tailnetCheck: each watchdog run pings (tailscale ping -c 1 --timeout 5s, tailnet only; --until-direct=false since G743) each phone in dashboard_tailnet_devices that status calls online; two failed runs in a row are one problem line naming only the kind of device, shown in the menu bar and log/watchdog.json, never a notification (report-only). Offline phones are never pinged. Tests: test/tailnet-watch.test.ts, eval watchdog-tailnet-silent-phone.",
   },
   G738: {
     closed: "81c0b71f",
