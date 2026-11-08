@@ -117,6 +117,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - On the 30-day sign-in, a private value written another way on its page (spaced out, without its hyphen, with look-alike letters) is hidden too, not only its exact spelling (G614).
 
 ### What the hub does
+- The Sunday restore test no longer fails with "refs didn't come back: refs/remotes/origin/main". The hourly push to your brain's private copy could move that ref while the hourly backup ran, so the backup listed a newer one than it packed; nothing was lost. Backups now list exactly what they packed, and restore no longer refuses a backup over that ref, including the ones you already have (docs/backup.md "The Sunday restore test", G738).
 - A page an assistant outside the wall makes always gets a suffix with a digit in it, so folding same-name pages never mistakes it for a word and keeps the wrong page (about 1 in 360 before; G710).
 
 - The installer installs Bun, when it's missing, from one pinned Bun release checked against its sha256, never by running bun.sh's install script; it prints the PATH line for your shell's startup file instead of editing it. `pocketbrain connect <agent> --kind claude-code` connects Claude Code through the same stdio bridge as other apps on this computer, so its key is kept in `~/.config/pocketbrain/agent-keys/` and never on `claude`'s command line or in its config (audit v11 finding 6, audit v12).

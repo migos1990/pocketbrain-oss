@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G738: {
+    closed: "claude/drill-refs",
+    title: "The Sunday restore test failed over a remote-tracking ref the hourly push moved mid-backup",
+    severity: "medium",
+    finding: "Mac 2026-11-08: restore_drill failed \"refs didn't come back: refs/remotes/origin/main\". The hourly backup and the hourly push to origin start together; backup() wrote the manifest's refs (git show-ref) after git bundle create, so a push in between left the manifest naming a tracking ref the bundle never held, and restore refused the whole backup. Nothing was lost: the bundle held every branch and the restored brain matched.",
+    fix: "src/backup.ts: the manifest's refs are the bundle's own (git bundle list-heads), and restore checks every ref the bundle holds plus every branch and tag the manifest names, but not a remote-tracking ref, so backups made before the fix restore too. Tests: test/restore-hardening.test.ts (G738), eval rt-restore-tracking-ref-moved.",
+  },
   G737: {
     closed: "claude/area-chip-title",
     title: "A person page's header chip still repeated the org named in the line under the name",

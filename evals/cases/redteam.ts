@@ -3945,6 +3945,25 @@ const ageKeys = () => {
   return { id, pub: Bun.spawnSync(["age-keygen", "-y", id]).stdout.toString().trim() };
 };
 const restoreCases: Case[] = [
+  { id: "rt-restore-tracking-ref-moved", dimension: "e2e", kind: "benign", gap: "G738", title: "a backup whose manifest names a newer origin tracking ref than its bundle (the hourly push moved it mid-backup) still restores, with the bundle's ref", source: "Mac Sunday restore test 2026-11-08", run: async () => {
+    if (!backup?.restore || !Bun.which("age")) return na("no backups or no age here");
+    const k = ageKeys(), root = sandbox(), dest = mkdtempSync(join(tmpdir(), "pb-eval-bk-")), origin = mkdtempSync(join(tmpdir(), "pb-eval-origin-"));
+    const git = (cwd: string, ...a: string[]) => Bun.spawnSync(["git", ...a], { cwd }).stdout.toString().trim();
+    git(origin, "init", "-q", "--bare"); git(root, "remote", "add", "origin", origin); git(root, "push", "-q", "origin", "HEAD:refs/heads/main"); git(root, "fetch", "-q", "origin");
+    const packed = git(root, "rev-parse", "refs/remotes/origin/main");
+    const b = backup.backup(root, { dest, recipients: [k.pub], record: false });
+    const stage = mkdtempSync(join(tmpdir(), "pb-eval-craft-"));
+    backup.decrypt(b.file, k.id, stage);
+    const m = JSON.parse(readFileSync(join(stage, "manifest.json"), "utf8"));
+    m.refs["refs/remotes/origin/main"] = "1".repeat(40);
+    writeFileSync(join(stage, "manifest.json"), JSON.stringify(m));
+    const forged = join(dest, "moved.tar.age");
+    Bun.spawnSync(["age", "-r", k.pub, "-o", forged], { stdin: Bun.spawnSync(["tar", "-cf", "-", "-C", stage, "."]).stdout });
+    const to = join(mkdtempSync(join(tmpdir(), "pb-eval-new-")), "brain");
+    let why = "";
+    try { await backup.restore(forged, { to, identity: k.id, offline: true }); } catch (e) { why = (e as Error).message; }
+    return steps([[`restored${why ? ` (refused: ${why})` : ""}`, !why], ["tracking ref as packed", !why && git(to, "rev-parse", "refs/remotes/origin/main") === packed]]);
+  } },
   { id: "rt-restore-link-refused", dimension: "e2e", kind: "attack", gap: "G61", title: "a backup re-packed with a link out of the brain is refused, and the target outside is untouched", source: "bug hunt 2026-10-15 B4", run: async () => {
     if (!backup?.restore || !Bun.which("age")) return na("no backups or no age here");
     const k = ageKeys(), root = sandbox(), dest = mkdtempSync(join(tmpdir(), "pb-eval-bk-"));

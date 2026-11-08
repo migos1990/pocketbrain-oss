@@ -105,3 +105,40 @@ test("a failed restore into an existing empty folder keeps the folder, empty", a
   await expect(bk.restore(b.file, { to, identity, key: join(keys, "hom") })).rejects.toThrow();
   expect(readdirSync(to)).toEqual([]);
 }, 30_000);
+
+// G738 (Mac, 2026-11-08): the Sunday restore test failed "refs didn't come back:
+// refs/remotes/origin/main". The hourly push to origin runs beside the hourly backup, so the
+// tracking ref moved between `git bundle create` and the manifest's ref list. A remote-tracking ref
+// is the brain's note of where origin was, not the brain: restore keeps the bundle's and goes on.
+test("a backup whose manifest names a newer origin tracking ref than its bundle still restores (G738)", async () => {
+  const root = brain(), dest = tmp("pb-rh-dest-");
+  const origin = tmp("pb-rh-origin-");
+  sh(origin, "git", "init", "-q", "--bare");
+  sh(root, "git", "remote", "add", "origin", origin);
+  sh(root, "git", "push", "-q", "origin", "HEAD:refs/heads/main");
+  sh(root, "git", "fetch", "-q", "origin");
+  const packed = sh(root, "git", "rev-parse", "refs/remotes/origin/main").stdout.toString().trim();
+  expect(packed).toMatch(/^[0-9a-f]{40}$/);
+  const b = bk.backup(root, { dest, recipients: [pub], record: false });
+  const forged = forge(b.file, dest, (_s, m) => { m.refs["refs/remotes/origin/main"] = "1".repeat(40); });
+  const to = join(tmp("pb-rh-new-"), "brain");
+  const r = await bk.restore(forged, { to, identity, offline: true });
+  expect(r.head).toBe(sh(root, "git", "rev-parse", "HEAD").stdout.toString().trim());
+  expect(sh(to, "git", "rev-parse", "refs/remotes/origin/main").stdout.toString().trim()).toBe(packed);
+}, 30_000);
+
+test("a branch the manifest names that the bundle doesn't hold is still refused: that would be lost work (G738)", async () => {
+  const root = brain(), dest = tmp("pb-rh-dest-");
+  const b = bk.backup(root, { dest, recipients: [pub], record: false });
+  const forged = forge(b.file, dest, (_s, m) => { m.refs["refs/heads/main"] = "1".repeat(40); });
+  await expect(bk.restore(forged, { to: join(tmp("pb-rh-new-"), "brain"), identity, offline: true })).rejects.toThrow(/refs didn't come back: refs\/heads\/main/);
+}, 30_000);
+
+test("a backup's manifest lists exactly the refs its bundle holds (G738)", () => {
+  const root = brain(), dest = tmp("pb-rh-dest-");
+  const b = bk.backup(root, { dest, recipients: [pub], record: false });
+  const stage = tmp("pb-rh-read-");
+  const m = bk.decrypt(b.file, identity, stage);
+  const heads = Object.fromEntries(sh(stage, "git", "bundle", "list-heads", "repo.bundle").stdout.toString().trim().split("\n").map((l) => l.split(" ")).filter(([, r]) => r !== "HEAD").map(([s, r]) => [r, s]));
+  expect(m.refs).toEqual(heads);
+}, 30_000);

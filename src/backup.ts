@@ -153,6 +153,16 @@ function refsOf(root: string): Record<string, string> {
   for (const l of g(root, "show-ref").out.split("\n").filter(Boolean)) { const [sha, ref] = l.split(" "); out[ref] = sha; }
   return out;
 }
+// The refs a bundle itself holds, so the manifest says what was packed, not what the brain held a
+// moment later: the hourly push to origin runs beside the hourly backup and moves the tracking ref
+// in between (G738).
+function bundleRefs(root: string, bundle: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const l of g(root, "bundle", "list-heads", bundle).out.split("\n").filter(Boolean)) { const [sha, ref] = l.split(" "); if (ref && ref !== "HEAD") out[ref] = sha; }
+  return out;
+}
+// A remote-tracking ref is the brain's note of where its origin was, not part of the brain.
+const tracking = (ref: string) => ref.startsWith("refs/remotes/");
 
 export interface BackupResult { file: string; bytes: number; sha256: string; head: string; extras: number; skipped: Skipped[]; uncommitted: string[]; deleted: string[]; recorded: boolean }
 
@@ -184,7 +194,7 @@ export function backup(root: string, o: { dest?: string; recipients?: string[]; 
       created: now.toISOString(),
       head: g(root, "rev-parse", "HEAD").out,
       branch: g(root, "symbolic-ref", "--short", "HEAD").out || "main",
-      refs: refsOf(root),
+      refs: bundleRefs(root, join(stage, "repo.bundle")),
       replica: hub.replicaName(root),
       ...(cfgHub ? { hub: { hub: cfgHub.hub, epoch: cfgHub.epoch } } : {}),
       bundle_sha256: sha256(readFileSync(join(stage, "repo.bundle"))),
@@ -393,9 +403,12 @@ export async function restore(file: string, o: { to: string; identity: Identity;
     let fp: ReturnType<typeof formatProblem>;
     try { fp = formatProblem(to); } catch (e) { rmSync(to, { recursive: true, force: true }); throw new BackupError((e as Error).message); }
     if (fp?.kind === "newer") { rmSync(to, { recursive: true, force: true }); throw new BackupError(fp.text.replace("Nothing was read or changed", "Nothing was restored")); }
-    const got = refsOf(to);
-    const missing = Object.entries(m.refs).filter(([r, s]) => got[r] !== s).map(([r]) => r);
-    if (missing.length) throw new BackupError(`refs didn't come back: ${missing.slice(0, 3).join(", ")}`);
+    // Every ref the bundle holds must be here as packed; beyond that, a branch or tag the manifest
+    // names must match too (anything else would be lost work), but a remote-tracking ref may differ:
+    // backups made before G738 listed refs a moment after packing, while a push could move one.
+    const got = refsOf(to), packed = bundleRefs(to, join(stage, "repo.bundle"));
+    const missing = [...Object.entries(packed), ...Object.entries(m.refs).filter(([r]) => !tracking(r))].filter(([r, s]) => got[r] !== s).map(([r]) => r);
+    if (missing.length) throw new BackupError(`refs didn't come back: ${[...new Set(missing)].slice(0, 3).join(", ")}`);
     const fsck = g(to, "fsck", "--full", "--no-progress");
     if (fsck.code !== 0) throw new BackupError(`git fsck: ${fsck.err || fsck.out}`);
     for (const e of m.extras) {

@@ -70,6 +70,8 @@ Every Sunday after the night pass, once backups are set up, the hub tests its ne
 2. With the offsite copy on, the same file read back out of the synced folder (in a child process under the offsite copy's 10-minute limit) and compared byte for byte. A file that never arrived, or arrived cut short, fails the test.
 3. With the **drill key**, that file is restored into the scratch folder: every hash, `git fsck`, the same notes and facts as the brain had at that commit, doctor, and the hub boots on it. Without it, the restore runs on a copy of today's brain with a throwaway key: the mechanics are proven, the file itself isn't opened, and the line says so.
 
+A backup's manifest lists the refs its bundle holds (`git bundle list-heads`), so the hourly push to origin, which runs beside the hourly backup, can't make the two disagree. Restore checks every ref the bundle holds and every branch and tag the manifest names; a remote-tracking ref such as `refs/remotes/origin/main` is only the brain's note of where origin was, so a backup made before this check, whose manifest names a newer one, still restores with the bundle's (G738).
+
 The result is one line on Settings ("Scheduled jobs") and Who knows: "Your brain was restored from Sunday's backup in your cloud folder in 40 s", or "The Sunday restore test failed: …" in the warning colour. It is kept in `log/restore-drill.json`, counted in `log/drills.jsonl` like a drill you run by hand (the week report and the real-use bar read it), beats `restore_drill` in the [heartbeat ledger](real-use-bar.md#one-ledger-for-every-job), and a failure, or no test for 8 days, is the probe's `restore_drill` alert.
 
 ### The drill key
