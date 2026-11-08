@@ -77,13 +77,18 @@ async function phone(extraPolicy: string) {
   writeFileSync(join(root, "people/chris-dorval.md"), readFileSync(join(root, "people/chris-dorval.md"), "utf8").replace("area: work", "area: ov"));
   page(root, "projects/voisins-fair", "project", "Voisins fair", fact("next_step", "book the hall", "gmail:000000000000e1f7"));
   writeFileSync(join(root, "projects/voisins-fair.md"), readFileSync(join(root, "projects/voisins-fair.md"), "utf8").replace("area: work", "area: ov"));
+  // The org said in plain words, and a role alone that names it (use-it on the Mac, 2026-11-08; G736).
+  page(root, "people/eve-roy", "person", "Eve Roy", fact("role", "Organisateur de la réunion du conseil d'administration d'Option Voisins", "gmail:000000000000e1f7") + fact("org", "Option Voisins", "gmail:000000000000e1f7"));
+  page(root, "people/fay-lin", "person", "Fay Lin", fact("role", "Secrétaire du conseil d'Option Voisins", "gmail:000000000000e1f7"));
+  for (const f of ["people/eve-roy.md", "people/fay-lin.md"]) writeFileSync(join(root, f), readFileSync(join(root, f), "utf8").replace("area: work", "area: ov"));
   sh(root, "owner", "add", "-A"); sh(root, "owner", "commit", "-qm", "owner: setup");
   const H = "127.0.0.1:8799";
   const d = dashboardHandler(root, { port: 8799, loginKey: "k".repeat(32), now: () => new Date(DEMO_NOW) });
   const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
   process.env.PB_NOW = DEMO_NOW;
-  try { return { chris: await (await d.handle(new Request(`http://${H}/p/people/chris-dorval`, { headers: { host: H, cookie } }))).text(), fair: await (await d.handle(new Request(`http://${H}/p/projects/voisins-fair`, { headers: { host: H, cookie } }))).text() }; }
+  const get = async (id: string) => (await d.handle(new Request(`http://${H}/p/${id}`, { headers: { host: H, cookie } }))).text();
+  try { return { chris: await get("people/chris-dorval"), fair: await get("projects/voisins-fair"), eve: await get("people/eve-roy"), fay: await get("people/fay-lin") }; }
   finally { delete process.env.PB_NOW; }
 }
 
@@ -105,4 +110,17 @@ test("G732 the area chip is never a lone short slug, and never repeats the org t
   const same = await phone("  ov: { owner: claude, label: Option Voisins }\n");
   expect(same.chris).not.toContain('<span class="chip">Option Voisins</span>');
   expect(same.fair).toContain('<span class="chip">Option Voisins</span>');
+}, 120_000);
+
+test("G736 the area chip drops beside a line naming the org even when the org fact is plain words, or only the role names it", async () => {
+  const bare = await phone("  ov: { owner: claude }\n");
+  for (const html of [bare.eve, bare.fay]) {
+    expect(html).toContain("Option Voisins</p>");
+    expect(html).not.toMatch(/<span class="chip">OV<\/span>/);
+  }
+  const same = await phone("  ov: { owner: claude, label: Option Voisins }\n");
+  for (const html of [same.eve, same.fay]) expect(html).not.toContain('<span class="chip">Option Voisins</span>');
+  // A label that isn't the org still shows.
+  const named = await phone("  ov: { owner: claude, label: Neighbours board }\n");
+  for (const html of [named.eve, named.fay]) expect(html).toContain('<span class="chip">Neighbours board</span>');
 }, 120_000);

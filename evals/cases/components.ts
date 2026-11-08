@@ -1394,7 +1394,8 @@ const ownerListCases: Case[] = [
   } },
 ];
 
-// A person page on the demo brain says a role that names its org once (G729, G730).
+// A person page on the demo brain says a role that names its org once (G729, G730), and its area
+// chip never repeats that org (G736).
 const polishCases: Case[] = [
   { id: "role-naming-org-said-once", dimension: "upkeep", gap: "G729", kind: "benign", title: "a demo person whose role names Harbourline Software reads it once, the name linking the org page, never followed by at Harbourline Software", source: "owner's phone 2026-11-07 (a role that named its org said at the org again)", run: async () => {
     const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
@@ -1413,6 +1414,18 @@ const polishCases: Case[] = [
     const page = readFileSync(join(root, `${n.fm.id}.md`), "utf8");
     const once = page.includes("organiser of the [[orgs/harbourline|Harbourline Software]] offsite.") && !/offsite at \[\[orgs\/harbourline/.test(page);
     return ok(once, `${n.fm.id}: ${page.match(/^.*offsite.*$/m)?.[0]?.slice(0, 200) ?? "no role sentence"}`);
+  } },
+  { id: "area-chip-not-org-in-plain-words", dimension: "upkeep", gap: "G736", kind: "benign", title: "a person page's area chip (the org's initials) drops beside a line naming the org, when the org fact is plain words or only the role names it, and stays on a project page", source: "use-it on the Mac 2026-11-08 (a person page still showed the org's initials as its area chip)", run: async () => {
+    const page = await import(join(SRC_DIR, "dashboard", "html-page.ts"));
+    if (!page.areaChip) return na("no area chip rule at this commit");
+    const org = { fm: { id: "orgs/harbour-line", type: "org", title: "Harbour Line", area: "hl" } };
+    const s = { rules: { policy: { areas: { hl: { owner: "claude" } } } }, notes: [org] };
+    const who = (facts: Record<string, unknown>) => ({ fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", area: "hl", facts } });
+    const line = "organiser of the Harbour Line offsite";
+    const plainOrg = page.areaChip(s, who({ org: { value: "Harbour Line" } }), "hl", line);
+    const roleOnly = page.areaChip(s, who({}), "hl", line);
+    const project = page.areaChip(s, { fm: { id: "projects/offsite", type: "project", title: "Offsite", area: "hl", facts: {} } }, "hl", undefined);
+    return ok(plainOrg === "" && roleOnly === "" && project === "HL", `plain-words org ${JSON.stringify(plainOrg)}, role only ${JSON.stringify(roleOnly)}, project ${JSON.stringify(project)}`);
   } },
 ];
 

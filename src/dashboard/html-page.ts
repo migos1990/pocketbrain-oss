@@ -275,12 +275,19 @@ function projectCard(s: State, n: Note, fresh: boolean): string {
   return open ? `<a class="project" href="/settle/${esc(open.id)}">${inner}</a>` : `<div class="project">${inner}</div>`;
 }
 
-function areaChip(s: State, n: Note, area: string, line: string | undefined): string {
+export function areaChip(s: State, n: Note, area: string, line: string | undefined): string {
   if (!area) return "";
   const label = String(s.rules.policy.areas?.[area]?.label ?? "").trim();
   const chip = label || (area.length <= 3 ? area.toUpperCase() : area.charAt(0).toUpperCase() + area.slice(1));
-  const orgId = (() => { const f = n.fm.facts?.org; const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined; const m = r ? String(r.value ?? "").match(/\[\[([^\]|]+)/) : null; return m?.[1]?.trim(); })();
-  const names = [orgId ? s.notes.find((x) => x.fm.id === orgId)?.fm.title : undefined, n.fm.type === "org" ? n.fm.title : undefined].map((x) => String(x ?? "").trim()).filter(Boolean);
+  // The orgs the chip could repeat: the org fact, linked or in plain words, the page itself when
+  // it is an org, and any org filed in this area (area follows the org fact), so a role alone that
+  // names it counts too (use-it on the Mac, 2026-11-08; G736).
+  const f = n.fm.facts?.org;
+  const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined;
+  const v = String(r?.value ?? "");
+  const orgId = v.match(/\[\[([^\]|]+)/)?.[1]?.trim();
+  const names = [orgId ? s.notes.find((x) => x.fm.id === orgId)?.fm.title : v.includes("[[") ? undefined : v, n.fm.type === "org" ? n.fm.title : undefined,
+    ...s.notes.filter((x) => x.fm.type === "org" && String(x.fm.area ?? "") === area).map((x) => x.fm.title)].map((x) => String(x ?? "").trim()).filter(Boolean);
   const said = (x: string) => !!line && nameAt(line, x) >= 0;
   return names.some((o) => (said(o) || o === n.fm.title) && (chip.toLowerCase() === o.toLowerCase() || chip === initialsOf(o))) ? "" : chip;
 }

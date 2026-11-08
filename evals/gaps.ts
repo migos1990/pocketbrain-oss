@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G736: {
+    closed: "claude/area-chip-once",
+    title: "A person page's area chip repeated the org when the org fact was plain words",
+    severity: "low",
+    finding: "Use-it on the Mac 2026-11-08, a person page: after G732 the chip still showed the org initials beside a line naming the org, because the org fact held the org's name in plain words rather than a link, or only the role named it, so the chip rule never knew which org to compare.",
+    fix: "areaChip in src/dashboard/html-page.ts compares the chip with the org fact linked or in plain words, the page itself when an org, and every org filed in the page's area. Test: test/person-page-polish.test.ts.",
+  },
   G735: {
     closed: "claude/edited-by-read",
     title: "A fact the box's model read never made the page say Edited by you",
@@ -13,28 +20,28 @@ export const GAPS: Record<string, Gap> = {
     fix: "boxDays in src/page-notes.ts matches owner:<day>/home with an optional /read or /chip. Test: test/page-box-reply.test.ts.",
   },
   G732: {
-    closed: "claude/person-page-polish",
+    closed: "719f59e5",
     title: "A page's area chip printed a short area slug alone",
     severity: "low",
     finding: "Owner's phone 2026-11-07, a person page: under the line naming the role sat a lone chip reading Ov, the area slug capitalised, which repeats the org (Option Voisins) as two letters nobody reads.",
     fix: "areaChip in src/dashboard/html-page.ts: the area's label from policy (areas.<name>.label), else a slug of three letters or fewer in capitals, and no chip when that only repeats the org the line under the name says (its title or its initials). Test: test/person-page-polish.test.ts.",
   },
   G731: {
-    closed: "claude/person-page-polish",
+    closed: "719f59e5",
     title: "The line under a person's name said the org twice",
     severity: "low",
     finding: "Same page: the line read Organisateur de la réunion du conseil d'administration d'Option Voisins at Option Voisins, because the role already names the org.",
     fix: "personLine in src/dashboard/html-page.ts says the role alone when it names the org as whole words, case and accents aside (nameAt in src/util.ts). Test: test/person-page-polish.test.ts.",
   },
   G730: {
-    closed: "claude/person-page-polish",
+    closed: "719f59e5",
     title: "A sources tie named a page the page's own text already linked",
     severity: "low",
     finding: "Same page: The person also comes up in the sources of the board-role page read as filler, since the page's Earlier notes line already linked that page.",
     fix: "renderTouchedPages passes pageLead the pages linked by the page's other text (not the hub's own block); the sources lines and See also skip them. Test: test/person-page-polish.test.ts. Eval: role-naming-org-said-once.",
   },
   G729: {
-    closed: "claude/person-page-polish",
+    closed: "719f59e5",
     title: "A role that names its org was said with the org again",
     severity: "low",
     finding: "Same page: the hub's text read the role, then works at the org, which the role had already named.",
