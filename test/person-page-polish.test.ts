@@ -124,3 +124,17 @@ test("G736 the area chip drops beside a line naming the org even when the org fa
   const named = await phone("  ov: { owner: claude, label: Neighbours board }\n");
   for (const html of [named.eve, named.fay]) expect(html).toContain('<span class="chip">Neighbours board</span>');
 }, 120_000);
+
+// Use-it on the Mac after be0f4dad: the chip still showed beside a line naming the org, where no
+// org fact or org page in that area tells the chip which org it is. The line itself says it.
+test("G737 the area chip drops when the line under the name already says the words it stands for", async () => {
+  const { areaChip } = await import("../src/dashboard/html-page");
+  const s = { rules: { policy: { areas: { ov: { owner: "claude" }, hr: { owner: "claude" } } } }, notes: [] } as never;
+  const who = (facts: Record<string, unknown> = {}, area = "ov") => ({ fm: { id: "people/gus-hale", type: "person", title: "Gus Hale", area, facts } }) as never;
+  expect(areaChip(s, who(), "ov", "Trésorier d'Option Voisins")).toBe("");
+  expect(areaChip(s, who({ org: { value: "[[orgs/elsewhere]]" } }), "ov", "Organiser at the Option Voisins board · Laval")).toBe("");
+  // Words that don't make the slug, or a slug the line doesn't spell, keep the chip.
+  expect(areaChip(s, who(), "ov", "Treasurer of voisins")).toBe("OV");
+  expect(areaChip(s, who({}, "hr"), "hr", "Head of Research")).toBe("HR");
+  expect(areaChip(s, who({}, "hr"), "hr", undefined)).toBe("HR");
+});

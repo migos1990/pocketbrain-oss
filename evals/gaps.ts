@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G737: {
+    closed: "claude/area-chip-title",
+    title: "A person page's header chip still repeated the org named in the line under the name",
+    severity: "low",
+    finding: "Use-it on the Mac 2026-11-08 after be0f4dad: the header chip still showed the org initials after the H1, beside a line whose role names the org, because no org fact or org page filed in that area told the chip which org it stood for.",
+    fix: "areaChip in src/dashboard/html-page.ts also drops a slug chip (no policy label) when the line itself spells it: consecutive capitalised words whose initials are the chip. Test: test/person-page-polish.test.ts.",
+  },
   G736: {
-    closed: "claude/area-chip-once",
+    closed: "be0f4dad",
     title: "A person page's area chip repeated the org when the org fact was plain words",
     severity: "low",
     finding: "Use-it on the Mac 2026-11-08, a person page: after G732 the chip still showed the org initials beside a line naming the org, because the org fact held the org's name in plain words rather than a link, or only the role named it, so the chip rule never knew which org to compare.",

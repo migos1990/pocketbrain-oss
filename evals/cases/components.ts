@@ -1395,7 +1395,7 @@ const ownerListCases: Case[] = [
 ];
 
 // A person page on the demo brain says a role that names its org once (G729, G730), and its area
-// chip never repeats that org (G736).
+// chip never repeats that org (G736, G737).
 const polishCases: Case[] = [
   { id: "role-naming-org-said-once", dimension: "upkeep", gap: "G729", kind: "benign", title: "a demo person whose role names Harbourline Software reads it once, the name linking the org page, never followed by at Harbourline Software", source: "owner's phone 2026-11-07 (a role that named its org said at the org again)", run: async () => {
     const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
@@ -1426,6 +1426,14 @@ const polishCases: Case[] = [
     const roleOnly = page.areaChip(s, who({}), "hl", line);
     const project = page.areaChip(s, { fm: { id: "projects/offsite", type: "project", title: "Offsite", area: "hl", facts: {} } }, "hl", undefined);
     return ok(plainOrg === "" && roleOnly === "" && project === "HL", `plain-words org ${JSON.stringify(plainOrg)}, role only ${JSON.stringify(roleOnly)}, project ${JSON.stringify(project)}`);
+  } },
+  { id: "area-chip-spelled-by-line", dimension: "upkeep", gap: "G737", kind: "benign", title: "a person page's slug chip drops when the line under the name spells it in capitalised words, with no org fact or org page to say which org, and stays when the line doesn't", source: "use-it on the Mac 2026-11-08 after be0f4dad (the header chip still showed the org's initials)", run: async () => {
+    const page = await import(join(SRC_DIR, "dashboard", "html-page.ts"));
+    if (!page.areaChip) return na("no area chip rule at this commit");
+    const s = { rules: { policy: { areas: { hl: { owner: "claude" } } } }, notes: [] };
+    const who = { fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", area: "hl", facts: {} } };
+    const spelled = page.areaChip(s, who, "hl", "organiser of the Harbour Line offsite"), not = page.areaChip(s, who, "hl", "head of harbour logistics");
+    return ok(spelled === "" && not === "HL", `spelled ${JSON.stringify(spelled)}, not spelled ${JSON.stringify(not)}`);
   } },
 ];
 

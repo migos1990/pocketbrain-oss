@@ -289,7 +289,21 @@ export function areaChip(s: State, n: Note, area: string, line: string | undefin
   const names = [orgId ? s.notes.find((x) => x.fm.id === orgId)?.fm.title : v.includes("[[") ? undefined : v, n.fm.type === "org" ? n.fm.title : undefined,
     ...s.notes.filter((x) => x.fm.type === "org" && String(x.fm.area ?? "") === area).map((x) => x.fm.title)].map((x) => String(x ?? "").trim()).filter(Boolean);
   const said = (x: string) => !!line && nameAt(line, x) >= 0;
-  return names.some((o) => (said(o) || o === n.fm.title) && (chip.toLowerCase() === o.toLowerCase() || chip === initialsOf(o))) ? "" : chip;
+  if (names.some((o) => (said(o) || o === n.fm.title) && (chip.toLowerCase() === o.toLowerCase() || chip === initialsOf(o)))) return "";
+  // The line itself spells what a short slug stands for: a run of capitalised words whose
+  // initials are the chip ("d'Option Voisins" for OV), whatever the facts say (use-it on the Mac
+  // after be0f4dad; G737).
+  return !label && line && chip.length >= 2 && chip.length <= 3 && spelledIn(line, chip) ? "" : chip;
+}
+
+// Whether consecutive capitalised words in text have these initials ("Option Voisins" -> OV).
+function spelledIn(text: string, initials: string): boolean {
+  const words = text.split(/[\s\-'’·,.;:()]+/).filter(Boolean);
+  for (let i = 0; i + initials.length <= words.length; i++) {
+    const run = words.slice(i, i + initials.length);
+    if (run.every((w) => /^\p{Lu}/u.test(w)) && initialsOf(run.join(" ")) === initials) return true;
+  }
+  return false;
 }
 
 // What a person does, under their name (canvas Person board: "QA lead at Harbourline · Montréal"):
