@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G741: {
+    closed: "claude/tailnet-watch",
+    title: "A tailnet that was up and silent for 19 hours went unnoticed",
+    severity: "medium",
+    finding: "Mac 2026-11-07/08: tailscale status said the owner's phone was online with no health warning while the phone's own Tailscale had a stuck receive path (a magicsock receive error); the phone app showed Still waiting for your hub for about 19 hours, and toggling Tailscale on the phone fixed it. Nothing on the hub or the watchdog checked that the phone could actually be reached.",
+    fix: "src/watchdog.ts tailnetCheck: each watchdog run pings (tailscale ping -c 1 --timeout 5s, tailnet only) each phone in dashboard_tailnet_devices that status calls online; two failed runs in a row are one problem line naming only the kind of device, shown in the menu bar and log/watchdog.json, never a notification (report-only). Offline phones are never pinged. Tests: test/tailnet-watch.test.ts, eval watchdog-tailnet-silent-phone.",
+  },
   G738: {
-    closed: "claude/drill-refs",
+    closed: "81c0b71f",
     title: "The Sunday restore test failed over a remote-tracking ref the hourly push moved mid-backup",
     severity: "medium",
     finding: "Mac 2026-11-08: restore_drill failed \"refs didn't come back: refs/remotes/origin/main\". The hourly backup and the hourly push to origin start together; backup() wrote the manifest's refs (git show-ref) after git bundle create, so a push in between left the manifest naming a tracking ref the bundle never held, and restore refused the whole backup. Nothing was lost: the bundle held every branch and the restored brain matched.",

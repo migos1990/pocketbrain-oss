@@ -698,6 +698,25 @@ const pullCases: Case[] = [
     const tied = JSON.stringify(lam?.fm.facts?.relationship ?? "").includes("Noor Haddad's dentist");
     return ok(!bounced.length && tied, `bounced: ${bounced.join("; ") || "none"}; Dr Lam is Noor Haddad's dentist ${tied}`);
   } },
+  { id: "watchdog-tailnet-silent-phone", dimension: "e2e", gap: "G741", title: "an online phone the hub can't ping twice in a row is one quiet menu-bar line by kind only; an offline phone is never pinged", source: "Mac 2026-11-07/08, tailnet up and silent for 19 hours", run: async () => {
+    const wd = await import(join(SRC_DIR, "watchdog.ts"));
+    if (!wd.watchdogTick) return na("no watchdog at this commit");
+    const root = sandbox(), ip = "100.101.102.103";
+    writeFileSync(join(root, "rules", "policy.yaml"), readFileSync(join(root, "rules", "policy.yaml"), "utf8") + `\ndashboard_tailnet: true\ndashboard_tailnet_devices: [${ip}]\n`);
+    let online = true;
+    const pings: string[] = [], said: string[] = [];
+    const tailscale = (a: string[]) => a[0] === "status"
+      ? { code: 0, out: JSON.stringify({ BackendState: "Running", Peer: { p: { OS: "iOS", Online: online, TailscaleIPs: [ip], HostName: "owners-phone" } } }) }
+      : (pings.push(a.at(-1)!), { code: 1, out: "no reply" });
+    const tick = (m: number) => wd.watchdogTick(root, { url: "http://127.0.0.1:8787", run: () => ({ code: 0, out: "" }), uid: 501, fetch: (async () => new Response("{}")) as unknown as typeof fetch, platform: "darwin", now: new Date(Date.parse("2026-11-08T01:00:00Z") + m * 60_000), notify: (t: string) => said.push(t), tailscale });
+    await tick(0); await tick(5);
+    const lines = (wd.watchdogState(root).problems ?? []).filter((p: { name: string }) => p.name === "tailnet").map((p: { detail: string }) => p.detail);
+    const file = readFileSync(join(root, "log", "watchdog.json"), "utf8");
+    online = false; const before = pings.length; await tick(10);
+    const offlineOk = pings.length === before && !(wd.watchdogState(root).problems ?? []).some((p: { name: string }) => p.name === "tailnet");
+    const good = lines.length === 1 && /can't reach your phone/.test(lines[0]) && !file.includes(ip) && !file.includes("owners-phone") && !said.some((t) => t.includes("tailnet")) && offlineOk;
+    return ok(good, `lines ${JSON.stringify(lines)}; notified ${said.filter((t) => t.includes("tailnet")).length}; offline phone pinged ${pings.length - before}`);
+  } },
   { id: "init-facts-on-the-diary", dimension: "write-quality", gap: "G709", title: "the facts init starts a brain with are diary lines in its first commit, so the home has something on day one", source: "next-level D7, audit v12 'The first hour'", run: async () => {
     const init = await import(join(SRC_DIR, "init.ts")), diary = await import(join(SRC_DIR, "diary.ts")), brain = await import(join(SRC_DIR, "brain.ts"));
     const root = mkdtempSync(join(tmpdir(), "pb-eval-dayone-"));

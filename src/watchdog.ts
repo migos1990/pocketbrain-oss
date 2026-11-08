@@ -17,10 +17,12 @@ import { dirname, join } from "node:path";
 import { alert, appendJsonl, readJsonl } from "./util";
 import { keysDir } from "./secrets";
 import { jobChecks } from "./probe";
+import { tailscaleRun, type Run as TailscaleRun } from "./phone";
+import { isTailnetIp, tailnetSettings } from "./dashboard/tailnet";
 
 export type Run = (cmd: string[]) => { code: number; out: string };
 type Problem = { name: string; detail: string };
-type State = { fails: number; since?: string; restarted?: string; last?: string; problems?: Problem[]; notified?: Record<string, string>; messages_relaunched?: string };
+type State = { fails: number; since?: string; restarted?: string; last?: string; problems?: Problem[]; notified?: Record<string, string>; messages_relaunched?: string; tailnet_fails?: number };
 const MISSES = 2;
 const BACKOFF_MS = 15 * 60_000;
 const stateFile = (root: string) => join(root, "log", "watchdog.json");
@@ -36,6 +38,31 @@ function save(root: string, s: State) { mkdirSync(join(root, "log"), { recursive
 function outsideChecks(root: string, now: Date): Problem[] {
   try { return jobChecks(root, now).filter((c) => !c.ok && c.name !== "model" && c.name !== "watchdog").map((c) => ({ name: c.name, detail: c.detail })); }
   catch (e) { return [{ name: "checks", detail: `the watchdog couldn't run the hub's checks: ${(e as Error).message}` }]; }
+}
+
+// A tailnet that is up and silent (2026-11-07/08, about 19 hours): `tailscale status` said the
+// owner's phone was online with no health warning, while the phone's own Tailscale had stopped
+// receiving and the app said "Still waiting for your hub"; toggling Tailscale on the phone fixed
+// it. Each run pings, over the tailnet only, each phone listed in dashboard_tailnet_devices that
+// status calls online (an offline phone is just not in use); a phone that fails two runs in a row
+// is one problem line, by kind of device only, never its name or address (G741). Report-only for
+// now: the menu bar and log/watchdog.json show it, no Mac notification (QUIET).
+const TAILNET_MISSES = 2;
+const TAILNET_LINE = "tailnet: the hub can't reach your phone; toggle Tailscale on the phone first, restart it on the Mac only if that fails";
+const QUIET = new Set(["tailnet"]);
+type Peer = { OS?: string; Online?: boolean; TailscaleIPs?: string[] };
+function tailnetCheck(root: string, ts: TailscaleRun, s: State): { problem?: Problem; fails: number } {
+  const cfg = tailnetSettings(root);
+  const listed = new Set((cfg.dashboard_tailnet_devices ?? []).filter((d) => isTailnetIp(d)));
+  if (!cfg.dashboard_tailnet || !listed.size) return { fails: 0 };
+  let st: { BackendState?: string; Peer?: Record<string, Peer> };
+  try { st = JSON.parse(ts(["status", "--json"]).out); } catch { return { fails: 0 }; }
+  if (st.BackendState !== "Running") return { fails: 0 };
+  const phones = Object.values(st.Peer ?? {}).filter((p) => p.Online && /^(ios|android)$/i.test(p.OS ?? "")).map((p) => p.TailscaleIPs?.find((ip) => listed.has(ip))).filter((ip): ip is string => !!ip);
+  if (!phones.length) return { fails: 0 };
+  const failed = phones.some((ip) => ts(["ping", "-c", "1", "--timeout", "5s", ip]).code !== 0);
+  const fails = failed ? (s.tailnet_fails ?? 0) + 1 : 0;
+  return { fails, ...(fails >= TAILNET_MISSES ? { problem: { name: "tailnet", detail: TAILNET_LINE } } : {}) };
 }
 
 // A Mac notification: no hub, no network, no brain value (check details name jobs, dates and assistants).
@@ -70,17 +97,18 @@ function relaunchMessages(root: string, run: Run, now: Date, s: State): string |
 
 // One look at the hub: "ok", "waiting" (missed, not yet twice, or backing off), "restarted" or
 // "alerted" (a miss that would restart, on a machine with no launchd).
-export async function watchdogTick(root: string, o: { url: string; run: Run; uid: number; fetch?: typeof fetch; now?: Date; timeoutMs?: number; platform?: string; notify?: (text: string) => void }): Promise<{ action: "ok" | "waiting" | "restarted" | "alerted"; detail: string }> {
+export async function watchdogTick(root: string, o: { url: string; run: Run; uid: number; fetch?: typeof fetch; now?: Date; timeoutMs?: number; platform?: string; notify?: (text: string) => void; tailscale?: TailscaleRun }): Promise<{ action: "ok" | "waiting" | "restarted" | "alerted"; detail: string }> {
   const r = await healthTick(root, o);
+  const tn = tailnetCheck(root, o.tailscale ?? tailscaleRun, load(root));
   // What the hub would report, said from here, each problem once a day (the owner's day is close
   // enough: a UTC date only decides when the same problem is said again).
   const now = o.now ?? new Date();
   const s = load(root);
-  const problems = [...(r.action === "restarted" || r.action === "alerted" ? [{ name: "hub_hung", detail: r.detail }] : []), ...outsideChecks(root, now)];
+  const problems = [...(r.action === "restarted" || r.action === "alerted" ? [{ name: "hub_hung", detail: r.detail }] : []), ...outsideChecks(root, now), ...(tn.problem ? [tn.problem] : [])];
   const day = now.toISOString().slice(0, 10);
   const notified = Object.fromEntries(Object.entries(s.notified ?? {}).filter(([, d]) => d === day));
   const say = o.notify ?? (o.platform === "darwin" ? macNotify(o.run) : undefined);
-  for (const p of problems) if (notified[p.name] !== day) { try { say?.(p.detail); } catch { /* the menu bar still shows it */ } notified[p.name] = day; }
+  for (const p of problems) if (!QUIET.has(p.name) && notified[p.name] !== day) { try { say?.(p.detail); } catch { /* the menu bar still shows it */ } notified[p.name] = day; }
   let relaunched = s.messages_relaunched;
   if (o.platform === "darwin") {
     const at = relaunchMessages(root, o.run, now, s);
@@ -92,7 +120,7 @@ export async function watchdogTick(root: string, o: { url: string; run: Run; uid
       }
     }
   }
-  save(root, { ...load(root), last: now.toISOString(), problems, notified, messages_relaunched: relaunched });
+  save(root, { ...load(root), last: now.toISOString(), problems, notified, messages_relaunched: relaunched, tailnet_fails: tn.fails });
   // The watchdog itself ran: its own heartbeat (src/heartbeat.ts). A hung hub is the hub's problem, not this job's.
   beat(root, "watchdog", { ok: true, now });
   return r;
