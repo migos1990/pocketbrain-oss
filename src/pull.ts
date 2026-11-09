@@ -36,7 +36,7 @@ import { senderStanding } from "./sender";
 import { createHash } from "node:crypto";
 import type { Model } from "./model";
 import { recordInteraction } from "./standing";
-import { saveUpcoming, toUpcoming } from "./upcoming";
+import { saveUpcoming, toUpcoming, unreadComing } from "./upcoming";
 import { keepWords, keptQuotes } from "./quotes";
 
 // Sources whose items are messages to or from the owner: they feed standing suggestions.
@@ -367,6 +367,8 @@ async function refreshUpcoming(root: string, name: string, fetch?: (cfg: SourceC
   saveUpcoming(root, name, raw.flatMap((r) => toUpcoming(r, name, cfg.min_sensitivity) ?? []));
 }
 
+const CATCH_UP = 20; // unread coming events read by id per pass (G744)
+
 async function pullOne(root: string, name: string, opts: PullOpts): Promise<PullResult> {
   const file = loadSources(root);
   const cfg = file.sources?.[name];
@@ -388,6 +390,16 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   const seen: Seen = (id, version) => id in state.seen && (version === undefined || state.seen[id] === version) && !waiting(id);
   const got = fetchFn ? await fetchFn(cfg, state.live, seen, (id) => id in state.seen) : fetchFixture(root, cfg);
   const raw = Array.isArray(got) ? got : got.items;
+  // A coming event the pull never read is read now, by its id (G744). The sync token returns only
+  // what changes, and the first sync kept what was recent or within 60 days, so an event made long
+  // ago for a date past that window, or an old weekly series, never came through on its own.
+  if (cfg.kind === "gcal" && fetchFn === LIVE.gcal) {
+    const have = new Set(raw.map((r) => String(r.id)));
+    for (const id of unreadComing(root, name, state.seen).filter((id) => !have.has(id)).slice(0, CATCH_UP)) {
+      const e = await fetchCalendarEvent(cfg, id);
+      if (e && e.status !== "cancelled") raw.push(e);
+    }
+  }
   const nextLive = Array.isArray(got) ? undefined : got.cursor;
   if (!Array.isArray(got) && got.more) out.more = true;
   // An item left waiting (over the cap, no model, a failed extraction) keeps the source's own

@@ -97,6 +97,8 @@ function passedSince(root: string): (a: Record<string, unknown>) => boolean {
     if (check.startsWith("probe_")) return probe[check.replace(/^probe_(warn_)?/, "")]?.ok === true;
     // A failed rotation's own alert closes with its job check (src/probe.ts gardener_rotate).
     if (check === "gardener_ant" && a.from === "rotate") return probe.gardener_rotate?.ok === true;
+    // A lost ant login's one alert closes once no gardener job fails on it (G745).
+    if (check === "gardener_ant" && a.from === "signin") return probe.gardener_signin?.ok === true;
     if (check === "source_failed") return runs.some((r) => `source:${r.source}` === a.agent && !r.refused && String(r.at) > at);
     return false;
   };

@@ -55,7 +55,7 @@ The health probe in `start` (`src/probe.ts`, every 2 hours) checks the public do
 | `auto_saves` | a fact the hub planned to file was refused in the last day (names the refusal checks, never a value); it waits as a card and is tried again the next day. A save refused twice under the same code is parked until new code runs, and counts for as long as its proposal is open (G538). Early warning |
 | `filed_lines` | a fact the hub filed in the last day left no line on the owner's home (its commits touched no diary file); names how many, never a value. Early warning (G524) |
 | `source_cap` | a source reached its daily `max_per_day` limit; the rest is read tomorrow. Early warning |
-| `calendar_pull` | a calendar pull read nothing for 3 days while that calendar's coming events include ones it never read: the sync is broken, not quiet |
+| `calendar_pull` | a calendar pull read nothing for 3 days while that calendar's coming events include ones it never read, even after each pass reads those by id (G744): the sync is broken, not quiet |
 | `origin` | with `push_origin: true` in `rules/backup.yaml`: the hub's last 2 hourly pushes of main to the brain's origin failed (rejected because origin moved on, no credentials, or no answer in 5 minutes), so new commits are only on this disk |
 | `texts` | the last 3 texts to the owner all failed to send (for iMessage, usually the Messages permission) |
 | `fill` | once `rules/sources.yaml` has the consent line: a listed source made no proposal and re-confirmed no fact for 72 hours (`silent_after_hours` per source; see [sources-pull.md](sources-pull.md#silent-sources)) |

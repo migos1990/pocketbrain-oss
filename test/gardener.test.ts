@@ -193,7 +193,7 @@ test("night: managed skips the hub's own upkeep and forgetting while the gardene
 
 // ---------- the Anthropic side, against a fake `ant` on PATH ----------
 
-function fakeAnt(opts: { failCreate?: boolean; listed?: string; failUpdate?: boolean } = {}) {
+function fakeAnt(opts: { failCreate?: boolean; listed?: string; failUpdate?: boolean; noRefresh?: boolean } = {}) {
   const listed = opts.listed ?? '{"id":"vcrd_old","auth":{"type":"static_bearer","mcp_server_url":"https://brain.example/mcp"}}';
   const dir = mkdtempSync(join(tmpdir(), "pb-ant-"));
   const log = join(dir, "argv.log"), stdin = join(dir, "stdin.log");
@@ -201,6 +201,7 @@ function fakeAnt(opts: { failCreate?: boolean; listed?: string; failUpdate?: boo
 echo "$* key=\${ANTHROPIC_API_KEY:-unset}" >> "${log}"
 case "$*" in
   *"auth status"*) echo ok ;;
+${opts.noRefresh ? `  *) echo "credential resolution error: user_oauth credentials in ~/.config/anthropic/credentials/pocketbrain.json has client_id in config but missing refresh_token" >&2; exit 1 ;;\n` : ""}
   *"beta:deployment-runs list"*) printf '{"id":"run1","session_id":"sesn_old"}\\n{"id":"run2","session_id":"sesn_busy"}\\n{"id":"run3","session_id":"sesn_young"}\\n' ;;
   *"retrieve --session-id sesn_old"*) echo '{"id":"sesn_old","status":"idle","stop_reason":{"type":"end_turn"},"updated_at":"2026-10-08T01:00:00Z"}' ;;
   *"retrieve --session-id sesn_busy"*) echo '{"id":"sesn_busy","status":"running","updated_at":"2026-10-08T01:00:00Z"}' ;;
@@ -248,6 +249,50 @@ test("cleanup with ant missing or signed out is a Needs-you item, not silence", 
   writeFileSync(join(root, "rules/gardener.yaml"), YAML.stringify({ lock_file: f.lock, ant: join(f.dir, "no-such-ant") }));
   expect(cleanup(root, new Date(IN)).message).toContain("isn't installed");
   expect(readFileSync(join(root, "log/alerts.jsonl"), "utf8")).toContain("gardener_ant");
+});
+
+// Mac 2026-11-09: the ant login lost its refresh token. `ant auth status` still passed, every real
+// call failed, and the watchdog said "gardener_cleanup: 0 session(s) deleted, 3 failed" with no
+// cause; the weekly rotation would have failed the same way as a second line. One line now, naming
+// the hand step, for both jobs, and one Needs-you alert (G745).
+test("G745: a lost ant login is one line naming the re-login, for cleanup and rotation alike, not a count of failed calls", async () => {
+  const { jobChecks } = await import("../src/probe");
+  const { recordJob } = await import("../src/start");
+  const root = makeBrain();
+  const f = fakeAnt({ noRefresh: true });
+  withAnt(root, f);
+  writeFileSync(f.lock, JSON.stringify({ resources: { "./agents/gardener/vault.yaml": { id: "vlt_1" }, "./a/deployment-1.yaml": { id: "dep_1" }, "./a/deployment-2.yaml": { id: "dep_2" }, "./a/deployment-3.yaml": { id: "dep_3" } } }));
+  issueToken(root, "gardener");
+  const c = cleanup(root, new Date(IN));
+  expect(c.ok).toBe(false);
+  expect(c.message).toContain("ant auth login --profile pocketbrain");
+  expect(c.message).not.toMatch(/failed/);
+  const r = rotate(root, { scheduled: true });
+  expect(r.ok).toBe(false);
+  expect(r.message).toContain("ant auth login --profile pocketbrain");
+  recordJob(root, "gardener_cleanup", new Error(c.message), new Date(IN));
+  recordJob(root, "gardener_rotate", new Error(r.message), new Date(IN));
+  const bad = jobChecks(root, new Date(IN)).filter((x) => !x.ok && x.name.startsWith("gardener"));
+  expect(bad.map((x) => x.name)).toEqual(["gardener_signin"]);
+  expect(bad[0].detail).toContain("cleanup and rotate");
+  expect(bad[0].detail).toContain("ant auth login --profile pocketbrain");
+  const alerts = readFileSync(join(root, "log/alerts.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((a) => a.check === "gardener_ant");
+  expect(alerts.length).toBe(1);
+  expect(alerts[0].from).toBe("signin");
+  // Signed in again: the next cleanup and rotation clear the line.
+  recordJob(root, "gardener_cleanup", undefined, new Date(IN));
+  recordJob(root, "gardener_rotate", undefined, new Date(IN));
+  expect(jobChecks(root, new Date(IN)).find((x) => x.name === "gardener_signin")?.ok).toBe(true);
+});
+
+// A cleanup call that fails for another reason says ant's answer, not only a count.
+test("G745: a failed cleanup call names what ant said", () => {
+  const root = makeBrain();
+  const f = fakeAnt();
+  withAnt(root, f);
+  writeFileSync(join(f.dir, "ant"), `#!/bin/sh\ncase "$*" in\n  *"auth status"*) echo ok ;;\n  *) echo "POST /v1/deployment_runs: 500 Internal Server Error" >&2; exit 1 ;;\nesac\n`);
+  const c = cleanup(root, new Date(IN));
+  expect(c.message).toBe("gardener cleanup: 0 session(s) deleted, 1 failed (POST /v1/deployment_runs: 500 Internal Server Error)");
 });
 
 // Mac 2026-10-25: a vault holds one active credential per MCP server URL, so creating a second one

@@ -211,7 +211,11 @@ mcp_url: https://brain.example.com/mcp             # default: hub.yaml public_ur
   Operator task line, once after setup or an `ant` update: `pocketbrain task "Rotate the gardener
   once with your code to pin ant" --cmd "pocketbrain gardener rotate --code <code from the
   gardener's dashboard page>"`.
-- If `ant` is missing or its sign-in has expired, you get a Needs-you item, not silence.
+- If `ant` is missing or its sign-in has expired, you get a Needs-you item, not silence. A
+  sign-in that `ant auth status` still accepts but real calls refuse (a login file with no refresh
+  token, 2026-11-09) counts the same: the job stops, and one `gardener_signin` check and one alert
+  say to run `ant auth login --profile pocketbrain` on the hub, for cleanup and rotation together
+  (G745).
 - If cleanup or rotation throws (a broken lock file, a broken `rules/gardener.yaml`), or returns
   without doing its job (no deployments in the lock file, `ant` missing or signed out, an `ant`
   call that failed), the hub's health probe fails a `gardener_cleanup`, `gardener_rotate` or

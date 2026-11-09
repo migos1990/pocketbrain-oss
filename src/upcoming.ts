@@ -99,6 +99,15 @@ export function loadCalendar(root: string, day = today()): Upcoming[] {
 // The events still to come today or later, soonest first.
 export const loadUpcoming = (root: string, day = today()): Upcoming[] => loadCalendar(root, day).filter((e) => e.start.slice(0, 10) >= day);
 
+// A recurring meeting's instance id is its series id plus the instance's date or time.
+export const seriesId = (id: string) => id.replace(/_\d{8}(T\d{6}Z?)?$/, "");
+// The coming events of one source whose event (or series) its pull never read: events made long
+// before the first sync for a date past its window, or an old series, that no change ever brought
+// back through the sync token (G744). Series ids, soonest first, once each.
+export function unreadComing(root: string, source: string, seen: Record<string, string>, day = today()): string[] {
+  return [...new Set(loadUpcoming(root, day).filter((e) => e.source === source).map((e) => seriesId(e.id)))].filter((id) => !(id in seen));
+}
+
 // The meetings tied to a person's page (G694): those whose guests include an address the page
 // holds, or whose title names the person in full (two words at least, MIN_NAME letters). The last
 // one before today, the next from today on, and how many so far this calendar quarter.

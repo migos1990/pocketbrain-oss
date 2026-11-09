@@ -406,3 +406,35 @@ test("G41: Calendar with more than 100 changed events moves past the ones it has
   for (let pass = 0; pass < 3 && !proposed; pass++) proposed += (await pullSource(root, "cal")).proposals ?? 0;
   expect(proposed).toBe(1);
 });
+
+// Mac 2026-11-09: the calendar_pull check said "1 coming events were never read, the pull is
+// broken". It wasn't broken: an event made in July for December 19 was past the first sync's
+// 60-day window, and the sync token only returns what changes after it, so an unedited event that
+// time brings into the window was never read. Same for a weekly series whose first meeting is
+// older than the window. Each pass now reads the coming events the pull never saw (G744).
+test("G744: a coming event the first sync left out (too far ahead, or an old series) is read once it's in the coming 60 days", async () => {
+  const root = calRoot();
+  process.env.PB_TODAY = iso(0).slice(0, 10); // the cache's day and Google's now are the same clock here
+  writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ consent: "2026-10-01 test", sources: { cal: { kind: "gcal", account: "primary", upcoming: true } } }));
+  sh(root, "git", "commit", "-qam", "louis: upcoming");
+  events = {
+    later: { id: "later", etag: '"4"', status: "confirmed", updated: "2026-07-17T00:00:00Z", summary: "Course A final", start: { dateTime: iso(70) }, description: "Please book the exam room B-201 for the final" },
+    weekly: { id: "weekly", etag: '"2"', status: "confirmed", updated: "2025-09-01T00:00:00Z", summary: "Course A sync", start: { dateTime: "2025-09-02T15:00:00Z" }, recurrence: ["RRULE:FREQ=WEEKLY"], description: "Weekly sync on Course A with the team" },
+  };
+  const r1 = await pullSource(root, "cal");
+  expect(r1.fetched).toBe(0); // neither is recent or within the first sync's window
+  // Weeks pass: the final is now 50 days off, unedited, so the sync token never returns it. The
+  // coming-events cache lists it, and the weekly series' next meeting as an instance.
+  events.later = { ...events.later, start: { dateTime: iso(50) } };
+  sync = { s1: { items: [], next: "s1" } };
+  const r2 = await pullSource(root, "cal", { upcoming: () => [events.later, { ...events.weekly, id: "weekly_20261117T150000Z", start: { dateTime: iso(8) }, recurrence: undefined }] });
+  const r3 = await pullSource(root, "cal", { upcoming: () => [events.later] });
+  expect(r2.fetched + r3.fetched).toBe(2);
+  const st = JSON.parse(readFileSync(join(root, "log", "sources", "cal.json"), "utf8"));
+  expect(Object.keys(st.seen).sort()).toEqual(["later", "weekly"]);
+  expect(proposals(root).length).toBe(1); // the final's words reached the model like any event's
+  // Read once: the next pass fetches neither again.
+  calls = [];
+  await pullSource(root, "cal", { upcoming: () => [events.later] });
+  expect(calls.filter((c) => c === "later" || c === "weekly")).toEqual([]);
+});

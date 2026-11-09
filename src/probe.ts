@@ -18,12 +18,12 @@ import { loadBrain } from "./brain";
 import { loadRules, gardeners, type Rules } from "./rules";
 import { carve, grantFor } from "./carve";
 import { scoringIndex, foundBy, terms } from "./retrieve";
-import { missedWindows, nightMode, gardenerConfig } from "./gardener";
+import { missedWindows, nightMode, gardenerConfig, ANT_SIGN_IN } from "./gardener";
 import { freeDiskMb } from "./textline/items";
 import { offsiteCheck } from "./offsite";
 import { drillCheck } from "./restore-drill";
 import { beat } from "./heartbeat";
-import { loadUpcoming } from "./upcoming";
+import { loadUpcoming, seriesId } from "./upcoming";
 import YAML from "yaml";
 import { tailnetSettings, serveDoorProblem } from "./dashboard/tailnet";
 import { filedWithoutLine } from "./diary";
@@ -106,10 +106,16 @@ export function jobChecks(root: string, now = new Date()): Check[] {
       : { name: job, ok: true, detail: `${job} ran ${at.slice(0, 16)}` });
   }
   // The gardener's Anthropic jobs (start.ts tendOnce): only a failure or a success is known, no schedule to be late on.
-  for (const job of ["gardener_jobs", "gardener_cleanup", "gardener_rotate"]) {
+  // A lost ant login fails cleanup and rotation alike: one line, the hand step, not one per job (G745).
+  const gjobs = ["gardener_jobs", "gardener_cleanup", "gardener_rotate"];
+  const signin = gjobs.filter((job) => s[`${job}_error`]?.includes(ANT_SIGN_IN));
+  for (const job of gjobs) {
+    if (signin.includes(job)) continue;
     if (s[`${job}_error`]) out.push({ name: job, ok: false, detail: `${job} failed: ${s[`${job}_error`]}` });
     else if (s[`${job}_at`] && job !== "gardener_jobs") out.push({ name: job, ok: true, detail: `${job} ran ${s[`${job}_at`].slice(0, 16)}` });
   }
+  if (signin.length) out.push({ name: "gardener_signin", ok: false, detail: `the gardener's ${signin.map((j) => j.replace("gardener_", "")).join(" and ")} can't reach Anthropic: ${s[`${signin[0]}_error`]!.replace(/^gardener \w+: /, "")}` });
+  else if (gjobs.some((job) => s[`${job}_at`])) out.push({ name: "gardener_signin", ok: true, detail: "the ant CLI's login works" });
   // The gardener's runs: each hours window's latest occurrence should show it connecting. The weekly
   // run calls no upkeep_run, so without this a weekly run that stops is silent.
   let rules: Rules | undefined;
@@ -281,7 +287,7 @@ export function silentFailureChecks(root: string, now = new Date()): Check[] {
     if (!zeros.length || String(zeros[0].at) > since(CALENDAR_QUIET_HOURS)) continue;
     let seen: Record<string, string> = {};
     try { seen = JSON.parse(readFileSync(join(root, "log", "sources", `${name}.json`), "utf8")).seen ?? {}; } catch { /* never pulled */ }
-    const missed = new Set(coming.filter((e) => e.source === name).map((e) => e.id.replace(/_\d{8}(T\d{6}Z?)?$/, "")).filter((id) => !(id in seen)));
+    const missed = new Set(coming.filter((e) => e.source === name).map((e) => seriesId(e.id)).filter((id) => !(id in seen)));
     out.push(missed.size
       ? { name: "calendar_pull", ok: false, detail: `the ${name} calendar pull read nothing since ${(lastRead ?? String(zeros[0].at)).slice(0, 10)}, but ${missed.size} coming events on that calendar were never read: the pull is broken, not quiet. Run pocketbrain sources pull ${name} and pocketbrain doctor` }
       : { name: "calendar_pull", ok: true, detail: `the ${name} calendar is quiet: every coming event was read` });

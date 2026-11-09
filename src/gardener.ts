@@ -251,8 +251,24 @@ function gardenerAgent(root: string, cfg: GardenerConfig): string {
 function antReady(root: string, cfg: GardenerConfig, job: string): string | undefined {
   const s = ant(cfg, ["auth", "status"]);
   if (s.code === 0) return undefined;
-  const why = s.code === 127 ? "the ant CLI isn't installed on the hub (brew install anthropics/tap/ant)" : `sign the ant CLI in again: \`ant auth login --profile ${cfg.ant_profile}\``;
+  if (s.code !== 127) return signedOut(root, cfg);
+  const why = "the ant CLI isn't installed on the hub (brew install anthropics/tap/ant)";
   alert(root, { agent: "gardener", check: "gardener_ant", from: job, detail: `gardener ${job} didn't run: ${why}` });
+  return why;
+}
+
+// Mac 2026-11-09: `ant auth status` passed while every real call failed with "credential resolution
+// error: ... missing refresh_token", and cleanup counted each deployment's list as a failed call
+// ("0 session(s) deleted, 3 failed"), naming no cause. A call refused for its login is the one hand
+// step, said once for every gardener job (cleanup and rotation share the login), never a count (G745).
+export const ANT_SIGN_IN = "sign the ant CLI in again";
+const SIGNED_OUT = /credential resolution error|refresh_token|not (logged|signed) in|auth login|unauthori[sz]ed|\b401\b|invalid_grant/i;
+export const antSignedOut = (r: AntRun) => r.code !== 0 && r.code !== 127 && SIGNED_OUT.test(r.err);
+function signedOut(root: string, cfg: GardenerConfig): string {
+  const why = `${ANT_SIGN_IN}: \`ant auth login --profile ${cfg.ant_profile}\` on the hub; until then the gardener's old sessions aren't deleted and its token isn't rotated`;
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  const said = readJsonl<{ at?: string; check?: string; from?: string }>(join(root, "log", "alerts.jsonl")).some((a) => a.check === "gardener_ant" && a.from === "signin" && String(a.at ?? "") >= since);
+  if (!said) alert(root, { agent: "gardener", check: "gardener_ant", from: "signin", detail: `the gardener's jobs can't reach Anthropic: ${why}` });
   return why;
 }
 
@@ -271,11 +287,12 @@ export function cleanup(root: string, now = clock()): { ok: boolean; message: st
   }
   const notReady = antReady(root, cfg, "cleanup");
   if (notReady) return { ok: false, message: `gardener cleanup: ${notReady}` };
-  let deleted = 0, failed = 0;
+  let deleted = 0, failed = 0, why = "";
   const seen = new Set<string>();
   for (const dep of ids.deployments) {
     const list = ant(cfg, ["beta:deployment-runs", "list", "--deployment-id", dep, "--format", "jsonl"]);
-    if (list.code !== 0) { failed++; continue; }
+    if (antSignedOut(list)) return { ok: false, message: `gardener cleanup: ${signedOut(root, cfg)}` };
+    if (list.code !== 0) { failed++; why ||= list.err; continue; }
     for (const r of jsonLines(list.out)) {
       const sid = String((r.session_id ?? (r.session as { id?: string } | undefined)?.id) ?? "");
       if (!/^[A-Za-z0-9_-]+$/.test(sid) || seen.has(sid)) continue;
@@ -287,12 +304,16 @@ export function cleanup(root: string, now = clock()): { ok: boolean; message: st
       const ended = s.status === "terminated" || (s.status === "idle" && (typeof stop === "string" ? stop : stop?.type) === "end_turn");
       const at = Date.parse(String(s.ended_at ?? s.updated_at ?? s.created_at ?? ""));
       if (!ended || !Number.isFinite(at) || now.getTime() - at < 3_600_000) continue;
-      if (ant(cfg, ["beta:sessions", "delete", "--session-id", sid]).code === 0) deleted++; else failed++;
+      const del = ant(cfg, ["beta:sessions", "delete", "--session-id", sid]);
+      if (antSignedOut(del)) return { ok: false, message: `gardener cleanup: ${signedOut(root, cfg)}` };
+      if (del.code === 0) deleted++; else { failed++; why ||= del.err; }
     }
   }
   recordRun(root, { agent: gardenerAgentOr(root, cfg), op: "cleanup", deleted, failed });
-  if (failed) alert(root, { agent: "gardener", check: "gardener_ant", from: "cleanup", detail: `gardener cleanup: ${failed} call(s) to ant failed; sessions may still hold copies of the brain` });
-  return { ok: !failed, message: `gardener cleanup: ${deleted} session(s) deleted${failed ? `, ${failed} failed` : ""}` };
+  // A failure names ant's first answer, so the line says why and not only how many (G745).
+  const said = why.replace(/\s+/g, " ").trim().slice(0, 120);
+  if (failed) alert(root, { agent: "gardener", check: "gardener_ant", from: "cleanup", detail: `gardener cleanup: ${failed} call(s) to ant failed${said ? ` (${said})` : ""}; sessions may still hold copies of the brain` });
+  return { ok: !failed, message: `gardener cleanup: ${deleted} session(s) deleted${failed ? `, ${failed} failed${said ? ` (${said})` : ""}` : ""}` };
 }
 
 function gardenerAgentOr(root: string, cfg: GardenerConfig): string {
@@ -350,6 +371,7 @@ export function rotate(root: string, o: { code?: string; scheduled?: boolean } =
   const notReady = antReady(root, cfg, "rotate");
   if (notReady) return { ok: false, message: `gardener rotate: ${notReady}` };
   const listed = ant(cfg, ["beta:vaults:credentials", "list", "--vault-id", vault, "--format", "jsonl"]);
+  if (antSignedOut(listed)) return { ok: false, message: `gardener rotate: ${signedOut(root, cfg)}` };
   if (listed.code !== 0) return fail(root, `couldn't list the vault's credentials (${listed.err.slice(0, 200)}); nothing changed`);
   // A vault holds one active credential per MCP server URL (a second create is a 409), matched as
   // the vault matches it: scheme and host lowercased, default port and trailing slash dropped (G413).
