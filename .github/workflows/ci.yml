@@ -9,9 +9,13 @@ on:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+# Where the jobs run (G751, ci/mac-runner-plan.md, docs/release.md "When GitHub's runners are down"):
+# GitHub's runners, unless the repo variable PB_RUNNER names the Mac's runner (["self-hosted","pb-mac"]).
+# Only in the private repo, never for a fork's PR, and never the jobs that publish or hold a deploy
+# key (release.yml, public-sync.yml stay on GitHub's runners). Delete the variable to go back.
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
     # Step timeouts sit below the job's, so a hang turns a step red instead of the job "cancelled".
     timeout-minutes: 40
     steps:
@@ -30,8 +34,13 @@ jobs:
         env:
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          curl -sSL -o /tmp/gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
-          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  /tmp/gitleaks.tgz" | sha256sum -c -
+          if [ "$RUNNER_OS" = macOS ]; then
+            curl -sSL -o /tmp/gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_darwin_arm64.tar.gz
+            echo "cad3de5dc9a4d5447d967a70a4d49499c557f04db028274cc324f9ff983f6502  /tmp/gitleaks.tgz" | shasum -a 256 -c -
+          else
+            curl -sSL -o /tmp/gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+            echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  /tmp/gitleaks.tgz" | sha256sum -c -
+          fi
           tar xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           if [ "$REPO_NAME" = pocketbrain-oss ]; then
             mkdir /tmp/tree && git archive HEAD | tar x -C /tmp/tree
@@ -47,8 +56,9 @@ jobs:
           PB_DENYLIST: ${{ secrets.PB_DENYLIST }}
         run: |
           if [ -z "$PB_DENYLIST" ]; then echo "::warning::PB_DENYLIST secret not set; personal-term check skipped"; exit 0; fi
-          printf '%s\n' "$PB_DENYLIST" > /tmp/denylist.txt
-          sh scripts/check-public.sh /tmp/denylist.txt
+          # The runner's own temp folder, emptied after each job (a Mac runner keeps /tmp between jobs).
+          printf '%s\n' "$PB_DENYLIST" > "$RUNNER_TEMP/denylist.txt"
+          sh scripts/check-public.sh "$RUNNER_TEMP/denylist.txt"
       - run: bun install --frozen-lockfile
       # The dependency gate (docs/release.md#dependencies): bun.lock frozen everywhere, every
       # installed license on the AGPL-compatible allowlist, no high or critical advisory.
@@ -75,6 +85,10 @@ jobs:
           semgrep scan --config p/typescript --config p/javascript --config p/secrets --severity ERROR \
             --metrics off --baseline-commit "$base" --error src scripts conformance
       - run: sudo apt-get install -y openssh-client age   # ssh-keygen for signed-commit tests, age for backups
+        if: runner.os == 'Linux'
+      # The Mac's runner user installed age, ffmpeg and pipx once (ci/mac-runner-plan.md); ssh-keygen is built in.
+      - run: command -v ssh-keygen && command -v age && command -v pipx
+        if: runner.os == 'macOS'
       - run: git config --global user.name ci && git config --global user.email ci@example.com
       - run: "! git grep -nE '^(<<<<<<<|>>>>>>>)( |$)'"   # no merge conflict markers
       # The merge gate's rules (scripts/gate.ts), the same for every branch: test first, docs, recurring
@@ -139,7 +153,7 @@ jobs:
   # (pasted bearer, /b browser, OAuth, local), the same golden path on each, then the free
   # switch-day check. Answers are compared with test/e2e/doors.json. docs/release.md.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -154,7 +168,7 @@ jobs:
   # The open spec's conformance suite over real HTTP, against the reference server and a pocketBrain
   # hub on a throwaway sample brain (docs/spec/memory-passport.md, scripts/conformance.ts).
   conformance:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

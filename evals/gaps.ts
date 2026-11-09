@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G751: {
+    closed: "claude/mac-runner",
+    title: "When GitHub's runners failed at startup, the required test check never ran and nothing could merge",
+    severity: "high",
+    finding: "2026-11-09: every PR's ci run from about 17:00Z ended failure with no job and an empty log (PR 139 and 143), so the required `test` check never ran; with the main ruleset and no bypass, no fix could land and the Mac could not take a new sha.",
+    fix: ".github/workflows/ci.yml: test, e2e and conformance run on the Mac's self-hosted runner when the repo variable PB_RUNNER names it, only in the private repo and never for a fork's PR; publishing jobs stay on GitHub's runners; Linux-only steps have macOS twins (gitleaks pinned by its darwin checksum, tools checked not sudo-installed) and the denylist goes to RUNNER_TEMP. docs/release.md \"When GitHub's runners are down\" is the Mac setup (own user, home closed, system launchd job, low priority). Tests: test/ci-runner.test.ts.",
+  },
   G743: {
     closed: "claude/tailnet-direct",
     title: "The tailnet line rose while the phone answered over a relay",

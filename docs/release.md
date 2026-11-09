@@ -47,6 +47,43 @@ CI also saves a full-page screenshot of each page (`PB_UI_SHOT_DIR=<dir>`), uplo
 
 `.github/workflows/ci.yml` runs on every branch push and every PR: gitleaks over the whole history, the personal-term denylist (repo secret `PB_DENYLIST`), a code scan (Semgrep's TypeScript, JavaScript and secrets rules at ERROR severity, pinned, reporting only findings the change adds over the same base the gate's rules use), the [dependency gate](#dependencies), the merge gate's rules (`bun scripts/gate.ts <base> --no-run --no-ledger`: the base is the PR's base, the previous tip on a push to `main`, else `origin/main`; the slice-audit and agent-eval evidence lives in the builder's ledger outside the repo, so CI prints those as notes and blocks on the rest), typecheck, dead code, both test runs, evals, the north-star replay (`bun scripts/north-star.ts`, blocking), the demo. The test and eval steps have their own timeout below the job's, so a hang there shows as a red step rather than a cancelled job. Without the `PB_DENYLIST` secret the denylist step warns and passes. Paid agent evals (`--llm`) never run in CI; they stay with the one batched runner.
 
+### When GitHub's runners are down
+
+On 2026-11-09 every PR's `ci` run failed at startup with no job, so the required `test` check never ran and nothing could merge. The Mac mini can run the same jobs (`test`, `e2e`, `conformance`) as a self-hosted runner (G751). The repo variable `PB_RUNNER` is the switch: set to `["self-hosted","pb-mac"]` those jobs run on the Mac; deleted, they go back to GitHub's runners. Because the Mac holds the real brain, `ci.yml` uses the Mac only in a private repo (`github.event.repository.private`, so never in the public copy), never for a pull request from a fork, and never for the jobs that publish or hold a deploy key (`release.yml`'s own jobs, `public-sync.yml`, `docs-live.yml`); `test/ci-runner.test.ts` holds that. On macOS the Linux-only steps have a twin (gitleaks by its own pinned checksum, the tools checked instead of installed with `sudo`), and the denylist file goes to the job's own temp folder, which the runner empties after each job.
+
+The runner runs as its own standard macOS user, `pbrunner`, which can't read the owner's home (so not the brain, the keys folder or the tunnel's credentials), from a system launchd job at low priority. It is a long-lived runner, not an ephemeral one: an ephemeral runner needs a token stored on the Mac to register itself again after every job, and that token could register runners anywhere in the repo. Setup, once, on the Mac (the owner's typed line in the Mac thread):
+
+```sh
+sudo sysadminctl -addUser pbrunner -fullName "pocketBrain CI"     # a standard user, no admin
+chmod 700 ~                                                       # pbrunner shares the staff group
+sudo -u pbrunner ls ~/pocketbrain-brain                           # must fail: Permission denied
+brew install age ffmpeg pipx                                      # tools the tests need, in /opt/homebrew/bin
+sudo -iu pbrunner sh -c 'mkdir -p actions-runner && cd actions-runner && curl -fsSLo r.tgz https://github.com/actions/runner/releases/download/v$VERSION/actions-runner-osx-arm64-$VERSION.tar.gz && shasum -a 256 r.tgz && tar xzf r.tgz'
+```
+
+Pick `VERSION` from the runner's latest release and compare the printed SHA-256 with the one in its release notes. Then register it with a one-hour token straight from `gh` (never printed), and start it as a system launchd job:
+
+```sh
+cd ~/pocketbrain && REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)     # the private repo, from its remote
+T=$(gh api -X POST repos/$REPO/actions/runners/registration-token --jq .token)
+sudo -iu pbrunner sh -c "cd actions-runner && ./config.sh --url https://github.com/$REPO --token $T --labels pb-mac --name mac-mini --unattended --replace"; unset T
+P=/Library/LaunchDaemons/com.github.actions.runner.pocketbrain.plist
+sudo defaults write $P Label com.github.actions.runner.pocketbrain
+sudo defaults write $P UserName pbrunner
+sudo defaults write $P ProgramArguments -array /Users/pbrunner/actions-runner/run.sh
+sudo defaults write $P WorkingDirectory /Users/pbrunner/actions-runner
+sudo defaults write $P EnvironmentVariables -dict PATH /opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME /Users/pbrunner
+sudo defaults write $P RunAtLoad -bool true
+sudo defaults write $P KeepAlive -bool true
+sudo defaults write $P Nice -int 10
+sudo defaults write $P StandardOutPath /Users/pbrunner/actions-runner/runner.log
+sudo defaults write $P StandardErrorPath /Users/pbrunner/actions-runner/runner.log
+sudo chown root:wheel $P && sudo chmod 644 $P && sudo launchctl bootstrap system $P
+gh variable set PB_RUNNER --body '["self-hosted","pb-mac"]' --repo $REPO
+```
+
+Back to GitHub's runners: `gh variable delete PB_RUNNER --repo $REPO`. Remove the runner: `sudo launchctl bootout system/com.github.actions.runner.pocketbrain`, then remove it under the repo's Settings, Actions, Runners. While the Mac sleeps or is busy, `test` waits in the queue; deploys are unaffected.
+
 ## Dependencies
 
 What the package pulls in is checked before anything goes public, in CI on every push (`scripts/deps.ts`):
