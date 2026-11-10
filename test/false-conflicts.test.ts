@@ -65,7 +65,7 @@ const courseA = (root: string) => loadBrain(root).find((n) => n.fm.id === "proje
 for (const merge of ["latest", "replace"]) test(`a later mail saying the same next step in other words merges, no conflict (${merge})`, () => {
   const root = makeBrain();
   course(root, merge);
-  pulled(root, "next_step", "grade the midterms and post the marks to the class site", "2026-10-05", "projects/course-a");
+  pulled(root, "next_step", "grade midterm, and post the marks to class site.", "2026-10-05", "projects/course-a");
   runAuto(root, NOW);
   expect(disputes(root)).toHaveLength(0);
   const f = courseA(root).fm.facts!.next_step as FactRecord;

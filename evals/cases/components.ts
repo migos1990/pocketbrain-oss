@@ -862,6 +862,18 @@ const pullCases: Case[] = [
     const gone = !helper.includes("Spring course") && !helper.includes("f0000000000000a4");
     return ok(before && gone && steward.includes("is on [[projects/spring-course"), `shown before ${before}; gone for the reader it's kept from ${gone}; kept for steward ${steward.includes("is on [[projects/spring-course")}`);
   } },
+  { id: "value-key-keeps-names-and-signs", dimension: "conflicts", gap: "G759", title: "values that differ in a name, tense, number, sign or currency are never one value; a reworded sentence still is", source: "audit v13, trust defect 4", run: async () => {
+    const differ: [string, string][] = [["Send the signed lease to Robert on Friday", "Send the signed lease to Roberts on Friday"], ["The team moves to France in the spring", "The team moves to Frances in the spring"], ["The permit expires at the end of March", "The permit expired at the end of March"], ["The tenant agreed to the new lease terms", "The tenants agree to the new lease terms"], ["The lease is being signed by both parties", "The lease is signed by both parties"], ["-740", "740"], ["$740", "\u20ac740"]];
+    const same: [string, string][] = [["Use each sign-in client to retain in a partner sign-in flow", "use each sign-in client to be retained in a partner sign-in flow"], ["Ship the beta to the testers on Friday.", "ship beta to testers on friday"], ["2026-10-05", "2026 10 05"]];
+    const { sameValue } = await import(join(SRC_DIR, "normalize.ts"));
+    const folded = differ.filter(([a, b]) => sameValue(a, b)), split = same.filter(([a, b]) => !sameValue(a, b));
+    const root = sandbox("synthetic");
+    const w = (agent: string, value: string, mail: string) => write(root, agent, { id: "projects/course-a", attribute: "handover", value, as_of: TODAY, sources: [G(mail)], verification: "verified-by-source" });
+    w("planner", "Send the signed lease to Robert on Friday", "f000000000000004");
+    const second = w("steward", "Send the signed lease to Roberts on Friday", "f000000000000006");
+    const merged = /same value/i.test(second.message ?? "");
+    return ok(!folded.length && !split.length && !merged, `different pairs folded ${folded.length} of ${differ.length}${folded[0] ? ` (${folded[0][0]})` : ""}; rewordings split ${split.length} of ${same.length}; a different name merged as a source ${merged}`);
+  } },
   { id: "search-title-first", dimension: "retrieval", gap: "G693", title: "the note titled as the question comes first, ahead of a shorter note whose title holds it", source: "found building G685 (asked \"Pinecrest pilot\", a decision came first)", run: async () => {
     const core = await import(join(SRC_DIR, "core.ts"));
     const root = sandbox("synthetic");

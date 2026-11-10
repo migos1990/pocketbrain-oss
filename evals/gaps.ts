@@ -26,6 +26,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "2026-11-09: every PR's ci run from about 17:00Z ended failure with no job and an empty log (PR 139 and 143), so the required `test` check never ran; with the main ruleset and no bypass, no fix could land and the Mac could not take a new sha.",
     fix: ".github/workflows/ci.yml: test, e2e and conformance run on the Mac's self-hosted runner when the repo variable PB_RUNNER names it, only in the private repo and never for a fork's PR; publishing jobs stay on GitHub's runners; Linux-only steps have macOS twins (gitleaks pinned by its darwin checksum, tools checked not sudo-installed) and the denylist goes to RUNNER_TEMP. docs/release.md \"When GitHub's runners are down\" is the Mac setup (own user, home closed, system launchd job, low priority). Tests: test/ci-runner.test.ts.",
   },
+  G759: {
+    closed: "claude/value-key-strict",
+    title: "Different names, tenses, signs and currencies merged as the same value",
+    severity: "high",
+    finding: "Audit v13 (2026-11-09): valueKey (G662) cut every word of a sentence to a stem and compareKey drops every mark, so Robert and Roberts, Jon and Jones, France and Frances, hired and is hiring, expires and expired, tenant agreed and tenants agree, -740 and 740, a dollar and a euro amount were the same value: the second writer's different value was merged in as a source of the first, with no ask, against the comment that said tense stays. The false-conflict work traded asks for silent merges.",
+    fix: "src/normalize.ts valueKey keeps every word whole, a minus that signs a number and the currency mark; it still folds case, accents, punctuation, articles, is/are and the one rewording G662 was filed for (to retain, to be retained), for a lower-case word only, and a final s alone on a lower-case word inside the sentence (exam, exams), which can both hold. been and being no longer drop. Tests: test/value-key-strict.test.ts, test/false-conflicts.test.ts, eval value-key-keeps-names-and-signs.",
+  },
   G743: {
     closed: "6cc0d1a3",
     title: "The tailnet line rose while the phone answered over a relay",

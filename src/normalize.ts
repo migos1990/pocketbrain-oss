@@ -45,22 +45,56 @@ export function compareKey(v: unknown): string {
     .trim();
 }
 
-// Value key (G662): the comparison key, and for a sentence (five words or more) its meaning in
-// plain words: articles and the present forms of "to be" dropped ("to retain" and "to be
-// retained" say one thing) and each word cut to its stem, so "Use each client to retain…" and
-// "use each client to be retained…" are the same value (architecture 0.6 step 1), never a
-// conflict. Numbers, negations, tense ("was", "will"), every preposition and every content word
-// stay: "build 4" and "build 5", "on track" and "not on track", "was paid" and "will be paid",
-// "to Anna by Friday" and "by Anna to Friday" still differ (slice audit). Short values keep the
-// exact key.
-const GRAMMAR = new Set(["a", "an", "the", "be", "is", "are", "am", "been", "being", "le", "la", "les", "un", "une"]);
+// Value key (G662, tightened by audit v13, G759): the comparison key with the sign and the
+// currency kept, and for a sentence (five words or more) articles and "is"/"are"/"be" dropped, so a
+// sentence said again in other casing, accents, punctuation or with an article more is the same
+// value, never a conflict (architecture 0.6 step 1). One rewording folds, the one G662 was filed
+// for: "to retain" and "to be retained" (a passive infinitive and its active form), and only for a
+// word written in lower case, so never a name. Every other word stays whole: a name and a longer
+// name ("Robert", "Roberts"), a place, tense ("expires", "expired", "being signed", "signed"),
+// numbers, negations and every preposition differ, and so do "-740" and "740", "$740" and "€740".
+// A final "s" alone folds too, on a word written in lower case inside the sentence ("exam",
+// "exams"; "move", "moves"): the two can both hold, so it is no conflict and no ask (the owner's
+// rule), while a word with a capital, so any name, and a sentence's first word keep theirs. The first key cut every word to a stem; that merged a different
+// value in as a source of the first, and an extra ask is cheaper than a silent merge. Short values
+// keep the exact key.
+const GRAMMAR = new Set(["a", "an", "the", "be", "is", "are", "am", "le", "la", "les", "un", "une"]);
+// nearSame's looser word form, for a long sentence said again in another order (below).
 const stem = (w: string) => /^\d/.test(w) || w.length <= 4 ? w : w.replace(/(ing|ed|es|s)$/, "").replace(/(.)\1$/, "$1").replace(/e$/, "");
+const CURRENCY: Record<string, string> = { "$": "dollarsign", "€": "eurosign", "£": "poundsign", "¥": "yensign" };
+// A minus is a sign when it touches the number after it and no letter or digit before it; a dash
+// and a space is one only when the value is nothing but the number ("- 740"), else a list mark
+// ("- 3 seats"); between words or digits ("sign-in", "2026-10-05", "555-0142") it is punctuation.
+const signed = (v: string) => v
+  .replace(/(?:^\s*[-\u2212]\s+(?=[$€£¥]?[\d.,\s]+$)|(?<![\p{L}\p{N}])[-\u2212](?=[$€£¥]?\d))/gu, " minussign ")
+  .replace(/[$€£¥]/g, (c) => ` ${CURRENCY[c]} `);
+// "to be retained" reads as "to retain": only the passive side is rewritten, to the word less its
+// "ed" ("planned" to "plan"). The active word is never touched, since "to" is as often a
+// preposition before a name ("to anne" is no "to ann"); a verb ending in "e" ("to move", "to be
+// moved") therefore stays two values, an ask more and never a silent merge.
+const participle = (w: string) => /ed$/.test(w) ? w.replace(/ed$/, "").replace(/([^aeiou])\1$/, "$1") : w;
+// One final "s" off a longer word; never "ss", "us" or "is" ("class", "status", "basis").
+const singular = (w: string) => w.length >= 5 && /[^sui]s$/.test(w) && !/\d/.test(w) ? w.slice(0, -1) : w;
 export function valueKey(v: unknown): string {
-  const k = compareKey(v);
-  if (typeof v !== "string") return k;
+  // A number is its own text, sign and all: -740 is "-740" and never 740.
+  if (typeof v === "number") return valueKey(String(v));
+  if (typeof v !== "string") return compareKey(v);
+  const marked = signed(v);
+  const k = compareKey(marked);
   const words = k.split(" ").filter(Boolean);
   if (words.length < 5) return k;
-  return "~" + words.filter((w) => !GRAMMAR.has(w)).map(stem).join(" ");
+  // The same words with their capitals, to tell a name from a verb after "to".
+  const cased = marked.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\b(inc|ltd|llc|corp|sa|sas|gmbh)\b\.?/gi, "").replace(/[^\p{L}\p{N}@+]+/gu, " ").trim().split(" ").filter(Boolean);
+  const aligned = cased.length === words.length;
+  const out = [...words];
+  for (let i = 0; i + 1 < words.length; i++) {
+    if (words[i] !== "to") continue;
+    const passive = words[i + 1] === "be", t = passive ? i + 2 : i + 1;
+    if (t >= words.length || !aligned || cased[t] !== words[t] || /\d/.test(words[t]) || GRAMMAR.has(words[t])) continue;
+    if (passive) out[t] = participle(words[t]);
+  }
+  if (aligned) for (let i = 1; i < out.length; i++) if (cased[i] === words[i]) out[i] = singular(out[i]);
+  return "~" + out.filter((w) => !GRAMMAR.has(w)).join(" ");
 }
 export const sameValue = (a: unknown, b: unknown) => valueKey(a) === valueKey(b);
 
