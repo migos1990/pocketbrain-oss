@@ -243,6 +243,7 @@ export const OWNER_SAY = {
   "say.lookup": "{what}",
   "say.no-match": "Nothing on that yet. Tell me, and I'll keep it.",
   "say.noted": "Noted: {what}. Seen by {audience}.",
+  "say.noted-unread": "Noted: {what}. No assistant can read it yet.",
   "say.already": "I already have that. Nothing changed.",
   "say.settled": "Settled: {name}'s {attr} is {value}. That answers the question that was waiting; the other answers are under Earlier values.",
   "say.earlier": "Noted as earlier: {name}'s {attr} was {value}. It's {now} now; the earlier one is under Earlier values.",
@@ -277,6 +278,7 @@ export const OWNER_SAY = {
   "say.ask-nothing": "I have nothing on that. Ask me about someone or something in your memory.",
   "say.new-page-made": "New page for {name} in {area}; Undo takes it back.",
   "say.only-you": "only you see this",
+  "say.no-assistant-yet": "no assistant can read this yet",
   "say.left-out": "I left out “{what}”; say it on its own to keep it.",
 } as const;
 export type SayId = keyof typeof OWNER_SAY;

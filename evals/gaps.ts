@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G777: {
+    closed: "claude/box-seen-true",
+    title: "The box said Seen by your assistants about facts no assistant can read",
+    severity: "medium",
+    finding: "CEO review 2026-11-09: the box's reply after a told fact said \"Seen by your assistants.\" for anything not private, from the sensitivity alone, so it said so about pages outside every assistant's slice, and \"Seen by only you.\" about a private fact an assistant reads at its level.",
+    fix: "src/owner-say.ts audienceOf reads each assistant's carve (outside the wall, not paused, not the Gardener) for that very fact: your assistants only when one gets it; only you for a private fact none reads; else say.noted-unread, \"No assistant can read it yet.\" Words only, no access change. Tests: test/box-seen-true.test.ts, eval box-seen-is-true.",
+  },
   G746: {
     closed: "claude/lastmet-names",
     title: "Last met never showed for a person whose page holds no address",

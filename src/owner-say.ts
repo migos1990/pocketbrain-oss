@@ -13,7 +13,7 @@
 import { loadBrain, today, isList, isDisputed, sensitivityRank, type Note, type Fact, type FactRecord, type Sensitivity } from "./brain";
 import { followArea } from "./area-follow";
 import { loadRules, attributeSpec, ownerName, type Rules } from "./rules";
-import { records } from "./carve";
+import { records, carve, grantFor } from "./carve";
 import { write } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
 import { readDiary, sayDay } from "./diary";
@@ -384,7 +384,7 @@ export async function ownerSayModel(root: string, text: string, o: SayOptions = 
 
 // ---------- the reply ----------
 
-export type Audience = "your assistants" | "only you";
+export type Audience = "your assistants" | "only you" | "no assistant yet";
 export interface Chip { label: string; say: string }
 // signin: the screen offers "Sign in again" (a forget needs a sign-in from the last few minutes).
 // pages: every page a reply names when it names more than one (say.answer-many), so a screen can
@@ -392,7 +392,19 @@ export interface Chip { label: string; say: string }
 export interface SayReply { kind: SayId; text: string; page?: string; pages?: string[]; fact_key?: string; undo_token?: string; chips?: Chip[]; audience?: Audience; label?: string; signin?: boolean }
 
 const shown = (v: unknown): string => (typeof v === "string" ? v.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") : Array.isArray(v) ? v.map(shown).join(", ") : JSON.stringify(v));
-const audienceOf = (sens: Sensitivity): Audience => sensitivityRank(sens) >= sensitivityRank("private") ? "only you" : "your assistants";
+// Who can read the fact the owner just told, said true (G777): "your assistants" only when at
+// least one assistant that reads the brain (outside the wall, not paused, not the Gardener) gets
+// that very fact in its carve; else "only you" for a private one, and plainly that no assistant can
+// read it yet for the rest. Words only: nothing about who may read it changes.
+function audienceOf(root: string, id: string, attribute: string, sens: Sensitivity): Audience {
+  const rules = loadRules(root), notes = loadBrain(root), key = `${id}#${attribute}`;
+  const readers = Object.entries(rules.policy.agents).filter(([, a]) => !a.inside_wall && a.role !== "gardener" && (a.status ?? "active") !== "paused").map(([k]) => k);
+  const reads = readers.some((a) => { try { const c = carve(notes, rules, grantFor(rules, a)); return c.visible.has(id) && !c.hiddenFacts.some((h) => h.key === key); } catch { return false; } });
+  if (reads) return "your assistants";
+  return sensitivityRank(sens) >= sensitivityRank("private") ? "only you" : "no assistant yet";
+}
+const unseen = (a: Audience | undefined) => a === "only you" || a === "no assistant yet";
+const saidNoted = (what: string, a: Audience) => a === "no assistant yet" ? say("say.noted-unread", { what }) : say("say.noted", { what, audience: a });
 
 // ---------- a question: one sentence, never a dump of the page (G473) ----------
 
@@ -681,9 +693,11 @@ function sayOnce(root: string, text: string, o: SayOptions = {}): SayReply {
   const last = noted.at(-1)!;
   // One Undo takes back everything the sentence noted, newest first (so a page it started goes too).
   // Mixed: assistants see most of it, and the ones only the owner sees say so.
-  const mixed = noted.some((x) => x.audience === "only you") && noted.some((x) => x.audience !== "only you");
-  const what = noted.map((x) => mixed && x.audience === "only you" ? `${x.label!} (${say("say.only-you")})` : x.label!).join("; ");
-  return { ...last, undo_token: noted.map((x) => x.undo_token).filter(Boolean).join(","), text: `${say("say.noted", { what, audience: noted.every((x) => x.audience === "only you") ? "only you" : "your assistants" })}${started}`, ...(gate ? { signin: true } : {}) };
+  // Each part not seen says which way: only you, or no assistant yet (G777).
+  const mixed = noted.some((x) => unseen(x.audience)) && noted.some((x) => !unseen(x.audience));
+  const what = noted.map((x) => mixed && unseen(x.audience) ? `${x.label!} (${say(x.audience === "only you" ? "say.only-you" : "say.no-assistant-yet")})` : x.label!).join("; ");
+  const whole: Audience = mixed || noted.some((x) => !unseen(x.audience)) ? "your assistants" : noted.every((x) => x.audience === "only you") ? "only you" : "no assistant yet";
+  return { ...last, undo_token: noted.map((x) => x.undo_token).filter(Boolean).join(","), text: `${saidNoted(what, whole)}${started}`, ...(gate ? { signin: true } : {}) };
 }
 
 // The parts of a sentence (split as parseTells splits it) that share no word with any fact kept
@@ -813,8 +827,8 @@ function tell(root: string, rules: Rules, page: Note, told: Told, channel: strin
   // The page's text follows its facts now, not tonight (the page writer, its own hub commit).
   try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
   // Who sees it, from the page as it is now (G551), the row only as a floor.
-  const audience = audienceOf(privateNow(loadBrain(root).find((n) => n.fm.id === page.fm.id) ?? page, told.attribute, row?.sensitivity) ? "private" : "personal");
-  return { kind: "say.noted", page: page.fm.id, fact_key, undo_token: row?.undo_token, audience, label, text: `${say("say.noted", { what: label, audience })}${guess}` };
+  const audience = audienceOf(root, page.fm.id, told.attribute, privateNow(loadBrain(root).find((n) => n.fm.id === page.fm.id) ?? page, told.attribute, row?.sensitivity) ? "private" : "personal");
+  return { kind: "say.noted", page: page.fm.id, fact_key, undo_token: row?.undo_token, audience, label, text: `${saidNoted(label, audience)}${guess}` };
 }
 
 // The write path's reason in the owner's words; anything else gets the generic one.

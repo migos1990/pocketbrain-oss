@@ -740,6 +740,13 @@ const pullCases: Case[] = [
     for (const h of [0, 1, 2]) { write.reopenLostAccepts(root); keys.push(...filing.runAuto(root, at(h)).map((d: { key: string }) => d.key)); }
     return ok(!keys.length && !filing.redecided(root, at(3)).length, `filed ${keys.length} time(s) over three restarts`);
   } },
+  { id: "box-seen-is-true", dimension: "e2e", gap: "G777", title: "the box says Seen by your assistants only when an assistant can read the fact; otherwise that none can yet", source: "CEO review 2026-11-09", run: async () => {
+    const say = await import(join(SRC_DIR, "owner-say.ts")), actions = await import(join(SRC_DIR, "dashboard", "actions.ts")), rules = await import(join(SRC_DIR, "rules.ts"));
+    const root = sandbox();
+    for (const [a, v] of Object.entries(rules.loadRules(root).policy.agents) as [string, { inside_wall?: boolean; role?: string }][]) if (!v.inside_wall && v.role !== "gardener") actions.setAgentStatus(root, a, "paused");
+    const text = say.ownerSay(root, "J. Roy's role is program director").text as string;
+    return ok(!text.includes("Seen by your assistants") && text.includes("No assistant can read it yet."), text);
+  } },
   { id: "watchdog-tailnet-silent-phone", dimension: "e2e", gap: "G741", title: "an online phone the hub can't ping twice in a row is one quiet menu-bar line by kind only; an offline phone is never pinged", source: "Mac 2026-11-07/08, tailnet up and silent for 19 hours", run: async () => {
     const wd = await import(join(SRC_DIR, "watchdog.ts"));
     if (!wd.watchdogTick) return na("no watchdog at this commit");
