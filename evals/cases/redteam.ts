@@ -4409,6 +4409,33 @@ const leakTextCases: Case[] = [
       const once = first.outcome === "refused" && first.fails?.some((f: { check: string }) => f.check === "leak_tripwire");
       return ok(!!once && shape(hit) === shape(miss) && miss.outcome !== "committed", `first refused ${once}; then hit ${hit.outcome} vs miss ${miss.outcome}`);
     } },
+  { id: "rt-own-held-value-no-trip", dimension: "carving", kind: "benign", gap: "G758", source: "audit v13, trust defect 3",
+    title: "an assistant saying its own held value again is no leak and stays a writer; another assistant's held value still trips",
+    run: async () => {
+      if (!existsSync(join(SRC, "write-hold.ts"))) return na("no write hold at this commit");
+      const hold = await import(join(SRC, "write-hold.ts"));
+      const root = sandbox("synthetic");
+      const fee = (agent: string, attribute = "fee") => pb.write.write(root, { agent, id: "projects/course-a", attribute, value: "the invoice is 4,250 dollars to Larchmont Catering", as_of: TODAY, ...SRCREF });
+      const first = fee("planner"), again = fee("planner");
+      const tripped = again.fails?.some((f: { check: string }) => f.check === "leak_tripwire");
+      const stillWrites = !hold.writesHeld(root, "planner");
+      const root2 = sandbox("synthetic");
+      pb.write.write(root2, { agent: "steward", id: "projects/course-a", attribute: "fee", value: "the invoice is 4,250 dollars to Larchmont Catering", as_of: TODAY, ...SRCREF });
+      const other = pb.write.write(root2, { agent: "planner", id: "projects/course-a", attribute: "fee_note", value: "the invoice is 4,250 dollars to Larchmont Catering", as_of: TODAY, ...SRCREF });
+      return ok(first.outcome === "committed" && !tripped && again.outcome !== "refused" && stillWrites && other.outcome === "refused", `first ${first.outcome}; again ${again.outcome}, tripped ${!!tripped}; still a writer ${stillWrites}; another's held value ${other.outcome}`);
+    } },
+  { id: "rt-own-held-title-no-slug", dimension: "carving", kind: "attack", gap: "G758", source: "slice audit of G758 (2026-11-09)",
+    title: "an assistant's own held value as a new page's title is refused like any carved value in a title, so no page id carries it past the hold",
+    run: async () => {
+      if (!existsSync(join(SRC, "write-hold.ts"))) return na("no write hold at this commit");
+      const hold = await import(join(SRC, "write-hold.ts"));
+      const root = sandbox("synthetic");
+      const v = "the invoice is 4,250 dollars to Larchmont Catering";
+      pb.write.write(root, { agent: "planner", id: "projects/course-a", attribute: "fee", value: v, as_of: TODAY, ...SRCREF });
+      const r = pb.write.write(root, { agent: "planner", title: v, type: "project", area: "work", attribute: "next_step", value: "Book the hall", as_of: TODAY, ...SRCREF });
+      const made = pb.brain.loadBrain(root).some((n: any) => /larchmont/i.test(`${n.fm.id} ${n.fm.title}`));
+      return ok(r.outcome === "refused" && !made, `${r.outcome}; page made ${made}`);
+    } },
   { id: "rt-core-hold-filing-no-oracle", dimension: "carving", kind: "attack", gap: "G680", source: "slice audit of G680 (filing tick and canary)",
     title: "after a trusted assistant's guess, the hub's filing files neither its hit nor its miss, and a canary spends the guess like a real hit",
     run: async () => {

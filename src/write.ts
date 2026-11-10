@@ -18,7 +18,7 @@ import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isAppro
 import { writesHeld, holdWrites } from "./write-hold";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath, machineMail, mailKey } from "./louis";
 import { tokenRole } from "./tokenrole";
-import { carve, grantFor, mergedTarget, records, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
+import { carve, grantFor, mergedTarget, records, valueStrings, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
 import { needleFor, findCarried, unhide, distinctive, squash, type Needle } from "./match";
 import { git, commitPaths } from "./git";
 import { appendChained } from "./readlog";
@@ -461,6 +461,25 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   const raw = `${typeof req.value === "string" ? req.value : JSON.stringify(req.value ?? "")} ${req.text ?? ""} ${req.title ?? ""}`;
   const text = unhide(raw).toLowerCase();
   const own = carve(notes, rules, grantFor(rules, req.agent), { flags: false });
+  // A value held for the owner's eyes (carve.ts HELD_REASON) is hidden from every carve, its
+  // writer's included, yet its writer knows it: it wrote it. Saying it again is a re-confirmation,
+  // never a leak, so the wires below leave out what the writer's own records say on a held fact
+  // whose live records are all its own (the rule `ownHeld` below lets it update by; audit v13,
+  // G758). Only the withheld-part wire on a value leaves it out. The title wire does not: a title
+  // and the id built from it reach every reader, so the held value there is refused as on any
+  // carved value (slice audit of G758). The value wire above still trips when the same value is
+  // also a flagged fact hidden from the writer somewhere else.
+  const ownSaid = new Set<string>(), ownHeldKeys = new Set<string>();
+  for (const h of own.hiddenFacts) {
+    if (h.reason !== HELD_REASON) continue;
+    const [hid, hattr] = h.key.split("#");
+    const hf = notes.find((n) => n.fm.id === hid)?.fm.facts?.[hattr];
+    const recs = hf ? records(hf) : [];
+    if (!recs.length || !recs.filter((r) => !r.valid_to && !r.retired).every((r) => r.by === req.agent)) continue;
+    ownHeldKeys.add(h.key);
+    for (const r of recs) if (r.by === req.agent) for (const v of valueStrings(r)) ownSaid.add(v);
+  }
+  const wire = ownSaid.size ? { ...own, carvedValues: own.carvedValues.filter((v) => !ownSaid.has(v)) } : own;
   // The attribute name and the source refs land in other agents' views too (eval gap G22).
   // Not lower-cased: findCarried decodes base64 first and folds case itself, as the relay does (G113).
   const carried = unhide(`${raw} ${req.attribute ?? ""} ${(req.sources ?? []).map(refString).join(" ")}`);
@@ -523,7 +542,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // ones). Writing it back means the agent knows the word: the same matcher as the title wire and
   // the same refusal, so a guess at the hidden part is never confirmed by replaced_value, dated, or
   // merged as the same value (G188).
-  if (!leak && !rules.policy.agents[req.agent]?.inside_wall && scalarStrings(req.value).some((v) => { const u = unhide(v); return withholdName(u, own.carvedValues, nameNeedles(own)) !== u; })) {
+  if (!leak && !rules.policy.agents[req.agent]?.inside_wall && scalarStrings(req.value).some((v) => { const u = unhide(v); return withholdName(u, wire.carvedValues, nameNeedles(wire)) !== u; })) {
     const r = tripped({ outcome: "refused", alert: true, message: `leak_tripwire: the write contains a value ${req.agent} was never shown. ${ownerName(rules).replace(/^the/, "The")} is alerted.`, fails: [{ check: "leak_tripwire", outcome: "refuse", reason: "a value this agent was never shown", fix: "don't relay carved-out facts" }] }, "a withheld part of a value");
     if (r) return r;
   }
@@ -695,14 +714,14 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // exists (slice audit of G422).
   if (opts.contest) {
     const v = writerCarve?.visible.get(note.fm.id);
-    const hidden = writerCarve && (writerCarve.hiddenFacts.some((h) => h.key.startsWith(`${note!.fm.id}#`)) || (v && factHiddenReason(v, attr, { items: [] }, writerCarve.grant, rules)));
+    const hidden = writerCarve && (writerCarve.hiddenFacts.some((h) => h.key.startsWith(`${note!.fm.id}#`) && !ownHeldKeys.has(h.key)) || (v && factHiddenReason(v, attr, { items: [] }, writerCarve.grant, rules)));
     const privateRec = Object.values(note.fm.facts ?? {}).some((f) => records(f).some((r) => r.sensitivity && sensitivityRank(r.sensitivity) >= sensitivityRank("private")));
     if (hidden || privateRec) return done(propose(root, req, `the owner decides ${factKey} (not_in_your_view)`, []));
   }
   let hiddenWhy = writerCarve && note.fm.facts?.[attr] !== undefined ? writerCarve.hiddenFacts.find((h) => h.key === factKey)?.reason : undefined;
   // A value held for the owner's eyes (spec §7) is still its writer's to update, while every live
   // record is that writer's own: it knows the value, so nothing about it leaks.
-  const ownHeld = hiddenWhy === HELD_REASON && records(note.fm.facts![attr]).filter((r) => !r.valid_to && !r.retired).every((r) => r.by === req.agent);
+  const ownHeld = hiddenWhy === HELD_REASON && ownHeldKeys.has(factKey);
   if (ownHeld) hiddenWhy = undefined;
   const ownOnly = !!hiddenWhy?.startsWith("do not share") && records(note.fm.facts![attr]).every((r) => r.by === req.agent && r.shared_by === req.agent && !isOwnerConfirmed(r.verification) && !(r.sources ?? []).some((s) => OWNER_REF.test(refString(s))));
   if (hiddenWhy && !ownOnly) {

@@ -785,3 +785,30 @@ test("contract write: after a core assistant's first guess at a hidden value, a 
   expect(org(viaCanary, `Org ${c}`).message).toBe(org(viaReal, "Maple Trust Bank review").message);
   expect([writesHeld(viaCanary, "planner"), writesHeld(viaReal, "planner")]).toEqual([true, true]);
 });
+
+test("contract write: a writer's own held value is never a leak; another writer's held value is (G758)", async () => {
+  const { writesHeld } = await import("../../src/write-hold");
+  const fee = (root: string, agent: string, attribute = "fee") => write(root, { ...base, agent, attribute, value: "the invoice is 4,250 dollars to Larchmont Catering" } as never);
+  const root = makeBrain();
+  expect(fee(root, "planner").outcome).toBe("committed");
+  const again = fee(root, "planner");
+  expect(again.fails?.map((f) => f.check) ?? []).not.toContain("leak_tripwire");
+  expect(writesHeld(root, "planner")).toBe(false);
+  const other = makeBrain();
+  expect(fee(other, "steward").outcome).toBe("committed");
+  expect(fee(other, "planner", "fee_note").fails?.[0]?.check).toBe("leak_tripwire");
+  expect(writesHeld(other, "planner")).toBe(true);
+});
+
+test("contract write: a writer's own held value never becomes a page's title or id (slice audit of G758)", async () => {
+  const { makeBrain } = await import("../fixture");
+  const { remember } = await import("../../src/core");
+  const { loadBrain } = await import("../../src/brain");
+  const root = makeBrain();
+  const v = "the invoice is 4,250 dollars to Larchmont Catering";
+  const src = { as_of: "2026-10-05", sources: ["gmail:f000000000000009"], verification: "verified-by-source" };
+  remember(root, "planner", { id: "projects/course-a", attribute: "fee", value: v, ...src });
+  const r = remember(root, "planner", { type: "project", title: v, area: "work", attribute: "next_step", value: "Book the hall", ...src });
+  expect(r.outcome).toBe("refused");
+  expect(loadBrain(root).some((n) => /larchmont/i.test(`${n.fm.id} ${n.fm.title}`))).toBe(false);
+});

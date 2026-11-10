@@ -40,6 +40,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "2026-11-09: every PR's ci run from about 17:00Z ended failure with no job and an empty log (PR 139 and 143), so the required `test` check never ran; with the main ruleset and no bypass, no fix could land and the Mac could not take a new sha.",
     fix: ".github/workflows/ci.yml: test, e2e and conformance run on the Mac's self-hosted runner when the repo variable PB_RUNNER names it, only in the private repo and never for a fork's PR; publishing jobs stay on GitHub's runners; Linux-only steps have macOS twins (gitleaks pinned by its darwin checksum, tools checked not sudo-installed) and the denylist goes to RUNNER_TEMP. docs/release.md \"When GitHub's runners are down\" is the Mac setup (own user, home closed, system launchd job, low priority). Tests: test/ci-runner.test.ts.",
   },
+  G758: {
+    closed: "claude/hold-own-value",
+    title: "An assistant saying its own held value again was refused as a leak and put on proposals only",
+    severity: "high",
+    finding: "Audit v13 (2026-11-09; a regression from the write hold, G680): an assistant's money-, health- or legal-shaped value is saved held for the owner's eyes and hidden from every carve, its writer's included. The leak wire read the writer's carve, so the same write sent again was a value the writer was never shown: refused with leak_tripwire, the owner alerted to a leak for an ordinary re-confirmation, and the assistant's later writes all sent to the inbox until the owner cleared the hold. The steward, who sees everything, hit the same on its own held fact. No test covered it.",
+    fix: "src/write.ts: the wires leave out what the writer's own records say on a held fact whose live records are all its own (the rule that already let it update that fact), and a contest write no longer waits for the owner over such a fact. A held value another writer filed, and one the owner has since kept private, still trip the wire. Tests: test/hold-own-value.test.ts, test/contracts/write.contract.test.ts, eval rt-own-held-value-no-trip. Slice audit: the exemption covers a value only; the title wire keeps the writer's own held value, since a new page's id is built from its title and would carry the value past the hold, so a title answers as on main. Eval rt-own-held-title-no-slug.",
+  },
   G761: {
     closed: "claude/opening-check",
     title: "A model's opening outlived a sentence it rested on, and landed as two commits",
