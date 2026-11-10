@@ -1388,8 +1388,10 @@ export function unfreezeHeld(root: string): string[] {
 // The decided copy's `by` is who decided it (auto-decide): the reopened proposal is its writer's
 // again, the agent the server put on the request, or it waits as nobody's (G601).
 function reopened(p: { request?: WriteRequest } & Record<string, unknown>): Record<string, unknown> {
+  // Stamped: a proposal goes back once, then waits for the owner; the hub never files it again
+  // (src/filing.ts), and its decided copy is never put back again (G742).
   const { decided: _d, decision: _x, by: _b, ...open } = p;
-  return { ...open, ...(typeof p.request?.agent === "string" ? { by: p.request.agent } : {}) };
+  return { ...open, ...(typeof p.request?.agent === "string" ? { by: p.request.agent } : {}), reopened: today() };
 }
 // The last part of every id the owner forgot (forget.ts commits carry Forgot-Person: <id>); a new
 // page's id is its name's slug, with a short hash when that slug was taken.
@@ -1424,10 +1426,12 @@ export function reopenLostAccepts(root: string): string[] {
   // Proposals already waiting (a write that filed one again under another name): never a twin card.
   const waiting = readdirSync(join(root, "inbox")).filter((x) => x.endsWith(".yaml")).map((x) => { try { return (YAML.parse(readFileSync(join(root, "inbox", x), "utf8")) ?? {}).request as WriteRequest | undefined; } catch { return undefined; } });
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".yaml")).sort()) {
-    let p: { request?: WriteRequest; decision?: string; by?: string; capture?: unknown };
+    let p: { request?: WriteRequest; decision?: string; by?: string; capture?: unknown; reopened?: unknown };
     try { p = YAML.parse(readFileSync(join(dir, f), "utf8")) ?? {}; } catch { continue; }
     const req = p.request;
     if (p.decision !== "accept" || p.by !== "auto-decide" || typeof p.capture !== "string" || !req?.attribute || req.retract || existsSync(join(root, "inbox", f))) continue;
+    // Put back once already (G742): it went to the owner then, and whoever answered it, it stays answered.
+    if (p.reopened) continue;
     const named = !req.id && req.title && req.type ? resolveEntity(notes, req.type, String(req.title)) : undefined;
     const id = req.id ?? named?.id;
     const note = id ? notes.find((n) => n.fm.id === id) : undefined;
@@ -1438,14 +1442,18 @@ export function reopenLostAccepts(root: string): string[] {
     const cites = (r: FactRecord | undefined) => !!r && (r.sources ?? []).some((x) => mine.has(refString(x as SourceRef)));
     const landed = (n: Note, own = false): boolean => {
       const spec = attributeSpec(rules, n.fm.type, req.attribute!);
-      const plain = (v: unknown) => { let x = v; try { x = normalizeValue(v as never, spec); } catch { /* as written */ } return compareKey(typeof x === "string" ? x.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") : x); };
-      const key = plain(req.value);
+      // The write's own sameness (G662, G678): a sentence said again in other words is the value it
+      // holds, so the write saved nothing new; compared word for word, it was put back at every
+      // hub start and filed again on the next tick (30bfb0b4 live: 13 times; G742).
+      const flat = (v: unknown) => { let x = v; try { x = normalizeValue(v as never, spec); } catch { /* as written */ } return typeof x === "string" ? x.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") : x; };
+      const want = flat(req.value);
+      const same = (v: unknown) => { const x = flat(v); return valueKey(x) === valueKey(want) || nearSame(x, want); };
       const cur = n.fm.facts?.[req.attribute!];
       const held = [...(cur ? (isDisputed(cur) ? cur.candidates : records(cur)) : []), ...(n.fm.history?.[req.attribute!] ?? [])];
       const fk = `${n.fm.id}#${req.attribute}`;
-      const inPacket = packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => plain(c.value) === key));
-      if (own) return held.some((r) => r && cites(r) && plain(r.value) === key) || packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => cites(c) && plain(c.value) === key));
-      if (inPacket || held.some((r) => r && plain(r.value) === key)) return true;
+      const inPacket = packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => same(c.value)));
+      if (own) return held.some((r) => r && cites(r) && same(r.value)) || packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => cites(c) && same(c.value)));
+      if (inPacket || held.some((r) => r && same(r.value))) return true;
       // A max or min the write ignores by design (an older last contact): not lost.
       const live = cur && !isDisputed(cur) && !isList(cur) ? cur as FactRecord : undefined;
       if (live && (spec.merge === "max" || spec.merge === "min")) {
@@ -1453,7 +1461,7 @@ export function reopenLostAccepts(root: string): string[] {
         if (spec.merge === "max" ? !(String(v) > String(live.value)) : !(String(v) < String(live.value))) return true;
       }
       // A by-title capture's write handed back under the page's id (not_in_your_view) waits already (G601).
-      return waiting.some((w) => w && w.attribute === req.attribute && ((w.id ?? w.title) === (req.id ?? req.title) || w.id === n.fm.id) && plain(w.value) === key);
+      return waiting.some((w) => w && w.attribute === req.attribute && ((w.id ?? w.title) === (req.id ?? req.title) || w.id === n.fm.id) && same(w.value));
     };
     // A page the name fits holds the fact already: it landed there before the name fit another (G603).
     if (!note && named?.ambiguous && notes.some((n) => named.ambiguous!.includes(n.fm.id) && landed(n, true))) continue;

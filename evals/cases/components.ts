@@ -698,6 +698,24 @@ const pullCases: Case[] = [
     const tied = JSON.stringify(lam?.fm.facts?.relationship ?? "").includes("Noor Haddad's dentist");
     return ok(!bounced.length && tied, `bounced: ${bounced.join("; ") || "none"}; Dr Lam is Noor Haddad's dentist ${tied}`);
   } },
+  { id: "filing-reworded-capture-decided-once", dimension: "e2e", gap: "G742", title: "a mail capture the page holds in other words is decided once, across hub restarts", source: "Mac 2026-11-08, one capture filed 13 times", run: async () => {
+    const filing = await import(join(SRC_DIR, "filing.ts")), write = await import(join(SRC_DIR, "write.ts"));
+    if (!filing.redecided) return na("no redecided count at this commit");
+    const root = sandbox();
+    const YAML = (await import("yaml")).default;
+    writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
+    const f = join(root, "projects", "course-a.md");
+    writeFileSync(f, readFileSync(f, "utf8").replace("value: Grade the midterm,", 'value: "Grade the midterm exam for the whole class",'));
+    mkdirSync(join(root, "inbox", "decided"), { recursive: true });
+    mkdirSync(join(root, "inbox", "captures"), { recursive: true });
+    writeFileSync(join(root, "inbox", "captures", "x.md"), "---\nvia: source\nsource_kind: gmail\nstatus: extracted\n---\n");
+    writeFileSync(join(root, "inbox", "decided", `${TODAY}-capture-reword01.yaml`), YAML.stringify({ proposed: TODAY, by: "auto-decide", reason: "capture", checks: ["capture"], capture: "inbox/captures/x.md", request: { kind: "fact", agent: "steward", id: "projects/course-a", attribute: "next_step", value: "Grade the midterm exams for the whole class", as_of: "2026-10-01", sources: ["gmail:f000000000000003"], source_type: "email", confidence: "stated" }, decided: TODAY, decision: "accept" }));
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "owner: setup"], { cwd: root });
+    const at = (h: number) => new Date(Date.parse(`${TODAY}T15:00:00Z`) + h * 3_600_000);
+    const keys: string[] = [];
+    for (const h of [0, 1, 2]) { write.reopenLostAccepts(root); keys.push(...filing.runAuto(root, at(h)).map((d: { key: string }) => d.key)); }
+    return ok(!keys.length && !filing.redecided(root, at(3)).length, `filed ${keys.length} time(s) over three restarts`);
+  } },
   { id: "watchdog-tailnet-silent-phone", dimension: "e2e", gap: "G741", title: "an online phone the hub can't ping twice in a row is one quiet menu-bar line by kind only; an offline phone is never pinged", source: "Mac 2026-11-07/08, tailnet up and silent for 19 hours", run: async () => {
     const wd = await import(join(SRC_DIR, "watchdog.ts"));
     if (!wd.watchdogTick) return na("no watchdog at this commit");

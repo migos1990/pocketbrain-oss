@@ -173,6 +173,7 @@ function citesOwner(pr: Proposal): boolean {
 export const heldByAccess = (reason: unknown) => /^the owner decides [^\s()#]+#[^\s()#]+ \(not_in_your_view\)$/.test(String(reason ?? ""));
 const FORGOTTEN = "You forgot someone by this name, so only you decide it.";
 // Owner-facing only: never shown to the assistant, which got the write path's one fixed reply.
+const REOPENED = "The hub filed it once and nothing was saved, so you decide it.";
 const NOT_IN_VIEW = "The assistant can't see all of that page, so only you decide it.";
 function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[] }, now: Date): Verdict {
   const a = p.auto_decide;
@@ -196,6 +197,9 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // open, a claimed approval): the hub's yes is weighed as the assistant's write again and the
     // check hands it back, so a plan to save it failed every minute (G599). It waits for the owner.
     if (pr) { const c = ownerChecks(root, pr.file); if (c) return { never: c }; }
+    // The hub's yes saved nothing once and the start put it back (G431): it waits for the owner,
+    // never filed by the hub again, or it is filed and put back at every start (G742).
+    if (pr && reopenedFile(root, pr.file)) return { never: REOPENED };
     // A new page for a name the owner forgot never files itself again: one an older forget left in
     // the inbox, reopened with no writer, read its writer from the request after G601 (slice audit F1).
     if (pr && !pr.request.id && typeof pr.request.title === "string" && forgottenName(pr.request.title, forgottenSlugs(root))) return { never: FORGOTTEN };
@@ -478,6 +482,10 @@ function ownerChecks(root: string, file: string): string | undefined {
     const c = (YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { checks?: unknown })?.checks;
     return Array.isArray(c) ? c.map((x) => OWNER_CHECKS[String(x)]).find(Boolean) : undefined;
   } catch { return undefined; }
+}
+
+function reopenedFile(root: string, file: string): boolean {
+  try { return !!(YAML.parse(readFileSync(join(root, "inbox", file), "utf8")) as { reopened?: unknown })?.reopened; } catch { return false; }
 }
 
 function captured(root: string, file: string): boolean {
@@ -798,4 +806,16 @@ function heldConflictOf(root: string, commits: string[]): { id: string; file: st
 // One line per auto-decision, for the digest.
 export function autoDigestLines(root: string, since: string): string[] {
   return autoDecisions(root, 3650).filter((r) => r.at >= since).map((r) => `- ${r.undone ? "(undone) " : ""}${r.question}: the hub ${r.picked}, because ${r.why}. Undo on the overview.`);
+}
+
+// The proposals the hub decided more than once in the last `days` (30bfb0b4 live, 2026-11-08: one
+// capture filed 13 times in five days, put back at each hub start; G742). A decision the owner
+// undid doesn't count: Undo makes the hub never decide it again. Keys and counts only.
+export function redecided(root: string, now = new Date(), days = 7): { key: string; times: number }[] {
+  const since = new Date(now.getTime() - days * 86_400_000).toISOString();
+  const rows = readJsonl<AutoDone & { undo_of?: string }>(join(logDir(root), AUTO_LOG));
+  const undone = new Set(rows.filter((r) => r.undo_of).map((r) => r.undo_of!));
+  const times = new Map<string, number>();
+  for (const r of rows) if (!r.undo_of && r.key && String(r.at ?? "") >= since && !undone.has(r.commit)) times.set(r.key, (times.get(r.key) ?? 0) + 1);
+  return [...times].filter(([, n]) => n > 1).map(([key, times]) => ({ key, times })).sort((a, b) => b.times - a.times || a.key.localeCompare(b.key));
 }

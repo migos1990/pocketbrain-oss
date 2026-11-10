@@ -4,7 +4,7 @@
 // gone). Each check is ok or failing; a check that turns from ok to failing raises one alert
 // (log/alerts.jsonl, so the digest, dashboard and text channel surface it), and one that
 // recovers is noted in log/probe.json. No new outward channel.
-import { FILING_CODE } from "./filing";
+import { FILING_CODE, redecided } from "./filing";
 import type { StartKind } from "./measure";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -264,6 +264,11 @@ export function silentFailureChecks(root: string, now = new Date()): Check[] {
     out.push(silent.length
       ? { name: "filed_lines", ok: false, warn: true, detail: `${silent.length} filing${silent.length === 1 ? "" : "s"} by the hub in the last day left no line on the home` }
       : { name: "filed_lines", ok: true, detail: "every filing in the last day has its line on the home" });
+    // The hub decides a proposal once (G742: one capture filed 13 times, put back at each start).
+    const again = redecided(root, now);
+    out.push(again.length
+      ? { name: "redecided", ok: false, warn: true, detail: `${again.length} proposal${again.length === 1 ? "" : "s"} decided by the hub more than once in the last week (most: ${again[0]!.times} times)` }
+      : { name: "redecided", ok: true, detail: "the hub decided each proposal once in the last week" });
   }
   const runs = readJsonl<{ at?: string; source?: string; fetched?: number; capped?: boolean; deferred?: number }>(join(root, "log", "sources", "runs.jsonl"));
   // A source over its max_per_day: the rest is read tomorrow, which nobody saw outside the CLI.

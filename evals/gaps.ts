@@ -27,11 +27,18 @@ export const GAPS: Record<string, Gap> = {
     fix: ".github/workflows/ci.yml: test, e2e and conformance run on the Mac's self-hosted runner when the repo variable PB_RUNNER names it, only in the private repo and never for a fork's PR; publishing jobs stay on GitHub's runners; Linux-only steps have macOS twins (gitleaks pinned by its darwin checksum, tools checked not sudo-installed) and the denylist goes to RUNNER_TEMP. docs/release.md \"When GitHub's runners are down\" is the Mac setup (own user, home closed, system launchd job, low priority). Tests: test/ci-runner.test.ts.",
   },
   G743: {
-    closed: "claude/tailnet-direct",
+    closed: "6cc0d1a3",
     title: "The tailnet line rose while the phone answered over a relay",
     severity: "medium",
     finding: "Mac 2026-11-08 after fb492813: the watchdog counted misses at 15:12Z and 15:17Z and raised the tailnet line while the Mac's own tailscale pings got pongs in 8 to 75 ms. tailscale ping defaults to --until-direct=true, so with -c 1 a pong over a DERP relay exits 1 with direct connection not established; an idle iPhone often answers via relay first.",
     fix: "src/watchdog.ts tailnetCheck pings with --until-direct=false, so a pong by any path counts. The tailnet line stays out of Mac notifications (QUIET), now also tested through the watchdog's own osascript across days. Tests: test/tailnet-watch.test.ts.",
+  },
+  G742: {
+    closed: "claude/redecide-loop",
+    title: "One mail capture was filed by the hub 13 times, once after nearly every hub start",
+    severity: "medium",
+    finding: "Mac 2026-11-08 (30bfb0b4): log/auto-decisions.jsonl held 13 rows for one capture proposal over five days, one commit each and no diary line, the last two to the second of the two deploys' starts; filed_lines counted 5. At each start reopenLostAccepts put the decided capture back in the inbox as accepted with nothing saved (G431), comparing the value word for word, while the write had found the same sentence in other words on the page (G662, G678) and saved nothing new; the next tick filed it again.",
+    fix: "src/write.ts reopenLostAccepts compares with the write's own sameness (valueKey, nearSame); a proposal it puts back is stamped reopened and never put back again, and src/filing.ts never files a reopened proposal: it waits for the owner. src/filing.ts redecided counts proposals the hub decided more than once in a week, undone ones left out; the self-check's redecided line warns (report-only). Tests: test/redecide-loop.test.ts, eval filing-reworded-capture-decided-once.",
   },
   G741: {
     closed: "claude/tailnet-watch",

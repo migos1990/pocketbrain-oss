@@ -54,6 +54,7 @@ The health probe in `start` (`src/probe.ts`, every 2 hours) checks the public do
 | `backup` | backups are set up, the last one is over 48 hours old and the brain moved since |
 | `auto_saves` | a fact the hub planned to file was refused in the last day (names the refusal checks, never a value); it waits as a card and is tried again the next day. A save refused twice under the same code is parked until new code runs, and counts for as long as its proposal is open (G538). Early warning |
 | `filed_lines` | a fact the hub filed in the last day left no line on the owner's home (its commits touched no diary file); names how many, never a value. Early warning (G524) |
+| `redecided` | the hub decided one proposal more than once in the last week (undone decisions left out); names how many and the most times, never a key or a value. Early warning (G742) |
 | `source_cap` | a source reached its daily `max_per_day` limit; the rest is read tomorrow. Early warning |
 | `calendar_pull` | a calendar pull read nothing for 3 days while that calendar's coming events include ones it never read, even after each pass reads those by id (G744): the sync is broken, not quiet |
 | `origin` | with `push_origin: true` in `rules/backup.yaml`: the hub's last 2 hourly pushes of main to the brain's origin failed (rejected because origin moved on, no credentials, or no answer in 5 minutes), so new commits are only on this disk |
