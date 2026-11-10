@@ -31,7 +31,7 @@ import { readsByDay, readsReport } from "./whoread";
 import { AUDIO, transcriberFor } from "./transcribe";
 import { capture, parseEmail, STEP as CAPTURE_STEP, type CaptureInput, extractPending, heldCaptures, decideCapture, captureConfig, releaseHeld, heldCount, sweepOwnerProposals } from "./capture";
 import { intakeTick, dropOnce, mailOnce, mailSourceFor, type IntakeItem } from "./intake";
-import { loadSources, pullSource, pullAll, type PullResult } from "./pull";
+import { loadSources, pullSource, pullAll, resyncCalendar, type PullResult } from "./pull";
 import { connectGoogle } from "./google";
 import { recordCheckedRefs, registerLouisMessages } from "./louis";
 import { exportBrain, exportSlice, importBundle } from "./passport";
@@ -223,6 +223,8 @@ const USAGE = `pocketbrain <command>
   sources backfill <name> [--max N] [--dry-run]   facts with no live source: search the mailbox for each value; a mail
                                      that states it and names the note becomes its source (value unchanged)
                                      (safe to paste); --show also prints the facts (don't paste those)
+  sources resync <calendar> [--dry-run]   one full read of a calendar: every coming event and series still
+                                     meeting that no pull read yet (made long before its date); --dry-run only counts
   sources connect <name>             sign in to a live Gmail, Calendar, Drive or Contacts source (read-only scope); the
                                      token is saved in the keys folder, never printed
   capture held                       captures held for you (injection shapes); nothing was sent to a model
@@ -2106,6 +2108,19 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
       return -1;
     }
+    if (args[0] === "resync") {
+      // A one-off full read of a calendar source (G748); --dry-run counts and writes nothing.
+      const name = args[1] && !args[1].startsWith("--") ? args[1] : undefined;
+      if (!name) { console.error("sources resync <calendar source> [--dry-run]"); return 2; }
+      const dry = args.includes("--dry-run");
+      resyncCalendar(root, name, { dryRun: dry }).then((r) => {
+        if (r.refused) { console.log(`${name}: ${r.refused}`); process.exit(1); }
+        const counts = `${r.listed} event(s) on the calendar, ${r.unread} never read: ${r.coming} coming, ${r.series} series still meeting`;
+        console.log(dry ? `${name} (dry run, nothing written): ${counts}` : `${name}: ${counts}; ${r.fetched} fetched, ${r.stored.length} read, ${r.proposals ?? 0} proposed${r.capped ? ", daily cap reached: run it again tomorrow for the rest (what was read is skipped)" : ""}`);
+        process.exit(0);
+      }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
+      return -1;
+    }
     if (args[0] === "pull" && args.includes("--dry-run")) {
       const names = args[1] && !args[1].startsWith("--") ? [args[1]] : Object.keys(file.sources ?? {});
       (async () => { const rs: PullResult[] = []; for (const n of names) rs.push(await pullSource(root, n, { dryRun: true })); return rs; })().then((rs) => {
@@ -2132,7 +2147,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       p.then((rs) => { for (const r of rs) console.log(`${r.source}: ${r.refused ?? `${r.fetched} fetched, ${r.stored.length} read, ${r.confirmed ?? 0} confirmed, ${r.proposals ?? 0} proposed, ${r.due.length} note(s) due${r.capped ? ", daily cap reached (the rest waits for tomorrow)" : ""}`}`); process.exit(rs.some((r) => r.refused) ? 1 : 0); }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
       return -1;
     }
-    console.error("sources list | sources pull [<name>] [--dry-run [--show]] | sources connect <name> | sources backfill <name> [--max N] [--dry-run]");
+    console.error("sources list | sources pull [<name>] [--dry-run [--show]] | sources resync <calendar> [--dry-run] | sources connect <name> | sources backfill <name> [--max N] [--dry-run]");
     return 2;
   }
   if (cmd === "capture" && ["drop", "mail", "watch", "pending", "held", "release", "discard"].includes(args[0])) {

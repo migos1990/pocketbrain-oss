@@ -33,6 +33,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac read-only check 2026-11-08: 0 of the first 15 people pages showed Last met. The real data explains most of it (4 past meetings with guests, none matching the 8 addresses pages hold), but meetingsWith read only the emails attribute and hashed each value raw, so an address under email, or held as Name <address>, never matched; nothing reported it.",
     fix: "addressKeys in src/upcoming.ts reads every email-shaped attribute and the address inside a From line, lowercased. scripts/north-star.ts detectors reports people pages showing Last met and past guest meetings that tie no page, report-only. Tests: test/last-met-match.test.ts.",
   },
+  G748: {
+    closed: "claude/calendar-resync",
+    title: "A calendar event made long ago for a date more than 60 days out still waited for the window",
+    severity: "low",
+    finding: "Coordinator 2026-11-09 after G744: the per-pass catch-up reads an unread event only once it is in the coming-events cache (60 days), so an event made before the first sync for a date further out, or a series whose next meeting is past the window, stays unread until then, and nothing could read the calendar whole again short of losing its sync token.",
+    fix: "src/google.ts fetchCalendarResync lists each listed calendar without a sync token and keeps coming events and series still meeting (seriesLive: UNTIL, COUNT) not read at their version; src/pull.ts resyncCalendar counts them on --dry-run (writes nothing, no model, no event named) and otherwise runs them through pullSource with a fresh sync token. `pocketbrain sources resync <calendar> [--dry-run]`. Tests: test/google.test.ts (G748).",
+  },
   G745: {
     closed: "e47bbea7",
     title: "A lost ant login showed as a count of failed calls, one line per Gardener job",

@@ -438,3 +438,49 @@ test("G744: a coming event the first sync left out (too far ahead, or an old ser
   await pullSource(root, "cal", { upcoming: () => [events.later] });
   expect(calls.filter((c) => c === "later" || c === "weekly")).toEqual([]);
 });
+
+// After G744 a coming event is read once it is within 60 days; one made long ago for a date
+// further out, or an old series, still waits until then. A one-off resync reads the whole
+// calendar again for every coming event or live series not read yet, with a dry run that only
+// counts and writes nothing (G748).
+test("G748: a calendar resync counts first and writes nothing, then reads every coming event and live series the pull never read", async () => {
+  const { resyncCalendar } = await import("../src/pull");
+  const root = calRoot();
+  events = {
+    far: { id: "far", etag: '"3"', status: "confirmed", updated: "2026-07-17T00:00:00Z", summary: "Course A final", start: { dateTime: iso(120) }, description: "Please book the exam room B-201 for the final" },
+    series: { id: "series", etag: '"2"', status: "confirmed", updated: "2025-09-01T00:00:00Z", summary: "Course A sync", start: { dateTime: "2025-09-02T15:00:00Z" }, recurrence: ["RRULE:FREQ=WEEKLY"], description: "Weekly sync on Course A with the team" },
+    ended: { id: "ended", etag: '"2"', status: "confirmed", updated: "2025-01-01T00:00:00Z", summary: "Old series", start: { dateTime: "2025-01-02T15:00:00Z" }, recurrence: ["RRULE:FREQ=WEEKLY;UNTIL=20250301T000000Z"], description: "An old weekly that ended" },
+    past: { id: "past", etag: '"1"', status: "confirmed", updated: "2025-01-01T00:00:00Z", summary: "Old", start: { dateTime: "2025-01-02T10:00:00Z" }, description: "Long ago" },
+  };
+  await pullSource(root, "cal"); // the first sync: none of them is recent or within 60 days
+  const before = readFileSync(join(root, "log", "sources", "cal.json"), "utf8");
+  const dry = await resyncCalendar(root, "cal", { dryRun: true });
+  expect(dry).toMatchObject({ source: "cal", listed: 4, unread: 2, coming: 1, series: 1 });
+  expect(readFileSync(join(root, "log", "sources", "cal.json"), "utf8")).toBe(before);
+  expect(proposals(root)).toEqual([]);
+  const r = await resyncCalendar(root, "cal");
+  expect(r.refused).toBeUndefined();
+  expect(r.fetched).toBe(2);
+  const st = JSON.parse(readFileSync(join(root, "log", "sources", "cal.json"), "utf8"));
+  expect(Object.keys(st.seen).sort()).toEqual(["far", "series"]);
+  expect(proposals(root).length).toBe(1);
+  // Done once, nothing is left: a second dry run counts none.
+  expect((await resyncCalendar(root, "cal", { dryRun: true })).unread).toBe(0);
+  // Only a calendar source.
+  writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ consent: "2026-10-01 test", sources: { cal: { kind: "gcal", account: "primary" }, mail: { kind: "gmail", account: "primary" } } }));
+  expect((await resyncCalendar(root, "mail", { dryRun: true })).refused).toContain("calendar");
+});
+
+// Code review on G748: an event already under way (it started before now and ends later), or an
+// all-day event dated today, is still coming: the resync keeps it.
+test("G748: a resync keeps an unread event that is under way and an all-day event dated today", async () => {
+  const { resyncCalendar } = await import("../src/pull");
+  const root = calRoot();
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  events = {
+    now: { id: "now", etag: '"1"', status: "confirmed", updated: "2025-01-01T00:00:00Z", summary: "Workshop", start: { dateTime: new Date(Date.now() - 2 * 36e5).toISOString() }, end: { dateTime: new Date(Date.now() + 2 * 36e5).toISOString() }, description: "Workshop under way" },
+    today: { id: "today", etag: '"1"', status: "confirmed", updated: "2025-01-01T00:00:00Z", summary: "Retreat", start: { date: day(Date.now()) }, end: { date: day(Date.now() + 864e5) }, description: "All-day retreat" },
+  };
+  const dry = await resyncCalendar(root, "cal", { dryRun: true });
+  expect(dry).toMatchObject({ unread: 2, coming: 2, series: 0 });
+});

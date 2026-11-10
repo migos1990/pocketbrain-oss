@@ -276,6 +276,55 @@ export async function fetchCalendar(cfg: SourceConfig, cursor?: string, seen: Se
   return { items: items.slice(0, MAX_EVENTS), cursor: JSON.stringify(more ? prev : next), ...(more ? { more } : {}) };
 }
 
+// A series still meeting: no end, an UNTIL from today on, or a COUNT whose last meeting can't yet be
+// past (each step taken at its longest: a month as 31 days, a year as 366).
+function seriesLive(e: Raw, now: number): boolean {
+  const rule = (Array.isArray(e.recurrence) ? e.recurrence : []).find((r: unknown) => typeof r === "string" && r.startsWith("RRULE:")) as string | undefined;
+  if (!rule) return false;
+  const part = (k: string) => rule.match(new RegExp(`[;:]${k}=([^;]+)`))?.[1];
+  const until = part("UNTIL");
+  if (until) {
+    const m = until.match(/^(\d{4})(\d{2})(\d{2})/);
+    return !m || Date.parse(`${m[1]}-${m[2]}-${m[3]}T23:59:59Z`) >= now;
+  }
+  const count = Number(part("COUNT"));
+  if (!count) return true;
+  const step = ({ DAILY: 1, WEEKLY: 7, MONTHLY: 31, YEARLY: 366 } as Record<string, number>)[part("FREQ") ?? ""] ?? 366;
+  const start = Date.parse(e.start?.dateTime ?? e.start?.date ?? "") || 0;
+  return start + count * step * Math.max(1, Number(part("INTERVAL")) || 1) * 864e5 >= now;
+}
+
+// The one-off resync (G748): the whole of each listed calendar, read again without a sync token,
+// keeping each coming event and each series still meeting that the hub hasn't read at its version.
+// What a first sync's window or an unedited event kept from the pull. A fresh sync token comes back
+// as the cursor. Counts are for the dry run: listed, kept (unread), and of those coming or series.
+export async function fetchCalendarResync(cfg: SourceConfig, seen: Seen = () => false): Promise<{ items: Raw[]; cursor: string; listed: number; coming: number; series: number }> {
+  const token = await accessToken(cfg.account, "gcal");
+  const next: Record<string, string> = {};
+  const items: Raw[] = [];
+  let listed = 0, coming = 0, series = 0;
+  const now = Date.now();
+  for (const cal of cfg.where?.length ? cfg.where : ["primary"]) {
+    let page: string | undefined;
+    for (;;) {
+      const r = await get(token, `calendars/${encodeURIComponent(cal)}/events`, { maxResults: "250", ...(page ? { pageToken: page } : {}) }, "gcal");
+      if (r._notFound || r._gone) throw new Error(`calendar ${cal} can't be read`);
+      for (const e of (r.items ?? []) as Raw[]) {
+        if (e.status === "cancelled") continue;
+        listed++;
+        // Coming: it ends after now (an event under way, an all-day event dated today), else starts after now.
+        const live = seriesLive(e, now), ahead = (Date.parse(e.end?.dateTime ?? e.end?.date ?? e.start?.dateTime ?? e.start?.date ?? "") || 0) >= now;
+        if (!(live || ahead) || seen(String(e.id), String(e.etag ?? e.updated ?? "1").replace(/"/g, ""))) continue;
+        if (live) series++; else coming++;
+        items.push({ ...e, calendar: cal });
+      }
+      page = r.nextPageToken;
+      if (!page) { if (r.nextSyncToken) next[cal] = r.nextSyncToken; break; }
+    }
+  }
+  return { items, cursor: JSON.stringify(next), listed, coming, series };
+}
+
 // The coming events of the listed calendars, soonest first, recurring ones expanded: the read-time
 // cache behind live next_* facts (src/upcoming.ts). Nothing here goes to a model.
 // The coming `days` and the past `past` days (for "last met", G695), each window its own list so

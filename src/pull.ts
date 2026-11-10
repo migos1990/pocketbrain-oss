@@ -24,7 +24,7 @@ import { loadEscalation } from "./textline/policy";
 import { clock, ownerDay } from "./clock";
 import { refString, sourceRank } from "./sources";
 import { extractCapture, fileCard, checkCandidate, releaseHeldDaily, captureModel, findCapture, senderKey, previewExtraction, readCapture, unfinishedPull, type CaptureItem } from "./capture";
-import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchUpcoming, fetchDrive, fetchDriveFile, fetchContacts, fetchContact } from "./google";
+import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchCalendarResync, fetchUpcoming, fetchDrive, fetchDriveFile, fetchContacts, fetchContact } from "./google";
 import { cardItem, readCard, cardCandidates, cardAdjust, ownerRelations, fetchVcards, withoutDetails } from "./contacts";
 import { fetchDiscord, fetchDiscordMessage, fetchTexts, fetchText, fetchGranola, fetchGranolaNote } from "./feeds";
 import { findInjection, redactSecrets } from "./checks";
@@ -524,6 +524,28 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   git(root, ["commit", "-q", "-m", `pull: ${name} (${out.stored.length} stored, ${new Set(out.due).size} notes due)\n\nAgent: ${by}\nKind: pull`], by);
   out.due = [...new Set(out.due)];
   return out;
+}
+
+// `pocketbrain sources resync <calendar> [--dry-run]` (G748): the one-off full read of a calendar
+// source. The dry run lists the calendar and only counts what a resync would read (coming events
+// and series still meeting that the hub never read at their version); it writes nothing, sends
+// nothing to a model and names no event. Without it, those events go through the pull like any
+// other (consent, caps, captures), and the calendar's sync token starts again from this read.
+export type ResyncResult = PullResult & { listed?: number; unread?: number; coming?: number; series?: number };
+export async function resyncCalendar(root: string, name: string, o: { dryRun?: boolean } = {}): Promise<ResyncResult> {
+  const file = loadSources(root);
+  const cfg = file.sources?.[name];
+  const out: ResyncResult = { source: name, fetched: 0, stored: [], skipped: 0, due: [] };
+  if (!cfg || cfg.kind !== "gcal") return { ...out, refused: `${name}: a resync is for a calendar source (kind: gcal) in rules/sources.yaml` };
+  if (!cfg.fixture) { const no = consentGap(file, name, cfg); if (no) return { ...out, refused: no }; }
+  const state = loadState(root, name);
+  const seen = (id: string, version?: string) => id in state.seen && (version === undefined || state.seen[id] === version);
+  let got: Awaited<ReturnType<typeof fetchCalendarResync>>;
+  try { got = await fetchCalendarResync(cfg, seen); }
+  catch (e) { return { ...out, refused: `${name}: ${(e as Error).message}` }; }
+  const counts = { listed: got.listed, unread: got.items.length, coming: got.coming, series: got.series };
+  if (o.dryRun) return { ...out, ...counts };
+  return { ...(await pullSource(root, name, { fetch: () => ({ items: got.items, cursor: got.cursor }) })), ...counts };
 }
 
 export async function pullAll(root: string, opts: { model?: Model | null } = {}): Promise<PullResult[]> {
