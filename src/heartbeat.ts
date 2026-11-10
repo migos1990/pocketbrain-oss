@@ -22,6 +22,7 @@ export const CADENCE: Record<string, Cadence> = {
   searchable: { owner: "nightly search check", late_hours: 36 },
   backfill: { owner: "nightly source check", late_hours: 36 },
   trust: { owner: "nightly trust count", late_hours: 36 },
+  proofread: { owner: "nightly read of your pages", late_hours: 36 },
   housekeeping: { owner: "nightly housekeeping", late_hours: 36 },
   audit: { owner: "weekly access audit", late_hours: 8 * 24 },
   pull: { owner: "mail and calendar pull", late_hours: 36 },

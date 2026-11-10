@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G750: {
+    closed: "claude/nightly-read",
+    title: "The owner was the brain's only proofreader",
+    severity: "medium",
+    finding: "Next-level plan 2026-11-09 (move 1): 91 of 150 gaps were wording the owner found on his phone, each fixed by one more special case in a template, so the gap rate never fell; the demo brain passed every test while its pages still read \"The chose of <a decision> is …\" and \"<an org>'s kind is …\".",
+    fix: "src/proofread.ts reads every page as the owner sees it (the dashboard's own ownerPage, fresh) each night after the night pass and runs 14 class rules (template slot, raw markup, label sentence, machine date, repeated opener, spliced value, said twice, full name again, chip repeats, doubled, empty section, no source, bare URL, cut off), each proven by an old gap's bad sentence and a clean twin. Counts by rule and page kind, never a name, go to log/proofread.json, the proofread heartbeat and the north star's report; report-only, no card, no ask, no notification.",
+  },
   G749: {
-    closed: "claude/dangling-link-ask",
+    closed: "280610d2",
     title: "A fact linking a page the brain doesn't have was never asked about",
     severity: "medium",
     finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",

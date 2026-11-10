@@ -28,6 +28,7 @@ import { probeOnce, unsearchable, recordStart, northStarAfterStart, northStarLin
 import { pullAll, pullsDue, recheckDue, keepSourceWords } from "./pull";
 import { nightBackfill, nightBackfillLine } from "./backfill";
 import { trustReport, recordTrust, trustLine } from "./trust";
+import { proofread, proofreadLine } from "./proofread";
 import { examDue, examRun } from "./exam";
 import { auditCarve } from "./audit";
 import { loadRules } from "./rules";
@@ -201,6 +202,9 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
         // until the owner's `pocketbrain backfill on`), then the day's trust numbers are kept for the week-on-week line (src/trust.ts). No model.
         log(`${stamp()} ${await runJob(root, "backfill", async () => nightBackfillLine(await nightBackfill(root)))}`);
         log(`${stamp()} ${await runJob(root, "trust", () => { const t = trustReport(root); recordTrust(root, t); return `trust: ${t.facts} facts, ${trustLine(t)}`; })}`);
+        // The brain reads every page as the owner sees it, one set of class rules, counts only
+        // (src/proofread.ts, G750; report-only: no card, no ask, no notification).
+        log(`${stamp()} ${await runJob(root, "proofread", () => proofreadLine(proofread(root)))}`);
         // Hub logs rotated, git packed, .git against its budget (src/growth.ts).
         log(`${stamp()} ${await runJob(root, "housekeeping", () => housekeeping(root))}`);
       }

@@ -59,6 +59,7 @@
 // contradiction, each planted contradiction is asked exactly once, the saves the hub planned all
 // land, the imported page ends with cited prose, and pages_ok >= 80%. scripts/gate.ts runs it and
 // blocks a merge on a fail (NORTH_STAR_BLOCKING).
+import { readProofread, proofreadLine, type Proofread } from "../src/proofread";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -171,7 +172,7 @@ export function nightWindow(root: string, now: Date): { since: string; until: st
 //   owner_listed   of the live projects and decisions no more private than the owner's own page,
 //                  how many that page names (G725); a gap means the writer left some out. G740.
 //                  Printed in the report only, not in --json (its keys are pinned).
-export interface Detectors { people: number; last_met: number; guest_meetings: number; guest_meetings_untied: number; owner_listable: number; owner_listed: number }
+export interface Detectors { people: number; last_met: number; guest_meetings: number; guest_meetings_untied: number; owner_listable: number; owner_listed: number; read?: Proofread }
 const ENDED = new Set(["archived", "merged", "superseded", "done", "closed", "cancelled", "canceled", "completed"]);
 export function detectors(root: string, notes: Note[], day: string): Detectors {
   const people = notes.filter((n) => n.fm.type === "person" && !ENDED.has(String(n.fm.status ?? "active")));
@@ -183,7 +184,7 @@ export function detectors(root: string, notes: Note[], day: string): Detectors {
   const me = notes.find((n) => n.fm.id === ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page);
   const listable = me ? notes.filter((p) => ["project", "decision"].includes(String(p.fm.type)) && ["projects", "decisions"].includes(p.fm.id.split("/")[0]!) && !ENDED.has(String(p.fm.status ?? "active")) && sensitivityRank(p.fm.sensitivity) <= sensitivityRank(me.fm.sensitivity) && Object.keys(p.fm.facts ?? {}).length) : [];
   const named = new Set(me ? linksIn(me.body).map((l) => l.split("|")[0]!.trim()) : []);
-  return { people: people.length, last_met, guest_meetings: guests.length, guest_meetings_untied: guests.filter((e) => !e.who!.some((h) => held.has(h))).length, owner_listable: listable.length, owner_listed: listable.filter((p) => named.has(p.fm.id)).length };
+  return { people: people.length, last_met, guest_meetings: guests.length, guest_meetings_untied: guests.filter((e) => !e.who!.some((h) => held.has(h))).length, owner_listable: listable.length, owner_listed: listable.filter((p) => named.has(p.fm.id)).length, read: readProofread(root) };
 }
 
 export function measure(root: string, since: string, now: Date, planted = 0, until?: string): NorthStar {
@@ -379,7 +380,8 @@ export function report(m: NorthStar, label: string): string {
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,
     ...(m.why ? [`  commits: ${m.why.commits}, ${m.why.with_why} saying why; the Gardener's: ${m.why.gardener}, ${m.why.gardener_why} saying why (reported, not in pass)`] : []),
     ...(m.detectors ? [`  Last met shown on ${m.detectors.last_met} of ${m.detectors.people} people pages; ${m.detectors.guest_meetings_untied} of ${m.detectors.guest_meetings} past meetings with guests tie no page (reported, not in pass)`,
-      `  the owner's page names ${m.detectors.owner_listed} of ${m.detectors.owner_listable} live projects and decisions (reported, not in pass)`] : []),
+      `  the owner's page names ${m.detectors.owner_listed} of ${m.detectors.owner_listable} live projects and decisions (reported, not in pass)`,
+      `  ${m.detectors.read ? proofreadLine(m.detectors.read) : "nightly read: not run on this brain yet (reported, not in pass)"}`] : []),
     ...m.notes.map((n) => `  note: ${n}`),
   ].join("\n");
 }

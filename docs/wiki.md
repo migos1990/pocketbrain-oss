@@ -132,6 +132,29 @@ Links go both ways for an assistant too (`src/links.ts`). `read` returns `links_
 
 `read` takes an optional `section` (a `## ` heading). It returns only that section and the references it cites. An unknown section is a 404 (`GET /v1/notes/<id>?section=<heading>` on the JSON API). `context_pack` still ranks whole notes; ranking by section is not built yet.
 
+## The nightly read
+
+The owner is not the proofreader (next-level move 1, G750). After the night pass, `src/proofread.ts` renders every page the owner has exactly as the dashboard serves it to him (`ownerPage`, fresh) and reads the words on it: the name, the line under it, the chips, the paragraphs and headings, and the quotes under References (a quote is the source's own words, so it is only checked for being empty). One set of class rules, not one per gap:
+
+| Rule | What it catches |
+|---|---|
+| `template-slot` | a slot the template never filled: `{day}`, undefined, null, None |
+| `raw-markup` | `[[link]]`, `[^1]`, `**`, a code quote, a source id or a long hex id in the words, an id used as the page's name |
+| `label-sentence` | an attribute's label read as English: "The chose of X is …", "On X, the why: …", "Relationship of X: …", "X's what it is is …", "X's kind is …" |
+| `machine-date` | 2026-08-30 in a sentence the hub wrote |
+| `repeated-opener` | three sentences running that open with the same two words (a list written as prose) |
+| `spliced-value` | a free-text value glued into a template built for a short noun phrase (audit v13): "X is Robin is done …", "works as Former colleague; collaborator …", a mail subject ("Due for Re: Fwd: …"), a question inside a sentence ("…the review?."), a role glued to more words before its org ("is the student, team lead for group A at …") |
+| `said-twice` | one sentence twice on a page |
+| `full-name-again` | the page's full name opening two or more sentences of one paragraph |
+| `chip-repeats` | a chip that says again what the name or the line under it says, or its initials |
+| `doubled` | "..", "the the", a space before a comma |
+| `empty-section` | a heading with nothing under it, a "What the source said" with no words |
+| `no-source` | "No source given" |
+| `bare-url` | a web address as words in a sentence |
+| `cut-off` | a paragraph that stops mid-clause |
+
+Each rule is proven in `test/proofread.test.ts` by the bad sentence an old gap reported and a clean twin it must pass. A new wording gap whose sentence no rule catches becomes a rule, not another branch in a template. The result is counts by rule and by page kind, never a page's id, title or value, kept in `log/proofread.json`, the `proofread` heartbeat, and one line of the north star's report ("nightly read: 88 odd sentences on 44 of 102 pages (label-sentence 43, …) (reported, not in pass)"). It is report-only: no page, card or ask, and it reaches no notification. The first read of the demo brain found the writer's label sentences on every decision and project, machine dates on decision pages and conflict records, orgs whose full name opens each sentence, and a role glued to more words before its org.
+
 ## A link to a page you don't have
 
 A fact can link a page the brain has under no id, title or alias (the Mac's probe, 2026-11-09: a person's org fact linked an org page that never existed, so nothing tied the two). That is an open question about data, so it becomes one ask, never prose (`src/dangling.ts`, G749). The night pass (upkeep step 1c3c) finds each such live fact on a page below private and, once `rules/policy.yaml` says `links: { ask: true }` (the owner's typed word; until then it only counts them under `link-would-ask`), files one question per fact in `inbox/links/`, in one hub commit. The home asks it under **To answer** with a tap for each page in the same folder whose name shares the link's words (up to three), **Keep it as a name** (the fact becomes the plain words, which link by themselves once a page takes that name, G674) and **Leave it**. A pick or the name is the owner's word on that one fact, through `write()`, and the page is written again at once; Leave it is remembered, so a fact is never asked about twice. Nothing changes before his tap.

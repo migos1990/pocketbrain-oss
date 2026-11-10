@@ -1813,6 +1813,16 @@ const polishCases: Case[] = [
     const same = readFileSync(join(root, "people", "ana-diaz.md"), "utf8") === before;
     return ok(asks.length === 1 && asks[0].choices[0] === "orgs/harbour-line" && again.length === 0 && same, `${asks.length} ask(s), first choice ${asks[0]?.choices[0] ?? "none"}, asked again ${again.length}, page unchanged ${same}`);
   } },
+  { id: "nightly-read-finds-label-sentences", dimension: "upkeep", gap: "G750", kind: "benign", title: "the nightly read finds an attribute's label read as English, passes its clean twin, and its record names no page", source: "Next-level plan 2026-11-09 (move 1: the owner was the only proofreader)", run: async () => {
+    const f = join(SRC_DIR, "proofread.ts");
+    if (!existsSync(f)) return na("no nightly read at this commit");
+    const p = await import(f);
+    const page = (title: string, prose: string) => `<main><h1>${title}</h1><div class="prose"><p>${prose}</p><h2>References</h2><ol class="b-refs"></ol></div></main>`;
+    const bad = p.readPage(page("Atlas beta scope", "On Atlas beta scope, the why: offline mode needs another month."));
+    const good = p.readPage(page("Atlas beta scope", "Why: offline mode needs another month."));
+    const line = p.proofreadLine({ at: "2026-10-08T14:00:00Z", pages: 2, odd_pages: 1, by_rule: { "label-sentence": 1 }, by_kind: { decision: { "label-sentence": 1 } } });
+    return ok(bad.includes("label-sentence") && good.length === 0 && !line.includes("Atlas"), `bad ${bad.join(",") || "none"}; clean ${good.join(",") || "none"}; ${line}`);
+  } },
   { id: "last-met-by-invite-name-is-a-guess", dimension: "upkeep", gap: "G746", kind: "benign", title: "a guest named on the invite ties a page that holds no address, as a guess; an address the page holds is sure", source: "Mac 2026-11-09 (Last met 0 of 15: only 6 of 47 people pages hold an address)", run: async () => {
     const up = await import(join(SRC_DIR, "upcoming.ts"));
     if (!up.meetingsWith) return na("no meetings at this commit");
