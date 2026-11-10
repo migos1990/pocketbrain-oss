@@ -886,6 +886,33 @@ const pullCases: Case[] = [
     const gone = !helper.includes("Spring course") && !helper.includes("f0000000000000a4");
     return ok(before && gone && steward.includes("is on [[projects/spring-course"), `shown before ${before}; gone for the reader it's kept from ${gone}; kept for steward ${steward.includes("is on [[projects/spring-course")}`);
   } },
+  { id: "forget-drops-ask-chats", dimension: "upkeep", gap: "G763", title: "forgetting a person deletes the Ask chats that name them and keeps the others", source: "audit v13, slice audit medium", run: async () => {
+    const forget = await import(join(SRC_DIR, "forget.ts")), chats = await import(join(SRC_DIR, "ask-threads.ts"));
+    // Without the sandbox's agent notes: one is filed under another path than its id, which forget's plan reads by id.
+    const root = sandbox("synthetic", (r) => Bun.spawnSync(["rm", "-rf", join(r, "agents")]));
+    const person = pb.brain.loadBrain(root).find((n: any) => n.fm.type === "person" && String(n.fm.title ?? "").length >= 4 && !n.fm.merged_into);
+    if (!person) return na("no person in the sandbox");
+    const now = Date.parse(`${TODAY}T12:00:00Z`);
+    chats.addTurn(root, undefined, { q: `who is ${person.fm.title}?`, a: "A contact." }, now - 2000);
+    const other = chats.addTurn(root, undefined, { q: "what is due this week?", a: "Nothing." }, now - 1000);
+    let said = "";
+    try { said = forget.forgetPerson(root, person.fm.id, { now }).message; } catch (e) { return na(`forget refused: ${(e as Error).message.slice(-90)}`); }
+    const left = chats.listChats(root, now).map((c: any) => c.id);
+    return ok(left.length === 1 && left[0] === other.id && /1 Ask chat/.test(said), `chats left ${left.length} (the other one kept ${left[0] === other.id}); the reply says so ${/1 Ask chat/.test(said)}`);
+  } },
+  { id: "drill-key-owner-commit", dimension: "upkeep", gap: "G762", title: "the drill key is never set from a clone that isn't the hub", source: "audit v13, slice audit medium", run: async () => {
+    const drill = await import(join(SRC_DIR, "restore-drill.ts"));
+    const root = sandbox("synthetic");
+    writeFileSync(join(root, "rules", "backup.pub"), "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\n");
+    writeFileSync(join(root, "rules", "hub.yaml"), "hub: home\nepoch: 1\nreplicas:\n  home: {}\n  laptop: {}\n");
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-qm", "owner: two machines"], { cwd: root });
+    const head = () => Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: root }).stdout.toString().trim();
+    const before = head(), keyFile = join(mkdtempSync(join(tmpdir(), "pb-eval-drill-")), "backup-drill.key");
+    let refused = "";
+    try { drill.drillKeyOn(root, { keyFile }); } catch (e) { refused = (e as Error).message; }
+    return ok(/on the hub/.test(refused) && !existsSync(keyFile) && head() === before, `refused "${refused.slice(0, 50)}"; key made ${existsSync(keyFile)}; committed ${head() !== before}`);
+  } },
   { id: "wiki-hidden-page-name-writer", dimension: "access", gap: "G754", title: "a reader never gets the name of a page it can't see from the page writer's sentence about a fact that links it, by read, search, pack or what's new; a reader who sees the page gets a link", source: "audit v13 slice audit, high (a hidden page's title in plain words)", run: async () => {
     const out: string[] = [];
     let good = true;

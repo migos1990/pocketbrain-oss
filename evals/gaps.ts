@@ -40,6 +40,20 @@ export const GAPS: Record<string, Gap> = {
     finding: "2026-11-09: every PR's ci run from about 17:00Z ended failure with no job and an empty log (PR 139 and 143), so the required `test` check never ran; with the main ruleset and no bypass, no fix could land and the Mac could not take a new sha.",
     fix: ".github/workflows/ci.yml: test, e2e and conformance run on the Mac's self-hosted runner when the repo variable PB_RUNNER names it, only in the private repo and never for a fork's PR; publishing jobs stay on GitHub's runners; Linux-only steps have macOS twins (gitleaks pinned by its darwin checksum, tools checked not sudo-installed) and the denylist goes to RUNNER_TEMP. docs/release.md \"When GitHub's runners are down\" is the Mac setup (own user, home closed, system launchd job, low priority). Tests: test/ci-runner.test.ts.",
   },
+  G763: {
+    closed: "claude/drill-key-forget-chats",
+    title: "Ask chats outlived a forget",
+    severity: "medium",
+    finding: "Audit v13 (2026-11-09): after forgetPerson the owner's Ask chat file still named the person and what was said about them, a fresh Ask page showed both, and the leftovers list never looked at the chats folder beside the brain's git.",
+    fix: "src/forget.ts deletes every Ask chat that names the person by name, page id or address (dropChatsNaming in src/ask-threads.ts), says how many in its reply, and the undo says a deleted chat is not brought back. Tests: test/forget-person.test.ts, eval forget-drops-ask-chats.",
+  },
+  G762: {
+    closed: "claude/drill-key-forget-chats",
+    title: "The drill key was committed to rules/ around the hub gate and the owner author",
+    severity: "medium",
+    finding: "Audit v13 (2026-11-09): pocketbrain backup drill-key committed rules/backup.pub with a private git helper: on a replica, where the repo's git() refuses, it still committed; the author was whoever ran it, and the subject was hard-coded. The commit adds a second key that opens every later backup (invariants 5, 7 and 11).",
+    fix: "src/restore-drill.ts drillKeyOn and drillKeyOff commit through commitPaths as the owner, like the rules setters in src/ownerset.ts, and refuse on a replica or an unnamed clone before a key is made; a commit that fails removes the new key file. Tests: test/restore-drill.test.ts, eval drill-key-owner-commit.",
+  },
   G758: {
     closed: "claude/hold-own-value",
     title: "An assistant saying its own held value again was refused as a leak and put on proposals only",

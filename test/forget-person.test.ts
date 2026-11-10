@@ -238,3 +238,45 @@ test("the CLI shows the plan, prose mentions included, and changes nothing witho
   expect(main(["forget", "--undo", ID, "--brain", root])).toBe(0);
   expect(existsSync(join(root, `${ID}.md`))).toBe(true);
 });
+
+// Audit v13 (G763): Ask's chats (owner-only files beside the brain's git, src/ask-threads.ts) outlived
+// a forget: the chat still named the person and what was said about them, and the leftovers list
+// never looked there. A forget now deletes every chat that names them and says how many.
+test("G763 forget deletes the Ask chats that name the person, and only those", async () => {
+  const { addTurn, listChats } = await import("../src/ask-threads");
+  const root = setup();
+  const now = Date.parse("2026-10-08T12:00:00Z");
+  const a = addTurn(root, undefined, { q: "who is Sam Roy?", a: "Sam Roy is a contractor." }, now - 3000);
+  addTurn(root, a.id, { q: "and his email?", a: "sam@example.com" }, now - 2000);
+  const byId = addTurn(root, undefined, { q: "open people/sam-roy", a: "Here." }, now - 1500);
+  const other = addTurn(root, undefined, { q: "what is next for Course A?", a: "Grade the midterm." }, now - 1000);
+  const r = forgetPerson(root, ID, { now });
+  const left = listChats<{ q: string; a: string }>(root, now);
+  expect(left.map((c) => c.id)).toEqual([other.id]);
+  expect(JSON.stringify(left).toLowerCase()).not.toContain("sam roy");
+  expect(left.some((c) => c.id === byId.id)).toBe(false);
+  expect(r.message).toContain("2 Ask chat(s) that named them were deleted");
+  // The undo puts the brain back; a deleted chat stays deleted, and the undo says so.
+  expect(undoForget(root, ID, { now: now + DAY })).toMatch(/Ask chats? deleted with the forget (is|are) not brought back/);
+  expect(listChats(root, now + DAY).map((c) => c.id)).toEqual([other.id]);
+});
+
+test("G763 a forget with no chat about the person says nothing of chats", () => {
+  const root = setup();
+  const r = forgetPerson(root, ID, { now: Date.parse("2026-10-08T12:00:00Z") });
+  expect(r.message).not.toContain("Ask chat");
+});
+
+// Code review of G763: a name is matched as whole words, so a chat about something that only
+// holds the name's letters ("balsam Royce") is not deleted, and it could never be brought back.
+test("G763 a chat that only holds the name's letters inside other words is kept", async () => {
+  const { addTurn, listChats } = await import("../src/ask-threads");
+  const root = setup();
+  const now = Date.parse("2026-10-08T12:00:00Z");
+  const keep = addTurn(root, undefined, { q: "where is the balsam Royce order?", a: "At the depot." }, now - 2000);
+  const gone = addTurn(root, undefined, { q: "what did Sam Roy's team say?", a: "Nothing yet." }, now - 1000);
+  forgetPerson(root, ID, { now });
+  const left = listChats(root, now).map((c) => c.id);
+  expect(left).toContain(keep.id);
+  expect(left).not.toContain(gone.id);
+});

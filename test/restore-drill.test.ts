@@ -156,3 +156,29 @@ test("drill-key off removes only the drill key's own line, never the owner's key
   drillKeyOff(root, { keyFile });
   expect(readFileSync(f, "utf8").match(/^age1\S+/gm)).toEqual([pub]);
 });
+
+// Audit v13 (G762): the drill key adds a second key that opens every later backup, and it was
+// committed with a private git helper: the session's own author, a hard-coded "louis:" subject, and
+// no hub gate, so a replica committed to rules/ too (invariants 5, 7 and 11).
+test("G762 the drill key's commits are the owner's, through the repo's own git", () => {
+  const { root, keyFile } = brainWithBackup();
+  drillKeyOn(root, { keyFile });
+  const last = () => sh(root, "git", "log", "-1", "--format=%an <%ae>%n%s%n%b").out;
+  expect(last()).toMatch(/^.+ <(owner|louis)@pocketbrain\.local>\nowner: drill key for the Sunday restore test \(rules\/backup\.pub\)/);
+  expect(sh(root, "git", "log", "-1", "--format=%s", "--", "rules/backup.pub").out).toContain("drill key for the Sunday restore test");
+  drillKeyOff(root, { keyFile });
+  expect(last()).toMatch(/^.+ <(owner|louis)@pocketbrain\.local>\nowner: drill key removed \(rules\/backup\.pub\)/);
+  expect(sh(root, "git", "status", "--porcelain", "--", "rules").out).toBe("");
+});
+
+test("G762 on a clone that isn't the hub the drill key is refused: no key made, nothing committed", () => {
+  const { root, keyFile } = brainWithBackup();
+  writeFileSync(join(root, "rules", "hub.yaml"), "hub: home\nepoch: 1\nreplicas:\n  home: {}\n  laptop: {}\n");
+  sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "louis: two machines");
+  const head = sh(root, "git", "rev-parse", "HEAD").out, pubs = readFileSync(join(root, "rules", "backup.pub"), "utf8");
+  expect(() => drillKeyOn(root, { keyFile })).toThrow(/on the hub/);
+  expect(existsSync(keyFile)).toBe(false);
+  expect(readFileSync(join(root, "rules", "backup.pub"), "utf8")).toBe(pubs);
+  expect(sh(root, "git", "rev-parse", "HEAD").out).toBe(head);
+  expect(() => drillKeyOff(root, { keyFile })).toThrow(/on the hub/);
+});

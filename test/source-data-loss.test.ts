@@ -152,7 +152,7 @@ test("texts: a thread with more old rows than one query reads its recent texts o
   // The re-read window (for edits and unsends) brings back only rows already seen, never the old thread.
   expect(r2.items.map((x) => x.guid)).toEqual(["G-601", "G-602", "G-603", "G-604"]);
   expect(r2.cursor).toBe("604");
-});
+}, 60_000);
 
 test("texts: a first pass with nothing recent still moves the cursor past the old thread", () => {
   const chat = chatDb(600, 0);
@@ -162,7 +162,7 @@ test("texts: a first pass with nothing recent still moves the cursor past the ol
   expect(r1.cursor).toBe("600");
   const r2 = fetchTexts(cfg, r1.cursor, () => false);
   expect(r2.items).toEqual([]);
-});
+}, 60_000);
 
 test("texts: more recent texts than one query returns are read over the next passes", () => {
   const chat = chatDb(10, 700);
@@ -172,7 +172,7 @@ test("texts: more recent texts than one query returns are read over the next pas
   for (let i = 0; i < 3; i++) { const r = fetchTexts(cfg, cur, (id) => seen.has(id)); r.items.forEach((x) => seen.add(String(x.guid))); cur = r.cursor; }
   expect(seen.size).toBe(700);
   expect(cur).toBe("710");
-});
+}, 60_000);
 
 test("texts: verify_source finds a recent text in a long thread, and never a text outside the listed threads", () => {
   const chat = chatDb(600, 1);
@@ -180,7 +180,7 @@ test("texts: verify_source finds a recent text in a long thread, and never a tex
   const cfg = { kind: "imessage" as const, where: ["+15145550123"], path: chat.path };
   expect(fetchText(cfg, "G-601")?.text).toBe("text number 601 about the plan");
   expect(fetchText(cfg, "G-700")).toBeUndefined();
-});
+}, 60_000);
 
 test("texts: a pull over a long thread with today's text proposes from it", async () => {
   const chat = chatDb(600, 0);

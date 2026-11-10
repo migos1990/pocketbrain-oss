@@ -23,6 +23,9 @@ import { fetchOffsite, offsiteState, type Exec } from "./offsite";
 import { keysDir } from "./secrets";
 import { beat } from "./heartbeat";
 import { sha256 } from "./util";
+import { commitPaths } from "./git";
+import { OWNER } from "./owner";
+import { hubRole } from "./hub";
 import { recordDrill } from "./measure";
 
 export const DRILL_KEY = "backup-drill.key";
@@ -152,9 +155,15 @@ export function drillCheck(root: string, now = new Date()): { name: string; ok: 
 // plain text, so the key adds no reader there; it does mean a copy of the keys folder opens the
 // offsite files, so it is never synced or backed up (the backup leaves credential files out).
 const PUB = "rules/backup.pub";
+// rules/ changes are the hub's (invariant 11): refused elsewhere before a key is made.
+function hubOnly(root: string) {
+  const role = hubRole(root);
+  if (role.mode === "replica" || role.mode === "unnamed") throw new BackupError(`the drill key is set on the hub (${role.cfg.hub}); run this there. Nothing was changed`);
+}
 const MARK = "# drill key (pocketbrain backup drill-key): the Sunday restore test opens backups with it";
 export function drillKeyOn(root: string, o: { keyFile?: string } = {}): string {
   const file = o.keyFile ?? drillKeyFile();
+  hubOnly(root);
   if (!existsSync(join(root, PUB))) throw new BackupError(`no ${PUB} yet; set up backups first (pocketbrain backup --init --pub <age1...>)`);
   if (existsSync(file)) throw new BackupError(`there is already a drill key at ${file}; pocketbrain backup drill-key off first to make a new one`);
   const k = Bun.spawnSync(["age-keygen"], { stdout: "pipe", stderr: "pipe" });
@@ -167,13 +176,18 @@ export function drillKeyOn(root: string, o: { keyFile?: string } = {}): string {
   writeFileSync(file, secret + "\n", { mode: 0o600 });
   const text = readFileSync(join(root, PUB), "utf8").replace(/\n?$/, "\n");
   writeFileSync(join(root, PUB), `${text}${MARK}\n${pub}\n`);
-  const add = git(root, "add", PUB), c = git(root, "commit", "-q", "-m", "louis: drill key for the Sunday restore test", "--", PUB);
-  if (add.code !== 0 || c.code !== 0) throw new BackupError(`wrote ${PUB} but couldn't commit it: ${c.err || add.err}`);
+  // The owner's own commit through the repo's git (the hub gate, the owner as author), like every
+  // other rules/ setter (src/ownerset.ts): this line lets a second key open every later backup.
+  let unsaved: string | undefined;
+  try { unsaved = commitPaths(root, [PUB], `owner: drill key for the Sunday restore test (${PUB})`, OWNER); }
+  catch (e) { rmSync(file, { force: true }); throw e; }
+  if (unsaved) { rmSync(file, { force: true }); throw new BackupError(`the drill key wasn't added: the brain's git couldn't commit ${PUB} (${unsaved}); nothing was changed`); }
   return `drill key made in ${file} (0600, not printed) and added to ${PUB}; the next backup opens with it, and the Sunday test restores that file. pocketbrain drill --weekly runs the test now`;
 }
 
 export function drillKeyOff(root: string, o: { keyFile?: string } = {}): string {
   const file = o.keyFile ?? drillKeyFile();
+  hubOnly(root);
   // Only the drill key's own public line goes (derived from the key file), and the comment above it:
   // never the line after the comment whatever it is, which could be the owner's own key.
   const mine = existsSync(file) ? Bun.spawnSync(["age-keygen", "-y", file], { stdout: "pipe" }).stdout.toString().trim() : "";
@@ -182,8 +196,8 @@ export function drillKeyOff(root: string, o: { keyFile?: string } = {}): string 
   if (keep.length !== lines.length) {
     lines.splice(0, lines.length, ...keep);
     writeFileSync(join(root, PUB), lines.join("\n"));
-    git(root, "add", PUB);
-    git(root, "commit", "-q", "-m", "louis: drill key removed", "--", PUB);
+    const unsaved = commitPaths(root, [PUB], `owner: drill key removed (${PUB})`, OWNER);
+    if (unsaved) throw new BackupError(`the drill key wasn't removed: the brain's git couldn't commit ${PUB} (${unsaved}); nothing was changed`);
   }
   rmSync(file, { force: true });
   return `drill key removed from ${PUB} and the keys folder; backups made before now still open with it until they rotate out. The Sunday test goes back to a stand-in key`;

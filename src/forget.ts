@@ -19,6 +19,7 @@ import { logWrite, resolveEntity } from "./write";
 import YAML from "yaml";
 import { buildAll } from "./backup";
 import { edgeEnrolled } from "./edge";
+import { dropChatsNaming } from "./ask-threads";
 
 export const FORGET_UNDO_DAYS = 14;
 const DAY = 86_400_000;
@@ -34,7 +35,7 @@ const LEFTOVER_DIRS = ["journal", "archive", "comms", "handoffs", "digest", "cap
 // named: other notes that still name them in plain text (their title or an address) once the links
 // are [[redacted]]. Prose is the owner's to edit; the plan and the result list it, before --yes too.
 export interface ForgetPlan { id: string; title: string; links: string[]; inbox: string[]; disputes: string[]; standing: boolean; named: string[] }
-interface Stash { id: string; at: string; traces: StandingTraces; untracked: Record<string, string> }
+interface Stash { id: string; at: string; traces: StandingTraces; untracked: Record<string, string>; chats?: number }
 
 function walk(root: string, rel: string): string[] {
   const dir = join(root, rel);
@@ -124,7 +125,10 @@ export function forgetPerson(root: string, id: string, o: { now?: number } = {})
   }
   const hash = git(root, ["rev-parse", "HEAD"]);
   mkdirSync(stashDir(root), { recursive: true });
-  writeFileSync(join(stashDir(root), `${hash}.json`), JSON.stringify({ id, at, traces, untracked } satisfies Stash) + "\n");
+  // Ask's chats that name them (owner-only files beside the git folder, never committed) go whole;
+  // nothing keeps a copy, so the undo can't bring one back (audit v13, G763).
+  const chats = dropChatsNaming(root, [id, ...namesOf(plan.title, addresses)]);
+  writeFileSync(join(stashDir(root), `${hash}.json`), JSON.stringify({ id, at, traces, untracked, ...(chats ? { chats } : {}) } satisfies Stash) + "\n");
   logWrite(root, { at, agent: OWNER, kind: "owner-forget-person", key: id, outcome: "committed", step: 6 });
   dropParsed(root, [noteText, ...versions, ...before, ...cellCopies], [`"id":"${id}"`, ...addresses.map((a) => JSON.stringify(a))]);
   refreshViews(root, [id, ...addresses]);
@@ -140,6 +144,7 @@ export function forgetPerson(root: string, id: string, o: { now?: number } = {})
   for (const p of left) by.set(p.split("/")[0], (by.get(p.split("/")[0]) ?? 0) + 1);
   const message = [
     `Forgot ${plan.title}: their note, ${plan.links.length} link(s) (now [[redacted]]), ${plan.inbox.length} inbox item(s), ${plan.disputes.length} settled dispute(s)${plan.standing ? ", their standing" : ""} and their local traces. No assistant can read, search or be handed them from now on.`,
+    ...(chats ? [`${chats} Ask chat(s) that named them were deleted; the undo doesn't bring a chat back.`] : []),
     `Undo within ${FORGET_UNDO_DAYS} days: pocketbrain forget --undo ${id}. After that the undo is gone.`,
     ...(plan.named.length ? [`Still named in plain text, by name or address, in ${plan.named.length} note(s) assistants may read: ${plan.named.join(", ")}. A forget rewrites links, not prose: edit those notes.`] : []),
     ...(edge ? [`Edge bundles published before this still hold them: run pocketbrain edge publish --out <dir> again.`] : []),
@@ -171,8 +176,10 @@ export function undoForget(root: string, id: string, o: { now?: number } = {}): 
   }
   git(root, ["commit", "-q", "-m", `owner: undo forget ${id}\n\nKind: owner-edit\nUndid-Forget: ${hash}`], OWNER);
   const f = join(stashDir(root), `${hash}.json`);
+  let chats = 0;
   if (existsSync(f)) {
     const s = JSON.parse(readFileSync(f, "utf8")) as Stash;
+    chats = s.chats ?? 0;
     restorePersonTraces(root, id, s.traces);
     for (const [p, t] of Object.entries(s.untracked)) { mkdirSync(join(root, p, ".."), { recursive: true }); writeFileSync(join(root, p), t); }
     unlinkSync(f);
@@ -180,7 +187,7 @@ export function undoForget(root: string, id: string, o: { now?: number } = {}): 
   logWrite(root, { at: new Date(o.now ?? Date.now()).toISOString(), agent: OWNER, kind: "owner-edit", key: id, outcome: "committed", step: 6 });
   if (existsSync(join(root, "views"))) buildAll(root);
   dropStaleVectors(root); // the [[redacted]] versions of the linking notes
-  return `${id} is back, with its links, standing and inbox items, as it was.`;
+  return `${id} is back, with its links, standing and inbox items, as it was.${chats ? ` The ${chats === 1 ? "Ask chat" : `${chats} Ask chats`} deleted with the forget ${chats === 1 ? "is" : "are"} not brought back.` : ""}`;
 }
 
 // The night's housekeeping: what a forget kept for its undo goes once the window has passed.

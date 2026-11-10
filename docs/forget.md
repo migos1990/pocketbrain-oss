@@ -24,6 +24,7 @@ And, outside git:
 - **Views:** every file under `views/` naming them, dated snapshots included, is deleted, and the current views are built again.
 - **The restart cache:** `.cells/parse.json` drops every version of their note: the brain's own copies, each agent cell's copy, and any cached entry holding their id or one of their addresses. The dropped hashes are listed in `.cells/parse.drop`. Every process honours that file when it loads or saves the cache, so a running hub doesn't write them back.
 - **Semantic search's vectors** (`~/.cache/pocketbrain/vectors/`, docs/semantic-search.md): the vectors of their note, and of every note whose link to them became `[[redacted]]`, are deleted on disk at once, whether semantic search is on or off. A hub that was running keeps a copy in memory only until its next background pass; `forget --undo` deletes the vectors of the redacted versions in turn.
+- **Ask chats that name them** (your own chats on the Ask tab, kept beside the brain's git and never committed): each chat that names them by name, page id or address is deleted whole, and the command says how many. Nothing keeps a copy, so `--undo` does not bring a chat back, and says so (G763).
 - **The edge reader's cells** (`.cells/.edge-reader/`). Bundles you already published with `pocketbrain edge publish` still hold them until you publish again; when any agent is enrolled for the edge, the command says so.
 
 A person who was merged into, or replaced, them (`merged_into`, `superseded_by`) stops the forget. Undo that merge first, or forget that note too.

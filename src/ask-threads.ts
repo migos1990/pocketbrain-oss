@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { gitSide } from "./quotes";
+import { escapeRe } from "./util";
 
 export const CHAT_KEEP_DAYS = 90; // a chat untouched this long is dropped
 export const CHATS_MAX = 100; // the oldest chats go past this many
@@ -58,3 +59,23 @@ export function deleteChat(root: string, id: string): boolean {
   rmSync(file(root, id), { force: true });
   return true;
 }
+
+// Every chat that names someone (by any of `needles`, lower-cased: a page id, a name, an address)
+// is deleted whole, whatever its age: a forgotten person stays in no chat (src/forget.ts, G763).
+// Returns how many went.
+export function dropChatsNaming(root: string, needles: string[]): number {
+  const d = dir(root), keys = needles.map((n) => n.toLowerCase()).filter(Boolean);
+  if (!keys.length || !existsSync(d)) return 0;
+  let n = 0;
+  for (const f of readdirSync(d).filter((x) => x.endsWith(".json") || x.endsWith(".tmp"))) {
+    let text = "";
+    try { text = readFileSync(join(d, f), "utf8"); } catch { continue; }
+    // The file as stored (JSON escapes a quote or a non-ASCII letter) and as read back.
+    let said = text;
+    try { said = `${text}\n${collect(JSON.parse(text)).join("\n")}`; } catch { /* a file cut short is matched as stored */ }
+    // As whole words: "sam roy" is not in "balsam Royce". A deleted chat is not brought back.
+    if (keys.some((k) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(k)}(?![\\p{L}\\p{N}])`, "u").test(said.toLowerCase()))) { rmSync(join(d, f), { force: true }); n++; }
+  }
+  return n;
+}
+const collect = (v: unknown): string[] => typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(collect) : v && typeof v === "object" ? Object.values(v).flatMap(collect) : [];
