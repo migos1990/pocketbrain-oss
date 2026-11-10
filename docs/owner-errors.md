@@ -30,6 +30,8 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `dash.cant-add` (400) | Can't add it: {reason}. Fix: open the dashboard's Assistants page. |
 | `dash.note` (404) | {reason}. Fix: open the dashboard's Brain page, and search for the note. |
 | `dash.no-note` (404) | No note {id} (it may have been forgotten or renamed). Fix: open the dashboard's Brain page, and search for it. |
+| `app.no-page` (404) | That page isn't in your memory any more: it may have been renamed or forgotten. Fix: open Memory, and search for it. |
+| `app.let-gone` (404) | Nothing is left to decide here: it may already be done, or the page has changed. Fix: open On your mind. |
 | `dash.no-day` (404) | The brain has no saved version from {day}. Fix: open the dashboard's Brain page, and pick a day from a note's history. |
 | `dash.no-version` (404) | The note has no saved version from then. Fix: open the dashboard's Brain page, and pick a save from the note's history. |
 | `dash.consent-gone` (404) | That proposal is gone: proposals are kept until the dashboard restarts. Fix: type the sentence again, then click "Propose" on the assistant's page in the dashboard. |

@@ -12,6 +12,7 @@ export type Fix = Steps & (
   | { run: string }                    // a command to type
   | { click: string; on: string }      // a button on a dashboard page
   | { go: string; path: string }       // a dashboard page, by its tab name
+  | { tab: string; path: string }      // one of the owner app's four tabs, by the word on it
   | { reload: true }                   // the page the owner is on
   | { read: string }                   // a doc in this repo
 );
@@ -50,6 +51,9 @@ export const OWNER_ERRORS = {
   "dash.cant-add": { where: "dashboard", status: 400, what: "Can't add it: {reason}", fix: { go: "Assistants", path: "/agents" } },
   "dash.note": { where: "dashboard", status: 404, what: "{reason}", fix: { go: "Brain", path: "/brain", then: "and search for the note" } },
   "dash.no-note": { where: "dashboard", status: 404, what: "No note {id} (it may have been forgotten or renamed)", fix: { go: "Brain", path: "/brain", then: "and search for it" } },
+  // The owner app's own pages (/p, /let): its words and its tabs, never "note", an id or the Brain page (G780).
+  "app.no-page": { where: "dashboard", status: 404, what: "That page isn't in your memory any more: it may have been renamed or forgotten", fix: { tab: "Memory", path: "/memory", then: "and search for it" } },
+  "app.let-gone": { where: "dashboard", status: 404, what: "Nothing is left to decide here: it may already be done, or the page has changed", fix: { tab: "On your mind", path: "/home" } },
   "dash.no-day": { where: "dashboard", status: 404, what: "The brain has no saved version from {day}", fix: { go: "Brain", path: "/brain", then: "and pick a day from a note's history" } },
   "dash.no-version": { where: "dashboard", status: 404, what: "The note has no saved version from then", fix: { go: "Brain", path: "/brain", then: "and pick a save from the note's history" } },
   "dash.consent-gone": { where: "dashboard", status: 404, what: "That proposal is gone: proposals are kept until the dashboard restarts", fix: { first: "type the sentence again", click: "Propose", on: "the assistant's page" } },
@@ -189,6 +193,7 @@ export function fixText(f: Fix, vars: Vars = {}): string {
   const core = "run" in f ? `run ${f.run}`
     : "click" in f ? `click "${f.click}" on ${f.on} in the dashboard`
     : "go" in f ? `open the dashboard's ${f.go} page`
+    : "tab" in f ? `open ${f.tab}`
     : "reload" in f ? "reload the page"
     : `read ${f.read}`;
   return fill(`${f.first ? `${f.first}, then ` : ""}${core}${f.then ? `${f.then.startsWith("(") ? " " : ", "}${f.then}` : ""}`, vars);
@@ -215,7 +220,8 @@ export function ownerErrorHtml(id: OwnerErrorId, vars: Vars, esc: (s: string) =>
   const safe = Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, esc(String(v))]));
   const fix = cap(fixText(e.fix, safe));
   const linked = "go" in e.fix ? fix.replace(`the dashboard's ${e.fix.go} page`, `the dashboard's <a href="${e.fix.path}">${e.fix.go}</a> page`) : fix;
-  return `<h1>${fill(esc(e.what), safe)}</h1><p>${linked}.</p>`;
+  const tabbed = "tab" in e.fix ? fix.replace(`Open ${e.fix.tab}`, `Open <a href="${e.fix.path}">${e.fix.tab}</a>`) : linked;
+  return `<h1>${fill(esc(e.what), safe)}</h1><p>${tabbed}.</p>`;
 }
 
 // docs/owner-errors.md: every entry, grouped by where it shows, placeholders left in.

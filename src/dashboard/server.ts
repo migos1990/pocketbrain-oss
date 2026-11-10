@@ -52,7 +52,7 @@ import { homeView, pageLines, dayWords, firstName, attrWords, factSentence, page
 import type { Note } from "../brain";
 import { ownerPage, askProse, askFact, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
-import { homePage, askPage, askListPage, memoryPage, whoPage, letPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
+import { homePage, askPage, askListPage, memoryPage, whoPage, letPage, appPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
 import { parentOf as wikiParent } from "../wiki";
 import { findOverlaps, assistantOf } from "../overlap";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
@@ -451,6 +451,12 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   // never typed here.
   const page = (id: OwnerErrorId, tab: string, vars: Vars = {}, status = ownerStatus(id)) =>
     html({ title: status === 404 ? "Not found" : status >= 500 ? "Something broke" : "Can't do that", tab, body: `<div class="oops">${ownerErrorHtml(id, vars, esc)}</div>` }, status);
+  // A page of the owner app that isn't there (/p), or a Let sheet with nothing left to decide (/let:
+  // the fact is already given, or its page or assistant is gone): the app's own look and four tabs
+  // (G780; both showed the Settings side's "No note <id>", the second about a page that exists).
+  const APP_OOPS_CSS = ".oops h1{font-size:28px;line-height:32px;letter-spacing:-.02em;max-width:none;margin:28px 0 12px}.oops p{font-size:18px;line-height:25px;margin:0}.oops a{color:var(--text);font-weight:800;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:5px}";
+  const appOops = (id: OwnerErrorId, tab: "mind" | "memory" = "memory", vars: Vars = {}) =>
+    new Response(appPage("Not found", tab, `<div class="oops">${ownerErrorHtml(id, vars, esc)}</div>`, { css: APP_OOPS_CSS }), { status: ownerStatus(id), headers: PAGE_HEADERS });
   // The phone app reads its routes' errors as text (/app/pair, /app/fresh): unchanged by G621.
   const oopsText = (id: OwnerErrorId, vars: Vars = {}) => text(ownerError(id, vars), ownerStatus(id));
   const oops = (id: OwnerErrorId, vars: Vars = {}) => {
@@ -966,7 +972,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     // The home is the front door (audit v4); the old overview is one tap away from it.
     if (p === "/overview") return withFlash(overview(s, csrf, url.searchParams));
     const op = p.match(/^\/p\/(.+)$/);
-    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()), edit: url.searchParams.get("edit") === "1" }) ?? page("dash.no-note", "brain", { id: op[1]! });
+    if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()), edit: url.searchParams.get("edit") === "1" }) ?? appOops("app.no-page");
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];
@@ -984,7 +990,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (p === "/" || p === "/home") return home(csrf, undefined, undefined, url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, url.searchParams.get("all") === "1", !!url.searchParams.get("ok"), freshSignIn(root, sid, now()), url.searchParams.get("tok")?.match(/^[0-9a-f]{16}(?:,[0-9a-f]{16}){0,49}$/)?.[0]);
     const flashed = url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined;
     if (p === "/who") return who(csrf, freshSignIn(root, sid, now()), flashed);
-    if (p === "/let") return letSheet(csrf, url.searchParams) ?? page("dash.no-note", "brain", { id: url.searchParams.get("key")?.split("#")[0] ?? "" });
+    if (p === "/let") return letSheet(csrf, url.searchParams) ?? appOops("app.let-gone", "mind");
     if (p === "/ask") return ask(csrf, sid, flashed, url.searchParams);
     if (p === "/memory") return memory(url.searchParams, freshSignIn(root, sid, now()));
     const editor = s.rules.policy.owner_editor;

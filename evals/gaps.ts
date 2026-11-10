@@ -26,6 +26,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",
     fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
   },
+  G780: {
+    closed: "claude/page-not-found",
+    title: "A missing page in the owner app answered in the Settings side's words",
+    severity: "low",
+    finding: "Screens review 2026-11-10 (demo brain, 390px dark): /p/<id> for a page since renamed or forgotten showed \"No note people/x (it may have been forgotten or renamed)\" and \"Open the dashboard's Brain page\", in the Settings layout with no tabs. /let gave the same \"No note <id>\" whenever its sheet had nothing to ask, including when the page exists and the assistant already gets the fact, so it said a page was missing that was not.",
+    fix: "src/owner-errors.ts: two entries in the owner app's words (app.no-page, app.let-gone) and a fix kind that names one of the app's tabs; src/dashboard/server.ts appOops renders them with appPage and the four tabs. Words only, no access change. Tests: test/page-not-found.test.ts.",
+  },
   G777: {
     closed: "4278eee1",
     title: "The box said Seen by your assistants about facts no assistant can read",
