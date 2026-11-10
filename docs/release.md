@@ -51,22 +51,25 @@ CI also saves a full-page screenshot of each page (`PB_UI_SHOT_DIR=<dir>`), uplo
 
 On 2026-11-09 every PR's `ci` run failed at startup with no job, so the required `test` check never ran and nothing could merge. The Mac mini can run the same jobs (`test`, `e2e`, `conformance`) as a self-hosted runner (G751). The repo variable `PB_RUNNER` is the switch: set to `["self-hosted","pb-mac"]` those jobs run on the Mac; deleted, they go back to GitHub's runners. Because the Mac holds the real brain, `ci.yml` uses the Mac only in a private repo (`github.event.repository.private`, so never in the public copy), never for a pull request from a fork, and never for the jobs that publish or hold a deploy key (`release.yml`'s own jobs, `public-sync.yml`, `docs-live.yml`); `test/ci-runner.test.ts` holds that. On macOS the Linux-only steps have a twin (gitleaks by its own pinned checksum, the tools checked instead of installed with `sudo`), and the denylist file goes to the job's own temp folder, which the runner empties after each job.
 
-The runner runs as its own standard macOS user, `pbrunner`, which can't read the owner's home (so not the brain, the keys folder or the tunnel's credentials), from a system launchd job at low priority. It is a long-lived runner, not an ephemeral one: an ephemeral runner needs a token stored on the Mac to register itself again after every job, and that token could register runners anywhere in the repo. Setup, once, on the Mac (the owner's typed line in the Mac thread):
+The runner runs as its own standard macOS user, `pbrunner`, which can't read the owner's home (so not the brain, the keys folder or the tunnel's credentials), from a system launchd job at low priority. It is a long-lived runner, not an ephemeral one: an ephemeral runner needs a token stored on the Mac to register itself again after every job, and that token could register runners anywhere in the repo. Setup, once, on the Mac: the owner pastes it in Terminal at the keyboard, since every `sudo` needs them there (the Mac thread can't run sudo). The account has no login: its shell is `/usr/bin/false`, it is hidden from the login window, and everything below runs as it through `sudo -u pbrunner -H`, never a login shell.
 
 ```sh
-sudo sysadminctl -addUser pbrunner -fullName "pocketBrain CI"     # a standard user, no admin
-chmod 700 ~                                                       # pbrunner shares the staff group
+sudo sysadminctl -addUser pbrunner -fullName "pocketBrain CI" -shell /usr/bin/false    # a standard user, no admin
+sudo dscl . -create /Users/pbrunner IsHidden 1                    # not on the login window
+sudo dscl . -read /Users/pbrunner UserShell                       # must say /usr/bin/false
+chmod 700 ~                                                       # the owner's home is 750, group staff, which pbrunner is in
 sudo -u pbrunner ls ~/pocketbrain-brain                           # must fail: Permission denied
 brew install age ffmpeg pipx                                      # tools the tests need, in /opt/homebrew/bin
-sudo -iu pbrunner sh -c 'mkdir -p actions-runner && cd actions-runner && curl -fsSLo r.tgz https://github.com/actions/runner/releases/download/v$VERSION/actions-runner-osx-arm64-$VERSION.tar.gz && shasum -a 256 r.tgz && tar xzf r.tgz'
+VERSION=...                                                       # the runner's latest release number
+sudo -u pbrunner -H env VERSION=$VERSION sh -c 'cd /Users/pbrunner && mkdir -p actions-runner && cd actions-runner && curl -fsSLo r.tgz https://github.com/actions/runner/releases/download/v$VERSION/actions-runner-osx-arm64-$VERSION.tar.gz && shasum -a 256 r.tgz && tar xzf r.tgz'
 ```
 
-Pick `VERSION` from the runner's latest release and compare the printed SHA-256 with the one in its release notes. Then register it with a one-hour token straight from `gh` (never printed), and start it as a system launchd job:
+Compare the printed SHA-256 with the one in the runner's release notes. Then register it with a one-hour token straight from `gh`, passed on standard input so it never shows in `ps` or sudo's log, and start it as a system launchd job:
 
 ```sh
 cd ~/pocketbrain && REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)     # the private repo, from its remote
 T=$(gh api -X POST repos/$REPO/actions/runners/registration-token --jq .token)
-sudo -iu pbrunner sh -c "cd actions-runner && ./config.sh --url https://github.com/$REPO --token $T --labels pb-mac --name mac-mini --unattended --replace"; unset T
+printf %s "$T" | sudo -u pbrunner -H env REPO=$REPO sh -c 'cd /Users/pbrunner/actions-runner && ./config.sh --url https://github.com/$REPO --token "$(cat)" --labels pb-mac --name mac-mini --unattended --replace'; unset T
 P=/Library/LaunchDaemons/com.github.actions.runner.pocketbrain.plist
 sudo defaults write $P Label com.github.actions.runner.pocketbrain
 sudo defaults write $P UserName pbrunner
@@ -81,6 +84,10 @@ sudo defaults write $P StandardErrorPath /Users/pbrunner/actions-runner/runner.l
 sudo chown root:wheel $P && sudo chmod 644 $P && sudo launchctl bootstrap system $P
 gh variable set PB_RUNNER --body '["self-hosted","pb-mac"]' --repo $REPO
 ```
+
+Before switching it on, two things to check once:
+- Playwright's Chromium installs per user, and `--with-deps` may reach for `sudo` or `brew` on macOS. Run `sudo -u pbrunner -H sh -c 'cd /tmp && /opt/homebrew/bin/bunx playwright install chromium'` and see that it works without admin rights.
+- A job runs on the Mac, so it can reach the hub on 127.0.0.1:8787 and the dashboard on 8788. Both need a token or a cookie, and `/health` shows only the running sha. Tests must never listen on those two ports: today they only hand the numbers to in-process handlers (`dashboardHandler`), which open no socket.
 
 Back to GitHub's runners: `gh variable delete PB_RUNNER --repo $REPO`. Remove the runner: `sudo launchctl bootout system/com.github.actions.runner.pocketbrain`, then remove it under the repo's Settings, Actions, Runners. While the Mac sleeps or is busy, `test` waits in the queue; deploys are unaffected.
 

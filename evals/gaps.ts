@@ -6,21 +6,21 @@ export interface Gap { title: string; severity: "critical" | "high" | "medium" |
 
 export const GAPS: Record<string, Gap> = {
   G745: {
-    closed: "claude/calendar-recurring",
+    closed: "e47bbea7",
     title: "A lost ant login showed as a count of failed calls, one line per Gardener job",
     severity: "medium",
     finding: "Mac 2026-11-09 after 6cc0d1a3: the watchdog said \"gardener_cleanup: 0 session(s) deleted, 3 failed\". The ant login file had lost its refresh token: `ant auth status` still passed, and each deployment's run list failed with credential resolution error ... missing refresh_token. Cleanup counted each as a failed call and named no cause; the weekly rotation would have failed the same way as a second line.",
     fix: "src/gardener.ts: an ant call refused for its login (antSignedOut) stops the job with the hand step, `ant auth login --profile <profile>`, raised once a day as one gardener_ant alert (from signin) for every job; any other failed call names ant's first answer. src/probe.ts folds the jobs failing on it into one gardener_signin check, which closes the alert once the jobs run again. Tests: test/gardener.test.ts (G745).",
   },
   G744: {
-    closed: "claude/calendar-recurring",
+    closed: "e47bbea7",
     title: "A calendar event made long before its date was never read, and the check called the pull broken",
     severity: "medium",
     finding: "Mac 2026-11-09: calendar_pull said the pull read nothing since 2026-11-06 while 1 coming event was never read: the pull is broken. It was quiet, not broken: the event was made and last edited 2026-07-17 for 2026-12-19, past the first sync's 60-day window, and a sync token returns only what changes after it, so time bringing an unedited event into the window never brought it to the pull. An old weekly series (its start is its first meeting) is left out the same way.",
     fix: "src/pull.ts: each live calendar pass reads, by id, up to 20 coming events (series ids for recurring ones) from the coming-events cache that the pull never read (src/upcoming.ts unreadComing), like any changed event. calendar_pull now fails only when even that leaves one unread. Tests: test/google.test.ts (G744).",
   },
   G751: {
-    closed: "claude/mac-runner",
+    closed: "222b01b5",
     title: "When GitHub's runners failed at startup, the required test check never ran and nothing could merge",
     severity: "high",
     finding: "2026-11-09: every PR's ci run from about 17:00Z ended failure with no job and an empty log (PR 139 and 143), so the required `test` check never ran; with the main ruleset and no bypass, no fix could land and the Mac could not take a new sha.",
