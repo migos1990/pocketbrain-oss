@@ -26,8 +26,15 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",
     fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
   },
+  G781: {
+    closed: "claude/page-kind-word",
+    title: "An organisation's page called itself an org",
+    severity: "low",
+    finding: "Screens review 2026-11-10 (demo brain, 390px dark): the line under an organisation page's name read \"org · 1 source\". \"org\" is the note type's word; Memory's own list says Organisations.",
+    fix: "src/dashboard/html-page.ts kindWord: the owner's word for a note type on the page's kind line (org reads organisation; the other types already read as words). Words only, no access change. Tests: test/page-kind-word.test.ts.",
+  },
   G780: {
-    closed: "claude/page-not-found",
+    closed: "dbb52875",
     title: "A missing page in the owner app answered in the Settings side's words",
     severity: "low",
     finding: "Screens review 2026-11-10 (demo brain, 390px dark): /p/<id> for a page since renamed or forgotten showed \"No note people/x (it may have been forgotten or renamed)\" and \"Open the dashboard's Brain page\", in the Settings layout with no tabs. /let gave the same \"No note <id>\" whenever its sheet had nothing to ask, including when the page exists and the assistant already gets the fact, so it said a page was missing that was not.",

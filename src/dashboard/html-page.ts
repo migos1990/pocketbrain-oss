@@ -228,6 +228,11 @@ function facts(s: State, n: Note, fresh: boolean): string {
   return rows ? `<dl>${rows}</dl>` : "";
 }
 
+// The kind under a page's name, in the owner's word: a note's type is ours ("org"), and Memory's
+// list already says Organisations (G781).
+const KIND_WORDS: Record<string, string> = { org: "organisation" };
+const kindWord = (type: string) => KIND_WORDS[type] ?? type;
+
 // The owner's yes on a suggestion (approved:) is an approval, not a source: a fact from one web
 // page is "1 source".
 function sourceCount(n: Note): number {
@@ -496,7 +501,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   const chip = areaChip(s, n, area, personLine(s, n, fresh, closed));
   // A routine says whose it is: "Town's routine" (owner, 2026-11-03: "which agent does what").
   const runsIn = (x: Note) => x.fm.type === "capability" && assistantOf(x.fm.id) ? agentTitle(s.rules, assistantOf(x.fm.id)) : undefined;
-  const kind = runsIn(n) ? `${whose(runsIn(n)!)} ${PAGE_COPY.routine}` : String(n.fm.type ?? kindLabel(folderOf(n.fm.id)));
+  const kind = runsIn(n) ? `${whose(runsIn(n)!)} ${PAGE_COPY.routine}` : kindWord(String(n.fm.type ?? kindLabel(folderOf(n.fm.id))));
   // A person's name in two lines, the surname in the headline ink; anything else in one.
   const words = name.split(/\s+/);
   const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
