@@ -6,7 +6,7 @@ export interface Gap { title: string; severity: "critical" | "high" | "medium" |
 
 export const GAPS: Record<string, Gap> = {
   G773: {
-    closed: "claude/sentence-shape",
+    closed: "ffbd723f",
     title: "The page writer spliced any value into a sentence and glued a role to an org no source joined",
     severity: "medium",
     finding: "Audit v13 2026-11-09 (item 10): sentence() had 14 shapes and four spliced the raw value after \"is\" or \"works as\" as if it were a short noun phrase, so a clause, a list with a semicolon, a question or a value starting with a name read broken (\"<page> is <name> is done with …\", \"<org>'s what it is is A …\"), an attribute's code name was read as English (\"The chose of … is …\"), and a role from one mail was glued to an org from another into a claim neither made.",
@@ -27,7 +27,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
   },
   G777: {
-    closed: "claude/box-seen-true",
+    closed: "4278eee1",
     title: "The box said Seen by your assistants about facts no assistant can read",
     severity: "medium",
     finding: "CEO review 2026-11-09: the box's reply after a told fact said \"Seen by your assistants.\" for anything not private, from the sensitivity alone, so it said so about pages outside every assistant's slice, and \"Seen by only you.\" about a private fact an assistant reads at its level.",
@@ -172,6 +172,13 @@ export const GAPS: Record<string, Gap> = {
     severity: "high",
     finding: "Audit v13 (2026-11-09): valueKey (G662) cut every word of a sentence to a stem and compareKey drops every mark, so Robert and Roberts, Jon and Jones, France and Frances, hired and is hiring, expires and expired, tenant agreed and tenants agree, -740 and 740, a dollar and a euro amount were the same value: the second writer's different value was merged in as a source of the first, with no ask, against the comment that said tense stays. The false-conflict work traded asks for silent merges.",
     fix: "src/normalize.ts valueKey keeps every word whole, a minus that signs a number and the currency mark; it still folds case, accents, punctuation, articles, is/are and the one rewording G662 was filed for (to retain, to be retained), for a lower-case word only, and a final s alone on a lower-case word inside the sentence (exam, exams), which can both hold. been and being no longer drop. Tests: test/value-key-strict.test.ts, test/false-conflicts.test.ts, eval value-key-keeps-names-and-signs.",
+  },
+  G747: {
+    closed: "claude/quiet-pause",
+    title: "A quiet assistant's line said nothing to do, and early warnings still notified",
+    severity: "low",
+    finding: "Mac 2026-11-08/09: one assistant had not read since 4 Nov; the self-check's connections line said its token or connection may need a reconnect, with no way to make it stop short of reconnecting. The early-warning checks (filed_lines, auto_saves, source_cap; 7 of 15 probe alerts in 14 days on the real brain) alerted the owner through record() and reached a Mac notification through the watchdog, though their docs call them early warnings; only tailnet was kept quiet, by a list in watchdog.ts alone.",
+    fix: "src/probe.ts NOTIFY: only a promoted check alerts (record) or reaches the watchdog's Mac notification (src/watchdog.ts); REPORT_ONLY names the early warnings, and a check in neither list (a new detector) is recorded and shown, never sent. The connections line and Who knows' quiet words say reconnect it, or pause it (Settings or pocketbrain agent pause); a paused assistant drops out, nothing deleted, back on resume. Tests: test/quiet-pause.test.ts, eval probe-new-detector-report-only.",
   },
   G743: {
     closed: "6cc0d1a3",

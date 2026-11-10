@@ -9,14 +9,14 @@
 // It also reports what the hub can't while it is down (owner, 2026-10-22: self-healing and
 // self-reporting): the hub's job checks that need no network (a night pass, backup or Gardener run
 // that stopped, an assistant that stopped reading) run here too, and each failing one, like a hung
-// hub, reaches the owner as a Mac notification once a day and as a problem line in the menu bar
-// (log/watchdog.json). The hub's self-check in turn flags a watchdog that stopped running.
+// hub, reaches the owner as a problem line in the menu bar (log/watchdog.json) and, when the check
+// is promoted (NOTIFY in src/probe.ts, G747), as a Mac notification once a day. The hub's self-check in turn flags a watchdog that stopped running.
 import { beat } from "./heartbeat";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { alert, appendJsonl, readJsonl } from "./util";
 import { keysDir } from "./secrets";
-import { jobChecks } from "./probe";
+import { jobChecks, notifies } from "./probe";
 import { tailscaleRun, type Run as TailscaleRun } from "./phone";
 import { isTailnetIp, tailnetSettings } from "./dashboard/tailnet";
 
@@ -46,12 +46,11 @@ function outsideChecks(root: string, now: Date): Problem[] {
 // it. Each run pings, over the tailnet only, each phone listed in dashboard_tailnet_devices that
 // status calls online (an offline phone is just not in use); a phone that fails two runs in a row
 // is one problem line, by kind of device only, never its name or address (G741). Report-only for
-// now: the menu bar and log/watchdog.json show it, no Mac notification (QUIET).
+// now: the menu bar and log/watchdog.json show it, no Mac notification (not in NOTIFY, src/probe.ts).
 // A pong by any path counts: tailscale ping waits for a direct path by default, and with -c 1 a
 // pong over a DERP relay, which an idle phone often answers with first, exits 1 (G743).
 const TAILNET_MISSES = 2;
 const TAILNET_LINE = "tailnet: the hub can't reach your phone; toggle Tailscale on the phone first, restart it on the Mac only if that fails";
-const QUIET = new Set(["tailnet"]);
 type Peer = { OS?: string; Online?: boolean; TailscaleIPs?: string[] };
 function tailnetCheck(root: string, ts: TailscaleRun, s: State): { problem?: Problem; fails: number } {
   const cfg = tailnetSettings(root);
@@ -110,7 +109,7 @@ export async function watchdogTick(root: string, o: { url: string; run: Run; uid
   const day = now.toISOString().slice(0, 10);
   const notified = Object.fromEntries(Object.entries(s.notified ?? {}).filter(([, d]) => d === day));
   const say = o.notify ?? (o.platform === "darwin" ? macNotify(o.run) : undefined);
-  for (const p of problems) if (!QUIET.has(p.name) && notified[p.name] !== day) { try { say?.(p.detail); } catch { /* the menu bar still shows it */ } notified[p.name] = day; }
+  for (const p of problems) if (notifies(p.name) && notified[p.name] !== day) { try { say?.(p.detail); } catch { /* the menu bar still shows it */ } notified[p.name] = day; }
   let relaunched = s.messages_relaunched;
   if (o.platform === "darwin") {
     const at = relaunchMessages(root, o.run, now, s);

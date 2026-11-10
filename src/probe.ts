@@ -32,6 +32,24 @@ const readYamlFile = (f: string): { sources?: Record<string, unknown> } | undefi
 // warn: an early warning (alert check probe_warn_<name>): it reaches the owner like any alert but
 // isn't a hub failure, so it doesn't break the real-use streak (src/measure.ts).
 export interface Check { name: string; ok: boolean; detail: string; warn?: boolean }
+
+// Only a promoted check notifies (G747): an alert from the hub, a Mac notification from the
+// watchdog. Every other check is report-only: recorded in log/probe.json and shown on Settings,
+// doctor, the digest's list and the menu bar, never sent. A new detector starts report-only, as a
+// new scheduled step does, and is promoted by adding its name here once it has proved itself;
+// test/quiet-pause.test.ts fails on a check name in neither list.
+export const NOTIFY: ReadonlySet<string> = new Set([
+  // the doors (runChecks) and the watchdog's own
+  "local", "door", "mcp", "oauth", "phone_door", "hub_hung", "checks",
+  // jobs that stopped or failed (jobChecks)
+  "night", "digest", "searchable", "backfill", "trust", "housekeeping", "pull", "gardener_jobs", "gardener_cleanup", "gardener_rotate",
+  "backup", "offsite", "restore_drill", "origin", "model", "texts", "update", "fill", "gardener_runs", "gardener_setup", "gardener_signin", "calendar_pull", "probe",
+  // the daily self-check
+  "connections", "disk", "logs", "restarts", "watchdog", "release",
+]);
+// Early warnings, kept report-only: named so the list above stays a choice (docs/real-use-bar.md).
+export const REPORT_ONLY: ReadonlySet<string> = new Set(["filed_lines", "source_cap", "redecided", "tailnet", "auto_saves"]);
+export const notifies = (name: string) => NOTIFY.has(name);
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 async function get(f: Fetch, url: string, init: RequestInit = {}): Promise<Response | undefined> {
@@ -79,7 +97,7 @@ export function record(root: string, checks: Check[], now = new Date()): Check[]
     next[c.name] = was && was.ok === c.ok ? { ...was, detail: c.detail } : { ok: c.ok, since: now.toISOString(), detail: c.detail };
     if (!c.ok && (!was || was.ok)) {
       fresh.push(c);
-      alert(root, { agent: "hub", check: `probe_${c.warn ? "warn_" : ""}${c.name}`, from: c.detail });
+      if (notifies(c.name)) alert(root, { agent: "hub", check: `probe_${c.warn ? "warn_" : ""}${c.name}`, from: c.detail });
     }
   }
   mkdirSync(join(root, "log"), { recursive: true });
@@ -193,7 +211,8 @@ export function selfChecks(root: string, now = new Date()): Check[] {
   if (live.length) {
     const quiet = live.filter((n) => hoursSince(lastRead.get(n)!) > QUIET_HOURS);
     out.push(quiet.length
-      ? { name: "connections", ok: false, warn: true, detail: `${quiet.map((n) => `${n} (last read ${lastRead.get(n)!.slice(0, 10)})`).join(", ")} stopped reading the brain ${QUIET_HOURS / 24}+ days ago; its token or connection may need a reconnect` }
+      // What to do, not only what happened (G747): reconnect it, or pause it, which ends the line.
+      ? { name: "connections", ok: false, warn: true, detail: quiet.map((n) => `${n} hasn't read the brain since ${lastRead.get(n)!.slice(0, 10)}: reconnect it, or pause it if you don't use it now (Pause on its page in Settings, or pocketbrain agent pause ${n})`).join("; ") }
       : { name: "connections", ok: true, detail: `${live.length} assistant(s) reading` });
   }
   const logDir = join(root, "log");

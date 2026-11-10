@@ -747,6 +747,15 @@ const pullCases: Case[] = [
     const text = say.ownerSay(root, "J. Roy's role is program director").text as string;
     return ok(!text.includes("Seen by your assistants") && text.includes("No assistant can read it yet."), text);
   } },
+  { id: "probe-new-detector-report-only", dimension: "e2e", gap: "G747", title: "a check nobody promoted, or an early warning, is recorded but never alerts; a promoted one does", source: "Mac 2026-11-09, early warnings reached the owner as alerts", run: async () => {
+    const probe = await import(join(SRC_DIR, "probe.ts"));
+    if (!probe.NOTIFY) return na("no promoted list at this commit");
+    const root = sandbox();
+    probe.record(root, [{ name: "disk", ok: false, detail: "low" }, { name: "filed_lines", ok: false, warn: true, detail: "1" }, { name: "some_new_check", ok: false, detail: "x" }]);
+    const f = join(root, "log", "alerts.jsonl");
+    const checks = existsSync(f) ? readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l).check) : [];
+    return ok(checks.length === 1 && checks[0] === "probe_disk", `alerts: ${checks.join(", ") || "none"}`);
+  } },
   { id: "watchdog-tailnet-silent-phone", dimension: "e2e", gap: "G741", title: "an online phone the hub can't ping twice in a row is one quiet menu-bar line by kind only; an offline phone is never pinged", source: "Mac 2026-11-07/08, tailnet up and silent for 19 hours", run: async () => {
     const wd = await import(join(SRC_DIR, "watchdog.ts"));
     if (!wd.watchdogTick) return na("no watchdog at this commit");

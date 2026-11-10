@@ -90,5 +90,6 @@ export function quietLine(quiet: Quiet[], name: (agent: string) => string): stri
 // Who knows' line under a quiet assistant's name: when it last read and how often it used to.
 export function quietWords(q: Quiet): string {
   const usual = q.usualHours < 2 ? "every hour or so" : q.usualHours < 36 ? "about every day" : `about every ${Math.round(q.usualHours / 24)} days`;
-  return `Last read ${q.days === 1 ? "a day" : `${q.days} days`} ago; it used to read ${usual}`;
+  // What to do with it (G747): pausing ends the line and nothing is deleted.
+  return `Last read ${q.days === 1 ? "a day" : `${q.days} days`} ago; it used to read ${usual}. Reconnect it, or pause it on its page in Settings if you don't use it now`;
 }
