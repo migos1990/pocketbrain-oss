@@ -97,6 +97,23 @@ export function generate(seed: number): Generated {
   for (const n of notes) if (n.fm.type === "person") cardFacts(seed ^ notes.indexOf(n), w, n.fm.facts);
   // Links between notes, hidden or not, and decisions that replace one another.
   for (const n of notes) if (r.chance(0.5)) n.body += ` See [[${r.pick(notes).fm.id}]].`;
+  // A fact that links another note, hidden or not, by its id, its title or an alias, and the text
+  // that then names it in plain words: the sentence the page writer wrote before it linked such a
+  // page by id, and a summary (audit v13, G754, G755: a fact that links a page out of a view reads
+  // [[redacted]] there, while the writer's sentence and the summary said its name). From a stream
+  // of its own, like the cards. evolve() then runs the real page writer over the brain.
+  const lr = prng(seed ^ 0x71d1), lw = words(lr, w);
+  let lsrc = 0;
+  for (const n of notes) {
+    if (!lr.chance(0.45)) continue;
+    const to = lr.pick(notes);
+    if (to === n) continue;
+    const by = lr.pick(["id", "title", ...(to.fm.aliases?.length ? ["alias"] : [])]);
+    const day = lw.date(), ref = `gmail:e${(0x100000000000000 + ++lsrc * 6007 + lr.int(0, 999)).toString(16).slice(-15)}`;
+    n.fm.facts.partner = { value: `[[${by === "id" ? to.fm.id : by === "title" ? to.fm.title : to.fm.aliases[0]}]]`, as_of: day, sources: [ref], verification: "verified-by-source", by: "owner", recorded: lw.date() };
+    if (lr.chance(0.5)) n.fm.summary = `${n.fm.title} is tied to ${to.fm.title}.`;
+    if (lr.chance(0.5)) n.body = `The partner of ${n.fm.title} is ${to.fm.title}.[^pf-partner]\n\n(Written by the hub from this page's facts.)\n\n[^pf-partner]: Email, ${day} (${ref})`;
+  }
   const decisions = notes.filter((n) => n.fm.type === "decision");
   if (decisions.length >= 2 && r.chance(0.7)) {
     const [old, nu] = [decisions[0], decisions[1]];
@@ -144,8 +161,13 @@ export function generate(seed: number): Generated {
 
 // After the brain is written: merges (the real merge code) and handoffs (the real hand_off), when
 // the seed asks for them. Async because a handoff is.
-export async function evolve(g: Generated, src: { mergeNotes: Function; handOff: Function; loadBrain: Function }): Promise<void> {
+export async function evolve(g: Generated, src: { mergeNotes: Function; handOff: Function; loadBrain: Function; renderTouchedPages?: Function }): Promise<void> {
   const r = prng(g.seed ^ 0x5eed);
+  // The real page writer over every page, on most brains (G754): its sentences about a linked page.
+  if (src.renderTouchedPages && prng(g.seed ^ 0x9a6e).chance(0.75)) {
+    const w = src.renderTouchedPages(g.root, "1990-01-01T00:00:00Z") as { written: string[] };
+    g.ops.push(`page writer: ${w.written.length} pages`);
+  }
   const notes = src.loadBrain(g.root) as { fm: Record<string, any> }[];
   if (r.chance(0.5)) {
     const byType = new Map<string, typeof notes>();

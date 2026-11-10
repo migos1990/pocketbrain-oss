@@ -2,7 +2,8 @@
 // The carve as a property (backlog 276): for random brains and policies (test/carve-gen.ts:
 // areas, tags, types, sensitivity, aliases, object and list facts, fact-level sensitivity and
 // share_with, slices of every kind, excludes, tiers, reader tokens, merges, superseded decisions,
-// handoffs, contact cards' emails and phones held until Show), no agent's output through the live
+// handoffs, contact cards' emails and phones held until Show, facts that link another note with the
+// page writer run over them), no agent's output through the live
 // MCP server (orientation, read, search, context_pack, whats_new with its handoffs, memory_check)
 // carries a value, a name, a note id or a date of a note or fact carved out for it. "Carved out" is the leak oracle's (evals/lib/oracle.ts),
 // written from rules/ without the carve code. What an agent asked for (a read id, a search word, a
@@ -20,6 +21,7 @@ import { issueToken } from "../src/auth";
 import { loadBrain } from "../src/brain";
 import { mergeNotes } from "../src/merge";
 import { handOff } from "../src/handoff";
+import { renderTouchedPages } from "../src/wiki";
 import { makeBrain } from "./fixture";
 import { forbiddenFor, carvedFor, findLeaks } from "../evals/lib/oracle";
 
@@ -85,7 +87,7 @@ const report = (g: Generated, f: Finding[]) => `seed ${g.seed} (replay: CARVE_SE
 // Built once per run: the coverage test below reads the same brains the property checked.
 const built = new Map<number, Promise<Generated>>();
 function brainFor(seed: number): Promise<Generated> {
-  if (!built.has(seed)) built.set(seed, (async () => { const g = generate(seed); await evolve(g, { mergeNotes, handOff, loadBrain }); return g; })());
+  if (!built.has(seed)) built.set(seed, (async () => { const g = generate(seed); await evolve(g, { mergeNotes, handOff, loadBrain, renderTouchedPages }); return g; })());
   return built.get(seed)!;
 }
 
@@ -129,6 +131,13 @@ test("carve property: the generator is deterministic and covers what it claims",
   expect(all.some((g) => g.agents.some((x) => x.roles.includes("reader")))).toBe(true);
   expect(all.some((g) => g.ops.some((o) => o.startsWith("merge") && o.endsWith("ok")))).toBe(true);
   expect(all.some((g) => g.ops.some((o) => o.startsWith("handoff ")))).toBe(true);
+  // A fact that links another note, by id and by name, with the page writer run over it, a summary
+  // and an older plain-words sentence naming the linked note (G754, G755).
+  expect(all.some((g) => g.ops.some((o) => /^page writer: [1-9]/.test(o)))).toBe(true);
+  const links = notes.filter((n) => typeof (n.fm.facts?.partner as any)?.value === "string");
+  expect(links.some((n) => typeof n.fm.summary === "string")).toBe(true);
+  expect(links.some((n) => n.body.includes("The partner of"))).toBe(true);
+  expect(links.some((n) => !String((n.fm.facts!.partner as any).value).includes("/"))).toBe(true);
   // Contact cards (G563): emails and phones citing a card, private, some held until Show and some
   // seen, and the oracle forbids every held one to every agent, a core one that sees all included.
   const card = (r: any) => (r.sources ?? []).some((x: unknown) => String(x).startsWith("contacts:"));

@@ -413,8 +413,12 @@ test("page writer: an org fact naming a page by its id reads as the page's name,
   person(root, "ana-diaz", "Ana Diaz", fact("org", "orgs/acme-labs", "gmail:f0000000000000a1"));
   renderTouchedPages(root, SINCE);
   const b = body(root, "people/ana-diaz");
-  expect(b).not.toContain("orgs/acme-labs");
-  expect(b).toContain("Ana Diaz works at Acme Labs.");
+  // Never the bare id as words. The page is linked like any other, also when some reader of Ana's
+  // page can't see it (a secret org): that reader's own read redacts the link (G754).
+  expect(b).toContain("Ana Diaz works at [[orgs/acme-labs|Acme Labs]].");
+  expect(b.replace("[[orgs/acme-labs|Acme Labs]]", "")).not.toContain("orgs/acme-labs");
+  const { readNote } = await import("../src/core");
+  expect(JSON.stringify(readNote(root, "helper", "people/ana-diaz"))).not.toMatch(/Acme|acme-labs/);
   const { notePage } = await import("../src/dashboard/html-brain");
   const { loadState } = await import("../src/dashboard/data");
   const { loadBrain } = await import("../src/brain");

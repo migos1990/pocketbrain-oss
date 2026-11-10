@@ -30,7 +30,7 @@ function graphOf(res: CarveResult): Map<string, Neighbours> {
       // (audit v10, G612; redactLinks alone kept that link).
       ...(v.body ? linksIn(scrubPage(v.note.body, v, res)) : []),
       // Facts as the agent reads them (agentFact): no writer fields, scrubbed like read's.
-      ...linksIn(JSON.stringify(visibleFacts(v, res).map(([, f]) => agentFact(f, res.grant.agent, res)))),
+      ...linksIn(JSON.stringify(visibleFacts(v, res).map(([, f]) => agentFact(f, res.grant.agent, res, v)))),
     ];
     for (const to of seen) {
       if (to === id || !res.visible.has(to)) continue;

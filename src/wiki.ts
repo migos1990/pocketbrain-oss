@@ -715,9 +715,19 @@ export const RELATED = 4, RELATED_NAMES = 6;
 export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: (to: string) => boolean; names: Map<string, string[]>; byId: Map<string, Note>; resolve?: (link: string) => string | undefined; owner?: string[]; spec?: (attr: string) => AttributeSpec; members?: { id: string; recs: FactRecord[] }[]; namedIn?: { from: string; rec: FactRecord }[]; seeAlso?: { from: string; attr?: string; rec: FactRecord }[]; related?: Related[]; said?: string; elsewhere?: Set<string>; self?: boolean; ownerPage?: string }): { text: string; refs: { label: string; text: string }[] } | undefined {
   const lines: string[] = [], refs: { label: string; text: string }[] = [];
   const seen = new Map<string, Set<string>>(); // page named -> labels of the facts whose source names it
-  // Links in a sentence written by the id they resolve to, so every reader resolves them; one some
-  // reader of this page can't see reads as its plain name.
-  const linkWords = (s: string) => s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, to: string, words?: string) => { const id = o.resolve?.(to); return id && !o.blind(id) ? `[[${id}|${words ?? o.byId.get(id)?.fm.title ?? to}]]` : (words ?? (id === to ? o.byId.get(id)?.fm.title : undefined) ?? to); });
+  // Links in a sentence written by the id they resolve to, so every reader resolves them. A page
+  // some reader of this one can't see is linked the same way, never said in plain words: that
+  // reader's own read then shows [[redacted]], as the fact's value does, and the others the name
+  // (audit v13, G754: the plain name told the reader what the redacted link hid).
+  // A link to no page stays a link too: said in plain words it read differently from a link to a
+  // page the reader can't see, which told a writer whether its guess at a name was a page (slice
+  // audit of G754). An agent reads either as [[redacted]]; the owner's page draws its words.
+  // A value shaped like a page's id in a folder the brain has ("projects/x") is a link in all but
+  // brackets, whether or not that page exists: an agent's read shows either as [[redacted]] (view.ts
+  // scrubLeaves), and the sentence must not tell them apart.
+  let folders: Set<string> | undefined;
+  const idShaped = (v: string) => { const m = v.trim().match(/^([a-z0-9-]+)\/[a-z0-9][a-z0-9._-]*$/i); return !!m && (folders ??= new Set([...o.byId.keys()].map((k) => k.split("/")[0]!.toLowerCase()))).has(m[1]!.toLowerCase()); };
+  const linkWords = (s: string) => s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, to: string, words?: string) => { const id = o.resolve?.(to); return id ? `[[${id}|${words ?? o.byId.get(id)?.fm.title ?? to}]]` : `[[${to}${words ? `|${words}` : ""}]]`; });
   const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean }[] = [];
   for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     if (NOT_PROSE.test(attr) || isDisputed(f) || o.hidden(`${n.fm.id}#${attr}`)) continue;
@@ -734,11 +744,13 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     // footnotes() gives labels with the same reference one number, so the owner still reads one.
     const lab = `pf-${attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
     const waits = !isList(f) && typeof (f as { contested?: unknown }).contested === "string";
-    // A value that links to a page is written by its id, so every reader resolves it; one nobody
-    // made yet, or that some reader of this page can't see, reads as its plain name.
+    // A value that links to a page is written by its id, so every reader resolves it (one a reader
+    // can't see is [[redacted]] in that reader's read, G754); one nobody made yet reads as its plain name.
     // A person's org written as plain words ("Town") links when it is the title of exactly one org
-    // page; a value that is a page's id ("orgs/town") is that page, read by its name.
-    const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (v.includes("[[")) return v; if (o.byId.has(v.trim())) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" ? `[[${v.trim()}]]` : v; });
+    // page; a value that is a page's id ("orgs/town") is that page, read by its name. Plain words
+    // stay plain words when some reader of this page can't see that org page: the reader is shown
+    // the value as written, and the sentence must read like one whose words name no page.
+    const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (v.includes("[[")) return v; if (o.byId.has(v.trim()) || idShaped(v)) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" && !o.blind(id) ? `[[${v.trim()}]]` : v; });
     facts.push({ attr, vals, labs: [lab], waits });
     if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
     for (const r of recs) for (const s of r.sources ?? []) for (const to of o.names.get(itemOf(refString(s))) ?? [])

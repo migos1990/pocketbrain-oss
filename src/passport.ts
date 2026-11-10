@@ -80,7 +80,7 @@ export function exportSlice(root: string, agent: string): SliceBundle {
   // The fields core.readNote serves, built the same way.
   const notes = [...res.visible.values()].map((v) => ({
     id: v.note.fm.id, title: v.note.fm.title, type: v.note.fm.type, area: v.note.fm.area, aliases: v.note.fm.aliases ?? [],
-    facts: Object.fromEntries(visibleFacts(v, res).map(([a, f]) => [a, agentFact(f, agent, res)])),
+    facts: Object.fromEntries(visibleFacts(v, res).map(([a, f]) => [a, agentFact(f, agent, res, v)])),
     ...(v.body && v.note.body.trim() ? { body: scrubPage(v.note.body, v, res) } : {}),
   })).sort((a, b) => a.id.localeCompare(b.id));
   return { memory_passport: BUNDLE_VERSION, bundle: "slice", exported: today(), agent, notes };

@@ -26,7 +26,7 @@ export const strengthOf = (r: FactRecord) => STRENGTH[String(sourceRank(r))] ?? 
 export interface WhyFor {
   agent: string; // the caller; the owner sees everything
   may?: (r: FactRecord) => boolean; // whether the caller may see one current record (its level and share_with)
-  scrub?: (v: unknown) => unknown; // carved values in the caller's view withheld (view.ts scrubLeaves)
+  scrub?: (v: unknown, r?: FactRecord) => unknown; // carved values in the caller's view withheld (view.ts scrubLeaves)
 }
 
 const isOwner = (w: WhyFor) => w.agent === OWNER;
@@ -36,10 +36,10 @@ const writer = (by: string | undefined, w: WhyFor) => (!by || isOwner(w) || by =
 function record(r: FactRecord, w: WhyFor, ended?: string): WhyRecord {
   const scrub = w.scrub ?? ((v: unknown) => v);
   return {
-    value: scrub(r.value), as_of: r.as_of, ...(r.by ? { by: writer(r.by, w) } : {}), ...(r.recorded ? { recorded: r.recorded } : {}),
+    value: scrub(r.value, r), as_of: r.as_of, ...(r.by ? { by: writer(r.by, w) } : {}), ...(r.recorded ? { recorded: r.recorded } : {}),
     verification: r.verification, strength: strengthOf(r),
     // Another assistant's ref names it (G722; builder's slice audit of PR 131): the owner sees it, an agent its own.
-    sources: (r.sources ?? []).map((x) => { const ref = refString(x); const shown = isOwner(w) ? ref : readerRef(ref, w.agent); return { ref: String(scrub(shown)), kind: schemeOf(ref) ?? "?" }; }),
+    sources: (r.sources ?? []).map((x) => { const ref = refString(x); const shown = isOwner(w) ? ref : readerRef(ref, w.agent); return { ref: String(scrub(shown, r)), kind: schemeOf(ref) ?? "?" }; }),
     ...(r.last_confirmed ? { last_confirmed: r.last_confirmed } : {}), ...(ended ? { ended } : {}),
   };
 }

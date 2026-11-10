@@ -23,6 +23,30 @@ const viewOf = (root: string, agent: string) => {
 const G = (id: string) => "gmail:" + id;
 const SRC = { sources: [G("f000000000000004")], source_type: "email", verification: "verified-by-source" };
 const LOUIS = "imsg:phonemsg-01X0EXAMPLEL0VISTEXT0001"; // exists in the fixture
+// A page two visible pages link that `helper` can't see (audit v13, G754-G756): private, hidden from
+// it by name, or outside its areas. `served` is everything an agent is handed about the two pages.
+async function hiddenLinkBrain(hide: "private" | "exclude" | "area", render = true) {
+  const wiki = await import(join(SRC_DIR, "wiki.ts"));
+  const core = await import(join(SRC_DIR, "core.ts"));
+  const YAML = (await import("yaml")).default;
+  const root = sandbox("synthetic");
+  const git = (name: string, ...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: `${name}@pocketbrain.local`, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: `${name}@pocketbrain.local` } });
+  const policy = join(root, "rules", "policy.yaml");
+  const p = YAML.parse(readFileSync(policy, "utf8"));
+  if (hide === "exclude") p.agents.helper.exclude = ["projects/zorblax-holdings"];
+  p.agents.gardener ??= { tier: "trial", role: "gardener", max_sensitivity: "private", slices: ["all"] };
+  p.wiki = { ...(p.wiki ?? {}), sync: true, opening: true };
+  writeFileSync(policy, YAML.stringify(p));
+  const f = (value: string, mail: string) => `{ value: "${value}", as_of: 2026-10-05, sources: ["gmail:${mail}"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }`;
+  const head = (id: string, type: string, title: string, more = "") => `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\n${more}status: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n`;
+  writeFileSync(join(root, "projects", "zorblax-holdings.md"), `${head("projects/zorblax-holdings", "project", "Zorblax Holdings", `aliases: [ZH Group]\narea: ${hide === "area" ? "personal" : "work"}\nsensitivity: ${hide === "private" ? "private" : "personal"}\n`)}facts:\n  status: ${f("active", "f0000000000000c0")}\n---\n`);
+  writeFileSync(join(root, "people", "pat-lee.md"), `${head("people/pat-lee", "person", "Pat Lee", "area: work\nsensitivity: personal\n")}facts:\n  role: ${f("founder", "f0000000000000c1")}\n  org: ${f("[[projects/zorblax-holdings]]", "f0000000000000c1")}\n---\n`);
+  writeFileSync(join(root, "projects", "course-a.md"), `${head("projects/course-a", "project", "Course A", "area: work\nsensitivity: personal\n")}facts:\n  partner: ${f("[[Zorblax Holdings]]", "f0000000000000c2")}\n  status: ${f("active", "f0000000000000c2")}\n---\n`);
+  git("louis", "add", "-A"); git("louis", "commit", "-qm", "owner: zorblax, pat and course a");
+  if (render) wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  const served = (agent: string) => JSON.stringify([core.readNote(root, agent, "people/pat-lee"), core.readNote(root, agent, "projects/course-a"), core.search(root, agent, "Pat Lee founder"), core.search(root, agent, "Course A partner"), core.contextPack(root, agent, "Pat Lee"), core.contextPack(root, agent, "Course A"), core.whatsNew(root, agent, "1990-01-01")]);
+  return { root, git, core, wiki, served };
+}
 // A small brain of ties (G685-G687): two orgs, three people, one project, written once.
 async function tiedBrain() {
   const wiki = await import(join(SRC_DIR, "wiki.ts"));
@@ -861,6 +885,124 @@ const pullCases: Case[] = [
     const steward = (core.readNote(r.root, "steward", "orgs/north-college") as { body: string }).body;
     const gone = !helper.includes("Spring course") && !helper.includes("f0000000000000a4");
     return ok(before && gone && steward.includes("is on [[projects/spring-course"), `shown before ${before}; gone for the reader it's kept from ${gone}; kept for steward ${steward.includes("is on [[projects/spring-course")}`);
+  } },
+  { id: "wiki-hidden-page-name-writer", dimension: "access", gap: "G754", title: "a reader never gets the name of a page it can't see from the page writer's sentence about a fact that links it, by read, search, pack or what's new; a reader who sees the page gets a link", source: "audit v13 slice audit, high (a hidden page's title in plain words)", run: async () => {
+    const out: string[] = [];
+    let good = true;
+    for (const hide of ["private", "exclude", "area"] as const) {
+      const r = await hiddenLinkBrain(hide);
+      const helper = r.served("helper");
+      const named = /Zorblax|ZH Group/.test(helper);
+      const steward = (r.core.readNote(r.root, "steward", "people/pat-lee") as { body: string }).body.includes("[[projects/zorblax-holdings|Zorblax Holdings]]");
+      good &&= !named && steward && helper.includes("Pat Lee");
+      out.push(`${hide}: named to the reader ${named}, linked for one who sees it ${steward}`);
+    }
+    return ok(good, out.join("; "));
+  } },
+  { id: "wiki-hidden-page-name-old-text", dimension: "access", gap: "G754", title: "page text written before the fix that names a linked page in plain words is withheld from a reader who can't see that page", source: "audit v13 slice audit, high; pages are only written again when touched", run: async () => {
+    const r = await hiddenLinkBrain("area", false);
+    const n = pb.brain.loadBrain(r.root).find((x: any) => x.fm.id === "people/pat-lee");
+    n.body = "Pat Lee is the founder at Zorblax Holdings.[^pf-role][^pf-org]\n\n(Written by the hub from this page's facts.)\n\n[^pf-role]: Email, 2026-10-05 (gmail:f0000000000000c1)\n[^pf-org]: Email, 2026-10-05 (gmail:f0000000000000c1)\n";
+    pb.brain.saveNote(r.root, n);
+    r.git("louis", "commit", "-qam", "owner: older page text");
+    const helper = r.served("helper");
+    const steward = (r.core.readNote(r.root, "steward", "people/pat-lee") as { body: string }).body.includes("Zorblax Holdings");
+    return ok(!helper.includes("Zorblax") && steward, `named to the reader ${helper.includes("Zorblax")}; kept for one who sees it ${steward}`);
+  } },
+  { id: "wiki-hidden-page-name-summary", dimension: "access", gap: "G755", title: "a summary never names a page that a reader of its page can't see: wiki_sync refuses one, and a stored one is withheld from that reader", source: "audit v13 slice audit, high (the Gardener's summary; seen on a real brain)", run: async () => {
+    const r = await hiddenLinkBrain("area");
+    if (!r.core.gardenerWikiSync) return na("no wiki_sync at this commit");
+    const was = process.env.PB_NOW;
+    process.env.PB_NOW = "2026-10-08T07:30:00Z";
+    let refused = "";
+    try { r.core.gardenerWikiSync(r.root, "gardener", { id: "people/pat-lee", summary: "Pat Lee founded Zorblax Holdings." }); } catch (e) { refused = (e as Error).message; }
+    finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+    const n = pb.brain.loadBrain(r.root).find((x: any) => x.fm.id === "people/pat-lee");
+    const unsaved = n.fm.summary === undefined;
+    n.fm.summary = "Pat Lee is the founder at Zorblax Holdings.";
+    pb.brain.saveNote(r.root, n);
+    r.git("louis", "commit", "-qam", "owner: a summary");
+    const helper = r.served("helper");
+    return ok(/can't see/.test(refused) && unsaved && !helper.includes("Zorblax"), `refused "${refused.slice(0, 60)}"; nothing saved ${unsaved}; a stored one named to the reader ${helper.includes("Zorblax")}`);
+  } },
+  { id: "wiki-hidden-name-no-oracle-gardener", dimension: "carving", gap: "G755", kind: "attack", title: "the Gardener's guess at a page hidden from it too answers like any other name", source: "slice audit of G754-G756, finding 1", run: async () => {
+    const r = await hiddenLinkBrain("area");
+    if (!r.core.gardenerWikiSync) return na("no wiki_sync at this commit");
+    const YAML = (await import("yaml")).default;
+    const policy = join(r.root, "rules", "policy.yaml");
+    const p = YAML.parse(readFileSync(policy, "utf8"));
+    p.agents.gardener.exclude = ["projects/zorblax-holdings"];
+    writeFileSync(policy, YAML.stringify(p));
+    r.git("louis", "commit", "-qam", "owner: hide it from the gardener too");
+    const was = process.env.PB_NOW;
+    process.env.PB_NOW = "2026-10-08T07:30:00Z";
+    const say = (summary: string) => { try { r.core.gardenerWikiSync(r.root, "gardener", { id: "people/pat-lee", summary }); return "applied"; } catch (e) { return (e as Error).message.replace(/"[^"]*"/g, "Q"); } };
+    let hit = "", miss = "";
+    try { hit = say("Pat Lee founded Zorblax Holdings."); miss = say("Pat Lee founded Quuxcorp Holdings."); }
+    finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+    return ok(hit !== "applied" && hit === miss, `hit "${hit.slice(0, 50)}" vs miss "${miss.slice(0, 50)}"`);
+  } },
+  { id: "wiki-hidden-name-write-probe", dimension: "carving", gap: "G754", kind: "attack", title: "a writer's link to a hidden page and to no page read the same in the page's text", source: "slice audit of G754-G756, finding 2", run: async () => {
+    const body = async (value: string) => {
+      const r = await hiddenLinkBrain("area", false);
+      const n = pb.brain.loadBrain(r.root).find((x: any) => x.fm.id === "projects/course-a");
+      n.fm.facts.sponsor = { value, as_of: "2026-10-07", sources: ["gmail:f0000000000000c2"], verification: "verified-by-source", by: "planner", recorded: "2026-10-07" };
+      pb.brain.saveNote(r.root, n);
+      r.git("planner", "commit", "-qam", "planner: sponsor");
+      r.wiki.renderTouchedPages(r.root, "2000-01-01T00:00:00Z");
+      return (String(r.core.readNote(r.root, "helper", "projects/course-a").body).match(/[^.\n]*sponsor[^.\n]*/i) ?? [""])[0];
+    };
+    const hit = await body("[[Zorblax Holdings]]"), alias = await body("[[ZH Group]]"), miss = await body("[[Guess Corp]]"), idHit = await body("projects/zorblax-holdings"), idMiss = await body("projects/guess-corp");
+    return ok(!!miss && hit === miss && alias === miss && idHit === idMiss, `link hit "${hit}" vs miss "${miss}"; id hit "${idHit}" vs miss "${idMiss}"`);
+  } },
+  { id: "wiki-hidden-org-plain-words-no-oracle", dimension: "carving", gap: "G754", kind: "attack", title: "a person's org in plain words reads the same to a reader whether those words are a hidden org page's title or name no page", source: "second slice audit of G754 (2026-11-09)", run: async () => {
+    const body = async (title: string) => {
+      const r = await hiddenLinkBrain("area");
+      mkdirSync(join(r.root, "orgs"), { recursive: true });
+      const fm = (id: string, type: string, t: string, sens: string) => `---\nid: ${id}\ntype: ${type}\ntitle: ${t}\narea: work\nsensitivity: ${sens}\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n`;
+      writeFileSync(join(r.root, "orgs", "vexmoor.md"), `${fm("orgs/vexmoor", "org", "Vexmoor Partners", "private")}---\n`);
+      writeFileSync(join(r.root, "people", "sam-roe.md"), `${fm("people/sam-roe", "person", "Sam Roe", "personal")}facts:\n  org: { value: "${title}", as_of: 2026-10-05, sources: ["gmail:f0000000000000c4"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }\n---\n`);
+      r.git("louis", "add", "-A"); r.git("louis", "commit", "-qm", "owner: sam");
+      const wiki = await import(join(SRC_DIR, "wiki.ts"));
+      wiki.renderTouchedPages(r.root, "2000-01-01T00:00:00Z");
+      return String((r.core.readNote(r.root, "helper", "people/sam-roe") as any).body ?? "");
+    };
+    const hit = await body("Vexmoor Partners"), miss = await body("Guessmoor Partners");
+    return ok(hit === miss.replaceAll("Guessmoor", "Vexmoor") && /works at Guessmoor Partners/.test(miss), `same text for a hidden org's title and a name of no page: ${hit === miss.replaceAll("Guessmoor", "Vexmoor")}`);
+  } },
+  { id: "wiki-hidden-name-short-form", dimension: "carving", gap: "G755", kind: "attack", title: "a short form of a hidden page's name, in a summary, a person's note or a reference label, never reaches the reader", source: "slice audit of G754-G756, finding 4", run: async () => {
+    const r = await hiddenLinkBrain("area");
+    if (!r.core.gardenerWikiSync) return na("no wiki_sync at this commit");
+    const was = process.env.PB_NOW;
+    process.env.PB_NOW = "2026-10-08T07:30:00Z";
+    let refused = "";
+    try { r.core.gardenerWikiSync(r.root, "gardener", { id: "people/pat-lee", summary: "Pat Lee founded Zorblax." }); } catch (e) { refused = (e as Error).message; }
+    finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+    const n = pb.brain.loadBrain(r.root).find((x: any) => x.fm.id === "people/pat-lee");
+    n.fm.summary = "Pat Lee founded Zorblax.";
+    n.body = `${n.body}\n\n## Your notes\n\nMet the Zorblax group in May (Zorblax).[^zorblax-holdings]\n\n[^zorblax-holdings]: Email, 2026-10-05 (gmail:f0000000000000c1)\n`;
+    pb.brain.saveNote(r.root, n);
+    r.git("louis", "commit", "-qam", "owner: a note and a summary");
+    const helper = r.served("helper"), steward = r.served("steward");
+    return ok(/can't see/.test(refused) && !/zorblax/i.test(helper) && steward.includes("Zorblax group"), `summary refused ${/can't see/.test(refused)}; helper reads the short form ${/zorblax/i.test(helper)}; steward keeps it ${steward.includes("Zorblax group")}`);
+  } },
+  { id: "wiki-hidden-page-name-opening", dimension: "access", gap: "G756", title: "a model's opening that names a page a reader can't see never lands, and one stored before is not served to that reader", source: "audit v13 slice audit, high (the model opening)", run: async () => {
+    const r = await hiddenLinkBrain("area");
+    if (!r.core.gardenerWikiSync) return na("no wiki_sync at this commit");
+    const opening = { text: "Course A is active with Zorblax Holdings as its partner.", labels: ["pf-partner", "pf-status"] };
+    const was = process.env.PB_NOW;
+    process.env.PB_NOW = "2026-10-08T07:30:00Z";
+    let refused = "";
+    try { r.core.gardenerWikiSync(r.root, "gardener", { id: "projects/course-a", opening }); } catch (e) { refused = (e as Error).message; }
+    finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+    const n = pb.brain.loadBrain(r.root).find((x: any) => x.fm.id === "projects/course-a");
+    const unsaved = n.fm.opening === undefined;
+    n.fm.opening = { ...opening, by: "gardener", on: "2026-10-07" };
+    pb.brain.saveNote(r.root, n);
+    r.git("louis", "commit", "-qam", "owner: an older opening");
+    r.wiki.renderTouchedPages(r.root, "2000-01-01T00:00:00Z");
+    const helper = r.served("helper");
+    return ok(/^opening/.test(refused) && unsaved && !helper.includes("Zorblax"), `refused "${refused.slice(0, 60)}"; nothing saved ${unsaved}; a stored one named to the reader ${helper.includes("Zorblax")}`);
   } },
   { id: "value-key-keeps-names-and-signs", dimension: "conflicts", gap: "G759", title: "values that differ in a name, tense, number, sign or currency are never one value; a reworded sentence still is", source: "audit v13, trust defect 4", run: async () => {
     const differ: [string, string][] = [["Send the signed lease to Robert on Friday", "Send the signed lease to Roberts on Friday"], ["The team moves to France in the spring", "The team moves to Frances in the spring"], ["The permit expires at the end of March", "The permit expired at the end of March"], ["The tenant agreed to the new lease terms", "The tenants agree to the new lease terms"], ["The lease is being signed by both parties", "The lease is signed by both parties"], ["-740", "740"], ["$740", "\u20ac740"]];

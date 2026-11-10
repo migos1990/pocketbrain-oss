@@ -8,7 +8,7 @@ import { makeBrain } from "../fixture";
 import { loadBrain } from "../../src/brain";
 import { loadRules } from "../../src/rules";
 import { carve, grantFor } from "../../src/carve";
-import { redactLinks, scrubCarved, statusBanner, renderNote, renderView, buildView } from "../../src/view";
+import { redactLinks, scrubCarved, scrubPage, pageSummary, statusBanner, renderNote, renderView, buildView } from "../../src/view";
 import { readNote } from "../../src/core";
 import { useCells } from "../../src/cell";
 
@@ -53,6 +53,23 @@ test("contract view: a carved value is withheld from prose, disguised or not", (
     ["Paid via Maple-Trust-Bank", false, "Paid via Maple-Trust-Bank"],
   ];
   for (const [input, deep, out] of rows) expect(scrubCarved(input, res, deep), input).toBe(out);
+});
+
+test("contract view: on a page that links a note out of view, that note's names are withheld from the page's text and summary (G754, G755)", () => {
+  // money/main-bank ("Main bank") is out of helper's view by type.
+  const { res } = setup("helper", undefined, (root) => {
+    note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active\nsummary: Course C is paid through the Main bank.",
+      `  payer: { value: "[[money/main-bank|the house account]]", as_of: 2026-10-01, ${SRC} }`, "The payer of Course C is Main bank.\n\nMain-Bank, in another spelling.\n\nAsk the house account.");
+    note(root, "projects/course-d", "type: project\narea: work\nsensitivity: personal\nstatus: active", "", "Main bank is a common pair of words on a page that links nothing hidden.");
+  });
+  const c = res.visible.get("projects/course-c")!, d = res.visible.get("projects/course-d")!;
+  expect(scrubPage(c.note.body, c, res)).toBe("The payer of Course C is [withheld].\n\n[withheld]\n\nAsk [withheld].\n");
+  expect(pageSummary(c, res)).toBe("Course C is paid through the [withheld].");
+  // Only on the page that links it: elsewhere a title outside a view is no carved value.
+  expect(scrubPage(d.note.body, d, res)).toBe(d.note.body);
+  // A reader who sees the note keeps its name.
+  const all = setup("steward", undefined, (root) => note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active", `  payer: { value: "[[money/main-bank]]", as_of: 2026-10-01, ${SRC} }`, "Paid by Main bank."));
+  expect(scrubPage("Paid by Main bank.", all.res.visible.get("projects/course-c")!, all.res)).toBe("Paid by Main bank.");
 });
 
 test("contract view: a replaced decision links its replacement only if the agent sees it", () => {
@@ -349,4 +366,39 @@ test("contract view: a cross-page sentence about a hidden page goes, whatever pa
   const body = (readNote(root, "helper", "orgs/north-college") as { body: string }).body;
   expect(body).not.toContain("works at North College");
   expect(body).not.toContain("gmail:f0000000000000a2");
+});
+
+test("contract view: a short form of a hidden linked page's name and a label spelling it are withheld; a carved value in a label still withholds its line (slice audit of G754)", () => {
+  const { res } = setup("helper", undefined, (root) => {
+    note(root, "money/zorblax-fund", "type: money\narea: work\nsensitivity: personal\nstatus: active");
+    note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active",
+      `  payer: { value: "[[money/zorblax-fund]]", as_of: 2026-10-01, ${SRC} }`,
+      "Paid by Zorblax in May.\n\nSigned.[^p-rel-zorblax]\n\nSee Course A.[^p-see-course-a]\n\nBanked.[^maple-trust-bank]");
+  });
+  const c = res.visible.get("projects/course-c")!;
+  expect(scrubPage(c.note.body, c, res)).toBe("Paid by [withheld] in May.\n\n[withheld]\n\nSee Course A.[^p-see-course-a]\n\n[withheld]\n");
+});
+
+// Security review of G754's set-aside: a reader's own value is kept as written only where the hub
+// printed it as whole words; never letters inside another writer's word, never for an ended record.
+test("contract view: a reader's own short or ended value never unmasks another writer's words in the hub's sentence", () => {
+  const r = (by: string, value: string, more = "") => `{ value: "${value}", as_of: 2026-10-01, sources: ["gmail:f0000000000000a1"], verification: verified-by-source, by: ${by}, recorded: 2026-10-01${more} }`;
+  const { res } = setup("helper", undefined, (root) => {
+    note(root, "money/zorblax-fund", "type: money\narea: work\nsensitivity: personal\nstatus: active");
+    note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active",
+      `  payer: { value: "[[money/zorblax-fund]]", as_of: 2026-10-01, ${SRC} }\n  events:\n    items:\n      - ${r("planner", "money/zorblax-fund offsite in May")}\n      - ${r("helper", "or", ", valid_to: 2026-10-02")}\n      - ${r("helper", "la")}`,
+      "Course C's events are money/zorblax-fund offsite in May and la.[^pf-events]\n\n(Written by the hub from this page's facts.)\n\n[^pf-events]: Email, 2026-10-01 (gmail:f0000000000000a1)");
+  });
+  const c = res.visible.get("projects/course-c")!;
+  expect(scrubPage(c.note.body, c, res).split("\n")[0]).toBe("Course C's events are [withheld] offsite in May and la.[^pf-events]");
+});
+
+// Code review of PR 149: splitting a page around the hub's block never adds a line of its own.
+test("contract view: a page whose hub block is empty reads back line for line", () => {
+  const MADE = "(Written by the hub from this page's facts.)";
+  for (const body of [`${MADE}\n\nA note.`, `Lead line.\n\n## Facts\n${MADE}\n\nA note.`]) {
+    const { res } = setup("helper", undefined, (root) => note(root, "projects/course-e", "type: project\narea: work\nsensitivity: personal\nstatus: active", "", body));
+    const e = res.visible.get("projects/course-e")!;
+    expect(scrubPage(e.note.body, e, res)).toBe(e.note.body);
+  }
 });

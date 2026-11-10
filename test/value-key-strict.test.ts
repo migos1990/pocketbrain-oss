@@ -114,3 +114,10 @@ test("G759 a capture that differs only by a plural merges as a source and opens 
   expect(f.contested).toBeUndefined();
   expect(String(f.value)).toBe("Grade the midterm exam for the whole class");
 });
+
+// A plural folds only in prose: a mail address or a web address that differs by an "s" is another one.
+test("G759 an address that differs by a final s is never the same value", () => {
+  expect(sameValue("Send the signed form to jo@acmes.example today", "Send the signed form to jo@acme.example today")).toBe(false);
+  expect(sameValue("The sign-up page is https://example.org/teams for now", "The sign-up page is https://example.org/team for now")).toBe(false);
+  expect(sameValue("The sign-up page is www.example.org/teams for now", "The sign-up page is www.example.org/team for now")).toBe(false);
+});

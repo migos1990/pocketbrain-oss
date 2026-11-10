@@ -13,7 +13,7 @@ import { loadBrain, reloadNotes, parseNote, saveNote, today, isList, isDisputed,
 import { loadRules, attributeSpec, ownerName, isOwnerWord, type Rules } from "./rules";
 import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, type CarveResult, type Visible } from "./carve";
 import { sensitiveShape } from "./shape";
-import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage, summaryShown } from "./view";
+import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage, summaryShown, namesOut, withholdNames, nameMasked, factScrub } from "./view";
 import { contextBudget, tokensOf, fitBlocks, cutLine } from "./context";
 import { write, logWrite, gardenerProposals, REJECT_DAYS, type WriteResult } from "./write";
 import { runChecks, redactSecrets, findInjection, findSecret, refShapeOk, approvalClaim, type WriteRequest } from "./checks";
@@ -212,7 +212,7 @@ const WEEK_TOPIC = /\b(week|weekend|today|tonight|tomorrow|next|upcoming|coming 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function weekBlock(res: CarveResult, rules: Rules, keep?: (id: string) => boolean): { text: string; ids: string[] } | undefined {
   const day = today();
-  const notes = [...res.visible.values()].filter((v) => !keep || keep(v.note.fm.id)).map((v) => ({ id: v.note.fm.id, title: String(v.note.fm.title ?? v.note.fm.id), type: v.note.fm.type, status: v.note.fm.status, aliases: v.note.fm.aliases, facts: visibleFacts(v, res) }));
+  const notes = [...res.visible.values()].filter((v) => !keep || keep(v.note.fm.id)).map((v) => ({ id: v.note.fm.id, title: String(v.note.fm.title ?? v.note.fm.id), type: v.note.fm.type, status: v.note.fm.status, aliases: v.note.fm.aliases, facts: visibleFacts(v, res).map(([a, f]) => [a, nameMasked(f, v, res)] as [string, Fact]) }));
   const title = (id: string) => { const v = res.visible.get(id); return v ? String(v.note.fm.title ?? id) : undefined; };
   const w = weekOf(notes, rules, [], day, title);
   const ids = new Set<string>();
@@ -387,7 +387,7 @@ function noteOut(root: string, agent: string, id: string, section?: string) {
   const out = {
     id: fm.id, title: fm.title, type: fm.type, area: fm.area, updated: shownUpdated(v, res), aliases: fm.aliases ?? [],
     summary: pageSummary(v, res), parent: parent && res.visible.has(parent) ? parent : undefined,
-    facts: Object.fromEntries(visibleFacts(v, res).map(([a, f]) => [a, agentFact(f, agent, res)])),
+    facts: Object.fromEntries(visibleFacts(v, res).map(([a, f]) => [a, agentFact(f, agent, res, v)])),
     body: section !== undefined ? part : full,
     ...(part !== undefined ? { section: section!.trim() } : {}),
     standing: visibleStanding(v, res, rules),
@@ -421,7 +421,7 @@ export function why(root: string, agent: string, key: string): Why {
     throw new CoreError(404, `no fact ${key} in your view`);
   }
   logRead(root, agent, "why", [k[0]]);
-  const out = factWhy(root, v.note, k[1], { agent, may: recordFilter(agent, res.grant.ceiling, v.note.fm.sensitivity), scrub: (x) => scrubLeaves(x, res) });
+  const out = factWhy(root, v.note, k[1], { agent, may: recordFilter(agent, res.grant.ceiling, v.note.fm.sensitivity), scrub: factScrub(v, res) });
   served(root, agent, res, JSON.stringify(out));
   return out;
 }
@@ -446,7 +446,7 @@ function todayPack(root: string, agent: string, rules: Rules, res: CarveResult):
   for (const [id, v] of res.visible) {
     for (const [attr, f] of visibleFacts(v, res)) {
       if (!attr.startsWith("next_") || isList(f) || isDisputed(f)) continue;
-      const r = f as FactRecord;
+      const r = nameMasked(f, v, res) as FactRecord;
       if (r.retired || r.valid_to || factFreshness(f, attributeSpec(rules, v.note.fm.type, attr), day) !== "current") continue;
       const value = String(scrubLeaves(String(r.value ?? ""), res)).replace(/\s+/g, " ").trim().slice(0, 200);
       const d = isoDay(value);
@@ -1165,9 +1165,21 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
       throw new CoreError(422, `the text carries ${fid === id ? "this page's" : `${fv.note.fm.title ?? fid}'s`} ${attr}, which someone who reads this page can't see; send the page again without it`);
     throw new CoreError(422, "the text carries a value hidden from someone who reads this page; use only this page's own facts");
   }
+  // Nor the name of a page this one links that one of them can't see (audit v13, G755): their read
+  // shows that link as [[redacted]], and a summary has no link to redact. A page hidden from the
+  // Gardener itself is no ground for its name below, so a guess at it answers like any other name.
+  // Only a page the Gardener sees is refused by name here: one hidden from it too falls to the
+  // check below with every other name its facts don't hold, so a guess at it is told nothing
+  // (slice audit of G755). That reader's own read withholds the name whatever was saved.
+  const unseen = new Set(namesOut(v!, res, all));
+  for (const a of readers) {
+    const r = carve(notes, hub, grantFor(hub, a), { flags: false }), x = r.visible.get(id)!;
+    if (withholdNames(all, namesOut(x, r, all).filter((n) => !unseen.has(n)), r) !== all) throw new CoreError(422, "the text names a page that someone who reads this page can't see; send the page again without that name");
+  }
   // Never beyond the facts (backlog 377): every name and number it wrote is in this page's title,
   // its facts as the Gardener sees them, or a note it links to that the Gardener sees.
-  const factText = JSON.stringify(visibleFacts(v!, res));
+  // One value a line: a name withheld in another spelling takes its line, never every fact.
+  const factText = withholdNames(JSON.stringify(visibleFacts(v!, res), null, 1), namesOut(v!, res, all), res);
   const linked = [...linksIn(note.body), ...linksIn(factText)].map((l) => res.visible.get(l)?.note.fm.title ?? "");
   const ground = [note.fm.title, ...(note.fm.aliases ?? []), ownerName(hub), factText, ...linked].join("\n");
   const made = ungrounded([summary ?? "", ...sectionsIn.flatMap((x) => [x.heading, x.text])].join("\n"), ground);
@@ -1206,7 +1218,9 @@ function syncOpening(root: string, agent: string, res: CarveResult, hub: Rules, 
   const v = res.visible.get(id);
   const note = v?.body ? notes.find((n) => n.fm.id === id) : undefined;
   if (!note) throw new CoreError(404, `no note ${id}`);
-  const lead = hubLead(note);
+  // The hub's text as the Gardener itself reads it (G756): a sentence or a linked page's name
+  // hidden from it is no ground for an opening, and a guess at one answers like any other word.
+  const lead = hubLead({ ...note, body: scrubPage(note.body, v!, res) });
   if (!lead) throw new CoreError(422, "this page has no text from its facts yet; there is nothing to tie together");
   const why = openingProblem(text, labels, lead, [String(note.fm.title ?? ""), ...(note.fm.aliases ?? []), ...ownerWordsOf(hub)]);
   if (why) throw new CoreError(422, `opening: ${why}`);

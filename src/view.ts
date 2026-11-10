@@ -8,10 +8,10 @@ import { today, isList, isDisputed } from "./brain";
 import type { Rules } from "./rules";
 import { tierOf, ownerName } from "./rules";
 import type { CarveResult, Visible } from "./carve";
-import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFor } from "./carve";
+import { visibleFacts, shownUpdated, factSummary, countFacts, shownWords, linkFor, valueStrings } from "./carve";
 import { needleFor, findCarried, type Needle } from "./match";
 import { escapeRe, tokenIndex } from "./util";
-import { summaryOf, referenceForms } from "./wiki";
+import { summaryOf, referenceForms, MADE } from "./wiki";
 import { readerSource, readerText } from "./sources";
 import { headCommit } from "./git";
 import { visibleStanding, standingLine } from "./standing";
@@ -118,14 +118,208 @@ function withoutHiddenSentences(text: string, v: Visible, res: CarveResult, link
   return out;
 }
 
+// The names behind a page's redacted links (audit v13, G754, G755, G756). A fact or a line of the
+// page that links a note out of this reader's view shows them [[redacted]]; the note's title, its
+// aliases and the words the link used are then withheld from that page's own text and summary too,
+// however the note is hidden (a private page, one hidden by name, one outside the reader's areas):
+// the page writer once wrote such a name in plain words, and a summary or a model's opening could
+// reword it. Only on the page that links it: elsewhere a title outside a view is no carved value.
+// A name the reader is shown anyway (this page's own title, a note in view with the same name)
+// stays. Longest first.
+const nameIndex = new WeakMap<readonly Note[], Map<string, Note[]>>();
+function byName(all: readonly Note[]): Map<string, Note[]> {
+  let ix = nameIndex.get(all);
+  if (!ix) {
+    ix = new Map();
+    for (const n of all) for (const k of new Set([n.fm.id, n.fm.title, ...(n.fm.aliases ?? [])].map((x) => String(x ?? "").trim().toLowerCase()).filter(Boolean))) (ix.get(k) ?? ix.set(k, []).get(k)!).push(n);
+    nameIndex.set(all, ix);
+  }
+  return ix;
+}
+const leafStrings = (v: unknown): string[] => typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(leafStrings) : v && typeof v === "object" ? Object.values(v).flatMap(leafStrings) : [];
+export function namesOut(v: Visible, res: CarveResult, text = ""): string[] {
+  if (!res.all) return [];
+  const facts = Object.values(v.note.fm.facts ?? {}).flatMap((f) => (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]).flatMap((r) => leafStrings(r.value)));
+  const op = (v.note.fm as { opening?: { text?: unknown } }).opening?.text;
+  const src = [...facts, v.note.body ?? "", text, typeof op === "string" ? op : ""];
+  const idLike = facts.filter((s) => /^[a-z0-9-]+\/[^\s]+$/i.test(s.trim()));
+  if (!idLike.length && !src.some((s) => s.includes("[["))) return [];
+  const ix = byName(res.all), out = new Set<string>();
+  const seen = (n: Note) => linkFor(n.fm.id, res) !== undefined;
+  const own = String(v.note.fm.title ?? "").toLowerCase();
+  const add = (name: unknown) => {
+    const s = String(name ?? "").trim();
+    if (s.length < 3 || own.includes(s.toLowerCase()) || (ix.get(s.toLowerCase()) ?? []).some(seen)) return;
+    out.add(s);
+  };
+  const target = (to: string, words?: string) => {
+    const hid = (ix.get(to.trim().toLowerCase()) ?? []).filter((n) => !seen(n) && n.fm.id !== v.note.fm.id);
+    if (!hid.length) return;
+    for (const n of hid) { add(n.fm.title); for (const a of n.fm.aliases ?? []) add(a); }
+    if (words) add(words);
+  };
+  for (const s of src) for (const m of s.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g)) target(m[1]!, m[2]);
+  // A value that is a page's id ("orgs/town") is that page (src/wiki.ts pageLead).
+  for (const s of idLike) target(s);
+  return [...out].sort((a, b) => b.length - a.length);
+}
+// The words this reader is shown anyway, lower-cased: the titles and aliases in its view and the
+// values of the facts it sees, links left out (a link's words are the name in question). A word a
+// hidden page's name shares with them ("Holdings" beside a visible "Maple Holdings") says nothing.
+// Another writer's fact on the page itself counts too: the reader is served it as written, so the
+// page's prose saying the same word tells nothing more.
+const plainWords = new WeakMap<CarveResult, Map<string, string[]>>();
+function shownPlainWords(res: CarveResult): Map<string, string[]> {
+  let w = plainWords.get(res);
+  if (!w) {
+    w = new Map();
+    let at = "";
+    const add = (t: unknown) => { for (const x of String(t ?? "").replace(/\[\[[^\]]*\]\]/g, " ").toLowerCase().split(/[^\p{L}\p{N}]+/u)) if (x) { const l = w!.get(x) ?? w!.set(x, []).get(x)!; if (l.length < 2 && !l.includes(at)) l.push(at); } };
+    // Never what this reader wrote itself: a guess it files on any page would unmask the word.
+    const me = res.grant.agent;
+    const others = (f: Fact) => (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]).filter((r) => r.by !== me);
+    for (const v of res.visible.values()) {
+      at = v.note.fm.id;
+      if (v.note.fm.by !== me) { add(v.note.fm.title); for (const a of v.note.fm.aliases ?? []) add(a); }
+      // As the reader is served it: a hidden linked page's whole name in the value is withheld
+      // there, so its words are not shown by it.
+      const names = namesOut(v, res, v.note.body);
+      const served = (x: string) => (names.length ? withholdNames(x, names, res, v.note.fm.id, false) : x).replace(/\[withheld\]/g, " ");
+      for (const [, f] of visibleFacts(v, res)) for (const r of others(f)) for (const x of valueStrings(r)) if (!/^[a-z0-9-]+\/[^\s]+$/i.test(x.trim())) add(served(x));
+    }
+    plainWords.set(res, w);
+  }
+  return w;
+}
+const slugOf = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+// A name's words that name the page by themselves: none that a title or value in view holds.
+function nameParts(names: string[], res: CarveResult, _page?: string): string[] {
+  const shown = shownPlainWords(res);
+  return [...new Set(names.flatMap((n) => n.split(/[^\p{L}\p{N}]+/u)).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !shown.has(w.toLowerCase())))].sort((a, b) => b.length - a.length);
+}
+// `short: false` for a fact's value and the hub's own sentence that prints it: only the name as a
+// whole is withheld there. The value is a fact the reader is granted, and a word it shares with
+// the name ("Course coordinator" on a page that links a hidden "Course A") is that fact's own.
+// shownWords walks every note in view: once per carve, not once per name per page (the night
+// pass's searchable check renders every note, test/night-scale.test.ts).
+const shownCache = new WeakMap<CarveResult, Set<string>>();
+const shownOnce = (res: CarveResult) => shownCache.get(res) ?? shownCache.set(res, shownWords(res)).get(res)!;
+export function withholdNames(text: string, names: string[], res: CarveResult, page?: string, short = true): string {
+  if (!names.length) return text;
+  let out = text;
+  const word = (n: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(n)}(?=$|[^\\p{L}\\p{N}])`, "giu");
+  for (const n of names) out = out.replace(word(n), "$1[withheld]");
+  // A short form (slice audit of G754): one word of the name that no title in this reader's view
+  // holds ("Zorblax" of "Zorblax Holdings") names the page as well as the whole of it does.
+  const parts = short ? nameParts(names, res, page) : [];
+  // A reference label is a slug: one that spells the name, or such a word of it, is withheld with
+  // its line, the mark and the reference alike. The hub's own labels of pages in view never do.
+  const slugs = [...new Set([...names, ...parts].map(slugOf).filter((x) => x.length >= 4))];
+  const label = (line: string) => [...line.matchAll(/\[\^([^\]\s]+)\]/g)].some((m) => { const l = slugOf(m[1]!); return slugs.some((x) => l === x || l.startsWith(`${x}-`) || l.endsWith(`-${x}`) || l.includes(`-${x}-`)); });
+  if (slugs.length && label(out)) out = out.split("\n").map((line) => label(line) ? line.replace(/^(\s*(?:[-*] )?).*$/, "$1[withheld]") : line).join("\n");
+  // In another spelling (spacing, dashes, look-alikes), the whole line goes, as for a carved value.
+  const needles = names.filter((n) => !/^\p{L}+$/u.test(n)).map((n) => needleFor(n, n, shownOnce(res))).filter((x): x is Needle => !!x);
+  // Labels were checked above by their slug; a label of a page in view is no spelling of the name.
+  const bare = (t: string) => t.replace(/\[\^[^\]\s]+\]:?/g, " ");
+  if (needles.length && findCarried(bare(out), needles)) out = out.split("\n").map((line) => findCarried(bare(line), needles) ? line.replace(/^(\s*(?:[-*] )?).*$/, "$1[withheld]") : line).join("\n");
+  for (const w of parts) out = out.replace(word(w), "$1[withheld]");
+  return out;
+}
+
 // A visible page's own text (body, summary) as this agent gets it: links and carved values as for
-// any text (redactLinks), then the writer's sentences about its hidden facts left out.
+// any text (redactLinks), the names behind its redacted links withheld (namesOut), then the
+// writer's sentences about its hidden facts left out.
 export function scrubPage(text: string, v: Visible, res: CarveResult): string {
   // The links as written, for the sentences about another page's fact (G607): redactLinks turns a
   // link to a page out of view into [[redacted]], which no longer says which page it was.
   // Hidden facts' sentences go first, matched by their references as written; then another
   // assistant's refs and name leave what is left (G723). The file keeps them for the owner.
-  return readerText(withoutHiddenSentences(redactLinks(text, res), v, res, text), res.grant.agent);
+  // The hub's sentence for a fact this reader wrote itself keeps that value as the reader wrote it
+  // (slice audits of G754): the reader is shown its own value as written, and withholding the
+  // hidden name's words inside it handed a writer back which of its own words are in the name.
+  // Only in the hub's own block (the lines above its made-by line), only in a sentence that cites
+  // nothing but that reader's own facts, and only the value's own words: text a person wrote, or
+  // a sentence about someone else's fact, is withheld like the rest.
+  // A fact several wrote (a list, fifth audit round): the reader's own items read as written, the
+  // others' are withheld, each found from the sentence's end in the order the hub wrote them.
+  // The hub joins facts in one sentence and rewrites some values (a date), so the value as stored
+  // may not stand in it (sixth round): then the name's words inside the reader's own value are
+  // found one by one, in the order written, and each cited fact's words are walked past in turn.
+  // Only records the hub prints (live, kept to nobody), only a label one fact owns, and only where
+  // the value stands as whole words (security review): an ended item "or", or a fact whose label
+  // another's shares, took letters inside another writer's word and unmasked the rest of it.
+  const me = res.grant.agent, cited = new Map<string, FactRecord[]>(), clash = new Set<string>();
+  let mine = false;
+  for (const [attr, f] of Object.entries(v.note.fm.facts ?? {})) {
+    const recs = (isList(f) ? f.items : isDisputed(f) ? [] : [f as FactRecord]).filter((r) => !r.valid_to && !r.retired && !r.unseen && !r.share_with && (!r.sensitivity || r.sensitivity === v.note.fm.sensitivity));
+    if (recs.some((r) => r.by === me)) mine = true;
+    const s = attr.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    for (const l of [`pf-${s}`, `p-${s}`]) { if (cited.has(l)) clash.add(l); cited.set(l, recs); }
+  }
+  const kept: string[] = [];
+  const names = namesOut(v, res, text);
+  let body = withoutHiddenSentences(redactLinks(text, res), v, res, text);
+  if (mine && names.length && body.includes(MADE)) {
+    const nameWords = new RegExp(`(?<![\\p{L}\\p{N}])(?:${[...names, ...nameParts(names, res, v.note.fm.id)].sort((a, b) => b.length - a.length).map(escapeRe).join("|")})(?![\\p{L}\\p{N}])`, "giu");
+    const lines = body.split("\n");
+    const end = lines.findIndex((l) => l.includes(MADE));
+    let start = end;
+    while (start > 0 && !/^#{1,6} /.test(lines[start - 1]!)) start--;
+    for (let i = start; i < end; i++) lines[i] = lines[i]!.replace(/[^\n]*?(?:\[\^[^\]\s]+\])+/g, (s) => {
+      const ls = [...s.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!);
+      const facts = [...new Set(ls.map((l) => cited.get(l)).filter((x): x is FactRecord[] => !!x))];
+      if (ls.some((l) => clash.has(l)) || !facts.some((recs) => recs.some((r) => r.by === me))) return s;
+      // The last place before the cursor where `x` stands as whole words.
+      const whole = (hay: string, x: string) => {
+        for (let from = cursor - x.length; from >= 0; ) {
+          const at = hay.lastIndexOf(x, from);
+          if (at < 0) return -1;
+          if (!/[\p{L}\p{N}]/u.test(hay[at - 1] ?? " ") && !/[\p{L}\p{N}]/u.test(hay[at + x.length] ?? " ")) return at;
+          from = at - 1;
+        }
+        return -1;
+      };
+      let out = s, cursor = s.length;
+      const aside = (at: number, len: number, r: FactRecord) => {
+        if (r.by === me) out = `${out.slice(0, at)}\u0000${kept.push(out.slice(at, at + len)) - 1}\u0000${out.slice(at + len)}`;
+        cursor = at;
+      };
+      // The hub's sentence ends the segment: the last place a value stands is its own.
+      const walk = facts.reverse().flatMap((recs) => [...recs].reverse().flatMap((r) => valueStrings(r).map((y) => y.trim()).filter((y) => y.length >= 2).reverse().map((x) => ({ r, x }))));
+      // Another writer's value the hub cites but doesn't print may stand inside the reader's own
+      // value, still to come in the walk: those words are the reader's, not walked past.
+      // And the other way: the reader's own value the hub doesn't print (an org folded into a role
+      // sentence) may stand inside another writer's value still to come: those words are theirs.
+      const inTheirs = (i: number, at: number, len: number) => walk.slice(i + 1).some(({ r, x }) => { if (r.by === me || cursor < x.length) return false; const p = whole(out, x); return p >= 0 && p <= at && p + x.length >= at + len && x.length > len; });
+      const inMine = (i: number, at: number, len: number) => walk.slice(i + 1).some(({ r, x }) => { if (r.by !== me || cursor < x.length) return false; const p = whole(out, x); return p >= 0 && p <= at && p + x.length >= at + len; });
+      walk.forEach(({ r, x }, i) => {
+        const at = whole(out, x);
+        if (at >= 0) { if (r.by === me ? !inTheirs(i, at, x.length) : !inMine(i, at, x.length)) aside(at, x.length, r); return; }
+        // A link or a bare id is never written out in words: nothing of it to walk past.
+        if (/\[\[|^[a-z0-9-]+\/\S+$/i.test(x)) return;
+        for (const m of [...x.matchAll(nameWords)].reverse()) {
+          const w = m[0].toLowerCase();
+          const hit = whole(out.toLowerCase(), w);
+          if (hit >= 0 && (r.by === me ? !inTheirs(i, hit, w.length) : !inMine(i, hit, w.length))) aside(hit, w.length, r);
+        }
+      });
+      return out;
+    });
+    body = lines.join("\n");
+  }
+  // The hub's own block prints fact values: the name whole is withheld there, as in the facts;
+  // every other line (a person's note, a section, a summary's prose) loses its short forms too.
+  {
+    const lines = body.split("\n"), end = lines.findIndex((l) => l.includes(MADE));
+    let start = end;
+    while (start > 0 && !/^#{1,6} /.test(lines[start - 1]!)) start--;
+    const hub = end < 0 ? "" : lines.slice(start, end).join("\n");
+    const out = (t: string, short: boolean) => (t ? withholdNames(t, names, res, v.note.fm.id, short) : t);
+    // Only the parts that hold a line: an empty one would add a line of its own to the join.
+    body = end < 0 ? out(body, true) : [...(start > 0 ? [out(lines.slice(0, start).join("\n"), true)] : []), ...(end > start ? [out(hub, false)] : []), out(lines.slice(end).join("\n"), true)].join("\n");
+  }
+  body = body.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? "");
+  return readerText(body, res.grant.agent);
 }
 
 // The writer's sentences that state ANOTHER page's fact (audit v10, G607): an org's "Ana Diaz
@@ -229,8 +423,19 @@ export function guidanceFor(rules: Rules, res: CarveResult): string {
 
 // Every string inside a fact record, scrubbed one by one (the hub's render and the cells share
 // this, so a value is withheld the same way on both paths).
+// A value that is nothing but a page's id ("orgs/town", which the page writer reads as that page)
+// is a link in all but brackets: out of this reader's view it is [[redacted]] like one, whether
+// the page is hidden or was never made (G754).
+const folderCache = new WeakMap<readonly Note[], Set<string>>();
+function bareIdOut(v: string, res: CarveResult): boolean {
+  const m = res.all && v.trim().match(/^([a-z0-9-]+)\/[a-z0-9][a-z0-9._-]*$/);
+  if (!m) return false;
+  let folders = folderCache.get(res.all!);
+  if (!folders) folderCache.set(res.all!, folders = new Set(res.all!.map((n) => n.fm.id.split("/")[0]!)));
+  return folders.has(m[1]!) && linkFor(v.trim(), res) === undefined;
+}
 export function scrubLeaves(v: unknown, res: CarveResult): unknown {
-  if (typeof v === "string") return redactLinks(v, res);
+  if (typeof v === "string") return bareIdOut(v, res) ? "[[redacted]]" : redactLinks(v, res);
   if (Array.isArray(v)) return v.map((x) => scrubLeaves(x, res));
   if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scrubLeaves(x, res)]));
   return v;
@@ -240,8 +445,11 @@ export function scrubLeaves(v: unknown, res: CarveResult): unknown {
 // no writer (`by`, `shared_by`, `confirmed_by`, an end's or a forgetting's `by`) and a share_with
 // naming only the reader. Who wrote a fact and who else may see it name
 // other agents, and an agent shouldn't learn they exist.
-function agentRecord(r: FactRecord, agent: string, res: CarveResult): FactRecord {
+function agentRecord(r: FactRecord, agent: string, res: CarveResult, mask?: (s: string) => string): FactRecord {
   const out = scrubLeaves(r, res) as FactRecord;
+  // On a page that links a page out of this reader's view, that page's name is withheld from the
+  // values too, as from the text (pageMask): never from a value the reader wrote itself.
+  if (mask && r.by !== agent) out.value = mapStrings(out.value, mask) as FactRecord["value"];
   // Another assistant's ref says which assistant filed it (G722): the reader gets it unnamed.
   if (Array.isArray(out.sources)) out.sources = out.sources.map((s) => readerSource(s, agent));
   delete (out as { by?: string }).by;
@@ -253,10 +461,41 @@ function agentRecord(r: FactRecord, agent: string, res: CarveResult): FactRecord
   return out;
 }
 
-export function agentFact(f: Fact, agent: string, res: CarveResult): Fact {
-  if (isList(f)) return { ...f, items: f.items.map((r) => agentRecord(r, agent, res)) };
-  if (isDisputed(f)) return { ...f, candidates: f.candidates.map((r) => agentRecord(r, agent, res)) };
-  return agentRecord(f as FactRecord, agent, res);
+const mapStrings = (x: unknown, f: (s: string) => string): unknown => typeof x === "string" ? f(x) : Array.isArray(x) ? x.map((y) => mapStrings(y, f)) : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, y]) => [k, mapStrings(y, f)])) : x;
+// The names behind a page's redacted links, withheld from one string of that page (third slice
+// audit of G754): a fact's value that says the name in plain words read as written beside a body
+// sentence that withheld it, and the difference told a reader which of its words the name is.
+// Undefined when the page links nothing out of view (a cell's copy, already scrubbed, too).
+const masks = new WeakMap<Visible, { res: CarveResult; mask?: (s: string) => string }>();
+function pageMask(v: Visible, res: CarveResult): ((s: string) => string) | undefined {
+  const hit = masks.get(v);
+  if (hit && hit.res === res) return hit.mask;
+  const names = namesOut(v, res, v.note.body);
+  const mask = names.length ? (s: string) => withholdNames(s, names, res, v.note.fm.id, false) : undefined;
+  masks.set(v, { res, mask });
+  return mask;
+}
+// `v`, the page the fact is on, when the caller serves it as that page's fact.
+export function agentFact(f: Fact, agent: string, res: CarveResult, v?: Visible): Fact {
+  const mask = v ? pageMask(v, res) : undefined;
+  if (isList(f)) return { ...f, items: f.items.map((r) => agentRecord(r, agent, res, mask)) };
+  if (isDisputed(f)) return { ...f, candidates: f.candidates.map((r) => agentRecord(r, agent, res, mask)) };
+  return agentRecord(f as FactRecord, agent, res, mask);
+}
+// One fact's values as this reader gets them outside a record (its provenance): scrubbed, and the
+// page's hidden names withheld except in a record the reader wrote itself (`r`).
+export function factScrub(v: Visible, res: CarveResult): (x: unknown, r?: FactRecord) => unknown {
+  const me = res.grant.agent;
+  return (x, r) => { const mask = r?.by === me ? undefined : pageMask(v, res); return mask ? mapStrings(scrubLeaves(x, res), mask) : scrubLeaves(x, res); };
+}
+// A page's visible facts with their values scrubbed and that withholding done, writer fields kept
+// (the week block, the today pack).
+export function nameMasked(f: Fact, v: Visible, res: CarveResult): Fact {
+  const mask = pageMask(v, res), me = res.grant.agent;
+  // Carved values and links first, as on a read: a name's word withheld inside a carved value
+  // would hide it from that scrub. Every record is scrubbed; only others' values lose the name.
+  const one = (r: FactRecord): FactRecord => { const value = scrubLeaves(r.value, res); return { ...r, value: (mask && r.by !== me ? mapStrings(value, mask) : value) as FactRecord["value"] }; };
+  return isList(f) ? { ...f, items: f.items.map(one) } : isDisputed(f) ? { ...f, candidates: f.candidates.map(one) } : one(f as FactRecord);
 }
 
 // One visible note as the agent gets it: allowed facts with freshness, body if granted,
@@ -308,7 +547,7 @@ export function renderNote(v: Visible, res: CarveResult, rules: Rules, now = tod
   const facts = visibleFacts(v, res);
   if (facts.length) {
     lines.push("");
-    for (const [attr, f] of facts) lines.push(...factSummary(attr, agentFact(f, res.grant.agent, res), fm.type, rules, now).map((l) => redactLinks(l, res, false)));
+    for (const [attr, f] of facts) lines.push(...factSummary(attr, agentFact(f, res.grant.agent, res, v), fm.type, rules, now).map((l) => redactLinks(l, res, false)));
   }
   const text = body ?? (v.body && v.note.body.trim() ? scrubPage(v.note.body.trim(), v, res) : "");
   if (text) {

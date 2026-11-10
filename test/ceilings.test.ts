@@ -610,3 +610,61 @@ test("someone else's word the box knowingly files as the owner's (ceiling)", () 
 test("the owner's own sentences the box knowingly takes as hearsay (over-hold)", () => {
   for (const [s, who] of HEARSAY_OVERHOLD) expect([s, hearsay(s)?.who]).toEqual([s, who]);
 });
+
+// The names behind a page's redacted links (namesOut and withholdNames in src/view.ts; audit v13,
+// G754, and its slice audit). What the guard does not catch, and ordinary text it knowingly holds.
+// [what a reader is served, on a page that links a page out of its view]
+const HIDDEN_NAME_CEILING: [string, string][] = [
+  // A word of the name another assistant wrote on some other page this reader sees counts as shown.
+  ["a word of the name in another assistant's fact on another visible page", "passes on the linking page"],
+  // A word of the name that this reader is shown elsewhere is no short form of it.
+  ["the name's word that a title or a fact in the reader's view also holds (\"Holdings\")", "passes"],
+  // A value shaped like an id in a folder the brain doesn't have is plain text, not a link.
+  ["a fact value \"nofolder/zorblax\"", "no [[redacted]]: plain text, read as written"],
+  // A single word of the name inside a fact the reader is granted, and the hub's sentence that
+  // prints that fact: the fact's own word. Only the name whole is withheld there.
+  ["\"the Zorblax one\" as a fact's value on the page that links the hidden Zorblax Holdings", "passes, in the fact and in the hub's sentence for it"],
+  // A word of the name under four letters, a number in it, an inflection or a look-alike of one word.
+  ["\"Zed\" or \"2049\" of a hidden \"Zed Ox 2049\"; \"Zorblaxes\", \"Z0rblax\"", "passes"],
+  // The reader's own words are kept as written in the hub's sentence by finding them in its text,
+  // not by knowing which record each word came from: where the hub prints neither value as stored
+  // (both rewritten), a writer's guessed word can still read differently on a hit.
+  ["a writer's guessed word beside another writer's value when the hub rewrote both (two dated steps)", "may differ hit from miss"],
+  // The hub links a role that spells a page's exact title, so the writer's own sentence reads
+  // [[redacted]] where a miss reads as written: an exact-title guess is confirmed.
+  ["a writer's own role \"alpha Zorblax Holdings lead\" on the page that links the hidden page", "the hub's sentence reads alpha [[redacted]] lead"],
+  // The Gardener's own guesses (it may write prose): text that carries a value or alias hidden from
+  // it is refused with the fixed hidden-value answer where a miss is checked as any word, and a
+  // name hidden from it that opens a sentence is applied and read back [withheld].
+  ["the Gardener's summary naming an alias of a page hidden from the Gardener", "refused: carries a hidden value"],
+  ["the Gardener's summary whose first word is the name of a page hidden from it", "applied; its own read shows [withheld]"],
+];
+const HIDDEN_NAME_OVERHOLD: [string, string][] = [
+  // On that page only: any other use of a word of the name the reader is shown nowhere else.
+  ["\"the Zorblax river\" in a person's own note on a page that links the hidden Zorblax Holdings", "the [withheld] river"],
+];
+test("the names behind a redacted link: what passes, and ordinary text held (ceiling)", async () => {
+  const { makeBrain } = await import("./fixture");
+  const { readNote, remember } = await import("../src/core");
+  const { renderTouchedPages } = await import("../src/wiki");
+  const root = makeBrain();
+  const sh = (...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
+  const fact = (value: string) => `{ value: "${value}", as_of: 2026-10-05, sources: ["gmail:f0000000000000c1"], verification: verified-by-source, by: steward, recorded: 2026-10-05 }`;
+  const head = (id: string, type: string, title: string, area: string) => `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\n`;
+  writeFileSync(join(root, "projects", "zorblax-holdings.md"), `${head("projects/zorblax-holdings", "project", "Zorblax Holdings", "personal")}---\n`);
+  writeFileSync(join(root, "projects", "maple-holdings.md"), `${head("projects/maple-holdings", "project", "Maple Holdings", "work")}---\n`);
+  writeFileSync(join(root, "people", "pat-lee.md"), `${head("people/pat-lee", "person", "Pat Lee", "work")}facts:\n  org: ${fact("[[projects/zorblax-holdings]]")}\n  ref: ${fact("nofolder/zorblax")}\n---\nPat walks by the Zorblax river. The Holdings are many.\n`);
+  sh("add", "-A"); sh("commit", "-qm", "owner: pat");
+  expect(HIDDEN_NAME_CEILING).toHaveLength(9);
+  expect(HIDDEN_NAME_OVERHOLD).toHaveLength(1);
+  const before = readNote(root, "planner", "people/pat-lee") as { body: string; facts: Record<string, { value: string }> };
+  expect(before.body).toContain("the [withheld] river");   // over-hold
+  expect(before.body).toContain("The Holdings are many."); // a word shown elsewhere passes
+  expect(before.facts.ref!.value).toBe("nofolder/zorblax"); // no such folder: plain text, a granted fact's own word
+  // The writer writes the exact name on the page itself.
+  expect(remember(root, "planner", { id: "people/pat-lee", attribute: "nickname", value: "Zorblax Holdings", as_of: "2026-10-06", sources: ["gmail:f000000000000009"], verification: "verified-by-source" }).outcome).toBe("committed");
+  renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  const after = (readNote(root, "planner", "people/pat-lee") as { body: string }).body;
+  // The writer's own sentence reads as it wrote it, a hit like a miss: no guess is confirmed.
+  expect(after).toContain("nickname is Zorblax Holdings.");
+}, 60_000);

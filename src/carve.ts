@@ -52,6 +52,9 @@ export interface CarveResult {
   // Each merged note's final target (mergedTarget), so a link to the pointer renders as a link to
   // the note it became when the agent sees that note, and [[redacted]] otherwise (linkFor).
   mergedTo?: Map<string, string>;
+  // The notes the carve was made from, for the names behind a page's redacted links
+  // (view.ts namesOut, G754). Never served.
+  all?: readonly Note[];
 }
 
 // The id a link to `id` shows the agent: the note itself when it is in view, the note a merged
@@ -229,7 +232,7 @@ export function carve(notes: Note[], rules: Rules, given: Grant, opts: { flags?:
 
   const notShared = [...new Set(grant.exclude_types)].filter((t) =>
     notes.some((n) => matchesType(n, [t])) && rules.slices[t]?.announce !== false);
-  const result: CarveResult = { grant, visible, excluded, hiddenFacts, flags: [], notShared, carvedValues: [] };
+  const result: CarveResult = { grant, visible, excluded, hiddenFacts, flags: [], notShared, carvedValues: [], all: notes };
   const merged = notes.filter((n) => n.fm.status === "merged");
   if (merged.length) {
     const byId = new Map(notes.map((n) => [n.fm.id, n]));
@@ -491,7 +494,7 @@ function carveFromMemo(notes: Note[], rules: Rules, grant: Grant, memo: Memo, na
   }
   const notShared = [...new Set(grant.exclude_types)].filter((t) =>
     notes.some((n) => matchesType(n, [t])) && rules.slices[t]?.announce !== false);
-  const result: CarveResult = { grant, visible, excluded, hiddenFacts, flags: [], notShared, carvedValues: [] };
+  const result: CarveResult = { grant, visible, excluded, hiddenFacts, flags: [], notShared, carvedValues: [], all: notes };
   const merged = notes.filter((n) => n.fm.status === "merged");
   const byId = merged.length ? new Map(notes.map((n) => [n.fm.id, n])) : undefined;
   if (byId) {

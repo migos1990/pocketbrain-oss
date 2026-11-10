@@ -74,7 +74,8 @@ const signed = (v: string) => v
 // moved") therefore stays two values, an ask more and never a silent merge.
 const participle = (w: string) => /ed$/.test(w) ? w.replace(/ed$/, "").replace(/([^aeiou])\1$/, "$1") : w;
 // One final "s" off a longer word; never "ss", "us" or "is" ("class", "status", "basis").
-const singular = (w: string) => w.length >= 5 && /[^sui]s$/.test(w) && !/\d/.test(w) ? w.slice(0, -1) : w;
+// Letters only: a piece of a mail address ("jo@acmes") keeps its "s".
+const singular = (w: string) => w.length >= 5 && /^\p{L}+$/u.test(w) && /[^sui]s$/.test(w) ? w.slice(0, -1) : w;
 export function valueKey(v: unknown): string {
   // A number is its own text, sign and all: -740 is "-740" and never 740.
   if (typeof v === "number") return valueKey(String(v));
@@ -93,7 +94,8 @@ export function valueKey(v: unknown): string {
     if (t >= words.length || !aligned || cased[t] !== words[t] || /\d/.test(words[t]) || GRAMMAR.has(words[t])) continue;
     if (passive) out[t] = participle(words[t]);
   }
-  if (aligned) for (let i = 1; i < out.length; i++) if (cased[i] === words[i]) out[i] = singular(out[i]);
+  // Never inside a value that holds a web address, whose path words are no prose.
+  if (aligned && !/:\/\/|www\./i.test(v)) for (let i = 1; i < out.length; i++) if (cased[i] === words[i]) out[i] = singular(out[i]);
   return "~" + out.filter((w) => !GRAMMAR.has(w)).join(" ");
 }
 export const sameValue = (a: unknown, b: unknown) => valueKey(a) === valueKey(b);
