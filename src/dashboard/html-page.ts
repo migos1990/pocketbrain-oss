@@ -138,8 +138,8 @@ p.edited{font-size:13px;line-height:18px;color:var(--muted);margin:0 0 10px}
 .prose ol li{margin:0 0 6px}
 .prose details.quote{border:0;margin:0 0 4px}.prose details.quote summary{display:flex;align-items:center;gap:8px;min-height:44px;font-weight:600;color:var(--text);cursor:pointer;list-style:none}.prose details.quote summary::-webkit-details-marker{display:none}.prose details.quote summary::before{content:"+";display:inline-grid;place-items:center;width:18px;height:18px;border:1.5px solid currentColor;font-weight:800;line-height:1}.prose details.quote[open] summary::before{content:"−"}
 .prose blockquote{margin:0 0 8px;padding-left:12px;border-left:3px solid var(--marker-ink);color:var(--text)}
-a.project{margin:18px 0 0;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px;color:var(--text)}
-.project .nm{font-weight:900;font-size:22px;letter-spacing:-.02em}.project .flag{align-self:flex-start;font-size:13px;line-height:18px;font-weight:800;background:var(--marker-ink);color:var(--on-marker);padding:1px 6px;mix-blend-mode:var(--blend)}
+.project{margin:18px 0 0;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:6px;color:var(--text)}
+.project .nm{font-weight:800;font-size:19px;line-height:25px;letter-spacing:-.01em}.project .flag{align-self:flex-start;font-size:13px;line-height:18px;font-weight:800;background:var(--marker-ink);color:var(--on-marker);padding:1px 6px;mix-blend-mode:var(--blend)}
 .band .what{margin:0;padding:7px 0;border-bottom:2px solid var(--text);font-size:15px;line-height:20px;font-weight:500;overflow-wrap:anywhere}
 .band .what a,.describe .said a{text-decoration:underline;text-underline-offset:2px}
 .describe{margin:0 0 18px;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0 12px;display:flex;flex-direction:column;gap:8px}
@@ -277,7 +277,8 @@ function projectCard(s: State, n: Note, fresh: boolean): string {
   const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined;
   const next = r && !r.valid_to && (fresh || !shut(n, r)) ? plain(r.value, (x) => { const t = s.notes.find((m) => m.fm.id === x)?.fm.title; return t === undefined ? undefined : String(t); }) : "";
   if (!open && !next) return "";
-  const inner = `<span class="nm">${esc(displayName(id, n.fm.title))}</span>${next ? `<span>${PAGE_COPY.next} ${esc(next)}</span>` : ""}${open ? `<span class="flag">${PAGE_COPY.disagree}</span>` : ""}`;
+  // The card sits on its own page, so it leads with what's next and never repeats the page's name (G782).
+  const inner = `${next ? `<span class="nm">${PAGE_COPY.next} ${esc(next)}</span>` : ""}${open ? `<span class="flag">${PAGE_COPY.disagree}</span>` : ""}`;
   return open ? `<a class="project" href="/settle/${esc(open.id)}">${inner}</a>` : `<div class="project">${inner}</div>`;
 }
 

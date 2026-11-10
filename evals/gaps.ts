@@ -26,8 +26,15 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",
     fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
   },
+  G782: {
+    closed: "claude/project-page-heading",
+    title: "The card on a page repeated the page's own name as a heading",
+    severity: "low",
+    finding: "Screens review 2026-11-10 (demo brain, 390px dark): the card under a project page's prose (what's next, and a conflict's way to Settle) opened with the page's name in heading weight, so \"Atlas launch\" stood mid-page a second time. Without a conflict the card had no layout of its own and its name and next step ran together.",
+    fix: "src/dashboard/html-page.ts projectCard: the card leads with what's next and no longer says the page's name; the same rules and spacing with or without a conflict. Layout and words only, no access change. Tests: test/project-card-name.test.ts.",
+  },
   G781: {
-    closed: "claude/page-kind-word",
+    closed: "358118f3",
     title: "An organisation's page called itself an org",
     severity: "low",
     finding: "Screens review 2026-11-10 (demo brain, 390px dark): the line under an organisation page's name read \"org · 1 source\". \"org\" is the note type's word; Memory's own list says Organisations.",
