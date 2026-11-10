@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G740: {
+    closed: "claude/lastmet-weekhead",
+    title: "The owner's page said nothing for an area with more than twelve live projects",
+    severity: "medium",
+    finding: "Mac read-only check 2026-11-08: the owner's page had a Your … projects sentence for its small areas but none for the area holding 32 live projects, because past 2 * RELATED_NAMES an area said nothing; nothing reported it.",
+    fix: "pageLead in src/wiki.ts names the twelve touched most recently (Your work projects include …). scripts/north-star.ts detectors reports how many live projects and decisions the owner's page names, report-only. Tests: test/owner-page-projects.test.ts.",
+  },
+  G739: {
+    closed: "claude/lastmet-weekhead",
+    title: "Last met never tied a meeting to a page holding its address outside emails",
+    severity: "low",
+    finding: "Mac read-only check 2026-11-08: 0 of the first 15 people pages showed Last met. The real data explains most of it (4 past meetings with guests, none matching the 8 addresses pages hold), but meetingsWith read only the emails attribute and hashed each value raw, so an address under email, or held as Name <address>, never matched; nothing reported it.",
+    fix: "addressKeys in src/upcoming.ts reads every email-shaped attribute and the address inside a From line, lowercased. scripts/north-star.ts detectors reports people pages showing Last met and past guest meetings that tie no page, report-only. Tests: test/last-met-match.test.ts.",
+  },
   G745: {
     closed: "e47bbea7",
     title: "A lost ant login showed as a count of failed calls, one line per Gardener job",
@@ -125,7 +139,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/backup.ts: the manifest's refs are the bundle's own (git bundle list-heads), and restore checks every ref the bundle holds plus every branch and tag the manifest names, but not a remote-tracking ref, so backups made before the fix restore too. Tests: test/restore-hardening.test.ts (G738), eval rt-restore-tracking-ref-moved.",
   },
   G737: {
-    closed: "claude/area-chip-title",
+    closed: "30bfb0b4",
     title: "A person page's header chip still repeated the org named in the line under the name",
     severity: "low",
     finding: "Use-it on the Mac 2026-11-08 after be0f4dad: the header chip still showed the org initials after the H1, beside a line whose role names the org, because no org fact or org page filed in that area told the chip which org it stood for.",

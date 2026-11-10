@@ -47,6 +47,10 @@ export function toUpcoming(r: Record<string, any>, source: string, sensitivity?:
   return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}), ...(who.length ? { who } : {}) };
 }
 
+const EMAIL_ATTR = /^(?:\w+_)?e-?mails?$/i;
+// The address in a page's value: the one inside angle brackets, else the value when it is one.
+export const addressIn = (v: string) => { const a = (v.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] ?? v).trim().toLowerCase(); return /^[^\s@]+@[^\s@]+$/.test(a) ? a : undefined; };
+
 // An address as the cache keeps it: a hash, so the file never holds who the owner meets.
 export const guestKey = (email: string) => createHash("sha256").update(`pocketbrain-guest:${email.trim().toLowerCase()}`).digest("hex").slice(0, 20);
 
@@ -99,6 +103,15 @@ export function loadCalendar(root: string, day = today()): Upcoming[] {
 // The events still to come today or later, soonest first.
 export const loadUpcoming = (root: string, day = today()): Upcoming[] => loadCalendar(root, day).filter((e) => e.start.slice(0, 10) >= day);
 
+// The guest keys of the addresses a person page holds: every email-shaped attribute ("email" as
+// well as "emails"), its value read as an address even when held as a From line ("Name <address>")
+// or in capitals (the Mac's check 2026-11-08; G739).
+export function addressKeys(n: Note): string[] {
+  return Object.entries(n.fm.facts ?? {}).filter(([a, f]) => EMAIL_ATTR.test(a) && !isDisputed(f))
+    .flatMap(([, f]) => (isList(f) ? f.items : [f as FactRecord]).filter((r) => r && !r.valid_to && !r.retired && typeof r.value === "string"))
+    .flatMap((r) => { const a = addressIn(String(r.value)); return a ? [guestKey(a)] : []; });
+}
+
 // A recurring meeting's instance id is its series id plus the instance's date or time.
 export const seriesId = (id: string) => id.replace(/_\d{8}(T\d{6}Z?)?$/, "");
 // The coming events of one source whose event (or series) its pull never read: events made long
@@ -115,8 +128,7 @@ export interface Meetings { last?: Upcoming; next?: Upcoming; quarter: number }
 export function meetingsWith(n: Note, events: Upcoming[], day = today(), keep: (e: Upcoming) => boolean = () => true): Meetings {
   const out: Meetings = { quarter: 0 };
   if (n.fm.type !== "person" || !events.length) return out;
-  const em = n.fm.facts?.emails;
-  const mails = em && !isDisputed(em) ? (isList(em) ? em.items : [em as FactRecord]).filter((r) => r && !r.valid_to && !r.retired && typeof r.value === "string").map((r) => guestKey(String(r.value))) : [];
+  const mails = addressKeys(n);
   const names = [n.fm.title, ...(Array.isArray(n.fm.aliases) ? n.fm.aliases : [])].filter((x): x is string => typeof x === "string" && x.trim().length >= MIN_NAME && /\S\s+\S/.test(x.trim())).map(norm);
   const q = `${day.slice(0, 5)}${String(Math.floor((Number(day.slice(5, 7)) - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
   for (const e of events) {

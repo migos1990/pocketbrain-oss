@@ -964,7 +964,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // sentence per area when they span more than one: "Your work projects: [[projects/atlas|Atlas]]
   // and …". Never a page more private than his, or one some reader of his page can't see; each
   // name cited by that page's own facts (p-see-<page>, which a read checks against that page:
-  // view.ts). All of them or none (G703, G726): past 2 * RELATED_NAMES an area says nothing, and a
+  // view.ts). All of them or none (G703, G726): past 2 * RELATED_NAMES an area names its latest (G740), and a
   // read drops the whole sentence when one of its pages or facts is hidden from the reader.
   if (o.self) {
     const rank = sensitivityRank(n.fm.sensitivity);
@@ -975,12 +975,15 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
       const areas = new Map<string, typeof cited>();
       for (const x of cited) { const a = String(x.p.fm.area ?? ""); (areas.get(a) ?? areas.set(a, []).get(a)!).push(x); }
       for (const [area, xs] of [...areas].sort(([a], [b]) => a.localeCompare(b))) {
-        if (xs.length > 2 * RELATED_NAMES) continue;
+        // Past 2 * RELATED_NAMES the area names its latest ones ("Your work projects include …"),
+        // never nothing (the Mac's check 2026-11-08: 32 work projects, so the sentence never showed; G740).
+        const many = xs.length > 2 * RELATED_NAMES;
+        if (many) xs.splice(0, xs.length, ...xs.sort((a, b) => String(b.p.fm.updated ?? "").localeCompare(String(a.p.fm.updated ?? "")) || String(a.p.fm.title ?? "").localeCompare(String(b.p.fm.title ?? ""))).slice(0, 2 * RELATED_NAMES));
         // Decisions newest first, projects by name.
         xs.sort((a, b) => type === "decision" ? String(b.p.fm.decided_on ?? b.p.fm.created ?? "").localeCompare(String(a.p.fm.decided_on ?? a.p.fm.created ?? "")) || String(a.p.fm.title).localeCompare(String(b.p.fm.title)) : String(a.p.fm.title ?? a.p.fm.id).localeCompare(String(b.p.fm.title ?? b.p.fm.id)));
         const l = xs.map((x) => `[[${x.p.fm.id}|${x.p.fm.title ?? x.p.fm.id}]]`);
         const what = areas.size > 1 && /^[a-z][a-z -]{0,30}$/i.test(area) ? `${area.toLowerCase()} ${word}` : word;
-        lines.push(`Your ${what}: ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${[...new Set(xs.map((x) => cite(`p-see-${slug(x.p.fm.id)}`, x.recs)))].join("")}`);
+        lines.push(`Your ${what}${many ? " include" : ":"} ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${[...new Set(xs.map((x) => cite(`p-see-${slug(x.p.fm.id)}`, x.recs)))].join("")}`);
       }
     }
   }

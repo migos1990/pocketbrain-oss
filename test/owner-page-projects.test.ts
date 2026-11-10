@@ -114,3 +114,29 @@ test("G733 two listed pages with the same last name each keep their own source i
   expect(def).toContain("gmail:f000000000000011");
   expect(def).toContain("gmail:f000000000000012");
 });
+
+test("G740 an area with more live projects than a sentence holds names the latest ones, never nothing", () => {
+  const root = brain();
+  for (let i = 1; i <= 14; i++) page(root, `projects/shed-${i}`, "project", `Shed ${String(i).padStart(2, "0")}`, fact("next_step", "measure", `gmail:f0000000000001${String(i).padStart(2, "0")}`), { extra: "" });
+  // The two touched longest ago are the ones left out.
+  for (const i of [1, 2]) { const f = join(root, "projects", `shed-${i}.md`); writeFileSync(f, readFileSync(f, "utf8").replace("updated: 2026-10-01", "updated: 2026-09-01")); }
+  commit(root);
+  renderTouchedPages(root, SINCE);
+  const me = body(root, "people/robin-vale");
+  const s = me.match(/Your personal projects include [^.]*\./)?.[0] ?? "";
+  expect(s).toContain("[[projects/shed-03|Shed 03]]".replace("shed-03", "shed-3"));
+  expect(s).not.toContain("Shed 01");
+  expect(s).not.toContain("Shed 02");
+  expect((s.match(/\[\[/g) ?? []).length).toBe(12);
+});
+
+test("G740 the north star reports how many live projects and decisions the owner's page names", async () => {
+  const { detectors } = await import("../scripts/north-star");
+  const root = brain();
+  const before = detectors(root, loadBrain(root), "2026-10-08");
+  expect(before.owner_listed).toBe(0);
+  renderTouchedPages(root, SINCE);
+  const after = detectors(root, loadBrain(root), "2026-10-08");
+  expect(after.owner_listable).toBeGreaterThan(0);
+  expect(after.owner_listed).toBe(after.owner_listable);
+});

@@ -76,9 +76,12 @@ import { ownerPage } from "../src/dashboard/html-page";
 import { waitingCount } from "../src/dashboard/home";
 import { ownerAsks, changesHeld } from "../src/waiting";
 import YAML from "yaml";
+import { loadCalendar, meetingsWith, addressKeys } from "../src/upcoming";
+import { ownerOf, ownerTitle } from "../src/capture";
+import { sensitivityRank } from "../src/brain";
 
 export interface WhyCounts { commits: number; with_why: number; gardener: number; gardener_why: number }
-export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; held_by_ambiguity: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean }
+export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; held_by_ambiguity: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean; detectors?: Detectors }
 export const BAR = { share: 0.8 };
 
 // ---------- the two numbers, from any brain ----------
@@ -160,6 +163,29 @@ export function nightWindow(root: string, now: Date): { since: string; until: st
   return { since: new Date(end - 86_400_000).toISOString(), until: new Date(end).toISOString() };
 }
 
+// Two report-only detectors (rule 8: both failures were silent for over a day, the Mac's check
+// 2026-11-08), never part of pass:
+//   last_met       of the active person pages, how many show a Last met line from the calendar
+//                  cache; and of the past meetings with guests, how many tie no page (an address
+//                  no page holds, so Last met can't show). G739.
+//   owner_listed   of the live projects and decisions no more private than the owner's own page,
+//                  how many that page names (G725); a gap means the writer left some out. G740.
+//                  Printed in the report only, not in --json (its keys are pinned).
+export interface Detectors { people: number; last_met: number; guest_meetings: number; guest_meetings_untied: number; owner_listable: number; owner_listed: number }
+const ENDED = new Set(["archived", "merged", "superseded", "done", "closed", "cancelled", "canceled", "completed"]);
+export function detectors(root: string, notes: Note[], day: string): Detectors {
+  const people = notes.filter((n) => n.fm.type === "person" && !ENDED.has(String(n.fm.status ?? "active")));
+  const events = loadCalendar(root, day);
+  const last_met = people.filter((n) => meetingsWith(n, events, day).last).length;
+  const held = new Set(people.flatMap(addressKeys));
+  const guests = events.filter((e) => e.start.slice(0, 10) < day && e.who?.length);
+  const rules = loadRules(root);
+  const me = notes.find((n) => n.fm.id === ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page);
+  const listable = me ? notes.filter((p) => ["project", "decision"].includes(String(p.fm.type)) && ["projects", "decisions"].includes(p.fm.id.split("/")[0]!) && !ENDED.has(String(p.fm.status ?? "active")) && sensitivityRank(p.fm.sensitivity) <= sensitivityRank(me.fm.sensitivity) && Object.keys(p.fm.facts ?? {}).length) : [];
+  const named = new Set(me ? linksIn(me.body).map((l) => l.split("|")[0]!.trim()) : []);
+  return { people: people.length, last_met, guest_meetings: guests.length, guest_meetings_untied: guests.filter((e) => !e.who!.some((h) => held.has(h))).length, owner_listable: listable.length, owner_listed: listable.filter((p) => named.has(p.fm.id)).length };
+}
+
 export function measure(root: string, since: string, now: Date, planted = 0, until?: string): NorthStar {
   const notes = loadBrain(root);
   const touched = touchedSince(root, since, until);
@@ -195,7 +221,7 @@ export function measure(root: string, since: string, now: Date, planted = 0, unt
   const home_asks = waitingCount(root, later, own);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
-  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why };
+  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why, detectors: detectors(root, notes, now.toISOString().slice(0, 10)) };
 }
 
 // ---------- the fixed week ----------
@@ -352,6 +378,8 @@ export function report(m: NorthStar, label: string): string {
     `  pages touched: ${m.pages}; with cited prose, an inbound link and more than the hub's own text: ${m.pages_ok} (${pct(m.share)}, want >= ${pct(BAR.share)}); cited prose ${m.prose}, inbound link ${m.inbound}`,
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,
     ...(m.why ? [`  commits: ${m.why.commits}, ${m.why.with_why} saying why; the Gardener's: ${m.why.gardener}, ${m.why.gardener_why} saying why (reported, not in pass)`] : []),
+    ...(m.detectors ? [`  Last met shown on ${m.detectors.last_met} of ${m.detectors.people} people pages; ${m.detectors.guest_meetings_untied} of ${m.detectors.guest_meetings} past meetings with guests tie no page (reported, not in pass)`,
+      `  the owner's page names ${m.detectors.owner_listed} of ${m.detectors.owner_listable} live projects and decisions (reported, not in pass)`] : []),
     ...m.notes.map((n) => `  note: ${n}`),
   ].join("\n");
 }

@@ -1653,6 +1653,21 @@ const unnamedCases: Case[] = [
 
 // A project or decision no person, org or project fact ties to is still reached (G725, G726).
 const ownerListCases: Case[] = [
+  { id: "owner-page-full-area-names-latest", dimension: "upkeep", gap: "G740", kind: "benign", title: "the owner's page names the twelve latest projects of an area holding more, never nothing", source: "Mac read-only check 2026-11-08 (32 work projects, no sentence)", run: async () => {
+    const wiki = await import(join(SRC_DIR, "wiki.ts"));
+    if (!wiki.RELATED_NAMES) return na("no owner lists at this commit");
+    const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `owner: { name: Robin Vale }\n${readFileSync(f, "utf8")}`); });
+    const rec = (v: string, ref: string) => `{ value: ${v}, as_of: 2026-10-05, sources: ["${ref}"], verification: verified-by-source, by: steward, recorded: 2026-10-05 }`;
+    const put = (id: string, type: string, title: string, facts: string) => writeFileSync(join(root, `${id}.md`), `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n${facts}---\n`);
+    put("people/robin-vale", "person", "Robin Vale", `  city: ${rec("Halifax", "gmail:f0000000000002a0")}\n`);
+    for (let i = 1; i <= 14; i++) put(`projects/shed-${i}`, "project", `Shed ${i}`, `  next_step: ${rec("measure", `gmail:f0000000000002${String(i).padStart(2, "0")}`)}\n`);
+    const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=steward@pocketbrain.local", ...a], { cwd: root });
+    git("add", "-A"); git("commit", "-qm", "steward: setup");
+    wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const body = readFileSync(join(root, "people", "robin-vale.md"), "utf8");
+    const n = (body.match(/Your [a-z ]*projects include [^.]*\./)?.[0].match(/\[\[/g) ?? []).length;
+    return ok(n === 12, `${n} names in the area's sentence`);
+  } },
   { id: "orphan-project-linked-from-owner-page", dimension: "upkeep", gap: "G725", kind: "benign", title: "a demo project and a decision holding no person, org or project fact get a link in from the owner's own page, and ChatGPT, once it can't see one of the listed pages, reads no part of that sentence", source: "north star 2026-11-07 (7 projects and 1 decision with no page linking them)", run: async () => {
     const demo = join(SRC_DIR, "..", "scripts", "demo-brain.ts");
     const ns = join(SRC_DIR, "..", "scripts", "north-star.ts");
@@ -1738,6 +1753,15 @@ const polishCases: Case[] = [
     const who = { fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", area: "hl", facts: {} } };
     const spelled = page.areaChip(s, who, "hl", "organiser of the Harbour Line offsite"), not = page.areaChip(s, who, "hl", "head of harbour logistics");
     return ok(spelled === "" && not === "HL", `spelled ${JSON.stringify(spelled)}, not spelled ${JSON.stringify(not)}`);
+  } },
+  { id: "last-met-any-email-field", dimension: "upkeep", gap: "G739", kind: "benign", title: "a meeting ties a person page holding the guest's address under email, as a From line, or in capitals", source: "Mac read-only check 2026-11-08 (0 of 15 people pages showed Last met)", run: async () => {
+    const up = await import(join(SRC_DIR, "upcoming.ts"));
+    if (!up.meetingsWith) return na("no meetings at this commit");
+    const e = up.toUpcoming({ id: "a", summary: "Sync", start: { dateTime: "2026-10-02T15:00:00Z" }, attendees: [{ email: "me@x.example", self: true }, { email: "ana@north.example" }] }, "cal");
+    const page = (facts: Record<string, unknown>) => ({ fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", facts } });
+    const single = up.meetingsWith(page({ email: { value: "Ana@North.example" } }), [e], "2026-10-08").last?.id;
+    const from = up.meetingsWith(page({ emails: { items: [{ value: "Ana Diaz <ana@north.example>" }] } }), [e], "2026-10-08").last?.id;
+    return ok(single === "a" && from === "a", `email field ${single ?? "none"}, From line ${from ?? "none"}`);
   } },
 ];
 
