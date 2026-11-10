@@ -234,6 +234,7 @@ export function scrubPage(text: string, v: Visible, res: CarveResult): string {
   // link to a page out of view into [[redacted]], which no longer says which page it was.
   // Hidden facts' sentences go first, matched by their references as written; then another
   // assistant's refs and name leave what is left (G723). The file keeps them for the owner.
+  const scrub = (text: string): string => {
   // The hub's sentence for a fact this reader wrote itself keeps that value as the reader wrote it
   // (slice audits of G754): the reader is shown its own value as written, and withholding the
   // hidden name's words inside it handed a writer back which of its own words are in the name.
@@ -320,6 +321,34 @@ export function scrubPage(text: string, v: Visible, res: CarveResult): string {
   }
   body = body.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? "");
   return readerText(body, res.grant.agent);
+  };
+  // A model's opening (G713) reaches a reader whole or not at all (audit v13, G761): when the scrub
+  // changes it, or changes or drops any sentence it rests on (a fact hidden, a linked page out of
+  // view, a name withheld), the reader gets the page without it, never what is left of it. The
+  // opening is every line that starts with its text, spacing aside, as the page writer finds it.
+  const op = v.note.fm.opening;
+  const flat = (t: string) => t.replace(/\s+/g, " ").trim();
+  const opText = op && typeof op.text === "string" && Array.isArray(op.labels) ? flat(op.text) : "";
+  const lines = text.split("\n");
+  const at = opText ? lines.map((l, i) => flat(l).startsWith(opText) ? i : -1).filter((i) => i >= 0) : [];
+  if (!at.length) return scrub(text);
+  const without = lines.filter((_l, i) => !at.includes(i)).join("\n").replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n");
+  const bare = scrub(without);
+  const labels = [...new Set([...op!.labels.map(String), ...at.flatMap((i) => [...lines[i]!.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!))])];
+  const rests = (t: string) => { const m = citedSentences(t); return labels.map((l) => m.get(l) ?? "").join("\n"); };
+  if (rests(bare) !== rests(without)) return bare;
+  const out = scrub(text), got = new Set(out.split("\n"));
+  return at.every((i) => got.has(lines[i]!)) ? out : bare;
+}
+// Each reference label with the sentences that cite it, as the page writer reads them (wiki.ts leadSentences).
+function citedSentences(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of text.split("\n")) {
+    if (/^\[\^[^\]\s]+\]:/.test(line)) continue;
+    for (const s of line.match(/[^\n]*?(?:\[\^[^\]\s]+\])+/g) ?? [])
+      for (const m of s.matchAll(/\[\^([^\]\s]+)\]/g)) out.set(m[1]!, `${out.get(m[1]!) ?? ""} ${s.replace(/\[\^[^\]\s]+\]/g, "")}`.trim());
+  }
+  return out;
 }
 
 // The writer's sentences that state ANOTHER page's fact (audit v10, G607): an org's "Ana Diaz

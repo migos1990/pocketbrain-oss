@@ -393,6 +393,26 @@ test("contract view: a reader's own short or ended value never unmasks another w
   expect(scrubPage(c.note.body, c, res).split("\n")[0]).toBe("Course C's events are [withheld] offsite in May and la.[^pf-events]");
 });
 
+// Audit v13 (G761): a model's opening reaches a reader whole or not at all. When the read drops or
+// changes a sentence it rests on, the opening goes with it; it is never served with a name withheld.
+test("contract view: a model's opening goes whole when a sentence it rests on does", () => {
+  const OP = "Pia Roe leads Course D with Quin Vale.";
+  const body = `${OP}[^p-at-pia-roe][^pf-status]\n\nCourse D is active.[^pf-status] [[people/pia-roe|Pia Roe]] and [[people/quin-vale|Quin Vale]] lead Course D.[^p-at-pia-roe][^p-at-quin-vale]\n\n[^pf-status]: Email, 2026-10-01 (gmail:f000000000000009)\n[^p-at-pia-roe]: Email, 2026-10-01 (gmail:f000000000000009)\n[^p-at-quin-vale]: Email, 2026-10-01 (gmail:f000000000000009)`;
+  const build = (quin: string) => setup("helper", undefined, (root) => {
+    note(root, "people/pia-roe", "type: person\narea: work\nsensitivity: personal\nstatus: active");
+    note(root, "people/quin-vale", `type: person\narea: work\nsensitivity: ${quin}\nstatus: active`);
+    note(root, "projects/course-d", `type: project\narea: work\nsensitivity: personal\nstatus: active\nopening: { text: "${OP}", labels: [p-at-pia-roe, pf-status], by: gardener, on: 2026-10-07 }`,
+      `  status: { value: active, as_of: 2026-10-01, ${SRC} }`, body);
+  }).res;
+  const shown = build("personal"), hid = build("private");
+  const a = shown.visible.get("projects/course-d")!, b = hid.visible.get("projects/course-d")!;
+  expect(scrubPage(a.note.body, a, shown)).toContain(OP);
+  const got = scrubPage(b.note.body, b, hid);
+  expect(got).not.toContain("leads Course D");
+  expect(got).not.toMatch(/Quin|Vale|\[withheld\]/);
+  expect(got).toContain("Course D is active.");
+});
+
 // Code review of PR 149: splitting a page around the hub's block never adds a line of its own.
 test("contract view: a page whose hub block is empty reads back line for line", () => {
   const MADE = "(Written by the hub from this page's facts.)";

@@ -26,6 +26,20 @@ export const GAPS: Record<string, Gap> = {
     finding: "2026-11-09: every PR's ci run from about 17:00Z ended failure with no job and an empty log (PR 139 and 143), so the required `test` check never ran; with the main ruleset and no bypass, no fix could land and the Mac could not take a new sha.",
     fix: ".github/workflows/ci.yml: test, e2e and conformance run on the Mac's self-hosted runner when the repo variable PB_RUNNER names it, only in the private repo and never for a fork's PR; publishing jobs stay on GitHub's runners; Linux-only steps have macOS twins (gitleaks pinned by its darwin checksum, tools checked not sudo-installed) and the denylist goes to RUNNER_TEMP. docs/release.md \"When GitHub's runners are down\" is the Mac setup (own user, home closed, system launchd job, low priority). Tests: test/ci-runner.test.ts.",
   },
+  G761: {
+    closed: "claude/opening-check",
+    title: "A model's opening outlived a sentence it rested on, and landed as two commits",
+    severity: "medium",
+    finding: "Audit v13 (2026-11-09): a read dropped an opening only when one of the labels it cites was hidden. An opening that names someone from a sentence it cites by another person's label kept its text once that sentence went from a reader, with the name withheld in place. And syncOpening committed the paragraph as the Gardener, then the page text as the hub, so reverting the first left the paragraph in the page.",
+    fix: "src/view.ts scrubPage gives a reader the page without the opening whenever the scrub changes the opening or changes or drops any sentence it rests on. src/core.ts syncOpening writes the page text before it commits (renderTouchedPages with only and commit: false) and commits both as one Gardener commit with the trailer Page-Text: hub, which partAuthors reads as the writer's text. Tests: test/model-opening.test.ts, evals opening-one-commit-reverts-whole, opening-drops-whole-when-a-sentence-goes. Slice audit: the opening is found by its line (spacing and label order aside), partAuthors needs Kind: wiki-sync beside Page-Text: hub, changes_since leaves out the Gardener's own text-only commit, and the opening's ground is the page's title and aliases as the Gardener's carve shows them.",
+  },
+  G760: {
+    closed: "claude/opening-check",
+    title: "A model's opening could say a false sentence built from the page's own words",
+    severity: "high",
+    finding: "Audit v13 (2026-11-09): openingProblem checked the paragraph's names, numbers and longer words against all the cited sentences as one bag. Words of two sentences made a third that neither says (one person's role on another person), and short words were never looked at, so a \"not\" or \"you are your …\" passed.",
+    fix: "src/wiki.ts unsaidPart: the paragraph is cut into parts at its commas and joining words, and every word of a part but a few tie words must be in one cited sentence, a name as written; a part that leans on who came before it must be in the sentence that names them; a bare name in a list is said with the words beside it. What still passes is in test/ceilings.test.ts. The opening stays off until the owner turns it on. Tests: test/model-opening.test.ts, eval opening-refuses-false-sentence-from-own-words. Slice audit: the page's own name is no \"of whom\", a part that names nobody leans on who came before it across sentences (or on who comes next), and a day or month must be in the sentence like any word.",
+  },
   G766: {
     closed: "claude/contested-current",
     title: "The owner's own page showed a held value on a sign-in that was no longer fresh",

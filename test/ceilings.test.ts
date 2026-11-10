@@ -668,3 +668,30 @@ test("the names behind a redacted link: what passes, and ordinary text held (cei
   // The writer's own sentence reads as it wrote it, a hit like a miss: no guess is confirmed.
   expect(after).toContain("nickname is Zorblax Holdings.");
 }, 60_000);
+
+// A model's opening (audit v13, G760): each part must be said by one cited sentence. What that
+// still lets through, and true rewordings it refuses.
+const OPENING_CEILING: [string, string][] = [
+  // The check knows which sentence a part's words are in, not their order in it.
+  ["You work as a lecturer at North College, where Ana Diaz and North College work at Ben Roy.", "passes"],
+  // "is" and "are" may stand between any words of one sentence.
+  ["You are North College, alongside your colleagues Ana Diaz and Ben Roy.", "passes"],
+  // A role in front of an "and" list reads as covering every name; each half is checked alone.
+  ["Your colleagues Ana Diaz and North College work at North College.", "passes"],
+];
+const OPENING_OVERHOLD: [string, string][] = [
+  // Another tense, or a word the sentence doesn't have.
+  ["You have worked as a lecturer at North College, alongside your colleagues Ana Diaz and Ben Roy.", "refused"],
+  // A true sentence with no subject of its own, beside another.
+  ["You work as a lecturer at North College. Works at North College.", "refused"],
+  // A tie that names nobody in its own part.
+  ["Ana Diaz and Ben Roy work at North College, where you work as a lecturer, alongside your colleagues.", "refused"],
+];
+test("a model's opening: false sentences that pass, and true ones refused (ceiling)", async () => {
+  const { openingProblem } = await import("../src/wiki");
+  const lead = "You work as a lecturer at North College.[^a][^b] [[people/ana-diaz|Ana Diaz]] and [[people/ben-roy|Ben Roy]] work at North College: your colleagues.[^c][^d]\n\n[^a]: Email\n[^b]: Email\n[^c]: Email\n[^d]: Email\n";
+  expect(OPENING_CEILING).toHaveLength(3);
+  expect(OPENING_OVERHOLD).toHaveLength(3);
+  for (const [text] of OPENING_CEILING) expect(openingProblem(text, ["a", "b", "c", "d"], lead, ["North College"], ["North College"]), text).toBeUndefined();
+  for (const [text] of OPENING_OVERHOLD) expect(openingProblem(text, ["a", "b", "c", "d"], lead, ["North College"], ["North College"]), text).toBeDefined();
+});

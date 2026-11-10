@@ -1244,7 +1244,10 @@ function syncOpening(root: string, agent: string, res: CarveResult, hub: Rules, 
   // hidden from it is no ground for an opening, and a guess at one answers like any other word.
   const lead = hubLead({ ...note, body: scrubPage(note.body, v!, res) });
   if (!lead) throw new CoreError(422, "this page has no text from its facts yet; there is nothing to tie together");
-  const why = openingProblem(text, labels, lead, [String(note.fm.title ?? ""), ...(note.fm.aliases ?? []), ...ownerWordsOf(hub)]);
+  // Its title and aliases as the Gardener reads them (the carve's copy): a value withheld from it
+  // there is no ground, so a guess at it answers like any other word.
+  const mine = [String(v!.note.fm.title ?? ""), ...(v!.note.fm.aliases ?? [])];
+  const why = openingProblem(text, labels, lead, [...mine, ...ownerWordsOf(hub)], mine);
   if (why) throw new CoreError(422, `opening: ${why}`);
   const inj = findInjection(text);
   if (inj) throw new CoreError(422, `the text ${inj}`);
@@ -1269,9 +1272,11 @@ function syncOpening(root: string, agent: string, res: CarveResult, hub: Rules, 
   if (note.fm.opening?.text === text && JSON.stringify(note.fm.opening.labels) === JSON.stringify(labels)) return { id, applied: false, would: [], why: "nothing changes" };
   const began = new Date(Math.min(Date.now(), clock().getTime()) - 1000).toISOString();
   saveNote(root, { ...note, fm: { ...note.fm, opening: { text, labels, by: agent, on: today() } } });
-  const failed = commitPaths(root, [note.path], `reflect:auto wiki: opening for ${id}\n\nWhy: ${agent} tied ${labels.length} of the page's own sentences together in one paragraph; every name, number and word is in the sentences it cites, and it reaches only a reader who sees all of them.\nAgent: ${agent}\nKind: wiki-sync\nFact-Keys: ${id}`, agent);
+  // The paragraph and the page text that carries it are one commit (audit v13, G761): reverting it
+  // takes both out. The text is the page writer's own (Page-Text: hub), made here from the page's facts.
+  try { renderTouchedPages(root, began, { only: id, commit: false }); } catch { /* the night run writes it */ }
+  const failed = commitPaths(root, [note.path], `reflect:auto wiki: opening for ${id}\n\nWhy: ${agent} tied ${labels.length} of the page's own sentences together in one paragraph; each part of it is said by one of the sentences it cites, and it reaches only a reader who sees all of them.\nAgent: ${agent}\nKind: wiki-sync\nPage-Text: hub\nFact-Keys: ${id}`, agent);
   if (failed) throw new CoreError(500, `couldn't save: ${failed}`);
-  try { renderTouchedPages(root, began); } catch { /* the night run writes it */ }
   return { id, applied: true, changed: would };
 }
 
@@ -1449,7 +1454,8 @@ export function changesSince(root: string, agent: string, since?: string, limit 
   const from = sinceOf(root, agent, since);
   // The hub's own text-only commits (the page writer's paragraphs, link repoints) change no fact:
   // nothing there for the Gardener to weigh, so they aren't listed as changes.
-  const changes = [...changedNotes(root, res, agent, `--since=${from}`)].filter(([, e]) => !(e.attrs.size === 0 && e.by === "hub")).slice(0, limit).map(([id, e]) => ({ id, attrs_changed: [...e.attrs].sort(), by: e.by, at: e.at, markdown: renderNote(res.visible.get(id)!, res, rules).join("\n") + "\n" }));
+  // Nor its own (the opening it wrote, with the page text that carries it, G761).
+  const changes = [...changedNotes(root, res, agent, `--since=${from}`)].filter(([, e]) => !(e.attrs.size === 0 && (e.by === "hub" || e.by === agent))).slice(0, limit).map(([id, e]) => ({ id, attrs_changed: [...e.attrs].sort(), by: e.by, at: e.at, markdown: renderNote(res.visible.get(id)!, res, rules).join("\n") + "\n" }));
   logRead(root, agent, "changes_since", changes.map((c) => c.id), freshCount(res, rules, changes.map((c) => c.id)));
   return { since: from, changes };
 }

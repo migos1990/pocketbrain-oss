@@ -215,7 +215,7 @@ export function leadSentences(lead: string): Map<string, string> {
   return out;
 }
 const linkTitles = (t: string) => t.replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, "$1").replace(/\[\[([^\]]+)\]\]/g, "$1");
-export function openingProblem(text: string, labels: string[], lead: string, also: string[] = []): string | undefined {
+export function openingProblem(text: string, labels: string[], lead: string, also: string[] = [], page: string[] = []): string | undefined {
   if (!text.trim() || text.length > OPENING_MAX || /\n/.test(text)) return `one paragraph on one line, at most ${OPENING_MAX} characters`;
   if (/\[\^|\[\[|\]\]/.test(text)) return "no reference or link in the text: name the sentences it rests on in labels";
   if ((text.match(/[.!?](?=\s|$)/g) ?? []).length > 3) return "at most three sentences";
@@ -233,6 +233,63 @@ export function openingProblem(text: string, labels: string[], lead: string, als
   const have = new Set(ground.split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(stem));
   const words = [...new Set([...text.matchAll(/\p{L}{5,}/gu)].map((m) => m[0]))].filter((w) => !JOINING.has(fold(w)) && !ALWAYS.has(fold(w)) && !have.has(stem(w)));
   if (words.length) return `${words.slice(0, 5).map((w) => `"${w}"`).join(", ")} ${words.length === 1 ? "is" : "are"} in none of the sentences it cites; reword only what they say`;
+  const part = unsaidPart(text, from.map(linkTitles), page);
+  if (part) return `no one of the sentences it cites says "${part}"; each part of the paragraph rewords one sentence, with who it is about`;
+  return undefined;
+}
+
+// Each part of an opening is said by ONE of the sentences it cites (audit v13, G760). The checks
+// above look at the paragraph's words as one bag, so words from two sentences made a third, false
+// one ("Ana Diaz works as a lecturer", when the lecturer is someone else), and a "not" was too
+// short to be looked at. The paragraph is cut into parts at its commas and joining words; every
+// word of a part but a few (TIE_WORDS) must be in one cited sentence: a name as written, any other word
+// with or without a final s. A part that says of whom only by what came before it (it starts with
+// a verb or a plain preposition, or names nobody) must be in the sentence that names them, and a
+// bare name in a list is said with the words of the part before or after it. The first part, or
+// its words, that no sentence says; undefined when each part is said.
+const TIE_WORDS = new Set("a an the is are and et alongside along with together also both where who which whose while".split(" "));
+const SUBJECT = new Set("you he she they we it i".split(" "));
+const STARTS = new Set([...SUBJECT, ..."your his her their our my its".split(" ")]);
+const CUT = /[,;:]|\s(?:and|et|where|who|which|whose|while)\s/u;
+const loose = (w: string) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+function unsaidPart(text: string, sentences: string[], page: string[] = []): string | undefined {
+  const toks = (s: string) => [...s.matchAll(/[\p{L}\p{N}]+/gu)].map((m) => m[0]);
+  const said = sentences.map((s) => { const w = toks(s).map((x) => asNumber(fold(x))); return { exact: new Set(w), loose: new Set(w.map(loose)) }; });
+  // The page's own name says of whom nothing: every sentence on the page may hold it.
+  const pageWords = new Set(page.flatMap(toks).map(fold));
+  // A name is a word the cited sentences use as one, in any case the opening writes it ("ana
+  // diaz"); any other word with a capital ("Student", "Paid") is an ordinary word.
+  const cap = (w: string) => /^\p{Lu}/u.test(w) && !STARTS.has(fold(w)) && !TIE_WORDS.has(fold(w));
+  const cut = sentences.flatMap((s) => s.split(/(?<=[.!?:])\s+/u)).map(toks);
+  // Said of whom: a word with a capital inside a sentence, or a sentence's first word when the
+  // next has one too ("Ana Diaz"); "Paid by" and "About it" name nobody in either case.
+  const whom = new Set([...cut.flatMap((t) => t.slice(1)), ...cut.filter((t) => t.length > 1 && cap(t[1]!)).map((t) => t[0]!)].filter(cap).map(fold));
+  type Tok = { w: string; k: string; name: boolean };
+  const says = (ts: Tok[]) => said.some((s) => ts.every((t) => (t.name ? s.exact.has(t.k) : s.loose.has(loose(t.k)))));
+  const parts = text.split(/(?<=[.!?])\s+/u).flatMap((sentence, at) => sentence.split(CUT).map((p) => {
+    const all = toks(p);
+    const kept: Tok[] = all.map((w) => ({ w, k: asNumber(fold(w)), name: whom.has(fold(w)) })).filter((t) => !TIE_WORDS.has(t.k));
+    const first = all.find((w) => !TIE_WORDS.has(fold(w)) || /^(a|an|the)$/i.test(w));
+    // It says of whom itself when it opens with a name, a number, "you" or "your", and names someone.
+    const opens = !!first && (/^\p{N}/u.test(first) || whom.has(fold(first)) || STARTS.has(fold(first)) || /^(a|an|the)$/i.test(first));
+    return { at, words: p.trim(), kept, opens, who: kept.filter((t) => (t.name && !pageWords.has(t.k)) || SUBJECT.has(t.k)), bare: kept.length > 0 && kept.every((t) => t.name) };
+  }).filter((p) => p.kept.length));
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]!;
+    if (p.bare) {
+      // A name in a list: said with the words of the part before it, or with the part after it,
+      // in its own sentence of the paragraph.
+      const mates = (x: typeof p) => x.at === p.at && !x.bare;
+      const before = parts.slice(0, i).reverse().find(mates), after = parts.slice(i + 1).find(mates);
+      if (!before && !after ? says(p.kept) : (!!before && says([...before.kept.filter((t) => !t.name), ...p.kept])) || (!!after && says([...after.kept, ...p.kept]))) continue;
+      return p.words;
+    }
+    // A part that doesn't say of whom leans on who came before it, in any sentence of the
+    // paragraph, or with nobody before it on who comes next.
+    const lean = !p.opens || !p.who.length;
+    const on = lean ? (parts.slice(0, i).reverse().find((x) => x.who.length) ?? (p.who.length ? undefined : parts.slice(i + 1).find((x) => x.who.length)))?.who ?? [] : [];
+    if (!says([...p.kept, ...on])) return p.words;
+  }
   return undefined;
 }
 
@@ -371,7 +428,9 @@ export function applyRewrite(n: Note, rw: Rewrite): Note {
 // last writer wins. A part nobody changed since it appeared belongs to whoever added it.
 export function partAuthors(root: string, path: string, commits = 200): Map<string, string> {
   const out = new Map<string, string>();
-  const log = git(root, ["log", `-n${commits}`, "--reverse", "--format=%H%x1f%an", "--", path]).split("\n").filter(Boolean);
+  // A commit with the trailer `Page-Text: hub` (a model's opening, G761) carries page text the
+  // writer made in the same commit: its parts are the writer's.
+  const log = git(root, ["log", `-n${commits}`, "--reverse", "--format=%H%x1f%an%x1f%(trailers:key=Page-Text,valueonly,separator=%x20)%x1f%(trailers:key=Kind,valueonly,separator=%x20)", "--", path]).split("\n").filter((l) => l.includes("\x1f"));
   const read = (rev: string) => { const s = git(root, ["show", `${rev}:${path}`]); try { return s ? parseNote(s, path) : undefined; } catch { return undefined; } };
   const parts = (n?: Note) => {
     const m = new Map<string, string>();
@@ -383,7 +442,8 @@ export function partAuthors(root: string, path: string, commits = 200): Map<stri
   };
   let prev = new Map<string, string>();
   for (const line of log) {
-    const [hash, by] = line.split("\x1f");
+    const [hash, an, text, kind] = line.split("\x1f");
+    const by = text?.trim() === "hub" && kind?.trim() === "wiki-sync" ? WRITER : an;
     const now = parts(read(hash));
     for (const [k, v] of now) if (prev.get(k) !== v) out.set(k, by);
     prev = now;
@@ -1079,7 +1139,9 @@ export function hubLead(n: Note): string {
   return op ? text.split("\n").filter((l) => !l.startsWith(op)).join("\n").trim() : text;
 }
 
-export function renderTouchedPages(root: string, since: string): PageWrite {
+// `o.only` writes that one page, touched or not, and `o.commit: false` leaves the file for the
+// caller to commit with what it saved: a model's opening lands with its page text in one commit (G761).
+export function renderTouchedPages(root: string, since: string, o: { only?: string; commit?: false } = {}): PageWrite {
   const role = hubRole(root).mode;
   if (role === "replica") return { written: [], kept: [] };
   const rules = loadRules(root);
@@ -1090,7 +1152,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
   // the pages themselves (G725). It is written every run, touched or not (G627),
   // so a rule change reaches it the next night; text that comes out the same is not written.
   const self = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
-  const pages = touchedPages(root, notes, since, self);
+  const pages = o.only ? touchedPages(root, notes, since, o.only).filter((n) => n.fm.id === o.only) : touchedPages(root, notes, since, self);
   if (!pages.length) return { written: [], kept: [] };
   const views = Object.keys(rules.policy.agents ?? {}).flatMap((agent) => { try { return [carve(notes, rules, grantFor(rules, agent), { flags: false })]; } catch { return []; } });
   const names = namesBySource(root, notes, ownerName(rules));
@@ -1242,7 +1304,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     const lead = pageLead(n, { related, hidden: (k) => hiddenKeys.has(k), blind: (to) => readers.some((v) => !v.visible.has(to)), names, byId, resolve, owner: ownerWords, spec: (attr) => attributeSpec(rules, String(n.fm.type ?? ""), attr), members, elsewhere, self: n.fm.id === self, ownerPage: self, namedIn: (namedIn.get(n.fm.id) ?? []).filter((x) => !hiddenKeys.has(`${x.from}#${x.attr}`) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), seeAlso: (seeAlso.get(n.fm.id) ?? []).filter((x) => (x.attr ? !hiddenKeys.has(`${x.from}#${x.attr}`) : readers.every((v) => !!v.visible.get(x.from)?.body)) && sensitivityRank(byId.get(x.from)!.fm.sensitivity) <= rank && (!x.rec.sensitivity || sensitivityRank(x.rec.sensitivity) <= rank)), said });
     // A model's opening (G713) goes first in the hub's block while it still fits what the block says.
     const op = lead && n.fm.opening;
-    if (lead && op && typeof op.text === "string" && Array.isArray(op.labels) && !openingProblem(op.text, op.labels.map(String), lead.text, [String(n.fm.title ?? ""), ...(n.fm.aliases ?? []), ...ownerWords]))
+    if (lead && op && typeof op.text === "string" && Array.isArray(op.labels) && !openingProblem(op.text, op.labels.map(String), lead.text, [String(n.fm.title ?? ""), ...(n.fm.aliases ?? []), ...ownerWords], [String(n.fm.title ?? ""), ...(n.fm.aliases ?? [])]))
       lead.text = `${op.text}${[...new Set(op.labels.map(String))].map((l) => `[^${l}]`).join("")}\n\n${lead.text}`;
     if (!lead) {
       // Nothing left to say (an Undo took the last fact out): the writer's own opening goes with its
@@ -1286,7 +1348,7 @@ export function renderTouchedPages(root: string, since: string): PageWrite {
     saveNote(root, { ...n, body });
     written.push(n.path);
   }
-  if (!written.length) return { written, kept };
+  if (!written.length || o.commit === false) return { written, kept };
   git(root, ["add", "--", ...written]);
   git(root, ["commit", "-q", "-m", `${WRITER}: page text for ${written.length} ${written.length === 1 ? "page" : "pages"}\n\nWhy: ${whyWritten(root, written, since, via)}; each opening paragraph says what the page's facts say now, with a reference for each.\nKind: page-writer\nFiles: ${written.join(", ")}`], WRITER);
   return { written: written.map((p) => p.slice(0, -3)), kept, commit: git(root, ["rev-parse", "--short", "HEAD"]).trim() };

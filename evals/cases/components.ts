@@ -1548,6 +1548,55 @@ const openingCases: Case[] = [
     const n = pb.brain.loadBrain(root).find((x: any) => x.fm.id === SCHOOL);
     return ok(/grades|weekly|reflections/.test(refused) && !n?.fm.opening, refused ? `refused: ${refused.slice(0, 120)}` : "written");
   } },
+  { id: "opening-refuses-false-sentence-from-own-words", dimension: "upkeep", gap: "G760", kind: "attack", title: "an opening that hangs one cited sentence's words on another sentence's person, or denies one, is refused and nothing is written", source: "audit v13 (the opening's check was a bag of words)", run: async () => {
+    const b = await openingBrain();
+    if (!b) return na("no opening paragraphs at this commit");
+    const { root, core, wiki } = b;
+    const labels = schoolLabels(wiki, root);
+    const texts = [
+      "At Lakeshore College, Ethan Brooks is your TA and Antoine Lavoie, Fatima Diallo, Jacob Stein, Lucas Bergeron, Mei Lin and Sarah Kim are your students.",
+      "At Lakeshore College, Antoine Lavoie is not your TA and Ethan Brooks, Fatima Diallo, Jacob Stein, Lucas Bergeron, Mei Lin and Sarah Kim are your students.",
+    ];
+    const got: string[] = [];
+    for (const text of texts) { try { await atGardenerHour(() => core.gardenerWikiSync(root, "gardener", { id: SCHOOL, opening: { text, labels } })); got.push("written"); } catch (e) { got.push(/one of the sentences|in none of the sentences/.test(String((e as Error).message)) ? "refused" : `other: ${String((e as Error).message).slice(0, 60)}`); } }
+    const n = pb.brain.loadBrain(root).find((x: any) => x.fm.id === SCHOOL);
+    return ok(got.every((g) => g === "refused") && !n?.fm.opening, got.join("; "));
+  } },
+  { id: "opening-one-commit-reverts-whole", dimension: "upkeep", gap: "G761", kind: "benign", title: "the Gardener's opening and the page text that carries it are one commit; reverting it leaves the page as it was", source: "audit v13 (the opening landed as two commits)", run: async () => {
+    const b = await openingBrain();
+    if (!b) return na("no opening paragraphs at this commit");
+    const { root, core, wiki } = b;
+    const labels = schoolLabels(wiki, root);
+    const g = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=owner", "-c", "user.email=owner@pocketbrain.local", ...a], { cwd: root }).stdout.toString().trim();
+    const before = g("rev-parse", "HEAD"), was = readFileSync(join(root, `${SCHOOL}.md`), "utf8");
+    const text = "At Lakeshore College, Antoine Lavoie is your TA and Ethan Brooks, Fatima Diallo, Jacob Stein, Lucas Bergeron, Mei Lin and Sarah Kim are your students.";
+    await atGardenerHour(() => core.gardenerWikiSync(root, "gardener", { id: SCHOOL, opening: { text, labels } }));
+    const commits = g("rev-list", "--count", `${before}..HEAD`), had = readFileSync(join(root, `${SCHOOL}.md`), "utf8").includes(text);
+    g("revert", "--no-edit", "HEAD");
+    const back = readFileSync(join(root, `${SCHOOL}.md`), "utf8") === was;
+    return ok(commits === "1" && had && back, `${commits} commit(s); text in the page: ${had}; revert restores the page: ${back}`);
+  } },
+  { id: "opening-drops-whole-when-a-sentence-goes", dimension: "carving", gap: "G761", kind: "attack", title: "a reader who loses a sentence the opening rests on gets none of the opening, not what is left of it", source: "audit v13 (a hide left the opening with the hub's label and a name)", run: async () => {
+    const b = await openingBrain();
+    if (!b) return na("no opening paragraphs at this commit");
+    const { root, core, wiki } = b;
+    const n0 = pb.brain.loadBrain(root).find((x: any) => x.fm.id === SCHOOL);
+    const said: Map<string, string> = wiki.leadSentences(wiki.hubLead(n0));
+    // It cites the TA's labels and one student's: the students' sentence names five more.
+    const labels = [...said].filter(([l, t]) => /your TA\./.test(t) || (/your students\./.test(t) && /ethan-brooks/.test(l))).map(([l]) => l);
+    const text = "At Lakeshore College, Antoine Lavoie is your TA and Ethan Brooks, Fatima Diallo, Jacob Stein, Lucas Bergeron, Mei Lin and Sarah Kim are your students.";
+    const r = await atGardenerHour(() => core.gardenerWikiSync(root, "gardener", { id: SCHOOL, opening: { text, labels } }));
+    if (!r.applied) return ok(false, `not applied (${r.why ?? ""})`);
+    const agents = Object.keys(pb.rules.loadRules(root).policy.agents).filter((a) => a !== "gardener");
+    const reads = (a: string) => { try { return String((core.readNote(root, a, SCHOOL) as any).body ?? ""); } catch { return ""; } };
+    const saw = agents.filter((a) => reads(a).includes(text));
+    const mei = pb.brain.loadBrain(root).find((x: any) => x.fm.id === "people/mei-lin");
+    mei.fm.sensitivity = "secret";
+    pb.brain.saveNote(root, mei);
+    Bun.spawnSync(["git", "-c", "user.name=owner", "-c", "user.email=owner@pocketbrain.local", "commit", "-qam", "owner: a page made secret"], { cwd: root });
+    const left = saw.filter((a) => /your TA and|are your students|\[withheld\]/.test(reads(a).split("\n").find((l) => l.includes("Antoine Lavoie is your TA")) ?? ""));
+    return ok(saw.length > 0 && left.length === 0, `${saw.length} reader(s) had the opening; ${left.length} still get part of it`);
+  } },
 ];
 
 // A fact with no checked source names who told it on the demo brain's pages (G720, G721).

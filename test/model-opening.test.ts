@@ -10,9 +10,9 @@ import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
-import { renderTouchedPages } from "../src/wiki";
+import { renderTouchedPages, openingProblem } from "../src/wiki";
 import { loadBrain, saveNote, type FactRecord } from "../src/brain";
-import { readNote, gardenerWikiSync, gardenerLast } from "../src/core";
+import { readNote, gardenerWikiSync, gardenerLast, changesSince } from "../src/core";
 import { setWikiOpening, setWikiSync } from "../src/ownerset";
 import { buildCell, cellDir } from "../src/cell";
 import { readdirSync } from "node:fs";
@@ -154,4 +154,138 @@ test("G714 no agent's cell holds the opening outside the page's text: only the r
     for (const f of files(cellDir(root, agent))) expect(readFileSync(f, "utf8")).not.toMatch(/^opening:/m);
   }
   expect(atNight(() => gardenerLast(root, "gardener").openings_due)).not.toContain(ORG);
+});
+
+// Audit v13 (G760): the check was a bag of words, so a false sentence built from the page's own
+// words landed and was served ("…, where you are your manager", "You are not the director…"). Now
+// each part of the opening must be said by ONE of the sentences it cites, with the one it is about.
+test("G760 a false sentence built from the page's own words is refused; the true rewording still lands", () => {
+  const root = brain({ on: true });
+  const all = LABELS;
+  for (const text of [
+    // The lecturer is the owner, not Ana: no one sentence says Ana and lecturer.
+    "Ana Diaz works as a lecturer at North College, alongside your colleague Ben Roy.",
+    // Negation, from words too short for the old check to look at.
+    "You do not work as a lecturer at North College, alongside your colleagues Ana Diaz and Ben Roy.",
+    "You work as a lecturer at North College, not alongside your colleagues Ana Diaz and Ben Roy.",
+    // Who is whose: "you" and "your student" are two sentences' words.
+    "You are your student at North College, alongside your colleagues Ana Diaz and Ben Roy.",
+    // What one sentence says of the owner, hung on someone else by an "and".
+    "Cara Lee is your student and work as a lecturer at North College, alongside Ana Diaz.",
+    // A tie from another sentence, hung on the wrong person.
+    "You work as a lecturer at North College, alongside your student Ana Diaz and Ben Roy.",
+    // Slice audit: the page's own name said again is no "of whom".
+    "Cara Lee works at North College and is your colleague at North College.",
+    "Ana Diaz works at North College: your student at North College.",
+    // Leaning on who came before holds across a full stop.
+    "Ana Diaz works at North College. Also your student.",
+    // A name in lower case is still that name: what follows leans on it.
+    "ana diaz works at North College: your student.",
+    "cara lee works at North College and is your colleague.",
+    // A role word with a capital is no name in a list.
+    "Ana Diaz works at North College, STUDENT.",
+    "Ana Diaz, Student, works at North College.",
+    "Ana Diaz works at North College and Student.",
+    "Ana Diaz works at North College. Student.",
+    "Cara Lee, Colleagues.",
+    // A day nobody said.
+    "You work as a lecturer at North College, Monday and Friday, alongside your colleagues Ana Diaz and Ben Roy.",
+    // A tie in front of the names it isn't theirs.
+    "Your student, Ana Diaz and Ben Roy work at North College.",
+  ]) expect(() => sync(root, text, all), text).toThrow(/opening: .*(one of the sentences|in none of the sentences)/);
+  expect(loadBrain(root).find((n) => n.fm.id === ORG)!.fm.opening).toBeUndefined();
+  expect((sync(root) as { applied: boolean }).applied).toBe(true);
+  // Reworded another true way.
+  expect((sync(root, "Ana Diaz and Ben Roy work at North College, your colleagues, where you work as a lecturer.", ["p-at-robin-vale", "p-in-robin-vale", "p-at-ana-diaz", "p-in-ana-diaz", "p-at-ben-roy", "p-in-ben-roy"]) as { applied: boolean }).applied).toBe(true);
+});
+
+// Slice audit: a cited sentence's first word is capitalised whether or not it is a name ("Paid",
+// "About"); in lower case it says of whom nothing, so the part still leans on who came before.
+test("G760 a cited sentence's opening word in lower case doesn't make a part say of whom", () => {
+  const lead = "You work as a lecturer at North College.[^a] Cara Lee works at North College.[^b] About it: tuition and grades.[^c] Paid by the college in full.[^d]";
+  for (const text of [
+    "Cara Lee works at North College, paid by the college in full.",
+    "Cara Lee works at North College, about tuition and grades.",
+    "You work as a lecturer at North College, paid by the college in full.",
+    "cara works at North College and is paid by the college in full.",
+    // The same with its capital kept: still no name.
+    "Cara Lee works at North College, Paid by the college in full.",
+    "Cara Lee works at North College: your student, Paid in full.",
+    "Cara Lee works at North College, About tuition and grades.",
+    "Cara Lee works at North College, the college paid in full.",
+  ]) expect(openingProblem(text, ["a", "b", "c", "d"], lead, ["North College"], ["North College"]), text).toBeDefined();
+});
+
+// Audit v13 (G761): hiding a page the opening names (not a fact behind it) left the opening with
+// the hidden person's surname and the hub's label of them; and the opening landed as two commits,
+// so reverting the Gardener's left the paragraph in the page.
+test("G761 a reader from whom a page the opening names is hidden gets none of the opening", () => {
+  const root = brain({ on: true });
+  sync(root);
+  expect(read(root, "helper")).toContain(OPENING);
+  const n = loadBrain(root).find((x) => x.fm.id === "people/cara-lee")!;
+  n.fm.sensitivity = "private";
+  saveNote(root, n);
+  sh(root, "owner", "commit", "-qam", "owner: Cara's page private");
+  const b = read(root, "helper");
+  expect(b).not.toContain("alongside");
+  expect(b).not.toMatch(/cara|\bLee\b/i);
+  expect(b).toContain("You work as a lecturer at North College.");
+  // planner (up to private) still sees Cara: the opening stays whole for it.
+  expect(read(root, "planner")).toContain(OPENING);
+});
+
+test("G761 a name the opening says from a sentence that goes takes the whole opening with it", () => {
+  const root = brain({ on: true });
+  // It cites Ana's labels for the colleagues' sentence, which names Ben too.
+  const labels = ["p-at-robin-vale", "p-in-robin-vale", "p-at-ana-diaz", "p-in-ana-diaz"];
+  const text = "You work as a lecturer at North College, alongside your colleagues Ana Diaz and Ben Roy.";
+  expect((sync(root, text, labels) as { applied: boolean }).applied).toBe(true);
+  expect(read(root, "helper")).toContain(text);
+  const n = loadBrain(root).find((x) => x.fm.id === "people/ben-roy")!;
+  n.fm.sensitivity = "private";
+  saveNote(root, n);
+  sh(root, "owner", "commit", "-qam", "owner: Ben's page private");
+  const b = read(root, "helper");
+  expect(b).not.toContain("alongside");
+  expect(b).not.toContain("[withheld]");
+  expect(b).not.toMatch(/\bBen\b|\bRoy\b/);
+  expect(b).toContain("You work as a lecturer at North College.");
+  expect(read(root, "planner")).toContain(text);
+});
+
+test("G761 the opening lands as one commit: reverting it takes the paragraph out of the page", () => {
+  const root = brain({ on: true });
+  const before = sh(root, "x", "rev-parse", "HEAD"), was = body(root);
+  sync(root);
+  expect(sh(root, "x", "rev-list", "--count", `${before}..HEAD`)).toBe("1");
+  expect(sh(root, "x", "log", "-1", "--format=%an %s")).toMatch(/^gardener reflect:auto wiki: opening for orgs\/north-college/);
+  expect(body(root)).toContain(OPENING);
+  sh(root, "owner", "revert", "--no-edit", "HEAD");
+  expect(body(root)).toBe(was);
+  expect(loadBrain(root).find((x) => x.fm.id === ORG)!.fm.opening).toBeUndefined();
+});
+
+test("G761 the Gardener's own opening is no change for it to weigh", () => {
+  const root = brain({ on: true });
+  sync(root);
+  const ch = atNight(() => changesSince(root, "gardener", "2026-10-01T00:00:00Z"));
+  expect(ch.changes.filter((c) => c.id === ORG && c.attrs_changed.length === 0)).toEqual([]);
+});
+
+test("G761 an opening line a person re-spaced or re-ordered still goes whole", () => {
+  const root = brain({ on: true });
+  const labels = ["p-at-robin-vale", "p-in-robin-vale", "p-at-ana-diaz", "p-in-ana-diaz"];
+  const text = "You work as a lecturer at North College, alongside your colleagues Ana Diaz and Ben Roy.";
+  sync(root, text, labels);
+  const n = loadBrain(root).find((x) => x.fm.id === ORG)!;
+  n.body = n.body.replace(text, text.replace("North College, ", "North College,  ")).replace("[^p-at-robin-vale][^p-in-robin-vale][^p-at-ana-diaz]", "[^p-in-robin-vale][^p-at-robin-vale][^p-at-ana-diaz]");
+  saveNote(root, n);
+  const ben = loadBrain(root).find((x) => x.fm.id === "people/ben-roy")!;
+  ben.fm.sensitivity = "private";
+  saveNote(root, ben);
+  sh(root, "owner", "commit", "-qam", "owner: a hand edit, and Ben's page private");
+  const b = read(root, "helper");
+  expect(b).not.toContain("alongside");
+  expect(b).not.toContain("[withheld]");
 });
