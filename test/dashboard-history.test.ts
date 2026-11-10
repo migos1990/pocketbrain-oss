@@ -80,7 +80,7 @@ test("a note's history shows each value with who saved it, and opens the note as
   expect(u.ok).toContain("undone");
   const after = await req("GET", "/history/projects/course-a");
   expect(after.text).toContain(">undone<");
-});
+}, 30_000); // real git commits under a full-suite load take 4-5 s, past bun's default
 
 test("what changed this week lists saves by day with who made them", async () => {
   const { login, post, req, agent } = setup();
@@ -99,7 +99,7 @@ test("what changed this week lists saves by day with who made them", async () =>
   expect((await req("GET", "/brain")).text).toContain('href="/history"');
   expect((await req("GET", "/note/people/jane-roy")).text).toContain('href="/history/people/jane-roy"');
   expect((await req("GET", "/history/people/nobody")).status).toBe(404);
-});
+}, 30_000);
 
 test("who saved: pocketBrain's own commits name the agent; anything else is the owner's", () => {
   expect(actorOf({ author: "planner", email: "planner@pocketbrain.local" })).toBe("planner");
@@ -142,4 +142,4 @@ test("going back in time: a note or the whole brain on a date, and an old value 
   expect(Number(git(root, ["rev-list", "--count", "HEAD"]))).toBe(Number(before) + 1);
   const h = await req("GET", "/history/people/jane-roy");
   expect(h.text).toContain("<s>Dean</s> to <b>Program director</b>");
-});
+}, 30_000);

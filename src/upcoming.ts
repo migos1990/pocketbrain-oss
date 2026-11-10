@@ -18,7 +18,9 @@ import { findInjection, redactSecrets } from "./checks";
 
 // `who`: the guests' addresses as hashes (guestKey), never the addresses, so a meeting can be tied
 // to a person's page by an address the page holds (G695); not the owner, not a room.
-export interface Upcoming { id: string; version: string; summary: string; location?: string; start: string; source: string; sensitivity?: Sensitivity; who?: string[] }
+// `names`: the guests' names as the invite gives them (a display name, or an address shaped
+// first.last), hashed the same way; a page ties by one only as a guess, said as one (G746).
+export interface Upcoming { id: string; version: string; summary: string; location?: string; start: string; source: string; sensitivity?: Sensitivity; who?: string[]; names?: string[] }
 interface CacheFile { sources: Record<string, { at: string; events: Upcoming[] }> }
 
 const DAYS = 60;          // how far ahead the cache reaches
@@ -44,12 +46,26 @@ export function toUpcoming(r: Record<string, any>, source: string, sensitivity?:
   const location = r.location ? redactSecrets(String(r.location)).text.slice(0, 200) : undefined;
   const guests = (Array.isArray(r.attendees) ? r.attendees : []).filter((a: Record<string, unknown>) => a && !a.self && !a.resource && typeof a.email === "string" && !/@resource\.calendar\.google\.com$/i.test(String(a.email)) && a.responseStatus !== "declined");
   const who = guests.length && guests.length <= GUESTS ? [...new Set(guests.map((a: Record<string, unknown>) => guestKey(String(a.email))))] as string[] : [];
-  return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}), ...(who.length ? { who } : {}) };
+  const names = who.length ? [...new Set(guests.flatMap((a: Record<string, unknown>) => guestNames(String(a.email), a.displayName)).map(nameKeyOf))] as string[] : [];
+  return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}), ...(who.length ? { who } : {}), ...(names.length ? { names } : {}) };
 }
 
 const EMAIL_ATTR = /^(?:\w+_)?e-?mails?$/i;
 // The address in a page's value: the one inside angle brackets, else the value when it is one.
 export const addressIn = (v: string) => { const a = (v.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] ?? v).trim().toLowerCase(); return /^[^\s@]+@[^\s@]+$/.test(a) ? a : undefined; };
+
+// A guest's name as the invite gives it: its display name when it has two words or more, and an
+// address shaped first.last (first_last, first-last) read as "first last".
+export function guestNames(email: string, display: unknown): string[] {
+  const out: string[] = [];
+  const d = typeof display === "string" ? display.trim() : "";
+  if (/\S\s+\S/.test(d) && !d.includes("@")) out.push(d);
+  const parts = (email.split("@")[0] ?? "").split(/[._-]+/);
+  if (parts.length >= 2 && parts.length <= 3 && parts.every((x) => /^\p{L}{2,}$/u.test(x))) out.push(parts.join(" "));
+  return out.filter((x) => x.length >= MIN_NAME);
+}
+// A name as the cache keeps it: a hash of its plain letters, never the name.
+export const nameKeyOf = (name: string) => createHash("sha256").update(`pocketbrain-guest-name:${norm(name).trim()}`).digest("hex").slice(0, 20);
 
 // An address as the cache keeps it: a hash, so the file never holds who the owner meets.
 export const guestKey = (email: string) => createHash("sha256").update(`pocketbrain-guest:${email.trim().toLowerCase()}`).digest("hex").slice(0, 20);
@@ -124,17 +140,22 @@ export function unreadComing(root: string, source: string, seen: Record<string, 
 // The meetings tied to a person's page (G694): those whose guests include an address the page
 // holds, or whose title names the person in full (two words at least, MIN_NAME letters). The last
 // one before today, the next from today on, and how many so far this calendar quarter.
-export interface Meetings { last?: Upcoming; next?: Upcoming; quarter: number }
+// byName: the last or next meeting ties only by a guest's name on the invite, a guess (G746).
+export interface Meetings { last?: Upcoming; next?: Upcoming; quarter: number; lastByName?: boolean; nextByName?: boolean }
 export function meetingsWith(n: Note, events: Upcoming[], day = today(), keep: (e: Upcoming) => boolean = () => true): Meetings {
   const out: Meetings = { quarter: 0 };
   if (n.fm.type !== "person" || !events.length) return out;
   const mails = addressKeys(n);
   const names = [n.fm.title, ...(Array.isArray(n.fm.aliases) ? n.fm.aliases : [])].filter((x): x is string => typeof x === "string" && x.trim().length >= MIN_NAME && /\S\s+\S/.test(x.trim())).map(norm);
   const q = `${day.slice(0, 5)}${String(Math.floor((Number(day.slice(5, 7)) - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
+  const keys = names.map((nm) => nameKeyOf(nm));
   for (const e of events) {
-    if (!keep(e) || !((e.who ?? []).some((h) => mails.includes(h)) || names.some((nm) => norm(e.summary).includes(nm)))) continue;
+    if (!keep(e)) continue;
+    const sure = (e.who ?? []).some((h) => mails.includes(h)) || names.some((nm) => norm(e.summary).includes(nm));
+    const guess = !sure && (e.names ?? []).some((k) => keys.includes(k));
+    if (!sure && !guess) continue;
     const d = e.start.slice(0, 10);
-    if (d < day) { out.last = e; if (d >= q) out.quarter++; } else out.next ??= e;
+    if (d < day) { out.last = e; out.lastByName = guess; if (d >= q) out.quarter++; } else if (!out.next) { out.next = e; out.nextByName = guess; }
   }
   return out;
 }

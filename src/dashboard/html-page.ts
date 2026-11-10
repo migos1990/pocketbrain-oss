@@ -93,6 +93,7 @@ export const PAGE_COPY = {
   notesSignIn: "Sign in again to edit this page.",
   roleAt: "{role} at {org}",
   lastMet: "Last met {day}",
+  byInviteName: "{line}, by the name on the invite",
   nextMeet: "Next: {what}, {day}",
   nextDay: "Next: {day}",
   quarterMeets: "{n} meetings so far this quarter",
@@ -337,7 +338,8 @@ function meetLine(s: State, m: Meetings | undefined, fresh: boolean): string {
   // A title shaped like health, money or legal names only its day on the 30-day sign-in (G696).
   const next = m.next && (fresh || !sensitiveShape(s.rules, m.next.summary)) ? fill(PAGE_COPY.nextMeet, { what: m.next.summary, day: say(m.next.start) }) : m.next ? fill(PAGE_COPY.nextDay, { day: say(m.next.start) }) : "";
   const parts = [
-    m.last ? fill(PAGE_COPY.lastMet, { day: say(m.last.start) }) : "",
+    // Tied only by a guest's name on the invite: said as the guess it is (G746).
+    m.last ? (m.lastByName ? fill(PAGE_COPY.byInviteName, { line: fill(PAGE_COPY.lastMet, { day: say(m.last.start) }) }) : fill(PAGE_COPY.lastMet, { day: say(m.last.start) })) : "",
     next,
     m.quarter > 1 ? fill(PAGE_COPY.quarterMeets, { n: String(m.quarter) }) : m.quarter === 1 ? PAGE_COPY.quarterMeet : "",
   ].filter(Boolean);

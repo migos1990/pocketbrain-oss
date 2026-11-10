@@ -43,3 +43,33 @@ test("G739 the north star reports how many people pages show Last met and how ma
   expect(d.guest_meetings).toBe(2);
   expect(d.guest_meetings_untied).toBe(1);
 }, 60_000);
+
+// Only 6 of 47 real people pages hold an address (the Mac, 2026-11-09), so a guest rarely ties by
+// address. The name on the invite (its display name, or an address shaped first.last) ties the
+// meeting as a guess, and the line says so; never a silent match (G746).
+test("G746 a guest's name on the invite ties the meeting as a guess, said as one", async () => {
+  const { root } = await makeDemoBrain();
+  person(root, "zed-quinn", "Zed Quinn", `  city: ${rec("Laval")}\n`);
+  person(root, "yara-lund", "Yara Lund", `  city: ${rec("Laval")}\n`);
+  person(root, "xia-moe", "Xia Moe", `  email: ${rec("xia@example.org")}\n`);
+  const guest = (email: string, displayName?: string) => ({ email, ...(displayName ? { displayName } : {}) });
+  const raw = [
+    { ...ev("m1", "Budget sync", "2026-10-02", []), attendees: [{ email: "robin@example.org", self: true }, guest("zq@north.example", "Zed Quinn")] },
+    { ...ev("m2", "Weekly", "2026-10-05", []), attendees: [{ email: "robin@example.org", self: true }, guest("yara.lund@south.example")] },
+    { ...ev("m3", "Intro", "2026-10-06", []), attendees: [{ email: "robin@example.org", self: true }, guest("xia@example.org", "Xia Moe")] },
+  ];
+  saveUpcoming(root, "calendar", raw.flatMap((e) => toUpcoming(e, "calendar") ?? []), DEMO_DAY);
+  const file = (await import("node:fs")).readFileSync((await import("../src/upcoming")).upcomingFile(root), "utf8");
+  expect(file).not.toContain("Zed");
+  expect(file).not.toContain("yara");
+  process.env.PB_NOW = DEMO_NOW;
+  try {
+    const s = loadState(root);
+    const html = (id: string) => ownerPage(s, "", s.notes.find((x) => x.fm.id === id)!, [], { fresh: true });
+    expect(html("people/zed-quinn")).toContain("Last met 2 Oct, by the name on the invite");
+    expect(html("people/yara-lund")).toContain("Last met 5 Oct, by the name on the invite");
+    // An address the page holds is sure: no hedge.
+    expect(html("people/xia-moe")).toContain("Last met 6 Oct");
+    expect(html("people/xia-moe")).not.toContain("by the name on the invite");
+  } finally { delete process.env.PB_NOW; }
+}, 60_000);

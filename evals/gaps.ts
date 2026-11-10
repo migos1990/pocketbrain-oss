@@ -5,15 +5,22 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G746: {
+    closed: "claude/lastmet-names",
+    title: "Last met never showed for a person whose page holds no address",
+    severity: "medium",
+    finding: "Mac 2026-11-09: Last met was still 0 of 15 people pages, because only 6 of 47 people pages hold an address, so a meeting's guests never tied the page and a guest's name on the invite was never read.",
+    fix: "toUpcoming in src/upcoming.ts keeps each guest's name as the invite gives it (a display name of two words or more, or an address shaped first.last), hashed like the addresses. meetingsWith ties a page by one only when no address or title does, as a guess, and the page says so: Last met 2 Oct, by the name on the invite. Tests: test/last-met-match.test.ts.",
+  },
   G740: {
-    closed: "claude/lastmet-weekhead",
+    closed: "0fe7506f",
     title: "The owner's page said nothing for an area with more than twelve live projects",
     severity: "medium",
     finding: "Mac read-only check 2026-11-08: the owner's page had a Your … projects sentence for its small areas but none for the area holding 32 live projects, because past 2 * RELATED_NAMES an area said nothing; nothing reported it.",
     fix: "pageLead in src/wiki.ts names the twelve touched most recently (Your work projects include …). scripts/north-star.ts detectors reports how many live projects and decisions the owner's page names, report-only. Tests: test/owner-page-projects.test.ts.",
   },
   G739: {
-    closed: "claude/lastmet-weekhead",
+    closed: "0fe7506f",
     title: "Last met never tied a meeting to a page holding its address outside emails",
     severity: "low",
     finding: "Mac read-only check 2026-11-08: 0 of the first 15 people pages showed Last met. The real data explains most of it (4 past meetings with guests, none matching the 8 addresses pages hold), but meetingsWith read only the emails attribute and hashed each value raw, so an address under email, or held as Name <address>, never matched; nothing reported it.",

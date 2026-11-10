@@ -1790,6 +1790,14 @@ const polishCases: Case[] = [
     const from = up.meetingsWith(page({ emails: { items: [{ value: "Ana Diaz <ana@north.example>" }] } }), [e], "2026-10-08").last?.id;
     return ok(single === "a" && from === "a", `email field ${single ?? "none"}, From line ${from ?? "none"}`);
   } },
+  { id: "last-met-by-invite-name-is-a-guess", dimension: "upkeep", gap: "G746", kind: "benign", title: "a guest named on the invite ties a page that holds no address, as a guess; an address the page holds is sure", source: "Mac 2026-11-09 (Last met 0 of 15: only 6 of 47 people pages hold an address)", run: async () => {
+    const up = await import(join(SRC_DIR, "upcoming.ts"));
+    if (!up.meetingsWith) return na("no meetings at this commit");
+    const e = up.toUpcoming({ id: "a", summary: "Sync", start: { dateTime: "2026-10-02T15:00:00Z" }, attendees: [{ email: "me@x.example", self: true }, { email: "ana.diaz@north.example" }] }, "cal");
+    const m = up.meetingsWith({ fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", facts: {} } }, [e], "2026-10-08");
+    const sure = up.meetingsWith({ fm: { id: "people/ana-diaz", type: "person", title: "Ana Diaz", facts: { email: { value: "ana.diaz@north.example" } } } }, [e], "2026-10-08");
+    return ok(m.last?.id === "a" && m.lastByName === true && sure.last?.id === "a" && !sure.lastByName, `by name ${m.last?.id ?? "none"} guess ${m.lastByName}; by address guess ${sure.lastByName}`);
+  } },
 ];
 
 export const componentCases: Case[] = [...carveCases, ...writeCases, ...conflictCases, ...idemCases, ...relayCases, ...upkeepCases, ...pullCases, ...fetcherCases, ...contactsCases, ...teachCases, ...openingCases, ...tellerCases, ...unnamedCases, ...ownerListCases, ...polishCases];
