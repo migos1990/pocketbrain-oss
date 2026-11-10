@@ -565,12 +565,32 @@ export function firstName(n: Note): string | undefined {
 const TITLE_NOUN = /(?:^|\s)(?:lead|director|manager|head|coordinator|chair|chairperson|dean|president|officer|editor|founder|co-founder|cofounder|engineer|designer|developer|analyst|advisor|adviser|professor|lecturer|teacher|instructor|consultant|partner|specialist|architect|scientist|owner|administrator|secretary|treasurer|recruiter|researcher|associate|assistant|producer|principal|counsel|accountant|strategist|writer|librarian|nurse|physician|doctor|lawyer|attorney|vp|ceo|cto|cfo|coo|cio|ciso|cpo|cmo)$/i;
 const titleRole = (role: string) => { const head = role.trim().split(/\s+(?:of|for)\s+/i)[0]!; return TITLE_NOUN.test(head) || /^[A-Z]{2,5}$/.test(head.split(/\s+/).at(-1)!); };
 const whose = (t: string) => /s$/.test(t) ? `${t}'` : `${t}'s`;
+// What shape a value is (audit v13 item 10, G773): a short noun phrase goes in a sentence; a clause
+// (a verb, a semicolon, a question), a value that starts with a name doing something, or a mail
+// subject is quoted under a plain label, never spliced after "is" or "works as".
+const CLAUSE = /[;?!]|\s[.:]\s|\b(?:is|are|was|were|has|have|had|will|would|can|could|should|did|does|do|needs?|wants?|said|says)\b|^(?:Re|Fwd?|TR):/i;
+const LEADS_WITH_NAME = /^\p{Lu}[\p{L}'’-]+ (?:\p{Lu}[\p{L}'’-]+ )?(?:is|was|has|had|will|did|are|were|can|should|said|says|asked|sent|told|wants?|needs?)\b/u;
+// A role or a title can be a long noun phrase ("organiser of the … board meeting"): up to 14 words.
+export const isPhrase = (v: string, words = 8) => !CLAUSE.test(v.replace(/\[\[[^\]]*\]\]/g, "X")) && !LEADS_WITH_NAME.test(v) && v.split(/\s+/).length <= words;
+// "None", "n/a", "TBD": no value at all, so no sentence.
+const NO_VALUE = /^(?:none|n\/a|null|tbd|-+)(?:\s*[:.]|$)/i;
+// A person's or an org's attribute is said as "X's city is Halifax." when its name reads as a plain
+// noun of one or two words; a code name that doesn't ("what it is", "kind", "chose", "why", "notes")
+// is said under its label (audit v13).
+const NOT_A_NOUN = /^(?:kind|type|chose|choice|why|what|how|who|status|notes?|summary|bio|misc|other|info|details?|description|context)$/;
+const sayable = (attr: string) => { const w = label(attr).toLowerCase().split(" "); return w.length <= 2 && w.every((x) => /^[a-z]+$/.test(x) && !/^(?:what|it|is|who|how|of|the|a|an|to|for)$/.test(x)) && !NOT_A_NOUN.test(w.join(" ")); };
+// What a thing is: "Sparkly is a dating app.", never "Sparkly's kind is dating app.".
+const WHAT_IT_IS = /^(?:kind|what_it_is|type|category|industry)$/;
+const withArticle = (v: string) => /^(?:a|an|the)\s/i.test(v) ? v.replace(/^\S+/, (w) => w.toLowerCase()) : `${/^[aeiou]/i.test(v) && !/^(?:uni|use|eu|one)/i.test(v) ? "an" : "a"} ${v}`;
+const quoted = (lab: string, v: string) => `${lab}: “${v}${/[.!?…]$/.test(v) ? "" : "."}”`;
 // One sentence per fact, shaped by what kind of value it is (rules/checks.yaml: a date, a list,
 // a link, an address) rather than by its name, so any attribute reads as words.
 function sentence(n: Note, attr: string, values: string[], owner: string[] = [], spec: AttributeSpec = {}, called?: string): string {
   const full = String(n.fm.title ?? n.fm.id), t = called ?? full, words = values.map((x) => inWords(x).replace(/\.$/, ""));
   const v = words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0];
   const person = n.fm.type === "person", lab = label(attr).toLowerCase(), many = words.length > 1;
+  if (!many && NO_VALUE.test(v ?? "")) return "";
+  const phrase = words.every((w) => isPhrase(w, attr === "role" || attr === "role+org" ? 14 : 8));
   // On someone else's page the owner is "you", the way a person would write it to them:
   // "Ana Diaz sent you a request for feedback on …", not "Relationship of Ana Diaz: sent Sam …".
   if (person && !many && !NOUN_ATTRIBUTE.test(attr) && DID.test(v) && /\s/.test(v) && !owner.some((o) => o.toLowerCase() === full.toLowerCase())) {
@@ -583,21 +603,24 @@ function sentence(n: Note, attr: string, values: string[], owner: string[] = [],
   // Upkeep's guess from the surname (src/family.ts): said as a guess, linking the owner's page.
   if (attr === "family" && person) return `${t} may be family: same surname as ${v}.`;
   // A role is said as the role it is: "the" in front only fits some ("the coach tennis" doesn't).
-  if (attr === "role") return `${whose(t)} role is ${v}.`;
+  if (attr === "role") return phrase ? `${whose(t)} role is ${v}.` : quoted("Role", v!);
   if (attr === "org" && person) return `${t} works at ${v}.`;
   // A person's role and org, from the same facts, are one sentence (the merge in pageLead).
   if (attr === "role+org" && person) { const [role, org] = words; return /^(?:a|an|the)\s/i.test(role!) ? `${t} is ${role} at ${org}.` : titleRole(role!) ? `${t} is the ${role} at ${org}.` : `${t} works as ${role} at ${org}.`; }
   // A preference is the words it was said in, one after the other (G490).
   if (attr === "prefers" && person) return `How ${t} likes things: ${words.join("; ")}.`;
   if (attr === "last_contact") return `You were last in touch with ${t} on ${v}.`;
-  if (attr === "status") return `${t} is ${v}.`;
+  if (attr === "status") return phrase ? `${t} is ${v}.` : quoted("Status", v!);
   // A plan or a date something is due: what happens, and on which day if it names one.
   if (attr === "next_step" && !many && yourToDo(v!)) return `${yourToDo(v!)!}.`;
-  if (spec.ends_on_date || spec.shelf_life === "until_date") return `${attr === "next_step" ? "Next" : label(attr)} for ${t}: ${v}.`;
+  if (spec.ends_on_date || spec.shelf_life === "until_date") return phrase ? `${attr === "next_step" ? "Next" : label(attr)} for ${t}: ${v}.` : quoted(label(attr), v!);
   if (spec.normalize === "date") return `${whose(t)} ${lab} ${many ? "dates are" : "is"} ${v}.`;
-  // A short value is said in one breath; a long one is quoted as the source gave it.
-  if (v.split(/\s+/).length <= 8 && !/[.;:!?]\s/.test(v)) return person || n.fm.type === "org" ? `${whose(t)} ${lab} ${many ? "are" : "is"} ${v}.` : `The ${lab} of ${t} ${many ? "are" : "is"} ${v}.`;
-  return `On ${t}, the ${lab}: ${v}.`;
+  // A short noun phrase is said in one breath; anything else is quoted as the source gave it, under
+  // its label, and an attribute's code name is never read as English (G773).
+  if (!phrase) return quoted(label(attr), many ? words.join("; ") : v!);
+  if (WHAT_IT_IS.test(attr) && !many && n.fm.type !== "person") return `${t} is ${withArticle(v!)}.`;
+  if ((person || n.fm.type === "org") && sayable(attr)) return `${whose(t)} ${lab} ${many ? "are" : "is"} ${v}.`;
+  return `${label(attr)}: ${v}.`;
 }
 // What kind of source it is, in words: an assistant's own note names the assistant; a kind the
 // hub has no word for is named by its scheme ("Import"), never just "Source".
@@ -788,7 +811,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   let folders: Set<string> | undefined;
   const idShaped = (v: string) => { const m = v.trim().match(/^([a-z0-9-]+)\/[a-z0-9][a-z0-9._-]*$/i); return !!m && (folders ??= new Set([...o.byId.keys()].map((k) => k.split("/")[0]!.toLowerCase()))).has(m[1]!.toLowerCase()); };
   const linkWords = (s: string) => s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, to: string, words?: string) => { const id = o.resolve?.(to); return id ? `[[${id}|${words ?? o.byId.get(id)?.fm.title ?? to}]]` : `[[${to}${words ? `|${words}` : ""}]]`; });
-  const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean }[] = [];
+  const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean; src?: string[] }[] = [];
   for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     if (NOT_PROSE.test(attr) || isDisputed(f) || o.hidden(`${n.fm.id}#${attr}`)) continue;
     // The owner's own page says what is true of him, not how he knows himself (G624).
@@ -811,7 +834,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     // stay plain words when some reader of this page can't see that org page: the reader is shown
     // the value as written, and the sentence must read like one whose words name no page.
     const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (v.includes("[[")) return v; if (o.byId.has(v.trim()) || idShaped(v)) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" && !o.blind(id) ? `[[${v.trim()}]]` : v; });
-    facts.push({ attr, vals, labs: [lab], waits });
+    facts.push({ attr, vals, labs: [lab], waits, src: [...new Set(recs.flatMap((r) => (r.sources ?? []).map((x) => refString(x))))] });
     if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
     for (const r of recs) for (const s of r.sources ?? []) for (const to of o.names.get(itemOf(refString(s))) ?? [])
       if (to !== n.fm.id && to !== o.ownerPage && o.byId.has(to) && !o.blind(to)) seen.set(to, (seen.get(to) ?? new Set()).add(lab));
@@ -820,7 +843,10 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // references ("Maya Chen is the design lead at Harbourline Software."); a list or a value
   // waiting to be checked keeps its own sentence.
   const role = facts.findIndex((x) => x.attr === "role"), org = facts.findIndex((x) => x.attr === "org");
-  if (n.fm.type === "person" && role >= 0 && org >= 0 && [role, org].every((i) => facts[i]!.vals.length === 1 && !facts[i]!.waits)) {
+  // Glued only when one source says both and the role is a plain noun phrase (audit v13: "is the
+  // guest lecturer at …" from two sources, "is the student, team lead for … at …"; G773).
+  if (n.fm.type === "person" && role >= 0 && org >= 0 && [role, org].every((i) => facts[i]!.vals.length === 1 && !facts[i]!.waits)
+    && (facts[role]!.src ?? []).some((x) => (facts[org]!.src ?? []).includes(x)) && isPhrase(facts[role]!.vals[0]!, 14) && !facts[role]!.vals[0]!.includes(",")) {
     // A role that already names its org ("organiser of the Option Voisins board") is said once,
     // the org's name in it linking its page, never "… Option Voisins board at Option Voisins"
     // (owner's phone, 2026-11-07; G729).
@@ -876,7 +902,9 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
       for (const id of ids) { const sc = schoolOf(id); const lab = `p-at-${id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; if (sc && !refs.some((r) => r.label === lab)) refs.push({ label: lab, text: [...new Set(sc.recs.map(reference))].join("; ") }); }
       continue;
     }
-    const said = linkWords(sentence(n, x.attr, x.vals, o.owner, o.spec?.(x.attr), lines.length && short ? short : undefined));
+    const raw = sentence(n, x.attr, x.vals, o.owner, o.spec?.(x.attr), lines.length && short ? short : undefined);
+    if (!raw) continue;
+    const said = linkWords(raw);
     lines.push(`${said}${x.labs.map((l) => `[^${l}]`).join("")}${x.waits ? " A different value is waiting to be checked." : ""}`);
   }
   // The pages whose title names the course ("PROD 20410: intra exam due …") gather on it (G712).

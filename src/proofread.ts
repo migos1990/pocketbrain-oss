@@ -79,7 +79,7 @@ export function readPage(html: string): Rule[] {
       if (title && (new RegExp(`^The [a-z][a-z_ ]{0,30} of ${t} is `).test(s) || new RegExp(`^On ${t}, the [a-z][a-z_ ]{0,30}: `).test(s) || new RegExp(`^[A-Z][a-z_ ]{0,30} of ${t}: `).test(s))) hit("label-sentence");
       // "X's what it is is …", "X's kind is …": an attribute's code name read as English.
       if (title && new RegExp(`^${t}(?:’s|'s) (?:(?:[a-z]+ )*(?:what|it|who|how)(?: [a-z]+)*|kind|chose|why|type) is `).test(s)) hit("label-sentence");
-      if (/\bis [A-Z][\p{L}'’-]* (?:is|was|has|will|did|had)\b/u.test(s) || /\b(?:is|works as) [A-Z][^.;]*;/.test(s) || /\b(?:Re|Fwd|Fw|TR):\s/.test(s) || /\?\s*[.,]|\?\s+[a-z]/.test(s) || /\bis the [a-z]+, [^.]* at [A-Z]/.test(s)) hit("spliced-value");
+      if (/\bis [A-Z][\p{L}'’-]* (?:is|was|has|will|did|had)\b/u.test(s) || /\bworks as [A-Z][^.;]*;/.test(s) || /\b(?:Re|Fwd|Fw|TR):\s/.test(s) || /\?\s*[.,]|\?\s+[a-z]/.test(s) || /\bis the [a-z]+, [^.]* at [A-Z]/.test(s)) hit("spliced-value");
       const k = s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim();
       if (k.length > 12) seen.set(k, (seen.get(k) ?? 0) + 1);
     }

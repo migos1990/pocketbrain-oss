@@ -85,9 +85,10 @@ test("G750 the nightly read covers every page as the owner sees it, counts by ru
   const { loadBrain } = await import("../src/brain");
   const notes = loadBrain(root).filter((n) => n.fm.type !== "hub");
   expect(r.pages).toBe(notes.length);
-  // The demo brain has the writer's label sentences today ("The chose of …"): the read finds them.
-  expect(r.by_rule["label-sentence"] ?? 0).toBeGreaterThan(0);
-  expect(r.by_kind.decision?.["label-sentence"] ?? 0).toBeGreaterThan(0);
+  // The writer no longer reads a label as English (G773), so the read finds none; the decision
+  // pages' machine dates it still finds.
+  expect(r.by_rule["label-sentence"] ?? 0).toBe(0);
+  expect(r.by_kind.decision?.["machine-date"] ?? 0).toBeGreaterThan(0);
   expect(r.odd_pages).toBeGreaterThan(0);
   // Kept for the north star and doctor, and names nothing: no page id, title or value in the record.
   const kept = readFileSync(join(root, "log", "proofread.json"), "utf8");

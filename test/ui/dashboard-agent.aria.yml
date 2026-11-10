@@ -75,10 +75,10 @@
         - cell "loaded its notes"
         - 'cell "4 notes: Grace Liu, Karen Liu, Harbourline Software, Atlas launch"'
         - cell "2026-10-08 08:06"
-      - 'row "\"Q1 roadmap\" 2 times loaded its notes 4 notes: Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah 2026-10-08 07:44"':
+      - 'row "\"Q1 roadmap\" 2 times loaded its notes 4 notes: Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah 2026-10-08 07:44"':
         - cell "\"Q1 roadmap\" 2 times"
         - cell "loaded its notes"
-        - 'cell "4 notes: Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah"'
+        - 'cell "4 notes: Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"'
         - cell "2026-10-08 07:44"
       - 'row "\"Maya Chen\" loaded its notes 3 notes: Maya Chen, Senior designer hire, Atlas launch 2026-10-08 07:22"':
         - cell "\"Maya Chen\""
@@ -726,11 +726,11 @@
         - cell "Claude"
         - cell "· loaded its notes \"Grace Liu\""
         - cell "· Grace Liu, Karen Liu, Harbourline Software, Atlas launch"
-      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah":
+      - row "2 h ago Claude · loaded its notes \"Q1 roadmap\" · Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah":
         - cell "2 h ago"
         - cell "Claude"
         - cell "· loaded its notes \"Q1 roadmap\""
-        - cell "· Q1 roadmap, Kenji Watanabe, Julie Tran, Priya Shah"
+        - cell "· Q1 roadmap, Julie Tran, Kenji Watanabe, Priya Shah"
       - row "3 h ago Claude · loaded its notes \"Maya Chen\" · Maya Chen, Senior designer hire, Atlas launch":
         - cell "3 h ago"
         - cell "Claude"

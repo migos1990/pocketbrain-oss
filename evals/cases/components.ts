@@ -677,7 +677,7 @@ const pullCases: Case[] = [
     const rec = (v: string, ref: string) => `{ value: ${v}, as_of: ${year}-10-05, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: ${year}-10-05 }`;
     mkdirSync(join(root, "orgs"), { recursive: true });
     writeFileSync(join(root, "orgs", "harbourline.md"), `---\nid: orgs/harbourline\ntype: org\ntitle: Harbourline Software\narea: work\nsensitivity: personal\nstatus: active\ncreated: ${year}-10-01\nupdated: ${year}-10-01\nby: planner\n---\n`);
-    writeFileSync(join(root, "people", "maya-chen.md"), `---\nid: people/maya-chen\ntype: person\ntitle: Maya Chen\narea: work\nsensitivity: personal\nstatus: active\ncreated: ${year}-10-05\nupdated: ${year}-10-05\nby: planner\nfacts:\n  role: ${rec("design lead", "gmail:f0000000000000a1")}\n  org: ${rec("\"[[orgs/harbourline]]\"", "gmail:f0000000000000a2")}\n  last_contact: ${rec(`${year}-10-04`, "gmail:f0000000000000a3")}\n---\n`);
+    writeFileSync(join(root, "people", "maya-chen.md"), `---\nid: people/maya-chen\ntype: person\ntitle: Maya Chen\narea: work\nsensitivity: personal\nstatus: active\ncreated: ${year}-10-05\nupdated: ${year}-10-05\nby: planner\nfacts:\n  role: ${rec("design lead", "gmail:f0000000000000a1")}\n  org: ${rec("\"[[orgs/harbourline]]\"", "gmail:f0000000000000a1")}\n  last_contact: ${rec(`${year}-10-04`, "gmail:f0000000000000a3")}\n---\n`);
     Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: maya"], { cwd: root });
     wiki.renderTouchedPages(root, "2000-01-01T00:00:00Z");
     const [lead, made] = readFileSync(join(root, "people", "maya-chen.md"), "utf8").split(/^---$/m).slice(2).join("---").trim().split("\n\n");
@@ -1812,6 +1812,22 @@ const polishCases: Case[] = [
     const asks = d.waitingLinkAsks(root), again = d.raiseLinkAsks(root);
     const same = readFileSync(join(root, "people", "ana-diaz.md"), "utf8") === before;
     return ok(asks.length === 1 && asks[0].choices[0] === "orgs/harbour-line" && again.length === 0 && same, `${asks.length} ask(s), first choice ${asks[0]?.choices[0] ?? "none"}, asked again ${again.length}, page unchanged ${same}`);
+  } },
+  { id: "sentence-says-value-by-shape", dimension: "upkeep", gap: "G773", kind: "benign", title: "the page writer quotes a clause under its label and joins a role to an org only when one source says both", source: "Audit v13 2026-11-09 (item 10)", run: async () => {
+    const w = await import(join(SRC_DIR, "wiki.ts"));
+    if (!w.isPhrase) return na("no value shapes at this commit");
+    const root = sandbox("synthetic");
+    const put = (id: string, type: string, title: string, facts: string) => { mkdirSync(join(root, id.split("/")[0]!), { recursive: true }); writeFileSync(join(root, `${id}.md`), `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n${facts}---\n`); };
+    const f = (a: string, v: string, ref: string) => `  ${a}: { value: ${JSON.stringify(v)}, as_of: 2026-10-05, sources: ["${ref}"], verification: verified-by-source, by: steward, recorded: 2026-10-05 }\n`;
+    put("orgs/fieldnote", "org", "Fieldnote", f("kind", "research studio", "gmail:f0000000000003b1"));
+    put("projects/beta", "project", "Beta", f("status", "Robin is done with the builds for now", "gmail:f0000000000003b2"));
+    put("people/zoe-harper", "person", "Zoe Harper", f("role", "guest lecturer", "gmail:f0000000000003b3") + f("org", "[[orgs/fieldnote]]", "gmail:f0000000000003b4"));
+    const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=steward@pocketbrain.local", ...a], { cwd: root });
+    git("add", "-A"); git("commit", "-qm", "steward: setup");
+    w.renderTouchedPages(root, "2000-01-01T00:00:00Z");
+    const read = (id: string) => readFileSync(join(root, `${id}.md`), "utf8");
+    const org = read("orgs/fieldnote").includes("Fieldnote is a research studio."), status = read("projects/beta").includes("Status: “Robin is done with the builds for now.”"), apart = !read("people/zoe-harper").includes("is the guest lecturer at");
+    return ok(org && status && apart, `org as a thing ${org}; clause quoted ${status}; role and org from two sources apart ${apart}`);
   } },
   { id: "nightly-read-finds-label-sentences", dimension: "upkeep", gap: "G750", kind: "benign", title: "the nightly read finds an attribute's label read as English, passes its clean twin, and its record names no page", source: "Next-level plan 2026-11-09 (move 1: the owner was the only proofreader)", run: async () => {
     const f = join(SRC_DIR, "proofread.ts");

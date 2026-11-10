@@ -96,7 +96,7 @@
     - superscript:
       - link "[1]":
         - /url: "#fn-1"
-    - text: The lead of Atlas launch is
+    - text: "Lead:"
     - link "Robin Lefebvre":
       - /url: /p/people/robin-lefebvre
     - text: .
@@ -111,7 +111,7 @@
     - superscript:
       - link "[2]":
         - /url: "#fn-2"
-    - text: A different value is waiting to be checked. The people of Atlas launch are
+    - text: "A different value is waiting to be checked. People:"
     - link "Maya Chen":
       - /url: /p/people/maya-chen
     - text: ","

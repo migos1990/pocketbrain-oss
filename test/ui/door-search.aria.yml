@@ -12,19 +12,19 @@
     - listitem:
       - link "Senior designer hire":
         - /url: /b/notes/projects%2Fdesigner-hire
-      - text: "projects/designer-hire · project #### From its facts Senior designer hire is final round.[^pf-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for"
+      - text: "projects/designer-hire · project #### From its facts Senior designer hire is final round.[^pf-status] Lead: [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for Senior designer hire: 30 Oct."
     - listitem:
       - link "Harbourline Software":
         - /url: /b/notes/orgs%2Fharbourline
-      - text: "orgs/harbourline · org #### From its facts Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/priya-shah|Priya Shah"
+      - text: "orgs/harbourline · org #### From its facts Harbourline Software is a software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/priya-shah|Priya Shah]] wo"
     - listitem:
       - link "Atlas launch":
         - /url: /b/notes/projects%2Fatlas-launch
-      - text: "projects/atlas-launch · project #### From its facts Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3"
+      - text: "projects/atlas-launch · project #### From its facts Atlas launch is in beta.[^pf-status] Lead: [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3 Nov.[^pf-due] Next fo"
     - listitem:
       - link "Kenji Watanabe":
         - /url: /b/notes/people%2Fkenji-watanabe
-      - text: "people/kenji-watanabe · person #### From its facts Kenji Watanabe is the senior data analyst at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Kenji works with you.[^pf-relatio"
+      - text: "people/kenji-watanabe · person #### From its facts Kenji Watanabe's role is senior data analyst.[^pf-role] Kenji works at [[orgs/harbourline|Harbourline Software]].[^pf-org] Kenji works with"
     - listitem:
       - link "Lucas Fontaine":
         - /url: /b/notes/people%2Flucas-fontaine
@@ -46,13 +46,13 @@
         - /url: /b/notes/people%2Fdaniel-okoro
       - text: "people/daniel-okoro · person #### From its facts Daniel Okoro is the staff engineer at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Daniel works with you on Atlas.[^pf-rela"
     - listitem:
-      - link "Sofia Marquez":
-        - /url: /b/notes/people%2Fsofia-marquez
-      - text: "people/sofia-marquez · person #### From its facts Sofia Marquez is the senior product marketing manager at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org] Sofia works with you"
-    - listitem:
       - link "Weekly Atlas review on Wednesdays":
         - /url: /b/notes/decisions%2F2026-10-01-weekly-team-review
       - text: decisions/2026-10-01-weekly-team-review · decision Decided on 2026-10-01 for the [[projects/atlas-launch]], with [[people/omar-haddad]] and [[people/maya-chen]] and [[people/hannah-becker]].[^1]
+    - listitem:
+      - link "Sofia Marquez":
+        - /url: /b/notes/people%2Fsofia-marquez
+      - text: "people/sofia-marquez · person #### From its facts Sofia Marquez's role is senior product marketing manager.[^pf-role] Sofia works at [[orgs/harbourline|Harbourline Software]].[^pf-org] Sofia"
     - listitem:
       - link "Omar Haddad":
         - /url: /b/notes/people%2Fomar-haddad

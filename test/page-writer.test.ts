@@ -36,7 +36,8 @@ test("page writer: a touched page gets one cited sentence per fact; a second run
   expect(r.written).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
   // Role and org are one sentence with both references (G559).
-  expect(b).toContain("Ana Diaz is the program director at North College.[^pf-role][^pf-org]");
+  // Two sources, one for the role and one for the org: never glued into a claim neither made (G773).
+  expect(b).toContain("Ana Diaz's role is program director.[^pf-role] Ana works at North College.[^pf-org]");
   expect(b).toMatch(/^\[\^pf-role\]: Email, 2026-10-05 \(gmail:f0000000000000a1\)$/m);
   const log = sh(root, "hub", "log", "-1", "--format=%an%n%B");
   expect(log.split("\n")[0]).toBe("hub");
@@ -158,7 +159,7 @@ test("note page: a page-writer page reads as words: linked names, dated referenc
   person(root, "ana-diaz", "Ana Diaz", fact("role", "program director", "gmail:f0000000000000a1") + fact("org", "\"[[North College]]\"", "owner:2026-10-05/dashboard") + fact("last_contact", "2026-10-05", "gmail:f0000000000000a1"));
   capture(root, "gmail:f0000000000000a1", ["Ben Okafor"]);
   renderTouchedPages(root, SINCE);
-  expect(body(root, "people/ana-diaz")).toContain("Ana Diaz is the program director at [[orgs/north-college|North College]].");
+  expect(body(root, "people/ana-diaz")).toContain("Ana Diaz's role is program director.[^pf-role] Ana works at [[orgs/north-college|North College]].");
   const ana = loadBrain(root).find((n) => n.fm.id === "people/ana-diaz")!;
   const html = notePage(loadState(root), "x", ana, "").body;
   // The edit form keeps the raw value; what the page shows never has brackets.
@@ -301,7 +302,7 @@ test("page writer: any attribute reads as a sentence; the text says the hub wrot
   // The full name once, then the first name; a date this year without its year (G559).
   expect(ana).toContain("Ana's languages are French and Portuguese.");
   expect(ana).toContain("You were last in touch with Ana on 5 Oct.");
-  expect(ana).toContain("On Ana, the bio: Runs the evening programme;");
+  expect(ana).toContain("Bio: “Runs the evening programme;");
   expect(ana).not.toMatch(/\b[A-Z][a-z]+ of Ana( Diaz)?: /);
   expect(ana.split("\n\n")[1]).toBe("(Written by the hub from this page's facts.)");
   expect(sh(root, "hub", "log", "-1", "--format=%B")).toMatch(/^Why: \d+ pages are new since 2000-01-01/m);
@@ -341,7 +342,7 @@ test("page writer: a longer text in the owner's commit stays on top, the facts' 
   expect(r.kept).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
   expect(b).toStartWith("Met Ana at the spring retreat;");
-  expect(b).toContain("## From its facts\nAna Diaz works as coach tennis at North College.");
+  expect(b).toContain("## From its facts\nAna Diaz's role is coach tennis.[^pf-role] Ana works at North College.");
   // Every reference says what kind of source it is.
   expect(b).toMatch(/^\[\^pf-org\]: Notion import, 2026-10-05 \(notion:import\/2026-09-15\)$/m);
   // A fact with no checked source says an assistant told it, never which one (G720).

@@ -32,13 +32,13 @@ test("after the writer reruns, an agent with one hidden fact keeps the page's ot
     const stale = lead((readNote(root, "claude", ID) as { body: string }).body);
     expect(stale).not.toContain("Due for");
     expect(stale).toContain("week 6 of 13");
-    expect(stale).toContain("The lead of Product Discovery course");
+    expect(stale).toContain("Lead: [[people/robin-lefebvre|Robin Lefebvre]]");
     // After it runs: the same, and nothing else is lost.
     renderTouchedPages(root, new Date(Date.now() - 400 * 86_400_000).toISOString());
     const after = lead((readNote(root, "claude", ID) as { body: string }).body);
     expect(after).not.toContain("Due for");
     expect(after).toContain("week 6 of 13");
-    expect(after).toContain("The lead of Product Discovery course");
+    expect(after).toContain("Lead: [[people/robin-lefebvre|Robin Lefebvre]]");
     // The owner still reads one number per mail.
     const nums = footnotes(readFileSync(f, "utf8")).notes;
     expect(new Set(nums.map((x) => x.n)).size).toBe(new Set(nums.map((x) => x.text)).size);

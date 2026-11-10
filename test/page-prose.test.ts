@@ -58,7 +58,7 @@ test("the made-by line is its own paragraph after the opening text, and still ma
 test("a role that doesn't read as a title is said as work, never 'the' in front", () => {
   const root = makeBrain();
   page(root, "orgs/harbourline", "org", "Harbourline Software");
-  page(root, "people/sam-roy", "person", "Sam Roy", fact("role", "coach tennis", "gmail:f0000000000000b1") + fact("org", "\"[[orgs/harbourline]]\"", "gmail:f0000000000000b2"));
+  page(root, "people/sam-roy", "person", "Sam Roy", fact("role", "coach tennis", "gmail:f0000000000000b1") + fact("org", "\"[[orgs/harbourline]]\"", "gmail:f0000000000000b1"));
   renderTouchedPages(root, "2000-01-01T00:00:00Z");
   expect(body(root, "people/sam-roy")).toContain("Sam Roy works as coach tennis at [[orgs/harbourline|Harbourline Software]].[^pf-role][^pf-org]");
 });

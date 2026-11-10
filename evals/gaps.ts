@@ -5,8 +5,15 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G773: {
+    closed: "claude/sentence-shape",
+    title: "The page writer spliced any value into a sentence and glued a role to an org no source joined",
+    severity: "medium",
+    finding: "Audit v13 2026-11-09 (item 10): sentence() had 14 shapes and four spliced the raw value after \"is\" or \"works as\" as if it were a short noun phrase, so a clause, a list with a semicolon, a question or a value starting with a name read broken (\"<page> is <name> is done with …\", \"<org>'s what it is is A …\"), an attribute's code name was read as English (\"The chose of … is …\"), and a role from one mail was glued to an org from another into a claim neither made.",
+    fix: "src/wiki.ts: isPhrase decides a value's shape (no clause marks, no leading name doing something, at most 8 words, 14 for a role); anything else is quoted under its plain label; an attribute whose name isn't a plain noun is said under its label, what an org or project is reads \"X is a …\", a value of None says nothing; role and org are one sentence only when one source cites both and the role has no comma. The nightly read (G750) now finds no label sentence on the demo brain (88 odd sentences on 44 pages before, 29 on 23 after).",
+  },
   G750: {
-    closed: "claude/nightly-read",
+    closed: "c4489408",
     title: "The owner was the brain's only proofreader",
     severity: "medium",
     finding: "Next-level plan 2026-11-09 (move 1): 91 of 150 gaps were wording the owner found on his phone, each fixed by one more special case in a template, so the gap rate never fell; the demo brain passed every test while its pages still read \"The chose of <a decision> is …\" and \"<an org>'s kind is …\".",
