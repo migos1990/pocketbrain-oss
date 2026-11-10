@@ -5,6 +5,7 @@
 // html-home.ts; the words are the owner's (test/owner-copy.test.ts).
 import { ownerAsks, type OwnerAsks } from "../waiting";
 import { waitingTeachAsks } from "../teaching";
+import { waitingLinkAsks } from "../dangling";
 import { HOME_COPY } from "./html-home";
 import { dateWordForms, sha256 } from "../util";
 import type { Note } from "../brain";
@@ -50,7 +51,7 @@ export interface HomeLine {
   attr?: string; // the attribute, for which lines lead the face (faceLines)
   kind?: string; // the diary row's kind, likewise
 }
-export interface Waiting { what: string; verb: string; href: string; n?: number; teach?: string; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // teach: a teaching question's key, for its three taps (teachKey); seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
+export interface Waiting { what: string; verb: string; href: string; n?: number; teach?: string; link?: string; choices?: { label: string; answer: string }[]; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // teach: a teaching question's key, for its three taps (teachKey); seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
 export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string }
@@ -562,10 +563,21 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   // private, read now (invariant 16); else it asks without them.
   const below = (id: string) => { const n = notes.get(id); return !!n && sensitivityRank(n.fm.sensitivity) < sensitivityRank("private"); };
   const teach: Waiting[] = waitingTeachAsks(root).map((a) => ({ what: below(a.org) && a.pages.every(below) ? a.question : HOME_COPY.teachUnnamed, verb: "tap to answer", href: "/home", teach: teachKey(a.code) }));
+  // A fact linking a page the brain doesn't have (src/dangling.ts, G749): which page he meant, the
+  // plain name, or leave it, each its own tap. It names the pages only while each is still below
+  // private, read now; else it asks without them and offers only the name or leave it.
+  const link: Waiting[] = waitingLinkAsks(root).map((a) => {
+    const named = below(a.page) && a.choices.every(below);
+    return { what: named ? a.question : HOME_COPY.linkUnnamed, verb: "tap to answer", href: "/home", link: a.key,
+      choices: [...(named ? a.choices.map((id) => ({ label: String(notes.get(id)?.fm.title ?? id), answer: `pick:${id}` })) : []), { label: HOME_COPY.linkName, answer: "name" }, { label: HOME_COPY.linkLeave, answer: "no" }] };
+  });
   // What waits on Settings (src/waiting.ts): one card that counts it and links there (G626).
   const settings: Waiting[] = asks.settings > 0 ? [{ n: asks.settings, what: settingsWords(asks), verb: "on Settings", href: SETTINGS_HREF }] : [];
-  return { waiting: [...asking, ...mail, ...teach, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
+  return { waiting: [...asking, ...mail, ...teach, ...link, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
+
+// The home's waiting cards alone, for a test or a probe.
+export const homeWaiting = (root: string, now: Date) => conflicts(root, now).waiting;
 
 // A teaching question's key on the home's forms: never the course code itself, which the card
 // leaves out once a page behind it is private.

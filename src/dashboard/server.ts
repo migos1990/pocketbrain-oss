@@ -24,6 +24,7 @@ import { listChats, getChat, addTurn, deleteChat, isChatId, type Chat } from "..
 import { sayDay } from "../diary";
 import { ownerDay } from "../clock";
 import { waitingTeachAsks, answerTeach, type TeachAnswer } from "../teaching";
+import { waitingLinkAsks, answerLink } from "../dangling";
 import { carve, grantFor, records } from "../carve";
 import { renderView } from "../view";
 import { CoreError, ownerWhy, ownerDecide, ownerKeepBoth, ownerConflict, ownerConflicts } from "../core";
@@ -142,6 +143,9 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   // The teaching question on the home (G715): asked from pages below private, and the diary's Undo
   // takes each filed fact back, like the org line above.
   "teach-answer": () => true,
+  // A link to a page the brain doesn't have (G749): asked from pages below private; the answer is the
+  // owner's word on one fact, which the diary's Undo takes back.
+  "link-answer": () => true,
   // Deleting an Ask chat only takes away what the owner typed and was told (G716).
   "ask-delete": () => true,
   // A sentence the owner just typed on a page, kept there as their note (G719); editing the notes
@@ -821,6 +825,21 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           const ok = answer === "no" ? (named ? `Got it. I won't ask about ${ask.code} again.` : "Got it. I won't ask about that class again.")
             : named ? `${answer === "teaches" ? "You teach" : "You're taking"} ${ask.code} at ${ask.org_title}. Your pages say it now.` : `${answer === "teaches" ? "Saved that you teach it" : "Saved that you're taking it"}. Your pages say it now.`;
           return go("/home", { ok, tok: newTokens(at) });
+        } catch (e) { return go("/home", { err: fail(e) }); }
+      }
+      if (action === "link-answer") {
+        // One tap on a link to a page the brain doesn't have (src/dangling.ts answerLink): found by its
+        // key; a pick must be one of the pages the question offered, which answerLink checks.
+        const ask = waitingLinkAsks(root).find((a) => a.key === form.ask);
+        if (!ask) return go("/home", { err: "Nothing waiting there any more." });
+        const raw = String(form.answer ?? "");
+        const answer = raw === "name" || raw === "no" ? raw : raw.startsWith("pick:") ? { pick: raw.slice(5) } : undefined;
+        if (!answer) return go("/home", { err: "That isn't one of the answers." });
+        const at = diaryAt();
+        try {
+          hubGate(root, ["commit"]);
+          answerLink(root, ask.key, answer);
+          return go("/home", { ok: answer === "no" ? "Got it. I won't ask about that link again." : "Done. The page says it now.", tok: newTokens(at) });
         } catch (e) { return go("/home", { err: fail(e) }); }
       }
       if (action === "fix-everywhere") {

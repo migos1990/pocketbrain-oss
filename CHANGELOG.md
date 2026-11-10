@@ -14,6 +14,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- A fact that links a page you don't have becomes one question on your home: pick the page you meant, keep it as a name, or leave it. It stays a count in the night report until you add `links: { ask: true }` to `rules/policy.yaml` (G749).
 - The box says "Seen by your assistants" only when one of your assistants can actually read what you just told it. When none can (its page is outside every assistant's slice, or the only one that reads it is paused), it says "No assistant can read it yet." Nothing about who can read what changed (G777).
 - A person's page whose page holds no address can still show Last met when a guest's name on the invite is theirs; it says so ("Last met 2 Oct, by the name on the invite") (G746).
 - Forgetting a person now also deletes your Ask chats that name them, and says how many; a chat is not brought back by the undo (audit v13, G763). The drill key for the Sunday restore test is added and removed as your own commit, on the hub only (G762).

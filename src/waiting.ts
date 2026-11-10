@@ -17,6 +17,7 @@ import { heldCount } from "./capture";
 import { inboxConflicts } from "./settle-inbox";
 import { unseenFacts } from "./seen";
 import { waitingTeachAsks } from "./teaching";
+import { waitingLinkAsks } from "./dangling";
 
 const DECISIONS = new Set(["dispute", "proposal", "held-answer"]);
 // Cards that ask for a tap but aren't a fact decision: held mail, a capture, an upkeep run, rules, spend.
@@ -31,6 +32,7 @@ export interface OwnerAsks {
   stuck: number; // captures held past their day
   serving: number; // values the serving hold keeps for Show it
   teach: number; // questions about a class the owner may teach, answered on the home
+  link: number; // questions about a fact linking a page the brain doesn't have, answered on the home (G749)
   total: number;
   settings: number; // asks the home doesn't list itself: they wait on Settings
   queues: Queues;
@@ -64,7 +66,9 @@ export function ownerAsks(root: string, now = new Date(), later = now): OwnerAsk
   if (serving) by.held_by_serving = serving;
   const teach = waitingTeachAsks(root).length;
   if (teach) by.teach = teach;
+  const link = waitingLinkAsks(root).length;
+  if (link) by.link = link;
   const total = Object.values(by).reduce((a, b) => a + b, 0);
-  const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + serving + teach;
-  return { by, waiting, other, stuck, serving, teach, total, settings: total - onHome, queues, homeConflicts, byAccess };
+  const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + serving + teach + link;
+  return { by, waiting, other, stuck, serving, teach, link, total, settings: total - onHome, queues, homeConflicts, byAccess };
 }

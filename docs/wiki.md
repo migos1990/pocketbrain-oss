@@ -132,6 +132,10 @@ Links go both ways for an assistant too (`src/links.ts`). `read` returns `links_
 
 `read` takes an optional `section` (a `## ` heading). It returns only that section and the references it cites. An unknown section is a 404 (`GET /v1/notes/<id>?section=<heading>` on the JSON API). `context_pack` still ranks whole notes; ranking by section is not built yet.
 
+## A link to a page you don't have
+
+A fact can link a page the brain has under no id, title or alias (the Mac's probe, 2026-11-09: a person's org fact linked an org page that never existed, so nothing tied the two). That is an open question about data, so it becomes one ask, never prose (`src/dangling.ts`, G749). The night pass (upkeep step 1c3c) finds each such live fact on a page below private and, once `rules/policy.yaml` says `links: { ask: true }` (the owner's typed word; until then it only counts them under `link-would-ask`), files one question per fact in `inbox/links/`, in one hub commit. The home asks it under **To answer** with a tap for each page in the same folder whose name shares the link's words (up to three), **Keep it as a name** (the fact becomes the plain words, which link by themselves once a page takes that name, G674) and **Leave it**. A pick or the name is the owner's word on that one fact, through `write()`, and the page is written again at once; Leave it is remembered, so a fact is never asked about twice. Nothing changes before his tap.
+
 ## A class you teach
 
 A mail's subject and sender are never stored, so the brain notices a class only from what it already holds (src/teaching.ts, code only, no model). A course code (two to five capitals, then three to six digits: "PROD 20410", "MATH101") that sits in the titles or values of live pages cited by two or more mails, with two or more people whose org fact names one school cited by those same mails, is one question: "You seem to teach PROD 20410 at North College. Right?" It is never asked about your employer, about a code that is already a page, about one your page already says you teach or take, or twice. The question lives in `inbox/teach/<code>.yaml`; no page changes before you answer.

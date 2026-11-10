@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G749: {
+    closed: "claude/dangling-link-ask",
+    title: "A fact linking a page the brain doesn't have was never asked about",
+    severity: "medium",
+    finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",
+    fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
+  },
   G777: {
     closed: "claude/box-seen-true",
     title: "The box said Seen by your assistants about facts no assistant can read",
@@ -13,7 +20,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/owner-say.ts audienceOf reads each assistant's carve (outside the wall, not paused, not the Gardener) for that very fact: your assistants only when one gets it; only you for a private fact none reads; else say.noted-unread, \"No assistant can read it yet.\" Words only, no access change. Tests: test/box-seen-true.test.ts, eval box-seen-is-true.",
   },
   G746: {
-    closed: "claude/lastmet-names",
+    closed: "d8c90999",
     title: "Last met never showed for a person whose page holds no address",
     severity: "medium",
     finding: "Mac 2026-11-09: Last met was still 0 of 15 people pages, because only 6 of 47 people pages hold an address, so a meeting's guests never tied the page and a guest's name on the invite was never read.",

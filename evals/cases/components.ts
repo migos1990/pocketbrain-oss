@@ -1797,6 +1797,22 @@ const polishCases: Case[] = [
     const from = up.meetingsWith(page({ emails: { items: [{ value: "Ana Diaz <ana@north.example>" }] } }), [e], "2026-10-08").last?.id;
     return ok(single === "a" && from === "a", `email field ${single ?? "none"}, From line ${from ?? "none"}`);
   } },
+  { id: "dangling-link-asks-once", dimension: "upkeep", gap: "G749", kind: "benign", title: "a fact linking a page the brain doesn't have is found once, offering the page whose name is close, and nothing changes before the owner's tap", source: "Mac probe 2026-11-09 (an org fact linking an org page that never existed)", run: async () => {
+    const f = join(SRC_DIR, "dangling.ts");
+    if (!existsSync(f)) return na("no dangling-link question at this commit");
+    const d = await import(f);
+    const root = sandbox("synthetic");
+    const put = (id: string, type: string, title: string, attr: string, v: string) => { mkdirSync(join(root, id.split("/")[0]!), { recursive: true }); writeFileSync(join(root, `${id}.md`), `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  ${attr}: { value: "${v}", as_of: 2026-10-05, sources: ["gmail:f0000000000003a1"], verification: verified-by-source, by: steward, recorded: 2026-10-05 }\n---\n`); };
+    put("orgs/harbour-line", "org", "Harbour Line", "kind", "shipping");
+    put("people/ana-diaz", "person", "Ana Diaz", "org", "[[orgs/harbour-line-co]]");
+    const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=steward@pocketbrain.local", ...a], { cwd: root });
+    git("add", "-A"); git("commit", "-qm", "steward: setup");
+    const before = readFileSync(join(root, "people", "ana-diaz.md"), "utf8");
+    d.raiseLinkAsks(root);
+    const asks = d.waitingLinkAsks(root), again = d.raiseLinkAsks(root);
+    const same = readFileSync(join(root, "people", "ana-diaz.md"), "utf8") === before;
+    return ok(asks.length === 1 && asks[0].choices[0] === "orgs/harbour-line" && again.length === 0 && same, `${asks.length} ask(s), first choice ${asks[0]?.choices[0] ?? "none"}, asked again ${again.length}, page unchanged ${same}`);
+  } },
   { id: "last-met-by-invite-name-is-a-guess", dimension: "upkeep", gap: "G746", kind: "benign", title: "a guest named on the invite ties a page that holds no address, as a guess; an address the page holds is sure", source: "Mac 2026-11-09 (Last met 0 of 15: only 6 of 47 people pages hold an address)", run: async () => {
     const up = await import(join(SRC_DIR, "upcoming.ts"));
     if (!up.meetingsWith) return na("no meetings at this commit");

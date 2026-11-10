@@ -4,6 +4,7 @@
 // recheck facts against live sources. Any contradiction is escalated, never resolved.
 // No LLM in v1: every pass here is a rule.
 import { raiseTeachAsks } from "./teaching";
+import { raiseLinkAsks } from "./dangling";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -218,6 +219,16 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const on = (rules.policy as { teach?: { ask?: boolean } }).teach?.ask === true;
     const t = raiseTeachAsks(root, { apply: on });
     if (t.length) add({ rule: on ? "teach-asked" : "teach-would-ask", key: on ? "teach-asked" : "teach-would-ask", kind: "review", detail: `${t.length} class${t.length === 1 ? "" : "es"} you may teach${on ? ": a question waits for you" : `, from ${t.reduce((a, x) => a + x.people.length, 0)} people at ${new Set(t.map((x) => x.org)).size} school${new Set(t.map((x) => x.org)).size === 1 ? "" : "s"}; the question waits for \`teach: { ask: true }\``}` });
+  }
+
+  // 1c3c. A fact linking a page the brain doesn't have (src/dangling.ts, G749): one question for the
+  //      owner each. Report-only until policy.yaml says `links: { ask: true }` (the owner's typed
+  //      word; a new step starts report-only): a count under a key that is no page's id. On, it
+  //      files the questions in inbox/links/ and nothing else.
+  {
+    const on = (rules.policy as { links?: { ask?: boolean } }).links?.ask === true;
+    const l = raiseLinkAsks(root, { apply: on });
+    if (l.length) add({ rule: on ? "link-asked" : "link-would-ask", key: on ? "link-asked" : "link-would-ask", kind: "review", detail: `${l.length} fact${l.length === 1 ? "" : "s"} link${l.length === 1 ? "s" : ""} a page you don't have${on ? ": a question waits for you" : "; the question waits for \`links: { ask: true }\`"}` });
   }
 
   // 1c4. One thing's pages under it (src/wiki.ts parentPlan, G640): a project page named "X: …", or

@@ -24,6 +24,9 @@ export const HOME_COPY = {
   askGot: "{at} · it got {told}",
   askMore: "and {n} more today",
   teachUnnamed: "You may teach a class at a school in your pages. Right?",
+  linkUnnamed: "A page points to a page you don't have. Keep what it says as a name?",
+  linkName: "Keep it as a name",
+  linkLeave: "Leave it",
 } as const;
 
 const LIGHT = "--bg:#ffffff;--well:#f7f7f5;--line:#e9e9e7;--text:#1f1f1e;--text-2:#5f5e5b;--muted:#71706c;--accent:#2a62d4;--accent-text:#1a6dc0;--bubble:#f0efec;--warn:#9a5b00;--on-accent:#ffffff;";

@@ -358,6 +358,8 @@ function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   if (w.href === "/home?all=1") return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock()}<a class="pill solid" href="${esc(w.href)}">${APP_COPY.seeThem}</a></div></li>`;
   // A question about a class (G715): its three answers, each its own tap.
   if (w.teach) return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><div class="acts">${([["teaches", APP_COPY.teachYes, "pill solid"], ["takes", APP_COPY.teachTakes, "pill"], ["no", APP_COPY.teachNo, "pill"]] as const).map(([answer, label, cls]) => `<form method="post" action="/action/teach-answer">${hidden(csrf, { ask: w.teach!, answer })}<button class="${cls}" aria-label="${esc(`${label}: ${w.what}`)}">${esc(label)}</button></form>`).join("")}</div></div></li>`;
+  // A link to a page the brain doesn't have (G749): a tap for each page offered, the plain name, leave it.
+  if (w.link && w.choices) return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><div class="acts">${w.choices.map((c, i) => `<form method="post" action="/action/link-answer">${hidden(csrf, { ask: w.link!, answer: c.answer })}<button class="${i === 0 ? "pill solid" : "pill"}" aria-label="${esc(`${c.label}: ${w.what}`)}">${esc(c.label)}</button></form>`).join("")}</div></div></li>`;
   if (onSettings(w)) return `<li class="card"><span class="what">${esc(w.what)}</span><div class="foot"><span></span><a class="pill" href="${esc(w.href)}">${APP_COPY.openSettings}</a></div></li>`;
   if (gardener) return `<li class="card"><a class="what" href="${esc(w.href)}">${esc(w.what)}</a><div class="foot"><small>${w.meta ? `${esc(w.meta)} · ` : ""}${APP_COPY.gardener}</small></div></li>`;
   const verb = w.href.startsWith("/settle/m-") ? APP_COPY.decide : APP_COPY.settle;
@@ -394,7 +396,7 @@ const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<
 const isKept = (w: Waiting) => w.verb === "kept private";
 const held = (w: Waiting) => (!!w.seen && !isKept(w)) || w.href === "/home?all=1";
 const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
-const isQuestion = (w: Waiting) => !!w.teach;
+const isQuestion = (w: Waiting) => !!w.teach || !!w.link;
 const group = (head: string, hint: string, cards: string[], n: number | null = cards.length) => cards.length ? `<h2 class="group">${esc(head)}${n === null ? "" : ` <b>${n}</b>`}</h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
 const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
 export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean; undo?: string } = {}): string {
