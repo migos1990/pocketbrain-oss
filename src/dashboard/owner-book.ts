@@ -30,8 +30,9 @@ export function ownerBook(s: State, fresh: boolean): OwnerBook {
   const now = s.notes.filter((n) => n.fm.type === "project" && String(n.fm.status ?? "active") === "active" && !DONE.test(String((n.fm.facts?.status as { value?: unknown } | undefined)?.value ?? "")) && shown(n))
     .sort((a, b) => String(b.fm.updated ?? "").localeCompare(String(a.fm.updated ?? "")) || String(a.fm.title).localeCompare(String(b.fm.title)))
     .slice(0, BOOK_NOW);
-  // A fact the owner marked private, or a page's private item, is the owner's after a sign-in only.
-  const open = (f: Fact) => fresh || ![isList(f) ? f.items : isDisputed(f) ? [] : [f as FactRecord]].flat().some((r) => sensitivityRank(r.sensitivity) >= sensitivityRank("private"));
+  // A fact the owner marked private, or a page's private item, is the owner's after a sign-in only;
+  // so is a value held until the owner opens it (`unseen`), as on the home (audit v13, G766).
+  const open = (f: Fact) => fresh || ![isList(f) ? f.items : isDisputed(f) ? [] : [f as FactRecord]].flat().some((r) => !!r.unseen || sensitivityRank(r.sensitivity) >= sensitivityRank("private"));
   const pages = s.notes.filter(shown);
   const day = ownerDay(s.rules, s.now);
   const events = loadUpcoming(s.root, day).filter((e) => fresh || sensitivityRank(e.sensitivity) < sensitivityRank("private"));

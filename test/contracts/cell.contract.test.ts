@@ -367,3 +367,21 @@ test("contract cell: another page's fact turning hidden reaches every cell file 
   expect(body()).not.toContain("works at North College");
   expect(body()).not.toContain("gmail:f000000000000009");
 });
+
+test("contract cell: a next step the calendar serves after the cell was built is scrubbed like the cell's text (G765)", async () => {
+  const { pullSource } = await import("../../src/pull");
+  const YAML = (await import("yaml")).default;
+  const root = makeBrain();
+  const f = join(root, "projects", "course-a.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace("value: Grade the midterm, as_of: 2026-10-01", "value: Grade the midterm by 2026-10-05, as_of: 2026-10-01"));
+  writeFileSync(join(root, "cal.json"), JSON.stringify([{ id: "next1", etag: '"2"', status: "confirmed", summary: "Course A fees with Maple Trust Bank", start: { dateTime: "2026-10-14T18:30:00-04:00" } }]));
+  writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "cal.json", upcoming: true } } }));
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "calendar"]);
+  useCells(true);
+  buildCells(root);
+  await pullSource(root, "cal", { model: null });
+  const helper = JSON.stringify(core.readNote(root, "helper", "projects/course-a"));
+  expect(helper).toContain("(from the calendar)");
+  expect(helper).not.toContain("Maple Trust");
+  expect(JSON.stringify(core.readNote(root, "steward", "projects/course-a"))).toContain("Course A fees with Maple Trust Bank");
+});

@@ -1004,6 +1004,70 @@ const pullCases: Case[] = [
     const helper = r.served("helper");
     return ok(/^opening/.test(refused) && unsaved && !helper.includes("Zorblax"), `refused "${refused.slice(0, 60)}"; nothing saved ${unsaved}; a stored one named to the reader ${helper.includes("Zorblax")}`);
   } },
+  { id: "contested-value-marked", dimension: "retrieval", gap: "G757", title: "a value with a conflict waiting beside it never reaches a pack, a read or the week block as plainly current", source: "audit v13, trust defect 2 (a regression from the pack-once change)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    const rec = (value: string, more = "") => `{ value: "${value}", ${more}as_of: 2026-10-07, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: planner, recorded: 2026-10-07 }`;
+    writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: ${rec("book the hall on 10 October", "contested: c-9001, ")}\n  room: ${rec("Hall B")}\n---\n`);
+    // The other stored form: two candidates under one dispute.
+    writeFileSync(join(root, "projects", "course-d.md"), `---\nid: projects/course-d\ntype: project\ntitle: Course D\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step:\n    dispute: c-9002\n    candidates:\n      - ${rec("book the lab on 10 October")}\n      - ${rec("book the lab on 12 October")}\n---\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-qm", "owner: course c"], { cwd: root });
+    const WAITS = "a different value is waiting to be checked";
+    const line = (text: string, attr: string) => text.split("\n").find((l) => l.startsWith(`- **${attr}**`)) ?? "";
+    const pack = core.contextPack(root, "helper", "Course C"), md = core.readNote(root, "helper", "projects/course-c").markdown as string;
+    const week = (core.contextPack(root, "helper", "what is due this week?") as string).split("\n").filter((l) => l.includes("(projects/course-c)"));
+    const marked = line(pack, "next_step").includes(WAITS) && line(md, "next_step").includes(WAITS);
+    const plain = !line(pack, "room").includes(WAITS);
+    const weekSays = week.length > 0 && week.every((l) => l.includes(WAITS));
+    const both = (core.contextPack(root, "helper", "Course D") as string).split("\n").filter((l) => l.includes("book the lab"));
+    const twoForm = both.length === 2 && both.every((l) => l.includes("candidate") && !l.includes("[current]"));
+    return ok(marked && plain && weekSays && twoForm, `fact line marked in pack and read ${marked}; an uncontested fact left plain ${plain}; week lines ${week.length}, all marked ${weekSays}; the two-candidate form reads as two candidates, neither current ${twoForm}`);
+  } },
+  { id: "week-block-scrubbed", dimension: "carving", gap: "G764", title: "the week block of a pack withholds a carved value in a next step, as a read does", source: "audit v13 slice audit, medium", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  next_step: { value: "call Maple Trust Bank on 10 October", as_of: 2026-10-07, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-07 }\n---\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-qm", "owner: course c"], { cwd: root });
+    const helper = core.contextPack(root, "helper", "what is due this week?") as string, steward = core.contextPack(root, "steward", "what is due this week?") as string;
+    return ok(helper.includes("(projects/course-c)") && !helper.includes("Maple Trust") && steward.includes("call Maple Trust Bank on 10 October"), `helper has the line ${helper.includes("(projects/course-c)")}, the carved value ${helper.includes("Maple Trust")}; steward reads it whole ${steward.includes("call Maple Trust Bank on 10 October")}`);
+  } },
+  { id: "calendar-next-scrubbed", dimension: "carving", gap: "G765", title: "a next step served from the calendar is scrubbed of carved values when reads come from cells", source: "audit v13 slice audit, medium", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts")), pull = await import(join(SRC_DIR, "pull.ts")), cell = await import(join(SRC_DIR, "cell.ts"));
+    const YAML = (await import("yaml")).default;
+    const root = sandbox("synthetic");
+    const f = join(root, "projects", "course-a.md");
+    writeFileSync(f, readFileSync(f, "utf8").replace(/next_step: \{ value: [^,]+,/, "next_step: { value: Grade the midterm by 2026-10-05,"));
+    writeFileSync(join(root, "cal.json"), JSON.stringify([{ id: "next1", etag: '"2"', status: "confirmed", summary: "Course A fees with Maple Trust Bank", start: { dateTime: "2026-10-14T18:30:00-04:00" }, location: "Room 12" }]));
+    writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "cal.json", upcoming: true } } }));
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-qm", "owner: calendar"], { cwd: root });
+    const was = cell.cellsOn(), dirWas = process.env.PB_UPCOMING_DIR;
+    process.env.PB_UPCOMING_DIR = mkdtempSync(join(tmpdir(), "pb-eval-upcoming-")); // the calendar cache lives outside the brain
+    try {
+      cell.useCells(true);
+      cell.buildCells(root);
+      await pull.pullSource(root, "cal", { model: null });
+      const got = (agent: string) => `${JSON.stringify(core.readNote(root, agent, "projects/course-a"))}\n${core.contextPack(root, agent, "Course A")}`;
+      const helper = got("helper"), steward = got("steward");
+      return ok(helper.includes("(from the calendar)") && !helper.includes("Maple Trust") && steward.includes("Course A fees with Maple Trust Bank"), `helper is served the event ${helper.includes("(from the calendar)")}, the carved value ${helper.includes("Maple Trust")}; steward reads it whole ${steward.includes("Course A fees with Maple Trust Bank")}`);
+    } finally { cell.useCells(was); if (dirWas === undefined) delete process.env.PB_UPCOMING_DIR; else process.env.PB_UPCOMING_DIR = dirWas; }
+  } },
+  { id: "owner-book-held-value", dimension: "carving", gap: "G766", title: "the owner's own page shows a held value in its week only on a fresh sign-in", source: "audit v13 slice audit, medium", run: async () => {
+    const data = await import(join(SRC_DIR, "dashboard", "data.ts")), book = await import(join(SRC_DIR, "dashboard", "owner-book.ts"));
+    const root = sandbox("synthetic");
+    writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: { value: "physio appointment for the knee on 10 October", unseen: true, as_of: 2026-10-07, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: planner, recorded: 2026-10-07 }\n---\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: root });
+    Bun.spawnSync(["git", "-c", "user.name=planner", "-c", "user.email=p@x", "commit", "-qm", "planner: course c"], { cwd: root });
+    const was = process.env.PB_NOW;
+    process.env.PB_NOW = `${TODAY}T14:00:00Z`;
+    try {
+      const lines = (fresh: boolean) => { const w = book.ownerBook(data.loadState(root), fresh).week; return [...w.past, ...w.days.flatMap((d: any) => d.lines), ...w.later, ...w.next].map((l: any) => l.what).join("\n"); };
+      const stale = lines(false).includes("physio"), fresh = lines(true).includes("physio");
+      return ok(!stale && fresh, `shown on a stale sign-in ${stale}; shown on a fresh one ${fresh}`);
+    } finally { if (was === undefined) delete process.env.PB_NOW; else process.env.PB_NOW = was; }
+  } },
   { id: "value-key-keeps-names-and-signs", dimension: "conflicts", gap: "G759", title: "values that differ in a name, tense, number, sign or currency are never one value; a reworded sentence still is", source: "audit v13, trust defect 4", run: async () => {
     const differ: [string, string][] = [["Send the signed lease to Robert on Friday", "Send the signed lease to Roberts on Friday"], ["The team moves to France in the spring", "The team moves to Frances in the spring"], ["The permit expires at the end of March", "The permit expired at the end of March"], ["The tenant agreed to the new lease terms", "The tenants agree to the new lease terms"], ["The lease is being signed by both parties", "The lease is signed by both parties"], ["-740", "740"], ["$740", "\u20ac740"]];
     const same: [string, string][] = [["Use each sign-in client to retain in a partner sign-in flow", "use each sign-in client to be retained in a partner sign-in flow"], ["Ship the beta to the testers on Friday.", "ship beta to testers on friday"], ["2026-10-05", "2026 10 05"]];

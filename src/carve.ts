@@ -730,10 +730,15 @@ export function factSummary(attr: string, f: Fact, type: string, rules: Rules, n
   if (isDisputed(f)) return [`- **${attr}** [disputed ${f.dispute}]:`, ...f.candidates.map((c) => `  - candidate: ${fmt(c)}`)];
   if (isList(f)) {
     const live = f.items.filter((i) => !i.valid_to);
-    return [`- **${attr}** [${fr}]:`, ...live.map((i) => `  - ${fmt(i)}`)];
+    // An item a conflict waits beside says so on its own line (G757).
+    return [`- **${attr}** [${fr}]:`, ...live.map((i) => `  - ${fmt(i)}${typeof i.contested === "string" ? ` [${CONTESTED}]` : ""}`)];
   }
-  return [`- **${attr}** [${fr}]: ${fmt(f as FactRecord)}`];
+  // A conflict waits beside this live value (`contested`, G425): the line says so itself, since a
+  // pack drops the hub's sentence that used to (audit v13, G757). Which value waits is the owner's.
+  const waits = typeof (f as FactRecord).contested === "string" ? `; ${CONTESTED}` : "";
+  return [`- **${attr}** [${fr}${waits}]: ${fmt(f as FactRecord)}`];
 }
+export const CONTESTED = "a different value is waiting to be checked";
 
 // Words the agent is shown anyway (titles and visible fact values), squashed. A fragment of a
 // carved value made only of these isn't distinctive enough to count as a leak.

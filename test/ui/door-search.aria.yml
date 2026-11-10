@@ -14,13 +14,13 @@
         - /url: /b/notes/projects%2Fdesigner-hire
       - text: "projects/designer-hire · project #### From its facts Senior designer hire is final round.[^pf-status] The lead of Senior designer hire is [[people/felix-moreau|Felix Moreau]].[^pf-lead] Due for"
     - listitem:
-      - link "Atlas launch":
-        - /url: /b/notes/projects%2Fatlas-launch
-      - text: "projects/atlas-launch · project #### From its facts Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3"
-    - listitem:
       - link "Harbourline Software":
         - /url: /b/notes/orgs%2Fharbourline
       - text: "orgs/harbourline · org #### From its facts Harbourline Software's kind is software company.[^pf-kind] Harbourline Software's city is Montréal.[^pf-city] [[people/priya-shah|Priya Shah"
+    - listitem:
+      - link "Atlas launch":
+        - /url: /b/notes/projects%2Fatlas-launch
+      - text: "projects/atlas-launch · project #### From its facts Atlas launch is in beta.[^pf-status] The lead of Atlas launch is [[people/robin-lefebvre|Robin Lefebvre]].[^pf-lead] Due for Atlas launch: 3"
     - listitem:
       - link "Kenji Watanabe":
         - /url: /b/notes/people%2Fkenji-watanabe

@@ -458,6 +458,8 @@ function agentRecord(r: FactRecord, agent: string, res: CarveResult, mask?: (s: 
   if (out.ended_by) delete (out.ended_by as { by?: string }).by;
   if (out.retired) delete (out.retired as { by?: string }).by;
   if (out.share_with) out.share_with = [agent];
+  // That a conflict waits is the reader's to know (G757); which one is the hub's own id.
+  if (typeof out.contested === "string") out.contested = "waiting";
   return out;
 }
 

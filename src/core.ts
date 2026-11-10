@@ -11,7 +11,7 @@ import type { Note, Fact, FactRecord, SourceRef } from "./brain";
 import { neighbours, neighbourLines, connectedLine, NEIGHBOURS_SHOWN } from "./links";
 import { loadBrain, reloadNotes, parseNote, saveNote, today, isList, isDisputed, sensitivityRank, linksIn } from "./brain";
 import { loadRules, attributeSpec, ownerName, isOwnerWord, type Rules } from "./rules";
-import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, type CarveResult, type Visible } from "./carve";
+import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, CONTESTED, type CarveResult, type Visible } from "./carve";
 import { sensitiveShape } from "./shape";
 import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage, summaryShown, namesOut, withholdNames, nameMasked, factScrub } from "./view";
 import { contextBudget, tokensOf, fitBlocks, cutLine } from "./context";
@@ -85,6 +85,18 @@ function authorize(root: string, agent: string): Rules {
 // seconds (docs/perf.md). Read paths only read what they get: the notes are shared and frozen.
 const cellSnapshots = new Map<string, { key: string; gen: number; snap: { notes: Note[]; stored: Note[]; rules: Rules; res: CarveResult } }>();
 
+// A next step served from the calendar is put on a cell's note after the cell was scrubbed, so its
+// event title is scrubbed here against the agent's own carve of the hub's brain, as the cell's text
+// was (audit v13 slice audit, G765). Only the notes the calendar changed are touched.
+function calendarScrubbed(root: string, agent: string, rules: Rules, slices: string[], stored: Note[], notes: Note[]): Note[] {
+  if (notes === stored || !notes.some((n, i) => n !== stored[i])) return notes;
+  const grant = grantFor(rules, agent);
+  grant.slices = slices;
+  const hub = carve(loadBrain(root, { shared: true }), rules, grant, { flags: false });
+  return notes.map((n, i) => n === stored[i] ? n : { ...n, fm: { ...n.fm, facts: Object.fromEntries(Object.entries(n.fm.facts ?? {}).map(([a, f]) =>
+    [a, !isList(f) && !isDisputed(f) && (f as FactRecord).by === "calendar" && f !== stored[i].fm.facts?.[a] ? { ...(f as FactRecord), value: scrubLeaves((f as FactRecord).value, hub) } : f])) } });
+}
+
 function snapshot(root: string, agent: string): { notes: Note[]; rules: Rules; res: CarveResult } {
   const rules = authorize(root, agent);
   if (cellsOn()) {
@@ -99,7 +111,7 @@ function snapshot(root: string, agent: string): { notes: Note[]; rules: Rules; r
     // After an in-place update only its files are read again (src/cell.ts).
     const changed = hit ? cellChangesSince(dir, hit.gen) : undefined;
     const stored = changed ? reloadNotes(dir, hit!.snap.stored, changed) : loadBrain(dir, { shared: true });
-    const notes = withUpcoming(stored, cellRules, loadUpcoming(root));
+    const notes = calendarScrubbed(root, agent, rules, info.slices, stored, withUpcoming(stored, cellRules, loadUpcoming(root)));
     const grant = grantFor(cellRules, agent);
     grant.slices = ["all"]; // the cell's own policy; FGA was applied when the cell was built
     // `all` never reaches the probe area (carve.ts), but a decoy in this cell is there because the
@@ -217,17 +229,27 @@ function weekBlock(res: CarveResult, rules: Rules, keep?: (id: string) => boolea
   const w = weekOf(notes, rules, [], day, title);
   const ids = new Set<string>();
   const say = (l: WeekLine, dated = true) => {
-    if (l.page) ids.add(l.page);
     const d = l.day ? `${l.day} ${DOW[new Date(`${l.day}T00:00:00Z`).getUTCDay()]}${l.time ? ` ${l.time}` : ""}: ` : "";
     const src = l.record ? ` (${reference({ ...l.record, sources: (l.record.sources ?? []).slice(0, 1).map((x) => readerSource(x, res.grant.agent)) })})` : "";
-    return `- ${dated ? d : ""}${l.page ? `${title(l.page) ?? l.page} (${l.page}): ` : ""}${l.what}${src}`;
+    // One side of a conflict that waits for the owner is never the week's plain fact (G757).
+    const waits = typeof l.record?.contested === "string" ? ` [${CONTESTED}]` : "";
+    // The line's words are a fact's value: scrubbed here as on any read (reads from a cell hold
+    // them scrubbed already; the CLI's --as and serve --no-cells don't; audit v13, G764).
+    // A bare id of a page out of view is redacted like a link (scrubLeaves), and a line whose
+    // words are withheld whole is left out: its day alone would say when the hidden thing is.
+    const what = String(scrubLeaves(l.what, res));
+    if (what.trim() === "[withheld]") return undefined;
+    if (l.page) ids.add(l.page);
+    return `- ${dated ? d : ""}${l.page ? `${title(l.page) ?? l.page} (${l.page}): ` : ""}${what}${waits}${src}`;
   };
+  // A section whose every line was left out prints no heading.
   const lines: string[] = [];
-  if (w.past.length) lines.push("Past due:", ...w.past.slice(0, WEEK_CAPS.past).map((l) => say(l)));
-  const days = w.days.flatMap((d) => d.lines.slice(0, WEEK_CAPS.day)).map((l) => say(l));
-  if (days.length) lines.push(...(w.past.length ? ["This week:"] : []), ...days);
-  if (w.later.length) lines.push("Coming up:", ...w.later.slice(0, WEEK_CAPS.later).map((l) => say(l)));
-  if (w.next.length) lines.push("Next steps with no date:", ...w.next.slice(0, WEEK_CAPS.next).map((l) => say(l, false)));
+  const section = (head: string | undefined, ls: string[]) => { if (ls.length) lines.push(...(head ? [head] : []), ...ls); };
+  const past = w.past.slice(0, WEEK_CAPS.past).flatMap((l) => say(l) ?? []);
+  section("Past due:", past);
+  section(past.length ? "This week:" : undefined, w.days.flatMap((d) => d.lines.slice(0, WEEK_CAPS.day)).flatMap((l) => say(l) ?? []));
+  section("Coming up:", w.later.slice(0, WEEK_CAPS.later).flatMap((l) => say(l) ?? []));
+  section("Next steps with no date:", w.next.slice(0, WEEK_CAPS.next).flatMap((l) => say(l, false) ?? []));
   if (!lines.length) return undefined;
   return { text: [`## Your week, ${w.from} to ${w.to}`, "Built from the notes you hold: each line is one fact, with its note id and source. Nothing else is dated in your view.", ...lines].join("\n"), ids: [...ids] };
 }

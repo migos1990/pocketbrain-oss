@@ -443,3 +443,16 @@ test("must never: an agent's own new page tells it whether a same-title page kep
   expect(seen(true)).toEqual(seen(false));
   expect(seen(false).hits).toEqual(["Harbour refit"]);
 });
+
+test("contract carve: a fact with a conflict waiting beside it never renders as plainly current (G757)", () => {
+  const root = makeBrain();
+  note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active",
+    `  next_step: { value: Book the room, contested: c-9001, as_of: 2026-10-07, ${SRC} }\n  room: { value: Hall B, as_of: 2026-10-07, ${SRC} }`);
+  const md = (core.readNote(root, "helper", "projects/course-c") as { markdown: string }).markdown;
+  const line = (attr: string) => md.split("\n").find((l) => l.startsWith(`- **${attr}**`))!;
+  expect(line("next_step")).toContain("; a different value is waiting to be checked]");
+  expect(line("room")).not.toContain("waiting to be checked");
+  // The conflict's id is the hub's own: never in what an agent reads.
+  expect(md).not.toContain("c-9001");
+  expect(JSON.stringify(core.readNote(root, "helper", "projects/course-c"))).not.toContain("c-9001");
+});
