@@ -1,0 +1,218 @@
+[
+  {
+    "agent": "claude",
+    "door": "check",
+    "sets": {
+      "usefulness": {
+        "asked": 24,
+        "answered": 5
+      },
+      "use": {
+        "asked": 10,
+        "answered": 5
+      }
+    },
+    "all": {
+      "asked": 34,
+      "answered": 10
+    },
+    "pointers": 5,
+    "tokens": {
+      "median": 1548,
+      "perAnswer": 6877
+    },
+    "noise": 69
+  },
+  {
+    "agent": "chatgpt",
+    "door": "check",
+    "sets": {
+      "usefulness": {
+        "asked": 24,
+        "answered": 5
+      },
+      "use": {
+        "asked": 10,
+        "answered": 5
+      }
+    },
+    "all": {
+      "asked": 34,
+      "answered": 10
+    },
+    "pointers": 3,
+    "tokens": {
+      "median": 1548,
+      "perAnswer": 6873
+    },
+    "noise": 69
+  },
+  {
+    "agent": "gemini",
+    "door": "check",
+    "sets": {
+      "usefulness": {
+        "asked": 25,
+        "answered": 4
+      },
+      "use": {
+        "asked": 10,
+        "answered": 6
+      }
+    },
+    "all": {
+      "asked": 35,
+      "answered": 10
+    },
+    "pointers": 7,
+    "tokens": {
+      "median": 1763,
+      "perAnswer": 6479
+    },
+    "noise": 66
+  },
+  {
+    "agent": "claude",
+    "door": "pack",
+    "sets": {
+      "usefulness": {
+        "asked": 24,
+        "answered": 20
+      },
+      "use": {
+        "asked": 10,
+        "answered": 10
+      }
+    },
+    "all": {
+      "asked": 34,
+      "answered": 30
+    },
+    "pointers": 3,
+    "tokens": {
+      "median": 1677,
+      "perAnswer": 1982
+    },
+    "noise": 77
+  },
+  {
+    "agent": "chatgpt",
+    "door": "pack",
+    "sets": {
+      "usefulness": {
+        "asked": 24,
+        "answered": 18
+      },
+      "use": {
+        "asked": 10,
+        "answered": 10
+      }
+    },
+    "all": {
+      "asked": 34,
+      "answered": 28
+    },
+    "pointers": 3,
+    "tokens": {
+      "median": 1737,
+      "perAnswer": 2117
+    },
+    "noise": 76
+  },
+  {
+    "agent": "gemini",
+    "door": "pack",
+    "sets": {
+      "usefulness": {
+        "asked": 25,
+        "answered": 12
+      },
+      "use": {
+        "asked": 10,
+        "answered": 7
+      }
+    },
+    "all": {
+      "asked": 35,
+      "answered": 19
+    },
+    "pointers": 4,
+    "tokens": {
+      "median": 1622,
+      "perAnswer": 2334
+    },
+    "noise": 71
+  },
+  {
+    "agent": "claude",
+    "door": "search",
+    "sets": {
+      "usefulness": {
+        "asked": 24,
+        "answered": 19
+      },
+      "use": {
+        "asked": 10,
+        "answered": 10
+      }
+    },
+    "all": {
+      "asked": 34,
+      "answered": 29
+    },
+    "pointers": 4,
+    "tokens": {
+      "median": 3626,
+      "perAnswer": 4460
+    },
+    "noise": 80
+  },
+  {
+    "agent": "chatgpt",
+    "door": "search",
+    "sets": {
+      "usefulness": {
+        "asked": 24,
+        "answered": 17
+      },
+      "use": {
+        "asked": 10,
+        "answered": 10
+      }
+    },
+    "all": {
+      "asked": 34,
+      "answered": 27
+    },
+    "pointers": 4,
+    "tokens": {
+      "median": 3606,
+      "perAnswer": 4659
+    },
+    "noise": 79
+  },
+  {
+    "agent": "gemini",
+    "door": "search",
+    "sets": {
+      "usefulness": {
+        "asked": 25,
+        "answered": 9
+      },
+      "use": {
+        "asked": 10,
+        "answered": 7
+      }
+    },
+    "all": {
+      "asked": 35,
+      "answered": 16
+    },
+    "pointers": 6,
+    "tokens": {
+      "median": 2770,
+      "perAnswer": 6001
+    },
+    "noise": 77
+  }
+]

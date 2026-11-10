@@ -107,6 +107,7 @@ import * as quizplan from "./quizplan";
 import * as fillMod from "./fill";
 import { examRun } from "./exam";
 import { runGolden } from "./golden";
+import { scoreUsefulness, countsText, detailText } from "./usefulness";
 import { importMemory, skippedMemory, afterImport, ME } from "./memimport";
 import { listHandoffs, decideHandoff } from "./handoff";
 import * as edge from "./edge";
@@ -306,6 +307,8 @@ const USAGE = `pocketbrain <command>
   fga model | sync [--apply] | check <agent>   (model saves its model_id) OpenFGA as a second lock on slices (docs/fga.md)
   golden [agent] [--file f] [--json]   the golden set: the owner's weekly questions (evals/weekly.yaml in the
                                      brain) through each agent's view; top 5, the expected fact, fresh
+  usefulness [agent] [--counts] [--json]   how many questions each assistant can answer from its context pack
+                                     and from search then read, in how many tokens, how much noise (report only)
   exam [agent] [--days 7] [--quiz [--n 3]]   memory exam: each agent's memory against the brain, brain-first
                                      reads, citations, slice; weekly in start -> digest/exam-<date>.md
   memsync off|on [part…] | run [agent] | scan <agent> | report <agent> [--json] | quiz <agent> | list | approve <id> | decline <id> | key | import <agent|me> [files] | ask <agent> | pointers <agent> | brainfirst [days]
@@ -1374,6 +1377,12 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     const r = runGolden(root, { agent: args[0] && !args[0].startsWith("--") ? args[0] : undefined, file: arg(args, "--file") });
     console.log(args.includes("--json") ? JSON.stringify(r.rows) : r.text);
     return r.file && !r.rows.some((x) => x.grade === "fail") ? 0 : 1;
+  }
+  if (cmd === "usefulness") {
+    // The usefulness number (src/usefulness.ts): report-only, never logged as an agent's read.
+    const s = scoreUsefulness(root, { ...(args[0] && !args[0].startsWith("--") ? { agents: [args[0]] } : {}), ...(arg(args, "--file") ? { file: arg(args, "--file") } : {}) });
+    console.log(args.includes("--json") ? JSON.stringify(s.agents) : args.includes("--counts") ? countsText(s) : detailText(s));
+    return 0;
   }
   if (cmd === "exam") {
     // The memory exam (src/exam.ts): each agent's own memory against the brain, from the logs.

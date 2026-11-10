@@ -1,0 +1,33 @@
+# The usefulness set for the demo brain (src/usefulness.ts, docs/prove-the-loop.md#usefulness):
+# twenty-five questions an assistant would ask about Robin, made up for the demo brain only. Each names
+# what an answer needs: a fact (note#attribute, its live value must be in the pack), words the pack
+# must hold (says), or a note it must bring (notes). The real brain's set lives in that brain's
+# evals/usefulness.yaml, never here.
+questions:
+  - { id: who-maya, q: "who is Maya Chen?", facts: [people/maya-chen#role, people/maya-chen#org] }
+  - { id: atlas-next, q: "what's the next step on the Atlas launch?", facts: [projects/atlas-launch#next_step] }
+  - { id: atlas-launch-day, q: "when does Atlas launch publicly?", facts: [projects/atlas-launch#due] }
+  - { id: kitchen-lead, q: "who leads the kitchen renovation?", facts: [projects/kitchen-renovation#lead] }
+  - { id: kitchen-payment, q: "how much is the next kitchen payment, and when?", facts: [money/kitchen-budget#next_payment] }
+  - { id: why-northgate, q: "why did we pick Northgate for the pricing page?", facts: [decisions/2026-09-22-pick-northgate#why] }
+  - { id: red-river-when, q: "which week is the Red River trip, and why that week?", facts: [decisions/2026-09-25-red-river-dates#chose, decisions/2026-09-25-red-river-dates#why] }
+  - { id: moms-move-next, q: "what's next for Mom's move?", facts: [projects/moms-move#next_step] }
+  - { id: helene-birthday, q: "when is Hélène's birthday?", facts: [people/helene-lefebvre#birthday] }
+  - { id: helene-moves-to, q: "where is my mother moving in December?", says: ["maison-des-pins"] }
+  - { id: ask-before-screen, q: "who should I ask before shipping a new screen?", says: ["the one to ask before anything ships with a new screen"] }
+  - { id: designer-hire, q: "where are we on the senior designer hire?", facts: [projects/designer-hire#status, projects/designer-hire#next_step] }
+  - { id: this-week, q: "what's on my plate this week?", facts: [projects/kitchen-renovation#next_step, projects/atlas-launch#next_step] }
+  - { id: daniel, q: "who is Daniel Okoro?", facts: [people/daniel-okoro#role] }
+  - { id: pinecrest-what, q: "what is Pinecrest Labs?", facts: [orgs/pinecrest-labs#kind] }
+  - { id: pinecrest-pilot, q: "how long is the Pinecrest pilot, and why?", facts: [decisions/2026-09-29-pinecrest-pilot-length#chose, decisions/2026-09-29-pinecrest-pilot-length#why] }
+  - { id: final-format, q: "what format are the final projects this term?", facts: [decisions/2026-09-10-final-project-format#chose] }
+  - { id: team-review, q: "what did we decide about the weekly team review?", facts: [decisions/2026-10-01-weekly-team-review#chose, decisions/2026-10-01-weekly-team-review#why] }
+  - { id: jordan, q: "who is Jordan Ellis to me?", facts: [people/jordan-ellis#relationship] }
+  - { id: kitchen-budget, q: "what does the kitchen cost in total?", facts: [money/kitchen-budget#total] }
+  # Harder ones (Louis's progress check, 2026-11-09): a who-do-I-ask answered by a person page,
+  # questions that span two pages, and a week question for the work-only assistant.
+  - { id: lakeshore-room, q: "who do I ask to move a room at Lakeshore?", says: ["books the rooms"], notes: [people/isabelle-roy] }
+  - { id: pricing-lead-org, q: "where does the person leading the pricing page work?", facts: [projects/pricing-page-refresh#lead, people/sofia-marquez#org] }
+  - { id: hannah-company, q: "what kind of company does Hannah work for?", facts: [people/hannah-becker#org, orgs/harbourline#kind] }
+  - { id: hire-lead-role, q: "what does the person running the designer hire do?", facts: [projects/designer-hire#lead, people/felix-moreau#role] }
+  - { id: work-week, q: "what's due for me this week?", as: [gemini], facts: [projects/pricing-page-refresh#next_step, projects/pinecrest-partnership#next_step, projects/designer-hire#next_step] }

@@ -24,9 +24,9 @@ test("a topic pack gives each fact once: the bullets, not the hub's sentences re
   expect(pack).not.toContain("[^pf-");
   // "See also" is the Connected line's job.
   expect(pack).not.toMatch(/See also \[\[/);
-  // How its pages are tied is not in the bullets: it stays, with its reference.
-  expect(atlas).toMatch(/work at \[\[orgs\/harbourline\|Harbourline Software\]\]\.\[\^p-rel-orgs-harbourline\]/);
-  expect(atlas).toContain("[^p-rel-orgs-harbourline]: ");
+  // How its pages are tied is the Connected line's too: the whole hub block leaves the pack (G768).
+  expect(atlas).not.toContain("[^p-rel-");
+  expect(atlas).toContain("Connected: ");
   // The person's own paragraph stays whole.
   expect(atlas).toContain("The Atlas launch is the big one this fall");
 }, 60_000);

@@ -783,6 +783,77 @@ const pullCases: Case[] = [
     const facts = brain.loadBrain(root).reduce((n: number, x: { fm: { facts?: object } }) => n + Object.keys(x.fm.facts ?? {}).length, 0);
     return ok(rows > 0 && rows === facts, `${rows} diary lines for ${facts} facts`);
   } },
+  { id: "usefulness-number", dimension: "upkeep", gap: "G767", title: "the usefulness number scores a question per assistant and door: answered, tokens, noise, and its counts name no question, note or value", source: "plans/next-level.md move 1 (owner 2026-11-09, i trust you to execute this plan)", run: async () => {
+    const u = await import(join(SRC_DIR, "usefulness.ts")).catch(() => undefined);
+    if (!u?.scoreUsefulness) return na("no usefulness score at this commit");
+    const root = sandbox("synthetic");
+    mkdirSync(join(root, "evals"), { recursive: true });
+    writeFileSync(join(root, "evals", "usefulness.yaml"), "questions:\n  - { id: a, q: \"what's next on Course A?\", facts: [projects/course-a#next_step] }\n  - { id: b, q: \"what's next on Course A?\", says: [\"no such words anywhere\"] }\n");
+    const s = u.scoreUsefulness(root, { agents: ["planner"], harvest: 0 });
+    const pack = s.agents.find((a: { door: string }) => a.door === "pack");
+    const counted = pack?.all.asked === 2 && pack.all.answered === 1 && pack.tokens.median > 0 && pack.noise >= 0;
+    const text = u.countsText(s);
+    const quiet = !/Course A|course-a|next on/.test(text);
+    return ok(counted && quiet, `one of two answered, tokens counted ${counted}; counts name nothing ${quiet}`);
+  } },
+  { id: "usefulness-memory-check-door", dimension: "upkeep", gap: "G769", title: "the usefulness number scores memory_check then read, the door assistants use most, and scoring it opens no feed", source: "next-level move 1 (the calls log: memory_check and read far above context_pack)", run: async () => {
+    const u = await import(join(SRC_DIR, "usefulness.ts")).catch(() => undefined);
+    const ms = await import(join(SRC_DIR, "memsync.ts"));
+    if (!u?.scoreUsefulness || !ms.previewFeed) return na("no memory_check door at this commit");
+    const { write } = await import(join(SRC_DIR, "write.ts"));
+    const root = sandbox("synthetic");
+    mkdirSync(join(root, "evals"), { recursive: true });
+    writeFileSync(join(root, "evals", "usefulness.yaml"), "questions:\n  - { id: a, q: \"what's next on Course A?\", facts: [projects/course-a#next_step] }\n");
+    ms.memoryCheck(root, "planner");
+    write(root, { kind: "fact", agent: "owner", id: "projects/course-a", attribute: "next_step", value: "Book the exam room", as_of: "2026-10-08", sources: ["owner:2026-10-08/notes"] }, { owner: true });
+    const log = join(root, "log", "memsync.jsonl"), before = readFileSync(log, "utf8");
+    const s = u.scoreUsefulness(root, { agents: ["planner"], harvest: 0, doors: ["check"] });
+    const door = s.agents.find((a: { door: string }) => a.door === "check");
+    const answered = door?.all.answered === 1;
+    const quiet = readFileSync(log, "utf8") === before;
+    return ok(answered && quiet, `the changed fact answered through memory_check then read ${answered}; nothing logged ${quiet}`);
+  } },
+  { id: "pack-paragraph-of-sixth", dimension: "retrieval", gap: "G771", title: "an answer that lives only in a paragraph of the sixth match reaches the pack", source: "usefulness --lost on the owner's brain: one retrieval question, its note sixth and given as facts only (accepted loss, 2026-11-09)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    const head = (id: string, title: string) => `---\nid: ${id}\ntype: project\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n---\n`;
+    // Six notes on the zephyr kite, the more they say it the higher they rank; only the last says where the spare is.
+    for (let i = 1; i <= 6; i++) writeFileSync(join(root, "projects", `zephyr-${i}.md`), `${head(`projects/zephyr-${i}`, `Zephyr kite part ${i}`)}${"The zephyr kite. ".repeat(8 - i)}${i === 6 ? "The spare zephyr line is in the blue box at Dana's." : ""}\n`);
+    const pack = core.contextPack(root, "planner", "zephyr kite");
+    const sixth = pack.includes("`projects/zephyr-6`");
+    const there = pack.includes("spare zephyr line is in the blue box");
+    return ok(sixth && there, `sixth note in the pack ${sixth}; its paragraph there ${there}`);
+  } },
+  { id: "pack-who-leads-with-person", dimension: "retrieval", gap: "G774", title: "a who-do-I-ask pack opens with the person, not the org they work at", source: "Louis's progress check, 2026-11-09 (who do I ask to move a room opened with the org)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    const fm = (id: string, type: string, title: string) => `---\nid: ${id}\ntype: ${type}\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n---\n`;
+    writeFileSync(join(root, "orgs", "bluewater-college.md"), `${fm("orgs/bluewater-college", "org", "Bluewater College")}Bluewater College, where the evening course runs. Bluewater has rooms on two floors; a room at Bluewater is booked a week ahead.\n`);
+    mkdirSync(join(root, "people"), { recursive: true });
+    writeFileSync(join(root, "people", "dana-fox.md"), `${fm("people/dana-fox", "person", "Dana Fox")}Dana books the rooms at Bluewater.\n`);
+    const pack = core.contextPack(root, "planner", "who do I ask to move a room at Bluewater?");
+    const first = pack.match(/^### .*`([^`]+)`$/m)?.[1];
+    return ok(first === "people/dana-fox" && pack.includes("`orgs/bluewater-college`"), `first block ${first}`);
+  } },
+  { id: "pack-anything-new-not-in-view", dimension: "retrieval", gap: "G775", title: "'anything new about X' is about X: with no X in view the pack says nothing matches", source: "Louis's progress check, 2026-11-09 (a trial assistant's 'anything new about the kitchen?' got five unrelated notes)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    writeFileSync(join(root, "projects", "intake-form.md"), `---\nid: projects/intake-form\ntype: project\ntitle: New intake form\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n---\nAnything new goes through the form; the latest version is on the shared drive.\n`);
+    const pack = core.contextPack(root, "planner", "anything new about the zephyr?");
+    const none = !/^### /m.test(pack) && pack.includes("Nothing in your view matches.");
+    const still = core.contextPack(root, "planner", "anything new about the intake form?").includes("`projects/intake-form`");
+    return ok(none && still, `nothing for the zephyr ${none}; the intake form still found ${still}`);
+  } },
+  { id: "pack-not-padded", dimension: "retrieval", gap: "G776", title: "a pack gives no fourth to sixth note that matched more weakly than the first", source: "Louis's progress check, 2026-11-09 (every pack five notes, also when three would do)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    const head = (id: string, title: string) => `---\nid: ${id}\ntype: project\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n---\n`;
+    writeFileSync(join(root, "projects", "quokka-plan.md"), `${head("projects/quokka-plan", "Quokka plan")}The quokka plan: three weeks, two people.\n`);
+    for (let i = 1; i <= 6; i++) writeFileSync(join(root, "projects", `plan-${i}.md`), `${head(`projects/plan-${i}`, `Plan ${i}`)}${"A plan. ".repeat(i)}\n`);
+    const pack = core.contextPack(root, "planner", "quokka plan");
+    const blocks = (pack.match(/^### /gm) ?? []).length;
+    return ok(pack.includes("`projects/quokka-plan`") && blocks <= 3, `${blocks} note blocks`);
+  } },
   { id: "home-set-aside-says-the-brain", dimension: "upkeep", gap: "G673", title: "a line the hub set aside (machine mail, a receipt) says the brain set it aside, never 'From today's email'", source: "Demo brain home at 390px, 2026-11-06 (set-aside line read From today's email)", run: async () => {
     const home = await import(join(SRC_DIR, "dashboard", "home.ts"));
     if (!home.SAID_COPY?.setAside) return na("no set-aside words at this commit");
@@ -1133,18 +1204,34 @@ const pullCases: Case[] = [
     const first = core.search(root, "steward", "Harbour walk")[0]?.id;
     return ok(first === "projects/harbour-walk", `first hit ${first}`);
   } },
-  { id: "pack-once-not-in-view", dimension: "upkeep", gap: "G699", title: "a topic pack gives each fact once, keeps how pages are tied, and an agent whose words no note in its view holds is told it isn't in its view", source: "audit v12 (every fact twice; a trial agent got weak notes and no not-in-my-view line)", run: async () => {
+  { id: "pack-once-not-in-view", dimension: "upkeep", gap: "G699", title: "a topic pack gives each fact once (since G768 the hub block leaves it whole), and an agent whose words no note in its view holds is told it isn't in its view", source: "audit v12 (every fact twice; a trial agent got weak notes and no not-in-my-view line)", run: async () => {
     const core = await import(join(SRC_DIR, "core.ts"));
     const retrieve = await import(join(SRC_DIR, "retrieve.ts"));
     if (!retrieve.onceOver) return na("no onceOver at this commit");
     const facts = "#### From its facts\nGrant report is drafting.[^pf-status] Ana Diaz and Ben Roy work at [[orgs/acme|Acme]].[^p-rel-orgs-acme] See also [[people/ana|Ana]].[^p-see-ana]\n[^pf-status]: Email, 2026-09-01 (gmail:f0000000000000c1)\n[^p-rel-orgs-acme]: Email, 2026-09-01 (gmail:f0000000000000c2)\n[^p-see-ana]: Email, 2026-09-01 (gmail:f0000000000000c3)";
     const once = retrieve.onceOver(facts);
-    const kept = once.includes("work at [[orgs/acme|Acme]]") && once.includes("[^p-rel-orgs-acme]: ") && !once.includes("is drafting") && !once.includes("See also") && !once.includes("[^pf-status]: ");
+    // G768: how pages are tied is the Connected line's job too, so nothing of the block is left.
+    const kept = once === "";
     const mine = retrieve.onceOver("A paragraph a person wrote.[^pf-status]") === "A paragraph a person wrote.[^pf-status]";
     const root = sandbox("synthetic");
     const pack = core.contextPack(root, "helper", "zzqx glorbnik");
     const none = !pack.includes("Not in your view:") || pack.includes("not in my view");
-    return ok(kept && mine && none, `restating sentences out, ties kept ${kept}; a person's text untouched ${mine}; not-in-view line well formed ${none}`);
+    return ok(kept && mine && none, `hub block out ${kept}; a person's text untouched ${mine}; not-in-view line well formed ${none}`);
+  } },
+  { id: "pack-answers-asked", dimension: "upkeep", gap: "G768", title: "a context pack carries what the question asks: no hub block, one references line per note, no related words, five connected, the week only for time", source: "next-level move 1 (the usefulness number counted 80% of a pack as noise)", run: async () => {
+    const core = await import(join(SRC_DIR, "core.ts"));
+    const root = sandbox("synthetic");
+    const agent = "helper";
+    const any = core.contextPack(root, agent, "course");
+    const next = core.contextPack(root, agent, "what's next for the course");
+    const lines = any.split("\n");
+    const hub = any.includes("From its facts") || any.includes("[^p-rel-");
+    const defs = lines.some((l: string) => /^\[\^[^\]\s]+\]:/.test(l));
+    const related = any.includes("and related words");
+    const wide = lines.filter((l: string) => l.startsWith("Connected: ")).some((l: string) => (l.match(/`[^`]+`/g) ?? []).length > 5);
+    const week = next.includes("## Your week");
+    const found = any.includes("\n### ");
+    return ok(found && !hub && !defs && !related && !wide && !week, `notes found ${found}; hub block ${hub}; reference lines ${defs}; related words ${related}; connected over five ${wide}; week on "next" ${week}`);
   } },
   { id: "week-across-pages", dimension: "upkeep", gap: "G689", title: "an assistant asking about its week gets one dated block across pages, each line its note and source, and nothing its carve hides", source: "audit v12 (\"what's next this week?\" answered not at all); plans/next-level.md F1", run: async () => {
     const core = await import(join(SRC_DIR, "core.ts"));

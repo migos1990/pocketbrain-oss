@@ -290,6 +290,10 @@ async function main(argv: string[]): Promise<number> {
       const vb = northStarVerdict(nb.exitCode, NORTH_STAR_BLOCKING);
       if (vb) fail.push(vb.replace("north star:", "north star (real brain):"));
     } else console.log("north star (real brain): no brain here (set PB_NORTH_STAR_BRAIN to measure one)");
+    // The usefulness number (scripts/usefulness.ts, docs/prove-the-loop.md#usefulness): printed
+    // with its change from the saved run, so a branch says which way it moves it. Not blocking.
+    const us = Bun.spawnSync(["bun", "scripts/usefulness.ts", "--compare", "evals/baselines/usefulness.json"], { stdout: "pipe", stderr: "pipe" });
+    console.log(us.stdout.toString().trim() || `usefulness: didn't run (${us.stderr.toString().trim().split("\n").at(-1)})`);
     // A closed gap names the commit on main that closed it (audit v3: 14 of 15 named a branch that
     // resolves nowhere). A branch's own new gaps cite the branch until it lands; printed, not blocking.
     const { GAPS } = await import("../evals/gaps");

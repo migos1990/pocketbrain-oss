@@ -52,8 +52,10 @@ export function neighbourLines(n: Neighbours): string[] {
 }
 
 // context_pack's one line per hit: both directions together, linked-to first.
+// At most five in a pack (G768): the rest are one read away, and the note's own links say them.
+const CONNECTED_SHOWN = 5;
 export function connectedLine(n: Neighbours): string | undefined {
   const seen = new Set<string>();
   const both = [...n.linksTo, ...n.mentionedIn].filter((x) => !seen.has(x.id) && seen.add(x.id));
-  return both.length ? `Connected: ${named(both.slice(0, 8))}${both.length > 8 ? `, and ${both.length - 8} more (read this note for all)` : ""}` : undefined;
+  return both.length ? `Connected: ${named(both.slice(0, CONNECTED_SHOWN))}${both.length > CONNECTED_SHOWN ? `, and ${both.length - CONNECTED_SHOWN} more (read this note for all)` : ""}` : undefined;
 }

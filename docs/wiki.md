@@ -128,7 +128,7 @@ An assistant that may read a note's text also reads its summary: in `read`, in i
 
 `read` returns `parent` only when the parent page is in the assistant's slice. A hidden parent answers like no parent, and its id never reaches the assistant's cell.
 
-Links go both ways for an assistant too (`src/links.ts`). `read` returns `links_to` and `mentioned_in` (up to 20 each, with titles) and adds `Mentioned in:` and `Links to:` lines to its Markdown. `context_pack` adds one `Connected:` line to each hit (up to 8 notes), so the next hop is one `read` away. Only links the assistant can see count: a link in a body it may not read, or in a fact carved from its view, never shows, and a note outside its slice is never named. Like the dashboard's "Mentioned in", this is computed on each read and never stored.
+Links go both ways for an assistant too (`src/links.ts`). `read` returns `links_to` and `mentioned_in` (up to 20 each, with titles) and adds `Mentioned in:` and `Links to:` lines to its Markdown. `context_pack` adds one `Connected:` line to each hit (up to 5 notes, G768), so the next hop is one `read` away. Only links the assistant can see count: a link in a body it may not read, or in a fact carved from its view, never shows, and a note outside its slice is never named. Like the dashboard's "Mentioned in", this is computed on each read and never stored.
 
 `read` takes an optional `section` (a `## ` heading). It returns only that section and the references it cites. An unknown section is a 404 (`GET /v1/notes/<id>?section=<heading>` on the JSON API). `context_pack` still ranks whole notes; ranking by section is not built yet.
 

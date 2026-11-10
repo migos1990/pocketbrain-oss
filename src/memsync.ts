@@ -699,6 +699,17 @@ export function unseenChanges(root: string, agent: string, s: ReturnType<typeof 
   return targets(notes, rules, res).filter((t) => t.key in seen && seen[t.key] !== sig(t)).length;
 }
 
+// What the next change feed would list for an agent, built without logging anything or opening a
+// feed (the usefulness number's memory_check door, src/usefulness.ts). Empty before its first
+// memory_check, as the feed itself is.
+export function previewFeed(root: string, agent: string, s: ReturnType<typeof state> = state(root)): FeedItem[] {
+  const seen = s.seen.get(agent);
+  if (!seen) return [];
+  const { notes, rules, res } = agentView(root, agent);
+  return targets(notes, rules, res).filter((t) => t.key in seen && seen[t.key] !== sig(t)).slice(0, FEED_MAX)
+    .map((t) => ({ key: t.key, about: `${t.title}: ${t.attr.replace(/_/g, " ")}`, now: t.current.length ? t.current.join(", ") : null, was: t.old.slice(-3), ...(t.as_of ? { as_of: t.as_of } : {}), pointer: pointerText(t) }));
+}
+
 export interface Reply { answers?: { id: string; answer: string }[]; corrections?: { id: string; done: boolean; note?: string }[]; memory_dump?: { id: string; text: string }; changes_seen?: string; routine?: string }
 
 // The answers are graded here, by rule. Drift becomes a correction for the owner; a correction

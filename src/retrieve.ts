@@ -214,9 +214,14 @@ function makeIndex(res: CarveResult, rules: Rules, now: string, lean = false): I
 }
 
 export interface QueryTerm { t: string; w: number }
+// Words that ask how recent, not what about (G775): "anything new about the kitchen?" is about
+// the kitchen, and a note that says "new" or "anything" is no answer to it. Left in when they are
+// all the question has.
+const FILLER = new Set(["anything", "something", "new", "news", "latest", "recent", "update", "updates", "happening", "lately", "nouveau", "nouvelle", "nouvelles"].map(stem));
 export function queryTerms(q: string, synonyms = true): QueryTerm[] {
   const out = new Map<string, number>();
-  for (const t of terms(q)) {
+  const all = terms(q), asked = all.filter((t) => !FILLER.has(t));
+  for (const t of asked.length ? asked : all) {
     out.set(t, 1);
     if (synonyms) for (const s of SYN.get(t) ?? []) if (!out.has(s)) out.set(s, 0.6);
     if (synonyms && lexiconOn()) for (const s of LEX.get(t) ?? []) if (!out.has(s)) out.set(s, LEXICON_WEIGHT);
@@ -262,7 +267,7 @@ export const meaningOnly = (w: Why) => w.strength === "weak" && w.via.length ===
 export function whyLine(w: Why): string {
   if (meaningOnly(w)) return "Matched only by similar meaning, none of your words (weak: check it is what was asked before relying on it)";
   return w.strength === "weak" ? `Matched only related words: ${w.via.join(", ")} (weak: check it is what was asked before relying on it)`
-    : `Matched: ${w.matched.join(", ")}${w.via.length ? `, and related words ${w.via.join(", ")}` : ""} (${w.strength})`;
+    : `Matched: ${w.matched.join(", ")} (${w.strength})`;
 }
 
 export interface Ranked extends Why { id: string; title: string; type: string; area: string; score: number; match: string }
@@ -415,32 +420,18 @@ function bestChunks(idx: Index, d: Doc, qt: QueryTerm[], n: number): Chunk[] {
 
 // What context_pack returns for a topic: for each hit, its header and facts plus its best
 // matching paragraphs, in the note's own order, until the character budget is spent.
-// The pack says each fact once (audit v12, G699): a note's facts reach the agent as its bullets,
-// so the hub's "From its facts" block drops the sentences that only restate one ([^pf-…]) and its
-// "See also" sentences ([^p-see-…], the Connected line's job), with their references and its
-// made-by line. What the bullets don't say (how its pages are tied, [^p-rel-…]) stays. A block
-// left with nothing goes. Other text, a person's own, is never touched.
+// The pack says each fact once (audit v12, G699) and only what was asked (next-level move 1,
+// G768): a note's facts reach the agent as its bullets, and how its pages are tied as the
+// Connected line, so the hub's "From its facts" block leaves the pack whole, with its references
+// and its made-by line. Other text, a person's own, is never touched.
 const FACTS_HEAD = /^#{1,6} From its facts\s*$/;
 const FOOTDEF = /^\[\^([^\]\s]+)\]:/;
-const RESTATES = /^(pf-|p-see-)/;
+const RESTATES = /^(pf-|p-see-|p-rel-)/;
 export function onceOver(text: string): string {
   const lines = text.split("\n");
   // The made-by line on its own (chunkNote splits it off): the pack drops it as it does in the block.
   if (text.trim() === "(Written by the hub from this page's facts.)") return "";
-  if (!FACTS_HEAD.test(lines[0] ?? "")) return text;
-  const kept: string[] = [], used = new Set<string>(), defs: string[] = [];
-  for (const l of lines.slice(1)) {
-    if (FOOTDEF.test(l)) { defs.push(l); continue; }
-    if (l.trim() === "(Written by the hub from this page's facts.)" || !l.trim()) continue;
-    const said = l.split(/(?<=[.!?](?:\[\^[^\]\s]+\])*)\s+/).filter((x) => {
-      const refs = [...x.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!);
-      return refs.some((r) => !RESTATES.test(r));
-    });
-    for (const x of said) for (const m of x.matchAll(/\[\^([^\]\s]+)\]/g)) used.add(m[1]!);
-    if (said.length) kept.push(said.join(" "));
-  }
-  if (!kept.length) return "";
-  return [lines[0], ...kept, ...defs.filter((d) => used.has(d.match(FOOTDEF)![1]!))].join("\n");
+  return FACTS_HEAD.test(lines[0] ?? "") ? "" : text;
 }
 
 // The references of the sentences onceOver took out sit in their own paragraph: they go too,
@@ -450,8 +441,23 @@ function unusedRefsOut(body: string[]): string[] {
   return body.map((b) => b.split("\n").filter((l) => { const id = l.match(FOOTDEF)?.[1]; return !id || !RESTATES.test(id) || used.has(id); }).join("\n")).filter((b) => b.trim());
 }
 
+// A note's references, one line under its paragraphs (G768): "References: [^1] Email, 2026-08-10
+// (gmail:…); [^2] …", each only once and only if a paragraph left in the pack cites it.
+function oneRefsLine(body: string[]): string[] {
+  const defs = new Map<string, string>();
+  const text = body.map((b) => b.split("\n").filter((l) => { const m = l.match(FOOTDEF); if (m) { if (!defs.has(m[1]!)) defs.set(m[1]!, l.slice(m[0].length).trim()); return false; } return true; }).join("\n")).filter((b) => b.trim());
+  const cited = new Set(text.flatMap((b) => [...b.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1]!)));
+  const refs = [...defs].filter(([id]) => cited.has(id)).map(([id, v]) => `[^${id}] ${v}`);
+  if (!refs.length) return text;
+  return text.length ? [...text.slice(0, -1), `${text.at(-1)}\nReferences: ${refs.join("; ")}`] : [];
+}
+
 export const WEAK_ONLY_NOTES = 3;
-export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNote?: number; budget?: number; synonyms?: boolean; semantic?: Semantic; keep?: (id: string) => boolean; first?: (id: string) => boolean } = {}): { text: string; ids: string[]; blocks: string[]; left: string[]; meaningOnly: boolean; weakOnly: boolean } {
+const WHO = /(?:^|[^\p{L}])(?:who|whom|qui)(?![\p{L}])/iu;
+// How a topic pack is shaped: notes given whole, then as their facts alone, then named on one line.
+export interface PackShape { whole: number; brief: number; also: number; floor?: boolean }
+export const PACK_SHAPE: PackShape = { whole: 3, brief: 3, also: 2 };
+export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNote?: number; budget?: number; synonyms?: boolean; semantic?: Semantic; keep?: (id: string) => boolean; first?: (id: string) => boolean; shape?: PackShape } = {}): { text: string; ids: string[]; blocks: string[]; brief: number; left: string[]; also: { id: string; title: string }[]; meaningOnly: boolean; weakOnly: boolean } {
   const { notes = 8, chunksPerNote = 3, budget = 8000, keep, first } = opts;
   const qt = queryTerms(q, opts.synonyms ?? true);
   // With a keep test (a topic that names someone, G503) the ranking is read further down, so the
@@ -460,7 +466,24 @@ export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNot
   // No note in the view holds any of the asker's own words, only related ones (G700): the head
   // says so plainly, and three such notes are enough to show what was near.
   const weakOnly = ranked.length > 0 && ranked.every((h) => h.strength === "weak" && !meaningOnly(h));
-  const hits = weakOnly ? ranked.slice(0, WEAK_ONLY_NOTES) : ranked;
+  // The pack answers what was asked (next-level move 1, G768): the best three notes come whole, the
+  // next three as their facts alone, without sources, and with their Connected line, and the next
+  // two as one "also matching" line, each one read away. Paragraphs of notes the answer didn't need
+  // were most of the noise; a needed fact on the fourth to sixth note, or a note named only on its
+  // Connected line, still comes (the owner's brain lost three answers when they went). `shape` is for the usefulness number's comparison of shapes only.
+  const { whole, brief, also: alsoN } = opts.shape ?? PACK_SHAPE;
+  // A who question is answered by a person (G774): the best person among the notes the pack gives
+  // comes first, so "who do I ask to move a room at Lakeshore?" opens with the one who books the
+  // rooms, not the college. The rest keep their order below it.
+  const top = ranked.slice(0, weakOnly ? WEAK_ONLY_NOTES : whole + brief);
+  const person = WHO.test(q) ? top.findIndex((h) => h.type === "person") : -1;
+  const lead = person > 0 ? [top[person]!, ...top.filter((_, i) => i !== person)] : top;
+  // A shape with `floor` (measured by the usefulness number's --shapes, not the default) gives a
+  // fourth to sixth note only when it matched as strongly as the first (G776).
+  const order = { strong: 2, partial: 1, weak: 0 } as const;
+  const hits = opts.shape?.floor ? lead.filter((h, i) => i < whole || order[h.strength] >= order[lead[0]!.strength]) : lead;
+  const also = weakOnly ? [] : ranked.slice(whole + brief, whole + brief + alsoN).map((h) => ({ id: h.id, title: h.title }));
+  if (!weakOnly) also.unshift(...lead.filter((h) => !hits.includes(h)).map((h) => ({ id: h.id, title: h.title })));
   const parts: string[] = [];
   const ids: string[] = [];
   let used = 0;
@@ -479,17 +502,28 @@ export function pack(idx: Index, q: string, opts: { notes?: number; chunksPerNot
     const refsOnly = (t: string) => t.split("\n").every((l) => FOOTDEF.test(l) || !l.trim());
     const cites = new Set([...chosen].flatMap((c) => [...said.get(c)!.matchAll(/\[\^([^\]\s]+)\](?!:)/g)].map((m) => m[1]!)));
     const carried = [...said].filter(([c, t]) => !chosen.has(c) && refsOnly(t)).map(([, t]) => t.split("\n").filter((l) => cites.has(l.match(FOOTDEF)?.[1] ?? "")).join("\n")).filter((t) => t.trim());
-    const body = unusedRefsOut([...d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => said.get(c.chunk)!), ...carried]);
+    const body = oneRefsLine(unusedRefsOut([...d.chunks.filter((c) => chosen.has(c.chunk)).map((c) => said.get(c.chunk)!), ...carried]));
     // Paragraphs left out because they only restate facts, or only hold references, are not more to read.
     const omitted = [...said].filter(([c, t]) => !chosen.has(c) && !refsOnly(t)).length;
+    if (ids.length >= whole) {
+      // Its facts without their sources (its Cite as line names them), so a needed value costs little.
+      const facts = d.chunks[0].chunk.text.split("\n").map((l) => l.replace(/ \(as of [^()]*\)$/, "")).join("\n");
+      const block = [facts, whyLine(h), "", `(Its facts only here; read \`${d.id}\` for its text and sources.)`].join("\n");
+      if (used + block.length > budget) break;
+      parts.push(block); ids.push(d.id); used += block.length;
+      continue;
+    }
     const block = [d.chunks[0].chunk.text, whyLine(h), ...(body.length ? ["", ...body] : []), ...(omitted > 0 ? ["", `(${omitted} more paragraph${omitted > 1 ? "s" : ""} in this note; read \`${d.id}\` for all of it)`] : [])].join("\n");
     if (used && used + block.length > budget) break;
     parts.push(block);
     ids.push(d.id);
     used += block.length;
   }
-  // Matches the character budget left out, best first (the context budget names them, src/context.ts).
-  const left = hits.slice(ids.length).map((h) => h.id);
+  // A match the character budget left out is named on the also line ahead of the rest, so no
+  // match drops out of the pack unnamed (review of G768). The weak-only pack has no also line: its
+  // left-out matches stay with the context budget's cut line.
+  const left = weakOnly ? hits.slice(ids.length).map((h) => h.id) : [];
+  if (!weakOnly) also.unshift(...hits.slice(ids.length).map((h) => ({ id: h.id, title: h.title })));
   // Every match found only by meaning: none of the query's words is in the view (G372).
-  return { text: parts.join("\n\n"), ids, blocks: parts, left, meaningOnly: hits.length > 0 && hits.every(meaningOnly), weakOnly };
+  return { text: parts.join("\n\n"), ids, blocks: parts, brief: Math.max(0, ids.length - whole), left, also, meaningOnly: hits.length > 0 && hits.every(meaningOnly), weakOnly };
 }
