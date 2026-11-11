@@ -207,7 +207,8 @@ function sameFactKey(root: string, r: Partial<WriteRequest>, notes: Note[], rule
   return JSON.stringify([r.id ? `id:${r.id}` : `${type}:${compareKey(String(r.title ?? ""))}`, r.attribute, value]);
 }
 export interface InboxDoc { by?: string; reason?: string; at?: string; request?: WriteRequest; [k: string]: unknown }
-export interface InboxCard { file: string; doc: InboxDoc; twins: { file: string; doc: InboxDoc }[] }
+// seen: proposalSeen of the very bytes this card was read from (G784), so the card's words and its hash agree.
+export interface InboxCard { file: string; doc: InboxDoc; seen: string; twins: { file: string; doc: InboxDoc }[] }
 // The inbox as the owner sees it: oldest proposal first, its twins folded into it.
 export function inboxCards(root: string): InboxCard[] {
   const dir = join(root, "inbox");
@@ -219,8 +220,8 @@ export function inboxCards(root: string): InboxCard[] {
   // Oldest first, by when it was filed (not by its name, which starts with the agent's).
   const files = readdirSync(dir).filter((x) => x.endsWith(".yaml")).map((f) => ({ f, at: statSync(join(dir, f)).mtimeMs })).sort((a, b) => a.at - b.at || a.f.localeCompare(b.f)).map((x) => x.f);
   for (const f of files) {
-    let doc: InboxDoc = {};
-    try { doc = (YAML.parse(readFileSync(join(dir, f), "utf8")) ?? {}) as InboxDoc; } catch { continue; }
+    let doc: InboxDoc = {}, bytes = "";
+    try { bytes = readFileSync(join(dir, f), "utf8"); doc = (YAML.parse(bytes) ?? {}) as InboxDoc; } catch { continue; }
     // An agent's proposal that cites the owner's word, or was flagged for it, is never folded into
     // another card: it keeps its own card and warning, and is answered on its own. The hub's own
     // capture of something the owner said (checks: capture, which no agent can set) folds.
@@ -229,7 +230,7 @@ export function inboxCards(root: string): InboxCard[] {
     const key = doc.request && !ownerWord ? sameFactKey(root, doc.request, notes, rules) : undefined;
     const card = key ? byKey.get(key) : undefined;
     if (card) { card.twins.push({ file: f, doc }); continue; }
-    const fresh: InboxCard = { file: f, doc, twins: [] };
+    const fresh: InboxCard = { file: f, doc, seen: sha256(bytes).slice(0, 16), twins: [] };
     cards.push(fresh);
     if (key) byKey.set(key, fresh);
   }
@@ -359,7 +360,7 @@ const withOwner = (r: Rules): Rules => ({ ...r, policy: { ...r.policy, agents: {
 // Request-Id:) into its own commit, which other readers trust.
 const oneLine = (s: string): string => s.replace(/[\r\n\u0085\u2028\u2029]+/g, " ");
 
-export function write(root: string, req: WriteRequest, opts: { acceptedBy?: string; contest?: boolean; hold?: boolean; owner?: boolean; stranger?: boolean; pulled?: boolean } = {}): WriteResult {
+export function write(root: string, req: WriteRequest, opts: { acceptedBy?: string; contest?: boolean; hold?: boolean; owner?: boolean; stranger?: boolean; pulled?: boolean; reviewed?: boolean } = {}): WriteResult {
   const asOwner = opts.owner === true && req.agent === OWNER;
   if (opts.owner && !asOwner) return { outcome: "refused", message: "owner: only the owner's own word" };
   if (asOwner) opts = { ...opts, acceptedBy: OWNER, contest: false };
@@ -454,7 +455,15 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     const sees = !!n && ((!!opts.acceptedBy && !hubYes) || !!rules.policy.agents[req.agent]?.inside_wall || carve(notes, rules, grantFor(rules, req.agent), { flags: false }).visible.has(n.fm.id));
     if (!sees) return done({ outcome: "refused", message: `${agentInId.check}: ${agentInId.reason}. Fix: ${agentInId.fix}`, fails: [agentInId] });
   }
-  const toInbox = fails.filter((f) => f.outcome === "inbox" && !(f.check === "injection_shapes" && rest() && stored()));
+  // A check that sends a write to the owner ("the owner reviews this one") is answered by the
+  // owner's own Save it on that proposal: filing it again would put the same ask back on their
+  // screen with "you approved" on it, and every tap would only ask again (owner's phone, 2026-11-11:
+  // a booking mail's "approved" kept a new-note ask waiting after Save it). Refusals still refuse,
+  // and the hub's own yes (auto-decide) is no person's review.
+  // `reviewed` is set only by decideOne, for the one proposal whose exact bytes the owner's card
+  // showed (`proposalSeen`); no door passes write() options, so no assistant can set it.
+  const ownerReviewed = opts.reviewed === true && isOwnerId(opts.acceptedBy) && !asOwner;
+  const toInbox = ownerReviewed ? [] : fails.filter((f) => f.outcome === "inbox" && !(f.check === "injection_shapes" && rest() && stored()));
   if (toInbox.length) return done(propose(root, req, toInbox.map((f) => `${f.check}: ${f.reason}`).join("; "), toInbox));
 
   // Leak tripwire.
@@ -1526,13 +1535,22 @@ function writeJournal(root: string, req: WriteRequest): WriteResult {
 // had answered it alone, through its own request and every write check, in the order they came in.
 // `shown`: the twins the owner saw on the card. Only those are answered, and only while they are
 // still that card's twins; one filed after the card was drawn waits for its own answer.
-export function decideProposal(root: string, file: string, decision: "accept" | "reject", by = OWNER, shown: string[] = [], opts: { contest?: boolean; hold?: boolean } = {}): WriteResult {
+// What the owner's card showed of a proposal: a hash of its file as it was drawn. Sent back with
+// Save it (`opts.seen`), it lets that one accept stand for the owner's review of exactly those bytes.
+export function proposalSeen(root: string, file: string): string | undefined {
+  const path = join(root, file.startsWith("inbox/") ? file : `inbox/${file}`);
+  return existsSync(path) ? sha256(readFileSync(path, "utf8")).slice(0, 16) : undefined;
+}
+
+export function decideProposal(root: string, file: string, decision: "accept" | "reject", by = OWNER, shown: string[] = [], opts: { contest?: boolean; hold?: boolean; seen?: string } = {}): WriteResult {
   const name = file.split("/").pop()!;
   const now = new Set(inboxCards(root).find((c) => c.file === name)?.twins.map((t) => t.file) ?? []);
   const twins = [...new Set(shown.map((t) => t.split("/").pop()!))].filter((t) => now.has(t));
   const r = decideOne(root, file, decision, by, opts);
   if (r.outcome === "refused" || !twins.length) return r;
-  const more = twins.map((t) => decideOne(root, t, decision, by, opts));
+  // A twin's own words were never on the card: it is weighed with every check, as before.
+  const { seen: _seen, ...twinOpts } = opts;
+  const more = twins.map((t) => decideOne(root, t, decision, by, twinOpts));
   const done = more.filter((x) => decision === "reject" ? x.outcome !== "refused" : ["committed", "disputed", "noop"].includes(x.outcome)).length;
   const waiting = more.filter((x) => x.outcome !== "refused" && !["committed", "disputed", "noop"].includes(x.outcome)).length;
   const left = more.filter((x) => x.outcome === "refused");
@@ -1545,11 +1563,21 @@ export function decideProposal(root: string, file: string, decision: "accept" | 
 const ownerClaim = (r: WriteRequest): Partial<WriteRequest> =>
   isOwnerConfirmed(normVerification(r.verification)) && !(r.sources ?? []).map(refString).some(isExactLouisRef) ? { verification: "self-reported" } : {};
 
-function decideOne(root: string, file: string, decision: "accept" | "reject", by: string, opts: { contest?: boolean; hold?: boolean } = {}): WriteResult {
+function decideOne(root: string, file: string, decision: "accept" | "reject", by: string, opts: { contest?: boolean; hold?: boolean; seen?: string } = {}): WriteResult {
   const rel = file.startsWith("inbox/") ? file : `inbox/${file}`;
   const path = join(root, rel);
-  if (!existsSync(path)) return { outcome: "refused", message: `no proposal ${rel}` };
-  const p = YAML.parse(readFileSync(path, "utf8")) as { request: WriteRequest; decided?: string };
+  if (!existsSync(path)) {
+    // Answered already (a second tap, a page left open, the hub's filing on its minute tick): nothing
+    // to do, and nothing to tell the owner but that. Never the file's name.
+    // The owner's tap only: the hub's own filing keeps its refusal, so a race never counts as saved.
+    if (isOwnerId(by) && existsSync(join(root, "inbox", "decided", rel.split("/").pop()!))) return { outcome: "noop", message: "already answered" };
+    return { outcome: "refused", message: `no proposal ${rel}` };
+  }
+  const raw = readFileSync(path, "utf8");
+  // A card drawn from other bytes than the file now holds: the owner looks again (never saved unseen).
+  if (opts.seen !== undefined && opts.seen !== sha256(raw).slice(0, 16)) return { outcome: "refused", message: "changed since shown", fails: [{ check: "changed_since_shown", outcome: "refuse", reason: "the proposal changed after its card was drawn", fix: "reload and answer it again" }] };
+  const reviewed = decision === "accept" && isOwnerId(by) && opts.seen !== undefined;
+  const p = YAML.parse(raw) as { request: WriteRequest; decided?: string };
   // On a replica, Louis's answer is queued as a signed op; the hub applies it on the next sync.
   const q = queueOp(root, "inbox", by, { file: rel, decision }, `${decision} ${rel}`);
   if (q) return q;
@@ -1580,7 +1608,7 @@ function decideOne(root: string, file: string, decision: "accept" | "reject", by
     const via = typeof capRel === "string" ? captureVia(root, capRel) : undefined;
     const imported = typeof capRel === "string" && via === "import" && typeof p.request.agent === "string";
     const sent = imported ? { ...req, sources: asAgentWord(req.sources ?? [], String(p.request.agent)) } : req;
-    r = write(root, sent, { acceptedBy: by, contest: opts.contest, hold: opts.hold, stranger, pulled: typeof capRel === "string" && via !== "import" });
+    r = write(root, sent, { acceptedBy: by, contest: opts.contest, hold: opts.hold, stranger, pulled: typeof capRel === "string" && via !== "import", reviewed });
     if (r.outcome === "refused") return r;
     // The write handed it back to the owner as this very proposal (a conflict on a page with a
     // private fact): it stays in the inbox, never answered as accepted with nothing saved (G431).

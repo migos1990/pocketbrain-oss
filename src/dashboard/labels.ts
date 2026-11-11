@@ -188,7 +188,15 @@ export function questionWords(value: string): string | undefined {
 // again with that date"); an owner page says what happened in his words (owner, 2026-10-24: that
 // text printed at the top of his home page). Anything else passes through.
 const REFUSED = /^([a-z][a-z0-9_]*): .*(?:\. Fix: .*)?$/;
+// An ask answered already, or gone, as the owner hears it: never the inbox file's name
+// (owner's phone, 2026-11-11: "no proposal inbox/2026-11-11-instinct-….yaml" in red on Settings).
+export const ALREADY_ANSWERED = "Already answered.";
+export const NOT_WAITING = "That question isn't waiting any more. Nothing to do.";
+export const CHANGED_SINCE = "It changed since you saw it. Look at it again.";
+
 export function refusalWords(msg: string): string {
+  if (/^no proposal \S+/.test(String(msg ?? ""))) return NOT_WAITING;
+  if (msg === "changed since shown") return CHANGED_SINCE;
   // A proposal for a note since forgotten or renamed (the write's "no note X; give title, ...").
   if (/^no note \S+; give title/.test(String(msg ?? ""))) return "Not saved: the note it was for is no longer in your memory. Dismiss it.";
   const lines = String(msg ?? "").split("\n").filter(Boolean);

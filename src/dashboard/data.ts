@@ -47,7 +47,7 @@ function frontmatter(text: string): { fm: Row; body: string } {
 // (trial, area ownership, a conflict), not only when the reason names the registry check. A
 // capture's proposal cites the capture itself, which code made, so it never counts.
 // evidence: written by the hub (src/evidence.ts); source_check: the hub's own check of a cited link (src/pull.ts).
-export interface Proposal { file: string; by: string; reason: string; at?: string; request: Row; evidence?: Evidence; source_check?: { result: string; ref: string; quote?: string }; capture?: true; also?: { file: string; by: string; sources: string[]; level?: string; mismatch?: boolean }[]; unregistered: string[] }
+export interface Proposal { file: string; seen?: string; by: string; reason: string; at?: string; request: Row; evidence?: Evidence; source_check?: { result: string; ref: string; quote?: string }; capture?: true; also?: { file: string; by: string; sources: string[]; level?: string; mismatch?: boolean }[]; unregistered: string[] }
 export interface HeldMessage { id: string; day: string; from: string; to: string; subject: string; at: string; reasons: string[]; text: string; verdict: string }
 export interface DisputeRow { id: string; fact_key: string; status: string; created: string; sensitivity?: string; candidates: FactRecord[]; escalated?: Row; suggestion?: Row; answer?: Row; body: string; gardener_first?: string; gardener_seen?: string }
 export interface UpkeepRun { run: string; escalate: string[]; autoFix: string[]; review: string[]; undone: boolean }
@@ -72,13 +72,13 @@ function levelOf(r: Partial<WriteRequest> | undefined, lead: Partial<WriteReques
 export function proposals(root: string): Proposal[] {
   // One card per fact: proposals of the same value are one card; the others are listed under also.
   let reg: Set<string> | undefined;
-  return inboxCards(root).map(({ file, doc: p, twins }) => {
+  return inboxCards(root).map(({ file, doc: p, twins, seen }) => {
     const request = (p.request ?? {}) as Row;
     const cited = (p as Row).capture || isOwnerId(String(p.by)) ? [] : ((request.sources as unknown[] | undefined) ?? []).map((x) => refString(x as string)).filter(isExactLouisRef);
     reg ??= cited.length ? louisMessages(root) : undefined;
     return {
       // No by (reopened before G601): the request's agent, which the server set from the token.
-      file, by: String(p.by ?? request.agent ?? "?"), reason: `${(p as Row).leak ? "It carried a value this assistant can't see (you were alerted). " : ""}${String(p.reason ?? "")}`, at: p.at ? String(p.at) : undefined, request, unregistered: cited.filter((r) => !reg!.has(r)),
+      file, seen, by: String(p.by ?? request.agent ?? "?"), reason: `${(p as Row).leak ? "It carried a value this assistant can't see (you were alerted). " : ""}${String(p.reason ?? "")}`, at: p.at ? String(p.at) : undefined, request, unregistered: cited.filter((r) => !reg!.has(r)),
       ...((p as Row).capture ? { capture: true as const } : {}), ...(p.evidence ? { evidence: p.evidence as Evidence } : {}), ...(p.source_check ? { source_check: p.source_check as Proposal["source_check"] } : {}),
       ...(twins.length ? { also: twins.map((t) => ({ file: t.file, by: String(t.doc.by ?? "?"), ...((t.doc as Row).source_check && ((t.doc as Row).source_check as { result?: string }).result !== "match" ? { mismatch: true } : {}), sources: (t.doc.request?.sources ?? []).map((x) => refString(x)), ...levelOf(t.doc.request, p.request) })) } : {}),
     };

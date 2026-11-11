@@ -162,6 +162,9 @@ ul.book a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--hea
 ul.book .kind{flex:none;max-width:40%;text-align:right;font-size:13px;line-height:18px;color:var(--muted)}
 details{border-top:2px solid var(--text);margin:18px 0 0}
 details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:800}
+#who form[action$="note-sensitivity"]{display:flex;align-items:center;gap:18px;margin:10px 0 16px}
+#who select{font:inherit;font-size:17px;line-height:24px;color:var(--text);background:var(--paper);border:2px solid var(--text);border-radius:0;padding:0 10px;min-height:44px;flex:1;min-width:0}
+#who form[action$="note-sensitivity"] button{font:inherit;font-size:15px;line-height:20px;font-weight:800;color:var(--text);background:none;border:0;border-radius:0;padding:0;min-height:44px;cursor:pointer;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}
 dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:15px;line-height:22px}
 dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
 .seen{display:flex;gap:6px 14px;align-items:center;flex-wrap:wrap;margin:16px 0 0;padding:10px 0 0;border-top:2px solid var(--text);font-size:13px;line-height:18px;color:var(--muted)}

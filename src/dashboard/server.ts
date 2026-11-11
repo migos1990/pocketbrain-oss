@@ -262,8 +262,10 @@ function usePhoneLink(root: string, token: string, now: Date): boolean {
 // What an error says to the owner (audit v5): a refusal keeps its own words, never a file path;
 // anything else from inside the code is one plain sentence, the details in the hub's log.
 const PATHS = /(?:[A-Za-z]:)?(?:\/[\w.@~-]+){2,}\/?/g;
+// A path inside the brain (inbox/x.yaml, log/reads.jsonl): one folder deep is a file name too.
+const BRAIN_FILES = /\b[\w-]+(?:\/[\w.@-]+)+\.(?:ya?ml|md|jsonl?)\b/g;
 export function ownerFacingError(e: unknown): string {
-  if (e instanceof CoreError) return e.message.replace(PATHS, "a file");
+  if (e instanceof CoreError) return e.message.replace(PATHS, "a file").replace(BRAIN_FILES, "a file");
   return ownerError("dash.internal");
 }
 

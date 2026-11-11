@@ -7,7 +7,8 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { loadRules } from "../rules";
 import { git } from "../git";
-import { decideProposal, resolveEntity } from "../write";
+import { decideProposal, resolveEntity, proposalSeen } from "../write";
+import { sha256 } from "../util";
 import { loadBrain, slugify } from "../brain";
 import { TYPE_FOLDER } from "../checks";
 import { decideHeld, fileTransport, type MailTransport } from "../relay";
@@ -30,7 +31,7 @@ import { approve as approveFix, decline as declineFix } from "../memsync";
 import { standingAction, samePersonAction } from "./people";
 import { undoAuto } from "../filing";
 import { createInvite } from "../invite";
-import { refusalWords } from "./labels";
+import { refusalWords, ALREADY_ANSWERED } from "./labels";
 
 const listPendingIds = (root: string) => listPending(root).map((p) => p.client_id);
 
@@ -83,9 +84,15 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       // One card per fact: the twins this card showed are answered with it, no others.
       const shown = (f.twins ?? "").split(",").map((t) => t.trim()).filter(Boolean);
       if (shown.some((t) => !/^[A-Za-z0-9._-]+\.yaml$/.test(t))) throw new CoreError(400, "bad proposal name");
-      const r = decideProposal(root, file, action === "proposal-accept" ? "accept" : "reject", undefined, shown);
+      // The card's hash of what it showed (proposalSeen): Save it stands for the owner's review of those bytes.
+      const seen = /^[0-9a-f]{16}$/.test(f.seen ?? "") ? f.seen : undefined;
+      const r = decideProposal(root, file, action === "proposal-accept" ? "accept" : "reject", undefined, shown, action === "proposal-accept" && seen ? { seen } : {});
       if (r.outcome === "refused") throw new CoreError(422, refusalWords(r.message));
-      return action === "proposal-reject" ? `rejected ${file}` : r.message;
+      // A second tap, or a page left open after the hub filed it: said once, plainly (owner's phone, 2026-11-11).
+      if (r.outcome === "noop" && r.message === "already answered") return ALREADY_ANSWERED;
+      if (action === "proposal-reject") return "Not saved.";
+      // What the write said is for the log; the owner hears what happened to their answer.
+      return r.outcome === "committed" || r.outcome === "noop" ? "Saved." : r.outcome === "disputed" ? "Saved. It differs from what your memory held, so it waits on your home to settle." : "It still waits for a look here.";
     }
     // A proposal by a name that fits a page and a new one (G603): the owner says which, and only
     // then is it accepted; accepting it as it stands would only ask the same question again (G705).
@@ -93,8 +100,13 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       const file = need("file"), to = need("to");
       if (!/^[A-Za-z0-9._-]+\.yaml$/.test(file)) throw new CoreError(400, "bad proposal name");
       const path = join(root, "inbox", file);
-      if (!existsSync(path)) throw new CoreError(404, `no proposal ${file}`);
+      if (!existsSync(path)) {
+        if (existsSync(join(root, "inbox", "decided", file))) return ALREADY_ANSWERED;
+        throw new CoreError(404, refusalWords(`no proposal inbox/${file}`));
+      }
       const was = readFileSync(path, "utf8");
+      // The placed proposal is the one the card showed, plus the page the owner picked.
+      const sawIt = /^[0-9a-f]{16}$/.test(f.seen ?? "") && f.seen === sha256(was).slice(0, 16);
       const p = YAML.parse(was) as { request?: { id?: unknown; title?: unknown; type?: unknown } };
       const r = p?.request;
       if (!r || r.id || typeof r.title !== "string" || typeof r.type !== "string" || !TYPE_FOLDER[r.type]) throw new CoreError(409, "This change already says which page it is for.");
@@ -108,7 +120,7 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       r.id = to === "new" ? id : to;
       writeFileSync(path, YAML.stringify(p, { aliasDuplicateObjects: false }));
       let res: ReturnType<typeof decideProposal> | undefined;
-      try { res = decideProposal(root, file, "accept"); } finally { if (!res || res.outcome === "refused") writeFileSync(path, was); }
+      try { res = decideProposal(root, file, "accept", undefined, [], sawIt ? { seen: proposalSeen(root, file) } : {}); } finally { if (!res || res.outcome === "refused") writeFileSync(path, was); }
       if (res.outcome === "refused") throw new CoreError(422, refusalWords(res.message));
       return res.message;
     }

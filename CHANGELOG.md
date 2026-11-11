@@ -14,6 +14,8 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- Save it on an ask your memory sent you to check now saves it. Before, a booking mail that said "approved" came back as the same ask after every Save it, and a second tap showed a red line with a file name; an ask already answered now says "Already answered." (G784).
+- "How private" on a page is a full-size field in the app's own look, with Save beside it. It was the browser's small grey box (G783).
 - The card under a page that says what is next no longer repeats the page's name above it (G782).
 - An organisation's page now says "organisation" under its name. It used to say "org" (G781).
 - A link to a page that has since been renamed or forgotten now opens a screen in your app's own words, with its four tabs and a way to Memory. It used to say "No note people/…" and point to the Brain page in Settings. The sheet that asks whether an assistant may know a fact no longer says its page is missing when there is simply nothing left to decide (G780).

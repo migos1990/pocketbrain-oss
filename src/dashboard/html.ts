@@ -462,9 +462,11 @@ function decideElsewhere(s: State, p: Proposal, csrf: string, yes: string, no: s
   if (line) return `<div class="sub">${esc(line)}</div>`;
   // A name that fits a page and a new one: which it is, then saved there (G603, G705).
   const fits = placesFor(s, p);
+  // What this card showed, by hash: Save it then stands for the owner's review of exactly it.
+  const seen = p.seen ?? "";
   const taps = fits.length
-    ? [...fits.map((id, i) => button(csrf, "proposal-place", { file: p.file, to: id }, `Same as ${s.notes.find((n) => n.fm.id === id)?.fm.title ?? id}`, i ? "" : "go")), button(csrf, "proposal-place", { file: p.file, to: "new" }, newOne(p)), button(csrf, "proposal-reject", { file: p.file }, no)]
-    : [button(csrf, "proposal-accept", { file: p.file }, yes, "go"), button(csrf, "proposal-reject", { file: p.file }, no)];
+    ? [...fits.map((id, i) => button(csrf, "proposal-place", { file: p.file, to: id, seen }, `Same as ${s.notes.find((n) => n.fm.id === id)?.fm.title ?? id}`, i ? "" : "go")), button(csrf, "proposal-place", { file: p.file, to: "new", seen }, newOne(p)), button(csrf, "proposal-reject", { file: p.file }, no)]
+    : [button(csrf, "proposal-accept", { file: p.file, seen }, yes, "go"), button(csrf, "proposal-reject", { file: p.file }, no)];
   return `<div class="ch"><div class="btns">${taps.join("")}</div></div><div class="sub">${esc("Or say what's right in the box on your home.")}</div>`;
 }
 

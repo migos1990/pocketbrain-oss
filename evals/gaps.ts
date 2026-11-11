@@ -26,8 +26,22 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",
     fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
   },
+  G784: {
+    closed: "claude/accepted-ask-leaves",
+    title: "Save it on an ask a check sent to the owner filed the same ask again, and a second tap showed a raw file name",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-11 (real brain): an assistant's new-note proposal from a booking mail waited on approval_needs_message_id (the mail said \"approved\"). The owner's Save it ran write() again, the same check sent it to the inbox again as a new proposal now carrying the approved: ref (\"found in an email and you approved\"), and the Settings page, still on the old card, answered the next tap with the red line \"no proposal inbox/2026-11-11-instinct-….yaml\". Every Save it would only ask again.",
+    fix: "src/write.ts: the owner's accept of the proposal its card showed (the card sends proposalSeen, a hash of the file as drawn; any other bytes are refused as changed since shown) no longer re-runs the checks whose outcome is to ask the owner; refusals still refuse, twins the card didn't show and the hub's own yes are weighed as before, and no door passes write() options. decideOne answers a proposal already in inbox/decided as a no-op. src/dashboard: Already answered., That question isn't waiting any more., and no brain file name in any owner-facing error. Tests: test/accept-leaves.test.ts.",
+  },
+  G783: {
+    closed: "claude/how-private-field",
+    title: "How private on a page was the browser's own small grey field and button",
+    severity: "low",
+    finding: "Screens review 2026-11-10, pass 3 (demo brain, 390px dark): under Change who sees it, the How private field and its Save were unstyled browser controls, 19px tall, in the system font, on a screen where every other control is 44px and in the app's type.",
+    fix: "src/dashboard/html-page.ts: three style rules; the field is a 44px box in the app's type and Save reads like the page's other actions. Layout only, no access change: the form, its action and its values are untouched. Tests: test/how-private-field.test.ts.",
+  },
   G782: {
-    closed: "claude/project-page-heading",
+    closed: "31c85068",
     title: "The card on a page repeated the page's own name as a heading",
     severity: "low",
     finding: "Screens review 2026-11-10 (demo brain, 390px dark): the card under a project page's prose (what's next, and a conflict's way to Settle) opened with the page's name in heading weight, so \"Atlas launch\" stood mid-page a second time. Without a conflict the card had no layout of its own and its name and next step ran together.",
