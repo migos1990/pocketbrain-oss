@@ -102,7 +102,10 @@ export function weekOf(notes: WeekNote[], rules: Rules, events: Upcoming[], day:
   for (const n of notes) {
     const going = ongoing(n);
     for (const [attr, f] of n.facts) {
-      const r = live(f);
+      // Dates that end on their day can be several on one page (G799, src/dated.ts): each live item
+      // of such a list is a dated line of its own; a list says nothing else here.
+      const listed = isList(f);
+      for (const r of listed ? f.items.filter((i) => !i.retired && !i.valid_to && !(i as { dispute?: string }).dispute) : [live(f)]) {
       if (!r) continue;
       const v = String(r.value ?? "");
       if (attr === "birthday") {
@@ -123,6 +126,7 @@ export function weekOf(notes: WeekNote[], rules: Rules, events: Upcoming[], day:
         else dated.push(line);
         continue;
       }
+      if (listed) continue;
       // A next step with no date, on a project still going, while it is not stale.
       if (attr === "next_step" && n.type === "project" && factFreshness(f, attributeSpec(rules, n.type, attr), day) !== "stale") {
         const w = said(r.value, title);
@@ -132,6 +136,7 @@ export function weekOf(notes: WeekNote[], rules: Rules, events: Upcoming[], day:
         if (d && d < day) continue;
         if (d) dated.push({ kind: "next", day: d, page: n.id, attr, what: w, record: r });
         else next.push({ kind: "next", page: n.id, attr, what: w, record: r, at: String(r.last_confirmed ?? r.as_of ?? "") });
+      }
       }
     }
   }

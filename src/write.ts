@@ -31,6 +31,7 @@ import { coOwnerOf, isOwnerWord } from "./rules";
 import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, isOwnerEmail, isOwnerId, ownerRef, approvedRef, normVerification } from "./owner";
 import { keepQuote, sweepQuotes } from "./quotes";
 import { hubReadRefs } from "./pull";
+import { twoDatedThings, sameItem, endsOnDate, wholeDay, byDay, itemOf, itemsOf, newItems } from "./dated";
 import { appendDiary, diaryRow, shownValue, type DiaryKind } from "./diary";
 import { captureSender, unknownSenderWait } from "./sender";
 
@@ -876,6 +877,8 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   const inRefs = incoming.sources.map(refString);
   const cardOnly = inRefs.some((x) => x.startsWith("contacts:") && !readFor(x, incoming)) && !inRefs.some((x) => HUB_READS.test(x) && !x.startsWith("contacts:"));
   if (!isOwnerId(opts.acceptedBy) && cardOnly && incoming.verification === "verified-by-source" && asRead(incoming).verification !== "verified-by-source") incoming.verification = "self-reported";
+  // Source items the hub read itself, any version (src/dated.ts): what says two dates are two things.
+  const readItems = new Set([...read].map(itemOf));
   const rank = (r: FactRecord) => ownerWord(r) ? 5 : r.verification === "confirmed-by-co-owner" ? Math.min(sourceRank(asRead(r)), 2) : sourceRank(asRead(r));
   const merge = spec.merge ?? "replace";
   let step: number | undefined;
@@ -946,7 +949,34 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
     const keyOf = (v: unknown) => spec.item_key && v && typeof v === "object" ? String((v as Record<string, unknown>)[spec.item_key]) : compareKey(v);
     // The same item first: confirming either side of a disputed item merges into that side (G305).
     const match = live.items.find((i) => valueKey(i.value) === valueKey(value) && !i.valid_to) ?? live.items.find((i) => keyOf(i.value) === keyOf(value) && !i.valid_to);
-    if (match && merge !== "append") {
+    // Dates that end on their day, kept side by side (G799): the same source item, read by the hub,
+    // giving another day is that item's date moving. It moves only as a single value would change
+    // (a newer day of the item, as strong a source, from inside the writer's areas, never money,
+    // health or legal, never over the owner's word); an earlier day of it is history; anything else
+    // waits beside the live item as a conflict (`contested`, G425), never marking the list's items as
+    // disputed, which the read doors can't serve (slice audit F1, F2).
+    const moved = !match && endsOnDate(spec) && wholeDay(value) ? sameItem(live.items.filter((i) => !i.valid_to && !i.retired), incoming, readItems) : undefined;
+    if (moved) {
+      const sensitive = note.fm.type === "money" || note.fm.id.startsWith("money/") || !!sensitiveShape(rules, attr, note.fm.title, moved.value, value);
+      const later = !incoming.as_of_approx && String(incoming.as_of) > String(moved.as_of);
+      const wins = ownerWord(incoming) || !ownerWord(moved) && !opts.contest && later && rank(incoming) >= rank(moved) && !sensitive;
+      if (wins) {
+        moved.valid_to = incoming.as_of;
+        moved.ended_by = { step: 2, at: d, by: req.agent };
+        live.items.push(incoming); byDay(live.items); step = 2; msg = "the same item's date moved";
+      } else if (!incoming.as_of_approx && String(incoming.as_of) < String(moved.as_of) && !ownerWord(incoming)) {
+        const hs = (hist[attr] ??= []);
+        const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value));
+        if (known) mergeSources(known);
+        else hs.push({ ...incoming, valid_to: moved.as_of, ended_by: { step: 2, at: d, by: req.agent } });
+        step = 2; msg = "an earlier day of the same item: kept as history";
+      } else {
+        const pending = moved.contested && packetOpen(root, moved.contested) ? moved.contested : undefined;
+        if (pending) { joinPacket(root, pending, incoming); msg = `added to open dispute ${pending}; live item kept`; }
+        else { const id = openDispute(root, note, attr, [(({ contested: _, ...c }) => c)(moved), incoming], ownerWord(moved) ? 6 : 7, held); moved.contested = id; msg = `the same item's date changed: disputed (${id}); live item kept`; }
+        disputed = true; step = ownerWord(moved) ? 6 : 7;
+      }
+    } else if (match && merge !== "append") {
       if (valueKey(match.value) === valueKey(value)) {
         if (!mergeSources(match)) return done({ outcome: "noop", fact_key: factKey, message: "item already recorded" });
         step = 1; msg = "same item, sources merged";
@@ -971,8 +1001,20 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         disputed = true; step = 7; msg = `item ${keyOf(value)} disputed (${id})`;
         }
       }
+    } else if (endsOnDate(spec) && wholeDay(value) && !ownerWord(incoming) && live.items.some((i) => !i.valid_to && !i.retired && wholeDay(i.value))
+      && (() => { const mine = newItems(incoming, read); return !mine.size || live.items.some((i) => !i.valid_to && !i.retired && [...itemsOf(i, readItems)].some((x) => mine.has(x))); })()) {
+      // A list of dates that end on their day (G799) takes another day only from an item the hub
+      // read that no live day came from. A day with nothing read behind it (an assistant's own word,
+      // a ref the hub never read, a relayed claim) says nothing about which thing it dates: it is
+      // kept as history, never live beside the others (slice audit N1). The owner's own word adds one.
+      const hs = (hist[attr] ??= []);
+      const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value));
+      if (known) mergeSources(known);
+      else hs.push({ ...incoming, valid_to: incoming.as_of, ended_by: { step: 7, at: d, by: req.agent } });
+      step = 7; msg = "kept as history";
     } else {
       live.items.push(incoming); step = 2; msg = "item added (set)";
+      if (endsOnDate(spec) && live.items.every((i) => wholeDay(i.value))) byDay(live.items);
     }
   } else {
     const cur = live as FactRecord;
@@ -1028,6 +1070,14 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       if (known) { if (!mergeSources(known)) return done({ outcome: "noop", fact_key: factKey, step: 7, message: "kept as history" }); }
       else hs.push({ ...incoming, valid_to: incoming.as_of, ended_by: { step: 7, at: d, by: req.agent } });
       step = 7; msg = "kept as history";
+    } else if (twoDatedThings(rules, note, attr, spec, cur, incoming, readItems, read)) {
+      // Another day from another source item the hub read, on an attribute that ends on its date
+      // (G799): two dated things on one page (a course's report and its final), so both hold. The live
+      // one stays as it is, the new one goes beside it, and nothing asks, the owner's word included: it
+      // is not contradicted. A conflict already waiting beside the live one keeps waiting on its item
+      // in the list; the night pass (upkeep 8c) closes it when its two sides are two dated things too.
+      facts[attr] = { items: byDay([cur, incoming]) };
+      step = 2; msg = "another date from another item: both kept";
     } else if (cur.contested && packetOpen(root, cur.contested) && !ownerWord(incoming)) {
       // A conflict already waits beside this value: another value joins it; nothing replaces the
       // live one until someone picks (G425).

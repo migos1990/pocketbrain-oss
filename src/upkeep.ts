@@ -26,6 +26,7 @@ import type { WriteResult } from "./write";
 import { keptBothWith } from "./write";
 import { wikiLint, renderTouchedPages, parentPlan, pageParentsOn } from "./wiki";
 import { tripPlan, tripsOn } from "./page-kind";
+import { bothDatesPlan, bothDatesOn, closeBothDates } from "./dated";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
 import { setAsideReceipts, setAsideMachineMail } from "./receipt-pages";
@@ -319,7 +320,9 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   for (const n of notes) {
     if (n.fm.status !== "active") continue;
     // A project whose due date has passed but is still active.
-    const due = n.fm.facts?.due as FactRecord | undefined;
+    // Several due dates side by side (G799): the project is past due once the last of them went by.
+    const dues = n.fm.facts?.due && !isDisputed(n.fm.facts.due) ? records(n.fm.facts.due).filter((r) => !r.retired && !r.valid_to && typeof r.value === "string" && isoDate(r.value)) : [];
+    const due = dues.sort((a, b) => String(b.value).localeCompare(String(a.value)))[0];
     const pastDue = n.fm.type === "project" && due && typeof due.value === "string" && isoDate(due.value) && due.value < now;
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
       if (attr === "due" && pastDue) continue; // past-due below says it once
@@ -518,6 +521,13 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
   //     a reworded sentence is the same value, or that a later mail of the same day is a change,
   //     still asks the owner to pick. Report-only: a review line per conflict, so the night's
   //     report counts them; nothing is settled or closed until the owner turns that on.
+  // 8c, dates (G800): a conflict on two dates from two source items closes as both kept, both dates
+  //     live side by side (src/dated.ts), a diary line with Undo; on by the owner's answer (2026-11-12), a count when `both_dates: false`.
+  {
+    const plan = bothDatesPlan(root, rules, loadBrain(root));
+    if (bothDatesOn(rules)) for (const key of closeBothDates(root, rules, plan)) add({ rule: "both-dates-closed", key, kind: "auto-fix", detail: "two dates from two different items: both kept, the conflict closed; Undo is on the home" });
+    else if (plan.length) add({ rule: "both-dates-would-close", key: "both-dates-would-close", kind: "review", detail: `${plan.length} conflict${plan.length === 1 ? " is" : "s are"} two dates from two different items; \`pocketbrain filing dates on\` keeps both and closes ${plan.length === 1 ? "it" : "them"} each night` });
+  }
   for (const d of loadBrain(root).filter((n) => n.fm.id.startsWith("disputes/") && n.fm.status === "open")) {
     const why = bothHold((d.fm as { candidates?: FactRecord[] }).candidates ?? [], rules, root, String(d.fm.fact_key ?? "").split("#")[1] ?? "");
     if (why) add({ rule: "both-hold-conflict", key: String(d.fm.fact_key ?? d.fm.id), kind: "review", detail: why });

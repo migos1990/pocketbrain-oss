@@ -264,6 +264,13 @@ export function setTrips(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { trips: mode === "on" }, `trips ${mode}`);
 }
 
+// `pocketbrain filing dates on|off`: whether the night pass closes a conflict on two dates from two
+// different source items as both kept (src/dated.ts, G800), or only counts them. On until turned off, by the owner's answer (2026-11-12).
+export function setBothDates(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("filing dates on | off");
+  return setRulesKeys(root, "policy.yaml", { both_dates: mode === "on" }, `both_dates ${mode}`);
+}
+
 // `pocketbrain aftercheck classify on|off [--cap <dollars>]`: the second-opinion classifier after an
 // agent's write (src/aftercheck.ts, docs/aftercheck.md), off until the owner says so. `--cap` sets
 // that step's own monthly spend cap (usage.cap.steps, docs/usage.md). Off keeps the cap.

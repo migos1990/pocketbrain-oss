@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### Before you update
 
+- From this update the nightly pass closes a conflict opened before it on two dates from two different calendar events or mails, keeping both, from the first night, each with Undo on your home (G800). Run `pocketbrain filing dates off` if you'd rather it only counted them.
 - From this update the nightly pass puts a flight, stay or booking page under the trip whose dates hold it, from the first night (G787). Run `pocketbrain wiki trips off` if you'd rather it only counted them.
 - Your Gardener can now write a short opening paragraph on a page that ties its facts together (G713). It is off: each night the Gardener's wiki_sync only reports what it would write. Run `pocketbrain wiki opening on` when you want pages to take it, and `pocketbrain wiki opening off` to go back.
 - The night pass can now notice a class you teach (G711). It is off: each night it only counts the classes it would ask you about. Add `teach: { ask: true }` to `rules/policy.yaml` when you want the question on your home.
@@ -15,6 +16,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- Two different due dates for one page, from two different calendar events or mails, no longer ask you to pick: a course's report and its final both stay, and both show in your week. Only the same event or mail giving a new date moves it, and an ask that is left reads "When is Course B due?", not "What is Course B's due?" (G799).
 - A birthday kept without its year reads as a day, "26 Jul", on the page, in its Details, on your home and in Ask's answer. It read "07-26". Pages the hub already wrote that way are written again on the next night, and the nightly read now counts a raw one as a machine date (G786).
 - Your own page no longer lists a flight, a booking, an appointment, a game or a provider's mail (a survey, a contest) as one of your projects, and new mail and calendar items no longer start a project page for an appointment or a provider's mail. Flights and stays sit under their trip. Areas read as their org writes them: "Your NCA projects", not "Your nca projects" (G787).
 - An ask your memory filed from your email and then sent back for a check says it came from that email. It used to say "From your assistant instinct". Mail a machine sent (no-reply, notifications, receipts) that an assistant passes on is no longer read for facts either, as with the mail your memory reads itself (G785).

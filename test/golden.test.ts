@@ -6,6 +6,13 @@ import { join } from "node:path";
 import { makeBrain } from "./fixture";
 import { runGolden, loadGolden } from "../src/golden";
 
+// A hand edit, committed as the owner's would be: a per-agent cell (PB_CELLS=1) is current by commit,
+// so an edit left on disk only would be read from the cell built before it.
+const edit = (root: string, f: string, text: string) => {
+  writeFileSync(f, text);
+  Bun.spawnSync(["git", "commit", "-qam", "hand edit"], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
+};
+
 const readsLog = (root: string) => { try { return readFileSync(join(root, "log", "reads.jsonl"), "utf8"); } catch { return ""; } };
 
 describe("pocketbrain golden", () => {
@@ -45,12 +52,12 @@ describe("pocketbrain golden", () => {
     writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: ask }\n");
     const f = join(root, "projects", "course-a.md");
     const orig = readFileSync(f, "utf8");
-    writeFileSync(f, orig.replace("value: Grade the midterm, as_of: 2026-10-01", "value: Grade the midterm by 2026-10-05, as_of: 2026-10-01"));
+    edit(root, f, orig.replace("value: Grade the midterm, as_of: 2026-10-01", "value: Grade the midterm by 2026-10-05, as_of: 2026-10-01"));
     const dated = runGolden(root, { agent: "planner" }).rows.find((x) => x.id === "w01")!;
     expect(dated.why).toContain("its date passed 3 days ago");
     expect(dated.why).toContain("it waits under the Brain's To recheck, nothing asks");
     // No date in it, just old: due by its shelf life, asked as Still the plan?
-    writeFileSync(f, orig.replace("as_of: 2026-10-01, sources", "as_of: 2026-09-20, sources"));
+    edit(root, f, orig.replace("as_of: 2026-10-01, sources", "as_of: 2026-09-20, sources"));
     const old = runGolden(root, { agent: "planner" });
     const w01 = old.rows.find((x) => x.id === "w01")!;
     expect(w01.grade).toBe("watch");
@@ -60,7 +67,7 @@ describe("pocketbrain golden", () => {
     // A date in an attribute that doesn't end on its date: named, and nothing asks.
     const j = join(root, "people", "jane-roy.md");
     const person = readFileSync(j, "utf8");
-    writeFileSync(j, person.replace(/role: \{ value: ([^,]+), as_of: [0-9-]+/, "role: { value: $1 until 2026-10-02, as_of: 2025-01-01"));
+    edit(root, j, person.replace(/role: \{ value: ([^,]+), as_of: [0-9-]+/, "role: { value: $1 until 2026-10-02, as_of: 2025-01-01"));
     const w02 = runGolden(root, { agent: "planner" }).rows.find((x) => x.id === "w02")!;
     expect(w02.grade).toBe("fail");
     expect(w02.why).toContain("role names a date but doesn't end on it (only next_step, due and deadline do)");

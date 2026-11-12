@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G799: {
+    closed: "claude/dated-conflicts",
+    title: "Two due dates from two calendar events asked the owner to pick one",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-12 (\"this question again doesn't make sense\"): a course page asked \"What is <course>'s due?\" between the owner's own date (4 Dec, from one calendar event) and an assistant's reading of another event (13 Nov). A page can hold several dates that each end on their day, but `due` was one value, so any second date from a source dated later opened a conflict against the owner's word (src/write.ts ownerDispute, step 6), and the question read the field's name as a noun (src/dashboard/html-settle.ts).",
+    fix: "src/dated.ts twoDatedThings, used by write(): on an attribute that ends on its date (DATED or shelf_life until_date), two different whole days from two different source items the hub read itself (versions folded; a ref the writer only names counts for nothing), neither on a money page or with a money-, health- or legal-shaped title, both hold: the fact becomes a list of both, nothing asks. The same item giving another day (sameItem) moves that item's day only as a single value would change (later, as strong a source, not contested from outside the writer's areas, not sensitive, never over the owner's word); an earlier day is history; anything else waits beside the live item as a `contested` conflict, never as item-level dispute markers the read doors can't serve (slice audit F1-F5). A side with no item behind it takes the usual ladder; on a list, a day with no item the hub read at that version (an assistant's word, an unread ref, a relayed claim) is history, never live (slice audit N1, N2). The week shows each live day of the list (src/week.ts); upkeep's past-due reads the last of them. The settle screen asks \"When is X due?\". Tests: test/dated-conflicts.test.ts, the G799 row in test/contracts/write.contract.test.ts.",
+  },
+  G800: {
+    closed: "claude/dated-conflicts",
+    title: "Date conflicts opened before G799 stayed on the owner's home",
+    severity: "medium",
+    finding: "The real brain's one open conflict on 2026-11-12 was of G799's shape (two dates, two different calendar events, read-only probe on the Mac); the write-path fix stops new ones but nothing retired the old card, and the owner's rule is that the pipeline retires it, never a hand step.",
+    fix: "Upkeep step 8c (src/dated.ts bothDatesPlan, closeBothDates): an open conflict with two sides that are two dated things, still beside its live value (alone, or as an item of a list a third date joined since), closes as `both-hold`; both days become a live list, the waiting day gets an item_added diary line (why both-dates) whose Undo ends it. One hub commit with a why. On from the first night by the owner's answer on 2026-11-12 (\"Yes, retire them by itself\"); `both_dates: false` (`pocketbrain filing dates off`) makes it a count. Tests: test/dated-conflicts.test.ts.",
+  },
   G773: {
     closed: "ffbd723f",
     title: "The page writer spliced any value into a sentence and glued a role to an org no source joined",

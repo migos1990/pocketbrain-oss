@@ -382,6 +382,8 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
     : row.kind === "new" && clause(attr, val(row.to)) ? lineWords("pageNew", { title: t, value: clause(attr, val(row.to))! })
     : row.kind === "new" ? w("new")
     : row.kind === "changed" ? w("changed")
+    // One more day beside the others ("Course B is also due 14 Oct 2026", G799), never "Course B's due".
+    : row.kind === "item_added" && clause(attr, val(row.to))?.startsWith("is ") ? lineWords("pageNew", { title: t, value: clause(attr, val(row.to))!.replace(/^is /, "is also ") })
     : row.kind === "item_added" ? w("itemAdded")
     : row.kind === "retracted" ? w("retracted")
     : row.kind === "kept" && row.source_word === "you" ? w("keptYours")

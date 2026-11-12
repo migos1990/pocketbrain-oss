@@ -23,6 +23,7 @@ export const SETTLE_COPY = {
   orTell: "Or tell me",
   next: "What's next for {name}?",
   what: "What is {name}'s {attr}?",
+  due: "When is {name} due?",
   many: "Which is {name}'s {attr}?",
   lean: "The Gardener leans this way: {why}",
   both: "Not sure, keep both",
@@ -74,7 +75,8 @@ form.pick.both button b{font-size:16px;line-height:22px;font-weight:800;letter-s
 // One short question (canvas Settle board: "When does the beta freeze?"); the sides say the values.
 export const question = (c: SettleCase) => {
   const [name, attr] = [displayName(c.page, c.title), c.attr.replace(/_/g, " ")];
-  const fixed = fill(c.attr === "next_step" ? SETTLE_COPY.next : SETTLE_COPY.what, { name, attr });
+  // "due" is said as what the thing is, never as a noun after a name ("What is Course B's due?", G799).
+  const fixed = fill(c.attr === "next_step" ? SETTLE_COPY.next : c.attr === "due" ? SETTLE_COPY.due : SETTLE_COPY.what, { name, attr });
   return /s's /.test(fixed) ? fixed.replace(/s's /, "s' ") : fixed;
 };
 
@@ -102,7 +104,7 @@ export function settlePage(c: SettleCase | undefined, csrf: string, rules: Rules
   const said = flash ? `<p class="bubble" role="status">${esc(refusalWords(flash).replace(" It still waits for you; dismiss it if it's wrong.", " It still waits here: pick another side, or tell me what's right."))}</p>` : "";
   const near = !!c && !(c.private && !o.fresh);
   // A private value shows only right after a sign-in (spec §8); before that, the question without it.
-  const body = !c ? `<p class="quiet">${SETTLE_COPY.gone}</p>` : c.private && !o.fresh ? `${where(c, o.area)}<h1>${esc(fill(SETTLE_COPY.many, { name: displayName(c.page, c.title), attr: c.attr.replace(/_/g, " ") }))}</h1><p class="quiet">${SETTLE_COPY.shut}</p>${signInAgain(csrf)}` : `${where(c, o.area)}<h1>${esc(question(c))}</h1><p class="sub">${esc(c.held ? SETTLE_COPY.held : c.sides.length > 2 ? SETTLE_COPY.subMany : SETTLE_COPY.sub)}</p>
+  const body = !c ? `<p class="quiet">${SETTLE_COPY.gone}</p>` : c.private && !o.fresh ? `${where(c, o.area)}<h1>${esc(c.attr === "due" ? question(c) : fill(SETTLE_COPY.many, { name: displayName(c.page, c.title), attr: c.attr.replace(/_/g, " ") }))}</h1><p class="quiet">${SETTLE_COPY.shut}</p>${signInAgain(csrf)}` : `${where(c, o.area)}<h1>${esc(question(c))}</h1><p class="sub">${esc(c.held ? SETTLE_COPY.held : c.sides.length > 2 ? SETTLE_COPY.subMany : SETTLE_COPY.sub)}</p>
 ${ordered(c).map((s, i) => row(c, s, csrf, rules, i === 0 && !!s.lean, o.words?.[s.n])).join("")}${said}
 <form class="pick both" method="post" action="/action/settle-both">${hidden(csrf, { id: c.id })}<button><b>${c.sides.length > 2 ? SETTLE_COPY.all : SETTLE_COPY.both}</b><small>${SETTLE_COPY.bothSmall}</small></button></form>
 <p class="tell">${SETTLE_COPY.orTell}</p>${composer(csrf, { id: c.id }, SETTLE_COPY.box, { label: SETTLE_COPY.box, action: "/action/settle-pick", name: "value", send: SETTLE_COPY.send })}`;

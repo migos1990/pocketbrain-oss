@@ -51,7 +51,7 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { setAsideMachineMail } from "./receipt-pages";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -266,6 +266,7 @@ const USAGE = `pocketbrain <command>
   dashboard phones [log|remove <name>|all]   the phones paired with the pocketBrain app; log: the app's last calls and the hub's answers; remove ends one's Face ID sign-in (docs/phone-app.md)
   filing now                           the hub's filing step by hand, only when no hub runs here: file what captures and sources found, expire what is past its deadline
   filing all on|off                    every fact your captures and sources find files itself, with Undo; only a conflict asks you
+  filing dates on|off                  whether the night pass closes a conflict on two dates from two different items as both kept (on by default; docs/filing.md)
   me name [--suggested]                your full name as an alias (asked here, or the one your mail gives most), so facts about you land on your own page
   next-steps newest                    a newer next step replaces the older one (kept in history) instead of asking you
   invite <agent> [--minutes 15] [--url <public url>]   a one-time code the agent redeems at POST /v1/enroll for its own token
@@ -1535,6 +1536,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
   if (cmd === "ask") return ownerSet(() => setAskToSee(root, args[0] === "on", { approver: arg(args, "--approver"), never: arg(args, "--never"), maxPerDay: arg(args, "--max-per-day"), clientId: arg(args, "--client-id") }));
   if (cmd === "night") return ownerSet(() => setNight(root, args[0] ?? ""));
   if (cmd === "filing" && args[0] === "all") return ownerSet(() => setFileAll(root, args[1] ?? ""));
+  if (cmd === "filing" && args[0] === "dates") return ownerSet(() => setBothDates(root, args[1] ?? ""));
   if (cmd === "me" && args[0] === "name") {
     // The owner's full name as an alias, then the open proposals that named the owner moved onto
     // one page. --suggested takes the name the proposals give most, so nothing is typed or printed.
