@@ -106,7 +106,7 @@ const MACHINE_LOCAL = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|notif
 // A no-reply word anywhere in it is a machine too: a developer notice from "cloud-noreply@…" was
 // read and filed a project's next step from its boilerplate (owner's phone, 2026-11-03; G662).
 const NO_REPLY_PART = /(?:^|[-_.+])(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply)(?:[-_.+]|$)/i;
-function machineSender(from: string | undefined): boolean {
+export function machineSender(from: string | undefined): boolean {
   const addr = /<([^>]+)>/.exec(from ?? "")?.[1] ?? from ?? "";
   const local = addr.trim().split("@")[0] ?? "";
   return addr.includes("@") && (MACHINE_LOCAL.test(local) || NO_REPLY_PART.test(local));

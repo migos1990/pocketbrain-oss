@@ -476,7 +476,8 @@ function proposalItem(s: State, p: Proposal, csrf: string) {
   const r = landing ? { ...p.request, id: landing } : p.request;
   // An agent citing the owner's word that the owner never gave (a forged "owner approved"): said plainly.
   const claimed = /owner_message_registered/.test(p.reason) || p.unregistered.length > 0;
-  const pulled = /^capture /.test(p.reason);
+  // A source's fact, or one a check sent back after the hub filed it (pulledFrom, G785).
+  const pulled = /^capture /.test(p.reason) || !!p.pulledFrom;
   const key = r.id ? `${r.id}${r.attribute ? `#${r.attribute}` : ""}` : "";
   const note = r.id ? noteName(s.notes, String(r.id)) : `"${esc(r.title)}"`;
   const asks = r.attribute === "open_question" && r.id && !r.retract;
@@ -518,7 +519,7 @@ function proposalItem(s: State, p: Proposal, csrf: string) {
     const where = r.id ? note : esc(String(r.title ?? ""));
     // The mail it came from, by its subject: a real payment is told from a guess by its mail
     // (new-user run, 2026-10-25).
-    const mail = mailOf(s.root, p.reason);
+    const mail = mailOf(s.root, p.pulledFrom ? `capture ${p.pulledFrom}` : p.reason);
     const at = [mail.subject ? `the email “${esc(mail.subject)}”${mail.from ? ` from ${esc(mail.from)}` : ""}` : mail.from ? `an email from ${esc(mail.from)}` : esc(sourceWords(r.sources as string[]) || "a source"), r.as_of ? esc(shortDate(String(r.as_of))) : ""].filter(Boolean).join(", ");
     const fact = `<blockquote class="said"><span class="sub">${risky ? `From ${at}. It looks like money, health or legal.` : `For ${where}, from ${at}`}</span>${risky ? "" : value}</blockquote>`;
     const shown = risky ? `${fact}<details><summary>Show it</summary><div class="sub">For ${where}</div><div class="one">${value}</div></details>` : fact;

@@ -42,7 +42,7 @@ import { git, commitPaths } from "./git";
 import { queueOp, pendingOps } from "./hub";
 import type { WriteResult } from "./write";
 import { OWNER, ownerRef, isOwnerId } from "./owner";
-import { corroborate, floorFor, loadSources } from "./pull";
+import { corroborate, floorFor, loadSources, machineSender } from "./pull";
 import { putQuote, getQuote, gitSide } from "./quotes";
 import { titlePiece as pieceOf } from "./page-kind";
 
@@ -124,6 +124,12 @@ function sourceFor(kind: CaptureKind, origin: Origin, id: string, rules: Rules, 
   // An agent's memory is that agent's word, even the agent that carries the owner's messages.
   if (origin.via === "import" || (origin.via === "agent" && origin.by !== captureAgent(rules))) return { ref: doc, source_type: "agent_observation" };
   return { ref: ownerRef(id.slice(0, 10), `capture/${id.slice(11)}`), source_type: "owner_message" };
+}
+
+// A From field, or a From: header line in the text (a forwarded block), naming a machine sender.
+export function machineMailCapture(from: string | undefined, text: string): boolean {
+  if (machineSender(from)) return true;
+  return [...text.matchAll(/^[ \t>*]*From:[ \t]*(.+)$/gim)].some((m) => machineSender(m[1]!.trim()));
 }
 
 // Secret shapes come out of the text, the subject and the From line alike (evals/gaps.ts G38):
@@ -230,6 +236,10 @@ export function storeCapture(root: string, input: CaptureInput, origin: Origin, 
   const none = { id: "", file: "", removed: p.found };
   if (!["text", "voice", "email"].includes(input.kind)) return { ...none, outcome: "refused", message: `kind must be text, voice or email` };
   if (!p.text) return { ...none, outcome: "refused", message: "nothing to capture" };
+  // Machine mail is never read for facts, whichever door brings it (G785; owner's phone, 2026-11-11:
+  // an assistant passed on a room-booking confirmation and it became a decision note to approve).
+  // An assistant's capture says who sent it in its From field or in the mail's own From: lines.
+  if (origin.via === "agent" && machineMailCapture(input.from, p.text)) return { ...none, outcome: "refused", message: "machine_mail: this is mail a machine sent (a no-reply, list or notification sender), and the owner's rule is that machine mail is never read for facts. Fix: don't pass on receipts, bookings or notices; mail a person wrote goes through, without a machine mail quoted in it" };
   if (Buffer.byteLength(p.text) > cfg.max_bytes) return { ...none, outcome: "refused", message: `capture is ${Buffer.byteLength(p.text)} bytes; the limit is ${cfg.max_bytes} (policy.yaml capture.max_bytes)` };
   const dup = findCapture(root, p.hash);
   if (dup) return { ...none, outcome: "duplicate", id: dup.split("/").pop()!.replace(/\.md$/, ""), file: dup, message: `already captured: ${dup}` };

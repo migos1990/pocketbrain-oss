@@ -1582,6 +1582,8 @@ function decideOne(root: string, file: string, decision: "accept" | "reject", by
   const q = queueOp(root, "inbox", by, { file: rel, decision }, `${decision} ${rel}`);
   if (q) return q;
   let r: WriteResult = { outcome: "noop", message: "rejected" };
+  const capRel = (p as { capture?: unknown }).capture;
+  const via = typeof capRel === "string" ? captureVia(root, capRel) : undefined;
   // A proposal file never brings its own approved: ref (one put there by hand, or by a journal
   // line): the only one is the one this accept adds (G424).
   p.request = { ...p.request, sources: (p.request.sources ?? []).filter((x) => !isApprovedRef(refString(x))) };
@@ -1604,8 +1606,6 @@ function decideOne(root: string, file: string, decision: "accept" | "reject", by
     // folder, the mailbox). An assistant's imported memory is that assistant's word: the hub's yes
     // is weighed as its own write, its carve included (G587 slice audit F1, F2).
     // Its refs are kept as the assistant's word too, so the stored record ranks as one (F2).
-    const capRel = (p as { capture?: unknown }).capture;
-    const via = typeof capRel === "string" ? captureVia(root, capRel) : undefined;
     const imported = typeof capRel === "string" && via === "import" && typeof p.request.agent === "string";
     const sent = imported ? { ...req, sources: asAgentWord(req.sources ?? [], String(p.request.agent)) } : req;
     r = write(root, sent, { acceptedBy: by, contest: opts.contest, hold: opts.hold, stranger, pulled: typeof capRel === "string" && via !== "import", reviewed });
@@ -1638,6 +1638,14 @@ function decideOne(root: string, file: string, decision: "accept" | "reject", by
       const incoming = { ...p.request, as_of: String(p.request.as_of ?? today()), sources: (p.request.sources ?? []) as FactRecord["sources"], by: p.request.agent, recorded: today() } as unknown as FactRecord;
       lines.push(appendDiary(root, { ...diaryRow({ at, factKey: r.fact_key, title: String(note.fm.title ?? note.fm.id), kind: "confirmed", from: undefined, to: shownValue(live), incoming, acceptedBy: by, rank: sourceRank(incoming), sensitivity: (p.request.sensitivity as Sensitivity | undefined) ?? note.fm.sensitivity }), added: [] }, today().slice(0, 7)));
     }
+  }
+  // A pulled fact a check sent back to the inbox keeps where it came from, for its card only: the
+  // card says "From an email", never "From your assistant <the capture agent>" (G785). Not the
+  // `capture` key, which the hub's filing reads: it would file it again every minute.
+  if (decision === "accept" && typeof capRel === "string" && via !== "import" && r.outcome === "inbox" && r.file && r.file !== rel && existsSync(join(root, r.file))) {
+    const doc = YAML.parse(readFileSync(join(root, r.file), "utf8")) as Record<string, unknown>;
+    writeFileSync(join(root, r.file), YAML.stringify({ ...doc, pulled_from: capRel }, { lineWidth: 0, aliasDuplicateObjects: false }));
+    lines.push(r.file);
   }
   const unsaved = commitPaths(root, [rel, destRel, ...lines], `inbox: ${decision} ${rel.split("/").pop()}`, by);
   if (unsaved) return { ...notSaved(unsaved), message: `${decision === "accept" && r.outcome !== "noop" ? "the fact is saved, but " : ""}the answer wasn't recorded: the proposal is still in the inbox, answer it again (${unsaved})` };

@@ -695,3 +695,31 @@ test("a model's opening: false sentences that pass, and true ones refused (ceili
   for (const [text] of OPENING_CEILING) expect(openingProblem(text, ["a", "b", "c", "d"], lead, ["North College"], ["North College"]), text).toBeUndefined();
   for (const [text] of OPENING_OVERHOLD) expect(openingProblem(text, ["a", "b", "c", "d"], lead, ["North College"], ["North College"]), text).toBeDefined();
 });
+
+// An assistant's capture of machine mail (src/capture.ts machineMailCapture, G785): it reads the
+// From field and the text's From: lines with the pull's own sender rule, nothing else.
+const MACHINE_CAPTURE_CATCH: [string | undefined, string][] = [
+  ["Bookings <no-reply@rooms.example>", "Your room is booked."],
+  [undefined, "From: Campus <notifications@school.example>\n\nYour room is booked."],
+  ["Jane <jane@example.org>", "Fwd:\n> From: Booking <noreply@rooms.example>\n> Your room is booked."],
+];
+const MACHINE_CAPTURE_CEILING: [string | undefined, string][] = [
+  // A machine named only in Reply-To or Sender, or in an encoded header.
+  [undefined, "Reply-To: no-reply@rooms.example\n\nYour room is booked."],
+  [undefined, "Sender: notifications@school.example\n\nYour room is booked."],
+  [undefined, "From: =?UTF-8?B?bm8tcmVwbHlAcm9vbXMuZXhhbXBsZQ==?=\n\nYour room is booked."],
+  // A person-style sender with no machine word (the 2026-11-11 booking itself): the note-kind rule's business.
+  ["Room Office <room.office-team@school.example>", "Your room booking REG1 is approved."],
+];
+const MACHINE_CAPTURE_OVERHOLD: [string | undefined, string][] = [
+  // A person who writes from an address that is a machine word (orders@ a small shop).
+  ["Pat <orders@shop.example>", "Hi, lunch Friday?"],
+  // A person's own reply that quotes a no-reply mail below it: the whole capture is refused, the
+  // person's words with it (the owner's rule reads any machine-mail source as machine mail, G679).
+  ["Pat <pat@example.org>", "Booked it, see you there.\n\n> From: Bookings <no-reply@rooms.example>\n> Your room is confirmed."],
+];
+test("an assistant's capture of machine mail: what it catches, misses and knowingly holds (ceiling)", async () => {
+  const { machineMailCapture } = await import("../src/capture");
+  for (const [from, text] of [...MACHINE_CAPTURE_CATCH, ...MACHINE_CAPTURE_OVERHOLD]) expect([from, text, machineMailCapture(from, text)]).toEqual([from, text, true]);
+  for (const [from, text] of MACHINE_CAPTURE_CEILING) expect([from, text, machineMailCapture(from, text)]).toEqual([from, text, false]);
+});
