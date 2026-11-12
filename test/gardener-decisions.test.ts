@@ -11,9 +11,10 @@ import { handle } from "../src/server";
 import { issueToken } from "../src/auth";
 import { decideProposal } from "../src/write";
 import { useCells } from "../src/cell";
+import { restoreCells } from "./cells";
 
 const SRC = { as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" };
-afterEach(() => { delete process.env.PB_NOW; process.env.PB_TODAY = "2026-10-08"; useCells(false); });
+afterEach(() => { delete process.env.PB_NOW; process.env.PB_TODAY = "2026-10-08"; restoreCells(); });
 async function call(root: string, token: string, method: string, path: string, body?: unknown) {
   const res = await handle(root, new Request(`http://pb${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { authorization: `Bearer ${token}` } }));
   return { status: res.status, json: (await res.json()) as any };

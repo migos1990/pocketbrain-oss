@@ -9,8 +9,9 @@ import * as core from "../src/core";
 import { upkeep } from "../src/upkeep";
 import { loadBrain } from "../src/brain";
 import { useCells, buildCells, cellDir } from "../src/cell";
+import { restoreCells } from "./cells";
 
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 
 const decision = (root: string, id: string, extra: string, title: string, sensitivity = "personal") =>
   writeFileSync(join(root, `${id}.md`), `---\nid: ${id}\ntype: decision\ntitle: ${title}\narea: work\nsensitivity: ${sensitivity}\nstatus: ${extra.includes("status:") ? extra.match(/status: (\w+)/)![1] : "active"}\ncreated: 2026-09-01\nupdated: 2026-09-01\n${extra.replace(/status: \w+\n?/, "")}\n---\n${title}.\n`);

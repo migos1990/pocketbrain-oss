@@ -11,8 +11,9 @@ import { handle } from "../src/server";
 import { issueToken } from "../src/auth";
 import { dashboardHandler } from "../src/dashboard/server";
 import { useCells } from "../src/cell";
+import { restoreCells } from "./cells";
 
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 
 test("a name the view doesn't hold is said, and notes that share only another word are left out (G503)", () => {
   const root = makeBrain();

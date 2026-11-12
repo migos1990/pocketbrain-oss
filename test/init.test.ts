@@ -13,13 +13,14 @@ import { runChecks, type WriteRequest } from "../src/checks";
 import { loadRules } from "../src/rules";
 import { decideProposal } from "../src/write";
 import { useCells, buildCells } from "../src/cell";
+import { restoreCells } from "./cells";
 import { ownerError } from "../src/owner-errors";
 
 const REPO = join(import.meta.dir, "..");
 const SEED = join(REPO, "examples", "seed");
 const SEEDS = ["--from-text", join(SEED, "notes.txt"), "--from-mbox", join(SEED, "mail.mbox"), "--from-ics", join(SEED, "calendar.ics")];
 process.env.PB_TODAY = "2026-10-08";
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 
 const fresh = () => join(mkdtempSync(join(tmpdir(), "pb-init-")), "brain");
 // Where init remembers the brain: a temp dir per run, never the real ~/.config.

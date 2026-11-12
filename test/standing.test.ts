@@ -8,6 +8,7 @@ import YAML from "yaml";
 import { makeBrain } from "./fixture";
 import * as core from "../src/core";
 import { useCells, buildCells, cellDir } from "../src/cell";
+import { restoreCells } from "./cells";
 import { write } from "../src/write";
 import { loadStanding, setStanding, recordInteraction, suggestStanding, approveSuggestion, orphanStanding, STANDING_READERS } from "../src/standing";
 import { handle } from "../src/server";
@@ -16,7 +17,7 @@ import { digest } from "../src/digest";
 import { pullSource } from "../src/pull";
 import { SAM, brain, traffic } from "./standing-fixture";
 
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 
 const setSlice = (root: string, name: string, s: Record<string, unknown>) => {
   const f = join(root, "rules", "slices.yaml");
@@ -33,7 +34,7 @@ const setAgent = (root: string, agent: string, patch: Record<string, unknown>) =
 const both = <T>(fn: () => T): [T, T] => {
   useCells(false); const hub = fn();
   useCells(true); const cell = fn();
-  useCells(false);
+  restoreCells();
   return [hub, cell];
 };
 

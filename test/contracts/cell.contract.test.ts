@@ -11,11 +11,12 @@ import * as rulesModule from "../../src/rules";
 const realLoadRules = rulesModule.loadRules;
 import { carve, grantFor } from "../../src/carve";
 import { useCells, buildCell, buildCells, cellDir, cellsDir, cellInfo, cellGeneration, freshCell, startCells, buildReaderCell, readerCellDir } from "../../src/cell";
+import { restoreCells } from "../cells";
 import * as core from "../../src/core";
 import { handle } from "../../src/server";
 import { issueToken, revokeTokens } from "../../src/auth";
 
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 
 const SRC = `sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-01`;
 function note(root: string, id: string, fm: string, facts = "", body = "") {

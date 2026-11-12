@@ -11,6 +11,7 @@ import { carve, grantFor } from "../../src/carve";
 import { redactLinks, scrubCarved, scrubPage, pageSummary, statusBanner, renderNote, renderView, buildView } from "../../src/view";
 import { readNote } from "../../src/core";
 import { useCells } from "../../src/cell";
+import { restoreCells } from "../cells";
 
 const SRC = `sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-01`;
 function note(root: string, id: string, fm: string, facts = "", body = "") {
@@ -193,7 +194,7 @@ test("contract view: a read's JSON facts name no other agent, with or without ce
       expect(facts, `cells ${cells}`).toContain("Bea");
       for (const name of ["planner", "steward", "gardener"]) expect(facts, `cells ${cells}`).not.toContain(name);
       expect(facts).not.toContain('"by"');
-    } finally { useCells(false); }
+    } finally { restoreCells(); }
   }
 });
 
@@ -210,7 +211,7 @@ test("contract view: one list item or dispute candidate shared with another agen
       const all = JSON.stringify(out);
       expect(Object.keys(out.facts).sort(), `cells ${cells}`).toEqual(["next_step"]);
       for (const v of ["Bob", "C-330", "Ann", "B-210"]) expect(all, `cells ${cells}`).not.toContain(v);
-    } finally { useCells(false); }
+    } finally { restoreCells(); }
   }
 });
 
@@ -363,7 +364,8 @@ test("contract view: a cross-page sentence about a hidden page goes, whatever pa
   writeFileSync(join(root, "projects", "ana-diaz.md"), fm("projects/ana-diaz", "project", "Ana Diaz Fund") + "---\n");
   writeFileSync(join(root, "orgs", "north-college.md"), fm("orgs/north-college", "org", "North College") + "---\n[[people/ana-diaz|Ana Diaz]] works at North College.[^p-at-ana-diaz]\n\n[^p-at-ana-diaz]: Email, 2026-10-05 (gmail:f0000000000000a2)\n");
   Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "planner: fixture"], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "planner", GIT_AUTHOR_EMAIL: "p@x", GIT_COMMITTER_NAME: "planner", GIT_COMMITTER_EMAIL: "p@x" } });
-  const body = (readNote(root, "helper", "orgs/north-college") as { body: string }).body;
+  // A cell leaves out a body with nothing left in it; the hub answers with its blank lines.
+  const body = (readNote(root, "helper", "orgs/north-college") as { body?: string }).body ?? "";
   expect(body).not.toContain("works at North College");
   expect(body).not.toContain("gmail:f0000000000000a2");
 });

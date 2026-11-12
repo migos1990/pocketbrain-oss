@@ -13,7 +13,13 @@ import { withTokenRole } from "../src/tokenrole";
 import { tokensOf } from "../src/context";
 
 const COURSE = "projects/course-a", PAUL = "people/paul-advisor";
-const edit = (root: string, id: string, f: (s: string) => string) => { const p = join(root, `${id}.md`); writeFileSync(p, f(readFileSync(p, "utf8"))); };
+// Each edit is committed, as every brain change is: a cell is current for a brain commit, so an
+// uncommitted edit after a read is invisible through cells (the lane ran this file without cells
+// until G801).
+const edit = (root: string, id: string, f: (s: string) => string) => {
+  const p = join(root, `${id}.md`); writeFileSync(p, f(readFileSync(p, "utf8")));
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "owner: edit"], { cwd: root });
+};
 const ids = (xs: { id: string }[] | undefined) => (xs ?? []).map((x) => x.id);
 
 test("read names the notes that link to a page, and the notes it links to, with titles", () => {

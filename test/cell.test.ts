@@ -7,16 +7,17 @@ import { loadBrain, saveNote, type Note } from "../src/brain";
 import * as core from "../src/core";
 import { changeStats, forgetChangeFeed } from "../src/core";
 import { useCells, buildCell, buildCells, cellDir } from "../src/cell";
+import { restoreCells } from "./cells";
 import { write } from "../src/write";
 import { saveNoteText } from "../src/dashboard/edit";
 
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 
 const AGENTS = ["steward", "planner", "helper"];
 const both = <T>(fn: () => T): [T, T] => {
   useCells(false); const hub = fn();
   useCells(true); const cell = fn();
-  useCells(false);
+  restoreCells();
   return [hub, cell];
 };
 // The only line allowed to differ: a cell knows how many notes it holds, not the brain's size.
@@ -321,7 +322,7 @@ test("an owner text edit of a hidden fact doesn't date the note; retiring a visi
         expect(c?.attrs_changed, `${agent} cells ${on}`).toEqual(["next_step"]);
       }
     }
-  } finally { delete process.env.GIT_AUTHOR_DATE; delete process.env.GIT_COMMITTER_DATE; useCells(false); }
+  } finally { delete process.env.GIT_AUTHOR_DATE; delete process.env.GIT_COMMITTER_DATE; restoreCells(); }
 });
 
 test("a change-feed read that fails or is cut short isn't remembered as 'nothing changed'", () => {

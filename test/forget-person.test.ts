@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { mkdtempSync } from "node:fs";
 import { enroll } from "../src/edge";
 import { useCells } from "../src/cell";
+import { restoreCells } from "./cells";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -21,7 +22,7 @@ import { main } from "../src/cli";
 import { loadBrain, saveParseSnapshots, resetParseSnapshots } from "../src/brain";
 
 const ID = "people/sam-roy";
-afterEach(() => useCells(false));
+afterEach(restoreCells);
 const DAY = 86_400_000;
 const sh = (root: string, ...a: string[]) => Bun.spawnSync(["git", "-C", root, ...a]).stdout.toString().trim();
 const commitAll = (root: string, msg: string) => Bun.spawnSync(["git", "-C", root, "-c", "user.name=louis", "-c", "user.email=louis@pocketbrain.local", "commit", "-qam", msg]);

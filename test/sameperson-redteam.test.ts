@@ -17,6 +17,7 @@ import { upkeep } from "../src/upkeep";
 import { carve, grantFor } from "../src/carve";
 import { FgaClient, startFga, stopFga } from "../src/fga";
 import { useCells, cellDir } from "../src/cell";
+import { restoreCells } from "./cells";
 
 const rec = (value: string, src: string) =>
   `{ value: "${value}", as_of: 2026-09-01, sources: ["${src}"], verification: verified-by-source, by: planner, recorded: 2026-10-01 }`;
@@ -670,7 +671,7 @@ test("G266 after a merge, a link to the dropped note shows the kept note to an a
   expect(readFileSync(join(root, "projects/lunch.md"), "utf8")).toContain("[[people/p-77]]"); // not repointed yet
   for (const cells of [false, true]) {
     useCells(cells);
-    try { expect(seen(root, "helper", "projects/lunch")!.body, `cells ${cells}`).toBe("See [[people/jane-roy]].\n"); } finally { useCells(false); }
+    try { expect(seen(root, "helper", "projects/lunch")!.body, `cells ${cells}`).toBe("See [[people/jane-roy]].\n"); } finally { restoreCells(); }
   }
   // Once Jane Roy leaves helper's view, the link is [[redacted]] again, also in a cell updated in
   // place (the id shares no word with a carved value, so only the pointer's target reaches the note).
@@ -682,6 +683,6 @@ test("G266 after a merge, a link to the dropped note shows the kept note to an a
     expect(seen(root, "helper", "projects/lunch")!.body).toBe("See [[redacted]].\n");
     // The cell file itself never keeps the id of a note out of the slice (invariant 10).
     expect(readFileSync(join(cellDir(root, "helper"), "projects/lunch.md"), "utf8")).not.toContain("people/jane-roy");
-  } finally { useCells(false); }
+  } finally { restoreCells(); }
   expect(seen(root, "helper", "projects/lunch")!.body).toBe("See [[redacted]].\n");
 });

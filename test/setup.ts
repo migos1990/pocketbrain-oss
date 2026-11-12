@@ -4,13 +4,15 @@
 // The folder is removed when the run exits, so a run leaves no pb-* folders behind.
 // Every run also gets its own config folder, so a brain remembered by a developer's own
 // `pocketbrain init` is never picked up by a test that runs without --brain.
-import { afterAll } from "bun:test";
+import { afterAll, beforeEach } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useFreeDisk } from "../src/textline/items";
 import { isolateGit } from "../evals/lib/gitenv";
 import { missingTools } from "./tools";
+import { cellsOn } from "../src/cell";
+import { LANE_CELLS, restoreCells } from "./cells";
 
 if (!process.env.PB_TEST_RUN_DIR) {
   const missing = missingTools();
@@ -48,3 +50,16 @@ if (!process.env.PB_TEST_RUN_DIR) {
 }
 // The hub's disk check reads a fixed figure in tests, so a full build disk can't fail them.
 useFreeDisk(() => 1_000_000);
+
+// The cells lane stays real (G801): every test starts with cells as the run asked for them
+// (PB_CELLS=1 on, else off). A test that left them changed fails the next test, which puts the
+// setting back, so one leak is one red line naming the fix instead of a quiet lane; the run's last
+// test is checked when the run ends. See test/cells.ts.
+const cellsLeft = (when: string) => `cells were left ${cellsOn() ? "on" : "off"} ${when}, but this run asked for them ${LANE_CELLS ? "on (PB_CELLS=1)" : "off"}: a test that changes cells must put them back with restoreCells() from test/cells.ts`;
+beforeEach(() => {
+  if (cellsOn() === LANE_CELLS) return;
+  const msg = cellsLeft("by the test before this one (or this file's beforeAll)");
+  restoreCells();
+  throw new Error(msg);
+});
+afterAll(() => { if (cellsOn() !== LANE_CELLS) { const msg = cellsLeft("by the run's last test"); restoreCells(); throw new Error(msg); } });

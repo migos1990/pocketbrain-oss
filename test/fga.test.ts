@@ -10,6 +10,7 @@ import { FgaClient, startFga, stopFga, refreshFga, syncFga, tuplesFromPolicy, sl
 import { search, contextPack } from "../src/core";
 import { loadRules } from "../src/rules";
 import { useCells, buildCells, cellInfo } from "../src/cell";
+import { restoreCells } from "./cells";
 
 let server: ReturnType<typeof Bun.serve>;
 let url = "";
@@ -44,7 +45,7 @@ beforeAll(() => {
   url = `http://127.0.0.1:${server.port}`;
 });
 afterAll(() => server.stop(true));
-afterEach(() => { stopFga(); useCells(false); down = false; });
+afterEach(() => { stopFga(); restoreCells(); down = false; });
 
 function brain() {
   const root = makeBrain();
