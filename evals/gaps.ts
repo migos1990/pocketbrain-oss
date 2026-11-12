@@ -26,6 +26,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Mac probe 2026-11-09 (north star red): a person's org fact linked an org page the brain never had, so nothing tied the two and the person failed the bar; the link was the pipeline's, and no step noticed it.",
     fix: "src/dangling.ts finds each live fact on a page below private that links no page by id, title or alias, and upkeep step 1c3c files one question per fact in inbox/links/ once policy says links: { ask: true } (report-only before). The home asks it under To answer: a close page, keep it as a name, or leave it; the answer is the owner's word on that fact. Tests: test/dangling-link-ask.test.ts.",
   },
+  G786: {
+    closed: "claude/birthday-words",
+    title: "A birthday held without its year read as the raw value \"07-26\"",
+    severity: "low",
+    finding: "Owner's phone and screens review item 14 (2026-11): a person page said \"…'s birthday is 07-26.\" in its text, \"07-26\" in Details and on the home's line, where every other date is said as a day; the page writer only turned YYYY-MM-DD into words, and a page it had written kept the raw value until a commit touched it.",
+    fix: "src/diary.ts sayYearly says a birthday or anniversary held as MM-DD (or vCard's --MM-DD) as \"26 Jul\"; the page writer (src/wiki.ts), Details (src/dashboard/html-page.ts), the home's lines (src/dashboard/home.ts) and Ask's answer (src/owner-say.ts) use it. renderTouchedPages writes again any page whose text still says such a value raw, touched or not, until it says the day; the nightly read counts \"is 07-26\" as machine-date. Tests: test/birthday-words.test.ts.",
+  },
   G784: {
     closed: "claude/accepted-ask-leaves",
     title: "Save it on an ask a check sent to the owner filed the same ask again, and a second tap showed a raw file name",

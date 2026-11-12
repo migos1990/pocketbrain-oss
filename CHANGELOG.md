@@ -14,6 +14,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+- A birthday kept without its year reads as a day, "26 Jul", on the page, in its Details, on your home and in Ask's answer. It read "07-26". Pages the hub already wrote that way are written again on the next night, and the nightly read now counts a raw one as a machine date (G786).
 - Save it on an ask your memory sent you to check now saves it. Before, a booking mail that said "approved" came back as the same ask after every Save it, and a second tap showed a red line with a file name; an ask already answered now says "Already answered." (G784).
 - "How private" on a page is a full-size field in the app's own look, with Save beside it. It was the browser's small grey box (G783).
 - The card under a page that says what is next no longer repeats the page's name above it (G782).

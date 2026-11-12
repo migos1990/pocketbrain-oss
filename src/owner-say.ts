@@ -16,7 +16,7 @@ import { loadRules, attributeSpec, ownerName, type Rules } from "./rules";
 import { records, carve, grantFor } from "./carve";
 import { write } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
-import { readDiary, sayDay } from "./diary";
+import { readDiary, sayDay, sayYearly } from "./diary";
 import { inboxConflicts, settleInbox } from "./settle-inbox";
 import { say, type SayId } from "./owner-errors";
 import { renderTouchedPages, MADE } from "./wiki";
@@ -473,7 +473,7 @@ function answer(page: Note, attr: string | undefined, notes: Note[], fresh?: boo
     if (isDisputed(f)) return { kind: "say.answer-waiting", page: id, text: say("say.answer-waiting", { name, attr: words }) };
     if (closedFact(page, f) && !fresh) return signin;
     // "Its next step is to freeze the beta", never "is freeze the beta" (G706).
-    const v = plain(valueOf(f), title), step = /(^|_)steps?$/.test(key) && /^\p{Ll}/u.test(v) && !/^to\s/i.test(v);
+    const v = sayYearly(key, plain(valueOf(f), title)), step = /(^|_)steps?$/.test(key) && /^\p{Ll}/u.test(v) && !/^to\s/i.test(v);
     return { kind: "say.answer", page: id, fact_key: `${id}#${key}`, text: say(isVerbAttribute(key) ? "say.answer-verb" : "say.answer", { name, attr: words, value: step ? `to ${v}` : v }) };
   }
   return { kind: "say.lookup", page: id, text: say("say.lookup", { what: about(page, title, fresh) }) };

@@ -15,7 +15,7 @@ import { needleFor, findCarried, type Needle } from "../match";
 import type { Rules } from "../rules";
 import { ownerName, ownAssistant } from "../rules";
 import { isOwnerId } from "../owner";
-import { readDiary, shownValue, displayName, sayDay, sayDays, ID_IN_TEXT, type DiaryRow } from "../diary";
+import { readDiary, shownValue, displayName, sayDay, sayDays, sayYearly, ID_IN_TEXT, type DiaryRow } from "../diary";
 import { ownerLocal } from "../clock";
 import { ownerConflicts, type SettleCase } from "../core";
 import { unseenFacts, keptFacts, type Unseen } from "../seen";
@@ -360,7 +360,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   const t = shortName(id, row.title!, notes);
   // A web address says its host only ("harbourline.example"), never a bare address in a sentence.
   const site = SITE_ATTRIBUTES.has(attr);
-  const val = (v: unknown) => site ? siteHost(say(v)) : say(v);
+  const val = (v: unknown) => site ? siteHost(say(v)) : sayYearly(attr, say(v));
   const prose = isProse(val(row.to)) || (row.from !== undefined && isProse(val(row.from)));
   const w = (k: LineKey) => lineWords(k, { title: t, attr: a, value: val(row.to), older: olderSay(row), source: CONFIRMED_BY[row.source_word] ?? "source", ...(row.from !== undefined && !shapeless ? { was: val(row.from) } : {}) });
   // A few attributes have their own sentence: what's next, when the owner was last in touch, a role.
@@ -462,7 +462,7 @@ function clause(attr: string, v: string): string | undefined {
 const clauseRank = (attr: string, v: string) => isProse(v) ? 4 : MONEY_ATTRIBUTES.has(attr) ? 0 : DUE_ATTRIBUTES.has(attr) ? 1 : STATE_ATTRIBUTES.has(attr) ? 3 : 2;
 function valueWords(attr: string, value: unknown, notes: Map<string, Note>): string {
   const v = plain(value, (x) => { const tt = notes.get(x)?.fm.title; return tt === undefined ? undefined : String(tt); }, slugsOf(notes)).replace(/[\s.]+$/, "");
-  return SITE_ATTRIBUTES.has(attr) ? siteHost(v) : v;
+  return SITE_ATTRIBUTES.has(attr) ? siteHost(v) : sayYearly(attr, v);
 }
 // Several held values, one line per page (owner's phone, 2026-11-03: one subscription was three
 // lines): "Notes app subscription comes to CAD 6.20, is due 9 Nov 2026 and will renew." Any other

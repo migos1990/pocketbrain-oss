@@ -123,6 +123,16 @@ export function sayDay(text: string): string {
   const m = text.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : text;
 }
+// A day that comes back every year, held without its year ("07-26", or vCard's "--07-26"), on a
+// birthday or an anniversary: said as "26 Jul", never as the raw value (screens review item 14).
+// Only these attributes: "10-12" elsewhere may be a range or a score.
+export const YEARLY_ATTRIBUTES = new Set(["birthday", "anniversary", "date_of_birth", "dob"]);
+export function sayYearly(attr: string, value: string): string {
+  const m = YEARLY_ATTRIBUTES.has(attr) ? value.trim().match(/^(?:--)?(\d{2})-(\d{2})$/) : null;
+  if (!m) return value;
+  const mo = Number(m[1]), d = Number(m[2]);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? `${d} ${MONTHS[mo - 1]}` : value;
+}
 // Every day inside a text, the same way; a date joined to a time or a range is left alone.
 export const sayDays = (text: string) => text.replace(/(?<![\w/-])\d{4}-\d{2}-\d{2}(?![\w-])/g, sayDay);
 // A Markdown link in a title ("[site.example](http://site.example)", an import's auto-link) reads

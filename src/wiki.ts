@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { records, carve, grantFor } from "./carve";
 import { CAPDIRS, ownerTitle, ownerOf } from "./capture";
 import { SCHEMES, normalizeRef, refString } from "./sources";
+import { sayYearly, YEARLY_ATTRIBUTES } from "./diary";
 
 export function summaryOf(n: Note): string | undefined {
   const s = n.fm.summary;
@@ -586,7 +587,7 @@ const quoted = (lab: string, v: string) => `${lab}: “${v}${/[.!?…]$/.test(v)
 // One sentence per fact, shaped by what kind of value it is (rules/checks.yaml: a date, a list,
 // a link, an address) rather than by its name, so any attribute reads as words.
 function sentence(n: Note, attr: string, values: string[], owner: string[] = [], spec: AttributeSpec = {}, called?: string): string {
-  const full = String(n.fm.title ?? n.fm.id), t = called ?? full, words = values.map((x) => inWords(x).replace(/\.$/, ""));
+  const full = String(n.fm.title ?? n.fm.id), t = called ?? full, words = values.map((x) => inWords(sayYearly(attr, x)).replace(/\.$/, ""));
   const v = words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0];
   const person = n.fm.type === "person", lab = label(attr).toLowerCase(), many = words.length > 1;
   if (!many && NO_VALUE.test(v ?? "")) return "";
@@ -734,9 +735,18 @@ function namesBySource(root: string, notes: Note[], owner: string): Map<string, 
 }
 
 // The pages a commit since `since` touched that the page writer writes.
+// A page the hub wrote before a yearly day was said as one ("birthday is 07-26", G786) is written
+// again too, touched or not, until its text says the day; then it is like any other page.
 function touchedPages(root: string, notes: Note[], since: string, always?: string): Note[] {
   const touched = new Set(git(root, ["log", `--since=${since}`, "--name-only", "--format="]).split("\n").filter((p) => p.endsWith(".md")));
-  return notes.filter((n) => (touched.has(n.path) || n.fm.id === always) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
+  return notes.filter((n) => (touched.has(n.path) || n.fm.id === always || rawYearly(n)) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
+}
+
+function rawYearly(n: Note): boolean {
+  return Object.entries(n.fm.facts ?? {}).some(([attr, f]) => YEARLY_ATTRIBUTES.has(attr) && !isDisputed(f) && records(f).filter(live).some((r) => {
+    const v = String(r.value ?? "").trim();
+    return sayYearly(attr, v) !== v && (n.body ?? "").includes(` is ${v}`);
+  }));
 }
 
 export const NAME_KEYS_PER_NIGHT = 20;

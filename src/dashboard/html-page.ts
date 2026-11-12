@@ -10,7 +10,7 @@ import type { State } from "./data";
 import type { HomeLine } from "./home";
 import type { SayReply } from "../owner-say";
 import { wikiBody, wikiLinks } from "./html-brain";
-import { displayName, sayDay, sayDays } from "../diary";
+import { displayName, sayDay, sayDays, sayYearly } from "../diary";
 import { connections, audience, kindLabel, folderOf, sourceWords } from "./browse";
 import { agentTitle, whose, byWhose, cap } from "./labels";
 import { refString } from "../sources";
@@ -221,7 +221,7 @@ function facts(s: State, n: Note, fresh: boolean): string {
     // Each attribute in the owner's words and each day as a person writes it (audit v11).
     const name = esc(cap(attrWords(attr)));
     if (!fresh && live.some((r) => shut(n, r))) return `<dt>${name}</dt><dd class="kind">${PAGE_COPY.shut}</dd>`;
-    const v = wikiLinks(s, live.map((r) => sayDays(linkText(r.value))).join(", ")).replace(/href="\/note\//g, 'href="/p/');
+    const v = wikiLinks(s, live.map((r) => sayYearly(attr, sayDays(linkText(r.value)))).join(", ")).replace(/href="\/note\//g, 'href="/p/');
     // A date said as "last week" stays a guess: "since around".
     const first = [...live].filter((r) => r.as_of).sort((a, b) => String(a.as_of).localeCompare(String(b.as_of)))[0];
     // A value that is itself that day ("last contact 4 Sep 2026") doesn't say it twice.

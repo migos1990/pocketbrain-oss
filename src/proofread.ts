@@ -18,7 +18,7 @@ export const RULES = [
   "template-slot", // a slot the template never filled: {day}, undefined, null
   "raw-markup", // [[link]], [^1], **, `code`, a source id or a long hex id in the words, an id for a name
   "label-sentence", // an attribute's label read as English: "The chose of X is", "On X, the why:"
-  "machine-date", // 2026-08-30 in a sentence the hub wrote (a source's own words may keep theirs)
+  "machine-date", // 2026-08-30, or a yearly 07-26, in a sentence the hub wrote (a source's own words may keep theirs)
   "repeated-opener", // three sentences running that open the same way: a list written as prose
   "spliced-value", // a free-text value glued into a template: "X is Robin is done", "works as A; B", "Due for Re: Fwd: …", "?." (audit v13)
   "said-twice", // one sentence twice on a page
@@ -68,7 +68,8 @@ export function readPage(html: string): Rule[] {
   for (const line of own) {
     if (/\{[a-z_]+\}|\bundefined\b|\bnull\b|\bNaN\b|\bNone[:.]|\[object Object\]/.test(line)) hit("template-slot");
     if (/\[\[|\]\]|\[\^\d+\]|\*\*|`|\b(?:gmail|gcal|mail|notion|approved|imsg|owner):\s?[0-9a-f]{6,}|\b[0-9a-f]{16,}\b/i.test(line)) hit("raw-markup");
-    if (/\b\d{4}-\d{2}-\d{2}\b/.test(line)) hit("machine-date");
+    // A yearly day without its year counts too: "birthday is 07-26" (G786).
+    if (/\b\d{4}-\d{2}-\d{2}\b/.test(line) || /\b(?:is|on) (?:--)?(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b(?!-)/.test(line)) hit("machine-date");
     if (/(?<!\.)\.\.(?!\.)|,,|\s[,.;:](?=\s|$)|\b([a-z]+) \1\b/.test(line)) hit("doubled");
     if (/\bno source given\b|\bunknown source\b|\bsource: none\b/i.test(line)) hit("no-source");
     if (/\bhttps?:\/\/\S/.test(line)) hit("bare-url");
