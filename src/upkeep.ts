@@ -25,6 +25,7 @@ import { queueOp } from "./hub";
 import type { WriteResult } from "./write";
 import { keptBothWith } from "./write";
 import { wikiLint, renderTouchedPages, parentPlan, pageParentsOn } from "./wiki";
+import { tripPlan, tripsOn } from "./page-kind";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
 import { setAsideReceipts, setAsideMachineMail } from "./receipt-pages";
@@ -257,6 +258,19 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
       n.fm.parent = p.parent!;
       saveNote(root, n);
       commitFix(root, run, [n.path], `put ${n.fm.id} under ${p.parent}`, [n.fm.id]);
+    }
+    // A flight, stay or booking is part of the trip whose dates hold it (src/page-kind.ts tripPlan,
+    // G787): on from the first run, by the owner's word (2026-11-12, "systematic … from the
+    // get-go"), with the same guards as above; `pocketbrain wiki trips off` makes it a count.
+    const trips = tripPlan(notes, (k) => hiddenFrom.has(k), shown).filter((t) => !would.some((w) => w.id === t.id));
+    if (!tripsOn(rules)) {
+      if (trips.length) add({ rule: "trip-would-set", key: "trip-would-set", kind: "review", detail: `${trips.length} flight or booking page${trips.length === 1 ? " is" : "s are"} part of a trip; \`pocketbrain wiki trips on\` puts ${trips.length === 1 ? "it" : "them"} under the trip each night` });
+    } else for (const t of trips) {
+      const n = byId.get(t.id)!;
+      if (!add({ rule: "trip-part", key: n.fm.id, kind: "auto-fix", detail: "put under the trip it is part of" })) continue;
+      n.fm.parent = t.parent;
+      saveNote(root, n);
+      commitFix(root, run, [n.path], `put ${n.fm.id} under ${t.parent}`, [n.fm.id]);
     }
   }
 

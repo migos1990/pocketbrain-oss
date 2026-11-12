@@ -44,6 +44,7 @@ import type { WriteResult } from "./write";
 import { OWNER, ownerRef, isOwnerId } from "./owner";
 import { corroborate, floorFor, loadSources } from "./pull";
 import { putQuote, getQuote, gitSide } from "./quotes";
+import { titlePiece as pieceOf } from "./page-kind";
 
 export type CaptureKind = "text" | "voice" | "email";
 // via: where it came in. cli and drop are Louis himself; agent is an agent's token; mail is the
@@ -332,6 +333,8 @@ const phonesIn = (t: string) => (t.match(/\+?\(?\d[\d\s().-]{5,}\d/g) ?? []).map
 const local = (d: string) => d.replace(/^1(?=\d{10}$)/, "");
 const samePhone = (a: string, b: string) => local(a) === local(b);
 
+const KIND_WORDS = { travel: "a flight, stay or booking", event: "a one-off event", errand: "a provider's mail" } as const;
+
 export function checkCandidate(c: Candidate, text: string, notes: Note[], rules: Rules, context = ""): Omit<CaptureItem, "proposal"> {
   if (!wellFormed(c)) return { candidate: c, status: "ungrounded", why: "the model's answer for this fact isn't well-formed" };
   const sq = squash(text);
@@ -382,6 +385,12 @@ export function checkCandidate(c: Candidate, text: string, notes: Note[], rules:
   // be committed in the proposal, printed by the digest and served once accepted.
   if (c.value.trim().length > MAX_VALUE_CHARS) return { candidate: c, status: "unsupported", why: TOO_LONG };
   if (!TYPES.includes(c.type)) return named({ candidate: c, status: "unsupported", why: `type ${c.type} isn't captured` });
+  // A flight, a booking, an appointment or a provider's mail is not a project or a decision of the
+  // owner's (G787, src/page-kind.ts): it starts no page of its own, whatever the fact. A flight or a
+  // stay may still start a project page, which the night pass puts under the trip whose dates hold it.
+  const kind = c.type === "project" || c.type === "decision" ? pieceOf(c.entity) : undefined;
+  if (kind && (c.type === "decision" || kind !== "travel") && !resolveEntity(notes, c.type, c.entity).id)
+    return { candidate: c, status: "unsupported", why: `${KIND_WORDS[kind]} is not a ${c.type} of yours; no page is started for it` };
   const spec = attributeSpec(rules, c.type, c.attribute);
   if (!isDeclared(rules, c.type, c.attribute))
     return named({ candidate: c, status: "unsupported", why: `${c.type} has no attribute ${c.attribute}; not proposed` });

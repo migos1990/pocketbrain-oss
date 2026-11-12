@@ -51,7 +51,7 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { setAsideMachineMail } from "./receipt-pages";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -335,6 +335,7 @@ const USAGE = `pocketbrain <command>
   aftercheck classify on|off [--cap <$>]  the second-opinion classifier after an agent's write, and its own monthly cap (docs/aftercheck.md)
   wiki family on|off                 whether upkeep links a person page with your surname to your page as maybe family (off: counts only; docs/owner-home.md)
   wiki parents on|off                whether upkeep puts a project page under the project it is part of (off: counts only; docs/wiki.md)
+  wiki trips on|off                  whether upkeep puts a flight, stay or booking page under its trip (on by default; docs/wiki.md)
   wiki links on|off|preview          whether upkeep links a name that fits exactly one note (off: nothing); preview lists what it would link (policy.yaml; docs/wiki.md)
   gardener open [minutes] [--agent g]  let the gardener connect outside its hours for a manual run (default 60)
   gardener cleanup                   delete its ended Anthropic sessions older than an hour (rules/gardener.yaml)
@@ -1570,8 +1571,9 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     if (args[0] === "links") return ownerSet(() => setLinkNames(root, args[1] ?? ""));
     if (args[0] === "family") return ownerSet(() => setFamilyLinks(root, args[1] ?? ""));
     if (args[0] === "parents") return ownerSet(() => setPageParents(root, args[1] ?? ""));
+    if (args[0] === "trips") return ownerSet(() => setTrips(root, args[1] ?? ""));
     if (args[0] === "opening") return ownerSet(() => setWikiOpening(root, args[1] ?? ""));
-    if (args[0] !== "sync") { console.error("wiki sync on | off, wiki opening on | off, wiki links on | off, wiki family on | off, or wiki parents on | off"); return 2; }
+    if (args[0] !== "sync") { console.error("wiki sync on | off, wiki opening on | off, wiki links on | off, wiki family on | off, wiki parents on | off, or wiki trips on | off"); return 2; }
     return ownerSet(() => setWikiSync(root, args[1] ?? ""));
   }
   if (cmd === "gardener") {

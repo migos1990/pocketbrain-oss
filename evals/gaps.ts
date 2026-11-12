@@ -33,6 +33,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Owner's phone and screens review item 14 (2026-11): a person page said \"…'s birthday is 07-26.\" in its text, \"07-26\" in Details and on the home's line, where every other date is said as a day; the page writer only turned YYYY-MM-DD into words, and a page it had written kept the raw value until a commit touched it.",
     fix: "src/diary.ts sayYearly says a birthday or anniversary held as MM-DD (or vCard's --MM-DD) as \"26 Jul\"; the page writer (src/wiki.ts), Details (src/dashboard/html-page.ts), the home's lines (src/dashboard/home.ts) and Ask's answer (src/owner-say.ts) use it. renderTouchedPages writes again any page whose text still says such a value raw, touched or not, until it says the day; the nightly read counts \"is 07-26\" as machine-date. Tests: test/birthday-words.test.ts.",
   },
+  G787: {
+    closed: "claude/projects-what-they-are",
+    title: "A flight, a booking, an appointment or a provider's survey mail became one of the owner's projects",
+    severity: "medium",
+    finding: "Owner's phone, 2026-11-12 (real brain, Memory): his page read \"Your personal projects include … survey contest, … Flight to Montréal (AC …), Flight to Montreal (TS …), … appointment at … | …\" while a trip page already said out Dec 12, back Jan 2. A mail or calendar item naming a project the brain didn't hold started a project page under the item's own title (src/capture.ts new-note), nothing asked what kind of thing it was, the only grouping rule matched titles and was off, and areas read raw (\"Your nca projects\").",
+    fix: "src/page-kind.ts reads a title, never with a model: travel (flight, stay, booking, check-in), a one-off event (appointment, \"A vs B\", a \"what | where\" title, one date in brackets) or a provider's mail (survey, contest, order, renewal); a trip title or the owner's own word on the page wins. Capture (checkCandidate) starts no project or decision page for an event or a provider's mail, nor a decision for a booking. Upkeep step 1c4 puts a flight or stay whose dates fall inside exactly one trip's dates under that trip (tripPlan; same reader guards as G640; on by the owner's word, `pocketbrain wiki trips off` counts only). The owner's page lists none of them and no page that has a parent, and an area reads as its org writes it (areaWord: \"Your NCA projects\"). Tests: test/page-kind.test.ts.",
+  },
   G784: {
     closed: "claude/accepted-ask-leaves",
     title: "Save it on an ask a check sent to the owner filed the same ask again, and a second tap showed a raw file name",

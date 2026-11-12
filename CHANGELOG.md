@@ -6,6 +6,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### Before you update
 
+- From this update the nightly pass puts a flight, stay or booking page under the trip whose dates hold it, from the first night (G787). Run `pocketbrain wiki trips off` if you'd rather it only counted them.
 - Your Gardener can now write a short opening paragraph on a page that ties its facts together (G713). It is off: each night the Gardener's wiki_sync only reports what it would write. Run `pocketbrain wiki opening on` when you want pages to take it, and `pocketbrain wiki opening off` to go back.
 - The night pass can now notice a class you teach (G711). It is off: each night it only counts the classes it would ask you about. Add `teach: { ask: true }` to `rules/policy.yaml` when you want the question on your home.
 - Upkeep now counts the held facts your assistants filed from receipts and other no-reply mail before this update, and changes nothing. Run `pocketbrain machine-mail` to see the count, and `pocketbrain machine-mail on` to set them aside, each with Undo on your home (G668).
@@ -15,6 +16,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 - A birthday kept without its year reads as a day, "26 Jul", on the page, in its Details, on your home and in Ask's answer. It read "07-26". Pages the hub already wrote that way are written again on the next night, and the nightly read now counts a raw one as a machine date (G786).
+- Your own page no longer lists a flight, a booking, an appointment, a game or a provider's mail (a survey, a contest) as one of your projects, and new mail and calendar items no longer start a project page for an appointment or a provider's mail. Flights and stays sit under their trip. Areas read as their org writes them: "Your NCA projects", not "Your nca projects" (G787).
 - Save it on an ask your memory sent you to check now saves it. Before, a booking mail that said "approved" came back as the same ask after every Save it, and a second tap showed a red line with a file name; an ask already answered now says "Already answered." (G784).
 - "How private" on a page is a full-size field in the app's own look, with Save beside it. It was the browser's small grey box (G783).
 - The card under a page that says what is next no longer repeats the page's name above it (G782).

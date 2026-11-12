@@ -10,6 +10,7 @@ import { hubRole } from "./hub";
 import { OWNER } from "./owner";
 import { loadRules, ownerName, attributeSpec, type Rules, type AttributeSpec } from "./rules";
 import { nameIndex, nameKey, nameKeys } from "./mentions";
+import { pageKind, isTripTitle, firstDay } from "./page-kind";
 import { existsSync, readFileSync, readdirSync, appendFileSync, mkdirSync } from "node:fs";
 import YAML from "yaml";
 import { join } from "node:path";
@@ -23,6 +24,26 @@ export function summaryOf(n: Note): string | undefined {
   if (typeof s !== "string") return undefined;
   const line = s.split("\n")[0].trim();
   return line || undefined;
+}
+
+// An area as a word in a sentence (G787): "Your NCA projects", never "Your nca projects". An area
+// is written as an org's title writes the same word ("nca" in "NCA Lakeside" is NCA) or its
+// initials ("gv" for "Green Valley" is GV); with no such org it stays lower case.
+// Only the casing comes from the org page: no name the area doesn't already say.
+export function areaWord(area: string, notes: Note[]): string {
+  const a = area.trim().toLowerCase();
+  const fold = (t: string) => t.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+  for (const n of notes) {
+    if (n.fm.type !== "org") continue;
+    for (const t of [n.fm.title, ...(n.fm.aliases ?? [])].map((x) => String(x ?? ""))) {
+      const ws = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+      const w = ws.find((x) => fold(x) === fold(a));
+      if (w && !a.includes(" ")) return w === w.toLowerCase() && w.length <= 3 ? w.toUpperCase() : w;
+      const caps = ws.filter((x) => /^\p{Lu}/u.test(x)).map((x) => x[0]).join("");
+      if (caps.length >= 2 && fold(caps) === fold(a)) return caps.toUpperCase();
+    }
+  }
+  return a;
 }
 
 export function parentOf(n: Note): string | undefined {
@@ -928,6 +949,18 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
       lines.push(`About it: ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${cited.map((x) => { const lab = `p-see-${x.p.fm.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; if (!refs.some((r) => r.label === lab)) refs.push({ label: lab, text: [...new Set(x.recs.map(reference))].join("; ") }); return `[^${lab}]`; }).join("")}`);
     }
   }
+  // The pages under this one (their `parent:` names it, G640/G787) gather on it, earliest first:
+  // a trip says its flights and stays ("On this trip: …"), any other page its parts. Cited like the
+  // course's pages above, so a read drops the sentence when one of them is out of the reader's view.
+  if (n.fm.type === "project") {
+    const under = [...o.byId.values()].filter((p) => p.fm.id !== n.fm.id && parentOf(p) === n.fm.id && !o.blind(p.fm.id) && !DONE.has(String(p.fm.status)) && sensitivityRank(p.fm.sensitivity) <= sensitivityRank(n.fm.sensitivity));
+    const cited = under.map((p) => ({ p, day: firstDay(p, (k) => o.hidden(k)), recs: Object.keys(p.fm.facts ?? {}).filter((a) => !o.hidden(`${p.fm.id}#${a}`)).flatMap((a) => { const f = p.fm.facts![a]!; return isDisputed(f) ? [] : records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity))); }) })).filter((x) => x.recs.length)
+      .sort((a, b) => (a.day ?? Infinity) - (b.day ?? Infinity) || String(a.p.fm.title).localeCompare(String(b.p.fm.title)));
+    if (cited.length && cited.length === under.length && cited.length <= 2 * RELATED_NAMES) {
+      const l = cited.map((x) => `[[${x.p.fm.id}|${x.p.fm.title ?? x.p.fm.id}]]`);
+      lines.push(`${isTripTitle(String(n.fm.title ?? "")) ? "On this trip" : "Part of it"}: ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${cited.map((x) => { const lab = `p-see-${x.p.fm.id.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; if (!refs.some((r) => r.label === lab)) refs.push({ label: lab, text: [...new Set(x.recs.map(reference))].join("; ") }); return `[^${lab}]`; }).join("")}`);
+    }
+  }
   const called = lines.length && short ? short : String(n.fm.title ?? n.fm.id);
   // The people whose org fact names this page, each cited by that fact's sources: a page they
   // link to links back, from facts, never guessed.
@@ -1006,8 +1039,12 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   // read drops the whole sentence when one of its pages or facts is hidden from the reader.
   if (o.self) {
     const rank = sensitivityRank(n.fm.sensitivity);
+    const parents = new Set([...o.byId.values()].map(parentOf).filter((x): x is string => !!x));
     for (const [type, word] of [["project", "projects"], ["decision", "decisions"]] as const) {
+      // A flight, a booking, an appointment or a provider's mail is no project or decision of his,
+      // and a page that is part of another is listed under that one (G787, src/page-kind.ts).
       const cited = [...o.byId.values()].filter((p) => p.fm.type === type && PAGE_DIRS.has(p.fm.id.split("/")[0]!) && !DONE.has(String(p.fm.status)) && !o.blind(p.fm.id) && sensitivityRank(p.fm.sensitivity) <= rank)
+        .filter((p) => !(parentOf(p) && o.byId.has(parentOf(p)!)) && !pageKind(p, parents.has(p.fm.id)))
         .map((p) => ({ p, recs: Object.entries(p.fm.facts ?? {}).filter(([a, f]) => !NOT_PROSE.test(a) && !isDisputed(f) && !o.hidden(`${p.fm.id}#${a}`)).flatMap(([, f]) => records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= rank) && r.value !== undefined && r.value !== null)) }))
         .filter((x) => x.recs.length);
       const areas = new Map<string, typeof cited>();
@@ -1020,7 +1057,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
         // Decisions newest first, projects by name.
         xs.sort((a, b) => type === "decision" ? String(b.p.fm.decided_on ?? b.p.fm.created ?? "").localeCompare(String(a.p.fm.decided_on ?? a.p.fm.created ?? "")) || String(a.p.fm.title).localeCompare(String(b.p.fm.title)) : String(a.p.fm.title ?? a.p.fm.id).localeCompare(String(b.p.fm.title ?? b.p.fm.id)));
         const l = xs.map((x) => `[[${x.p.fm.id}|${x.p.fm.title ?? x.p.fm.id}]]`);
-        const what = areas.size > 1 && /^[a-z][a-z -]{0,30}$/i.test(area) ? `${area.toLowerCase()} ${word}` : word;
+        const what = areas.size > 1 && /^[a-z][a-z -]{0,30}$/i.test(area) ? `${areaWord(area, [...o.byId.values()])} ${word}` : word;
         lines.push(`Your ${what}${many ? " include" : ":"} ${l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]}.${[...new Set(xs.map((x) => cite(`p-see-${slug(x.p.fm.id)}`, x.recs)))].join("")}`);
       }
     }
@@ -1215,6 +1252,8 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
     for (const id of to) at.set(id, [...(at.get(id) ?? []), { id: p.fm.id, recs }]);
   }
   for (const p of [...pages]) for (const [id, ms] of at) if (ms.some((m) => m.id === p.fm.id)) { const org = byId.get(id); if (org && !pages.includes(org) && PAGE_DIRS.has(id.split("/")[0]) && !["archived", "merged", "superseded"].includes(String(org.fm.status))) { pages.push(org); via.add(org.path); } }
+  // A page with a parent is listed on its parent's page (G787): the parent is written with it.
+  for (const p of [...pages]) { const up = parentOf(p); const par = up ? byId.get(up) : undefined; if (par && !pages.includes(par) && PAGE_DIRS.has(par.fm.id.split("/")[0]) && !["archived", "merged", "superseded"].includes(String(par.fm.status))) { pages.push(par); via.add(par.path); } }
   // Page -> the facts on other pages whose source names it (name keys), each with its record.
   const namedIn = new Map<string, { from: string; attr: string; rec: FactRecord }[]>();
   for (const p of notes) {

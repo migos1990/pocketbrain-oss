@@ -257,6 +257,13 @@ export function setPageParents(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { page_parents: mode === "on" }, `page_parents ${mode}`);
 }
 
+// `pocketbrain wiki trips on|off`: whether upkeep puts a flight, stay or booking page under the trip
+// whose dates hold it (src/page-kind.ts tripPlan, G787), or only counts them. On until turned off.
+export function setTrips(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki trips on | off");
+  return setRulesKeys(root, "policy.yaml", { trips: mode === "on" }, `trips ${mode}`);
+}
+
 // `pocketbrain aftercheck classify on|off [--cap <dollars>]`: the second-opinion classifier after an
 // agent's write (src/aftercheck.ts, docs/aftercheck.md), off until the owner says so. `--cap` sets
 // that step's own monthly spend cap (usage.cap.steps, docs/usage.md). Off keeps the cap.
