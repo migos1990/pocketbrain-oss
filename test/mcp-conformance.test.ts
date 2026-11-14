@@ -3,6 +3,8 @@
 // the protocol's edge cases (versions, bad JSON, batches, unknown tools, bad arguments) the way
 // the spec says, on /mcp and /mcp/<token> alike. Hosted clients each broke on a different slip.
 import { test, expect } from "bun:test";
+import { readFileSync, mkdirSync, appendFileSync } from "node:fs";
+import { join } from "node:path";
 import { makeBrain } from "./fixture";
 import { handle, allTools, SUPPORTED_PROTOCOLS } from "../src/server";
 import { issueToken } from "../src/auth";
@@ -84,4 +86,85 @@ test("a missing required argument or a wrong type is a tool error naming the arg
   expect(wrong.result.content[0].text).toMatch(/limit must be a number/);
   const fine = await rpc("tools/call", { name: "search", arguments: { query: "plans", limit: 3 } });
   expect(fine.result.isError).toBe(false);
+});
+
+// MCP 2026-07-28 drops the initialize handshake: a client stamps every request with its version
+// and, when it also speaks the older protocol, falls back to initialize only if the answer is a
+// 4xx WITHOUT a modern error body (-32022 and its neighbours). This door speaks the older protocol
+// only, so it must look like what it is (G816): an HTTP 200 "method not found", or a -32022, would
+// leave such a client stuck.
+const MODERN = "2026-07-28";
+const MODERN_ERRORS = [-32020, -32021, -32022];
+const calls = (root: string) => readFileSync(join(root, "log", "calls.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { agent: string; tool: string; refused?: string });
+
+test("a request stamped with a protocol this door doesn't speak gets a 400 a dual-era client falls back on, runs nothing, and is logged", async () => {
+  const { root, tok } = setup();
+  const post = (body: unknown, headers: Record<string, string> = {}) => handle(root, new Request("http://pb/mcp", { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json", ...headers }, body: JSON.stringify(body) }));
+  const stamped = { "io.modelcontextprotocol/protocolVersion": MODERN };
+  const tries: [string, Response][] = [
+    ["header", await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { "MCP-Protocol-Version": MODERN, "Mcp-Method": "tools/list" })],
+    ["_meta", await post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "remember", arguments: { title: "Stamped", attribute: "note", value: "must not be written", source: "agent:planner" }, _meta: stamped } })],
+    ["discover", await post({ jsonrpc: "2.0", id: 3, method: "server/discover", params: { _meta: stamped } })],
+    ["bare discover", await post({ jsonrpc: "2.0", id: 4, method: "server/discover" })],
+  ];
+  for (const [how, res] of tries) {
+    expect([how, res.status]).toEqual([how, 400]);
+    const body = await res.json();
+    expect(body.result).toBeUndefined();
+    expect(MODERN_ERRORS).not.toContain(body.error.code);
+    expect(body.error.data).toBeUndefined();
+    expect(body.error.message).toContain("initialize");
+    for (const v of SUPPORTED_PROTOCOLS) expect(body.error.message).toContain(v);
+  }
+  // Nothing ran: no write, and each try is one line naming the version and the method, nothing else of the client's.
+  expect(Bun.spawnSync(["git", "-C", root, "log", "--oneline", "--grep", "Stamped"], { stdout: "pipe" }).stdout.toString()).toBe("");
+  expect(calls(root).map((c) => [c.agent, c.tool])).toEqual([
+    ["planner", `mcp ${MODERN} tools/list`], ["planner", `mcp ${MODERN} tools/call`], ["planner", `mcp ${MODERN} server/discover`], ["planner", "mcp unstamped server/discover"],
+  ]);
+  // The fallback the client then takes works as before, also with the older protocol's own header.
+  const init = await (await post({ jsonrpc: "2.0", id: 5, method: "initialize", params: { protocolVersion: MODERN } }, { "MCP-Protocol-Version": MODERN })).json();
+  expect(init.result.protocolVersion).toBe(SUPPORTED_PROTOCOLS[0]);
+  const list = await post({ jsonrpc: "2.0", id: 6, method: "tools/list" }, { "MCP-Protocol-Version": init.result.protocolVersion });
+  expect(list.status).toBe(200);
+  expect((await list.json()).result.tools.length).toBeGreaterThan(5);
+});
+
+test("what a client sends as its version or method never lands in the log as written: only a date and a known shape do", async () => {
+  const { root, tok } = setup();
+  const post = (body: unknown, headers: Record<string, string> = {}) => handle(root, new Request("http://pb/mcp", { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json", ...headers }, body: JSON.stringify(body) }));
+  // A version that is no date, or older than the stamped protocol, changes nothing: the door answers as before.
+  expect((await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { "MCP-Protocol-Version": "2025-11-25" })).status).toBe(200);
+  expect((await post({ jsonrpc: "2.0", id: 2, method: "tools/list" }, { "MCP-Protocol-Version": "9999 people/jane-roy secret" })).status).toBe(200);
+  expect((await post({ jsonrpc: "2.0", id: 3, method: "tools/list", params: { _meta: { "io.modelcontextprotocol/protocolVersion": 20260728 } } })).status).toBe(200);
+  expect((await post({ jsonrpc: "2.0", id: 3, method: "tools/list" }, { "MCP-Protocol-Version": "2999-99-99" })).status).toBe(200);
+  // An older header beside a newer stamp in _meta is the newer protocol: refused.
+  expect((await post({ jsonrpc: "2.0", id: 4, method: "ping", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }, { "MCP-Protocol-Version": "2025-06-18" })).status).toBe(400);
+  // A later date is refused the same way; a method that isn't a plain name is logged as "other".
+  expect((await post({ jsonrpc: "2.0", id: 4, method: "people/jane-roy says <hello>" }, { "MCP-Protocol-Version": "2027-01-15" })).status).toBe(400);
+  // An unknown method with no stamp stays a JSON-RPC "method not found", and is now logged too.
+  const unknown = await post({ jsonrpc: "2.0", id: 5, method: "resources/list" });
+  expect(unknown.status).toBe(200);
+  expect((await unknown.json()).error.code).toBe(-32601);
+  expect(calls(root).map((c) => c.tool)).toEqual(["mcp 2026-07-28 ping", "mcp 2027-01-15 other", "unknown method resources/list"]);
+});
+
+test("the daily self-check says once that an assistant asked for a protocol the hub doesn't speak, with who and which, for a day", async () => {
+  const { root } = setup();
+  const { selfChecks } = await import("../src/probe");
+  const now = new Date("2026-11-14T12:00:00Z");
+  const check = () => selfChecks(root, now).find((c) => c.name === "mcp_version");
+  expect(check()).toBeUndefined();
+  mkdirSync(join(root, "log"), { recursive: true });
+  const line = (at: string, agent: string, tool: string) => appendFileSync(join(root, "log", "calls.jsonl"), `${JSON.stringify({ at, agent, tool, refused: "protocol version not spoken" })}\n`);
+  line("2026-11-12T08:00:00.000Z", "planner", `mcp ${MODERN} tools/list`);
+  line("2026-11-14T08:00:00.000Z", "planner", "search");
+  expect(check()).toMatchObject({ ok: true });
+  line("2026-11-14T09:00:00.000Z", "planner", `mcp ${MODERN} tools/list`);
+  line("2026-11-14T09:00:01.000Z", "planner", `mcp ${MODERN} server/discover`);
+  line("2026-11-14T09:30:00.000Z", "coach", "mcp unstamped server/discover");
+  const c = check()!;
+  expect(c).toMatchObject({ ok: false, warn: true });
+  expect(c.detail).toContain("3 requests");
+  expect(c.detail).toContain(`planner (MCP ${MODERN}: tools/list, server/discover)`);
+  expect(c.detail).toContain("coach (server/discover)");
 });

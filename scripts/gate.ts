@@ -7,6 +7,7 @@
 //   bun scripts/gate.ts record <agent-evals|slice-audit> <pass|clear|fail|regression> [note]
 //   bun scripts/gate.ts flaky [--days 7]  tests that failed then passed on rerun twice or more
 //   bun scripts/gate.ts [base] --ci-red-ok  merge while GitHub CI on main is red (a branch that fixes it)
+//   bun scripts/gate.ts [base] --ci-slow-ok merge while CI's test step is over 70% of its limit (a branch that fixes it)
 // A full run also runs the north-star eval (scripts/north-star.ts) and blocks on a fail (NORTH_STAR_BLOCKING).
 // Paid agent evals and slice audits are run by one session and recorded in a ledger keyed by the
 // git tree, so a rebase or squash with the same content keeps its evidence. Ledger: $PB_GATES, else
@@ -113,6 +114,59 @@ function ciRuns(): CiRun[] | string {
   const r = Bun.spawnSync(["gh", "api", `repos/${repo}/actions/workflows/ci.yml/runs?branch=main&per_page=50`, "--jq", ".workflow_runs | map({conclusion, created_at, head_sha})"], { stdout: "pipe", stderr: "pipe", timeout: 30_000 });
   if (r.exitCode !== 0) return (r.stderr.toString().trim().split("\n").at(-1) || "gh failed").slice(0, 120);
   try { return JSON.parse(r.stdout.toString()) as CiRun[]; } catch { return "unreadable answer"; }
+}
+
+// How long CI's test steps take against their limit. Main went red on 2026-11-14 because a slow
+// runner took the `bun test` step past its limit, with no warning before: the same tree ran in
+// 528 s on one runner and over 900 s on another. A full gate run reads the step times of main's
+// last finished runs and prints the latest and the median; it blocks only when the MEDIAN is over
+// 70% of the limit, so one slow runner never stops a merge.
+export const CI_TIME_SHARE = 0.7;
+export interface StepTime { step: string; seconds: number[]; limit: number } // seconds: newest first
+export function stepLimits(ciYml: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of ciYml.matchAll(/^\s*- run: ((?:PB_CELLS=1 )?bun test)\b[^\n]*\n\s*timeout-minutes: (\d+)/gm)) out[m[1]] = Number(m[2]) * 60;
+  return out;
+}
+// A job step's name as GitHub reports it ("Run bun test --timeout 20000") to its key in stepLimits.
+export function stepOf(name: string): string | undefined {
+  return name.match(/^Run ((?:PB_CELLS=1 )?bun test)(?: |$)/)?.[1];
+}
+export function ciTimeVerdict(times: StepTime[]): { lines: string[]; block?: string } {
+  const lines: string[] = []; const over: string[] = [];
+  for (const t of times) {
+    if (!t.seconds.length) continue;
+    const sorted = [...t.seconds].sort((a, b) => a - b);
+    const median = sorted[Math.floor((sorted.length - 1) / 2)];
+    const pct = (n: number) => `${Math.round((n / t.limit) * 100)}%`;
+    lines.push(`CI \`${t.step}\` on main: latest ${Math.round(t.seconds[0])} s (${pct(t.seconds[0])} of its ${t.limit} s limit), median of the last ${t.seconds.length} runs ${Math.round(median)} s (${pct(median)})`);
+    if (median > t.limit * CI_TIME_SHARE) over.push(`\`${t.step}\` takes ${Math.round(median)} s at the median of main's last ${t.seconds.length} runs, over ${Math.round(CI_TIME_SHARE * 100)}% of its ${t.limit} s limit`);
+  }
+  return over.length ? { lines, block: `CI time: ${over.join("; ")}. A slow runner will soon hit the limit and turn main red. Make the suite faster (the slowest tests are in the run's log), or ask the owner to raise timeout-minutes in .github/workflows/ci.yml; the branch that does either merges with --ci-slow-ok` } : { lines };
+}
+
+export function ciStepTimes(): StepTime[] | string {
+  const url = Bun.spawnSync(["git", "remote", "get-url", "origin"], { stdout: "pipe", stderr: "pipe" }).stdout.toString().trim();
+  const repo = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
+  if (!repo) return "no GitHub origin";
+  const yml = join(import.meta.dir, "..", ".github", "workflows", "ci.yml");
+  const limits = existsSync(yml) ? stepLimits(readFileSync(yml, "utf8")) : {};
+  if (!Object.keys(limits).length) return "no bun test step with a limit in ci.yml";
+  const gh = (path: string, jq: string) => Bun.spawnSync(["gh", "api", path, "--jq", jq], { stdout: "pipe", stderr: "pipe", timeout: 30_000 });
+  const ids = gh(`repos/${repo}/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=5`, ".workflow_runs | map(.id)");
+  if (ids.exitCode !== 0) return (ids.stderr.toString().trim().split("\n").at(-1) || "gh failed").slice(0, 120);
+  const seconds: Record<string, number[]> = {};
+  try {
+    for (const id of JSON.parse(ids.stdout.toString()) as number[]) {
+      const r = gh(`repos/${repo}/actions/runs/${id}/jobs`, '[.jobs[] | select(.name == "test") | .steps[] | select(.conclusion == "success" or .conclusion == "failure") | {name, started_at, completed_at}]');
+      if (r.exitCode !== 0) continue;
+      for (const s of JSON.parse(r.stdout.toString()) as { name: string; started_at: string; completed_at: string }[]) {
+        const step = stepOf(s.name);
+        if (step && step in limits) (seconds[step] ??= []).push((Date.parse(s.completed_at) - Date.parse(s.started_at)) / 1000);
+      }
+    }
+  } catch { return "unreadable answer"; }
+  return Object.entries(limits).map(([step, limit]) => ({ step, limit, seconds: seconds[step] ?? [] }));
 }
 
 // ---------- flaky tests ----------
@@ -308,6 +362,16 @@ async function main(argv: string[]): Promise<number> {
       console.log(`GitHub CI on main: ${runs.find((r) => r.conclusion)?.conclusion ?? "no finished run"}`);
       if (v && !argv.includes("--ci-red-ok")) fail.push(v);
       else if (v) console.log(`~ ${v} (--ci-red-ok)`);
+    }
+  }
+  if (run && !argv.includes("--no-ledger")) {
+    const times = ciStepTimes();
+    if (typeof times === "string") console.log(`CI test step time: unknown (${times})`);
+    else {
+      const v = ciTimeVerdict(times);
+      for (const l of v.lines) console.log(l);
+      if (v.block && !argv.includes("--ci-slow-ok")) fail.push(v.block);
+      else if (v.block) console.log(`~ ${v.block} (--ci-slow-ok)`);
     }
   }
   for (const n of needs) console.log(`~ needs evidence the builder records: ${n}`);

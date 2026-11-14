@@ -2,7 +2,9 @@
 // The carve property's checker, shared by the test (test/carve-property.test.ts) and the nightly
 // run (scripts/slice-proof.ts): one random brain (test/carve-gen.ts), every agent and token, every
 // door an assistant reads through, every read it can make there, checked against the leak oracle
-// (evals/lib/oracle.ts), which is written from rules/ without the carve code.
+// (evals/lib/oracle.ts), which is written from rules/ without the carve code. And the other way
+// (G815): each fact a reader is owed (test/carve-owed.ts) must be in the read of its page, through
+// every door, so a hub that gave every assistant nothing fails.
 //
 // The three doors (docs/slice-proof.md):
 //   mcp      POST /mcp, tools/call (the OAuth door and the local stdio bridge end in the same calls)
@@ -23,12 +25,15 @@ import { handOff } from "../src/handoff";
 import { renderTouchedPages } from "../src/wiki";
 import { resetBudgets } from "../src/budget";
 import { forbiddenFor, carvedFor, leakFinder } from "../evals/lib/oracle";
+import { owedFor } from "./carve-owed";
 
 export const DOORS = ["mcp", "api", "browser"] as const;
 export type Door = (typeof DOORS)[number];
 
 export interface Finding { agent: string; role: string; door: Door; tool: string; kind: "value" | "name" | "id" | "date"; what: string; from: string }
-export interface Checked { findings: Finding[]; answers: number; pages: number; facts: number; readers: number }
+// A fact a reader is owed (test/carve-owed.ts) that a read of its page through a door did not carry.
+export interface Missing { agent: string; role: string; door: Door; id: string; attr: string }
+export interface Checked { findings: Finding[]; missing: Missing[]; owed: number; answers: number; pages: number; facts: number; readers: number }
 
 type Ask = { read: "orientation" | "whats_new" | "context_pack" | "memory_check" } | { read: "read"; id: string } | { read: "context_pack"; topic: string }
   | { read: "search"; query: string } | { read: "why"; key: string } | { read: "who_is"; address: string };
@@ -122,11 +127,16 @@ async function open(root: string, door: Door, token: string, who: string): Promi
   };
 }
 
+// Is the value in the page as the door gave it? The leak oracle's own matcher, so a value is
+// "served" by exactly the test that would call it "leaked" for a reader it is kept from.
+export const servedIn = (page: string | undefined, value: string) => !!page && leakFinder([{ value, from: "" }])(page).length > 0;
+
 // One brain through the doors: what leaked (nothing, when the carve holds) and what was checked.
 export async function check(g: Generated, doors: readonly Door[] = DOORS): Promise<Checked> {
   const findings: Finding[] = [];
   const { asks, pages, facts } = asksFor(g.root);
-  let answers = 0, readers = 0;
+  const missing: Missing[] = [];
+  let answers = 0, readers = 0, owedCount = 0;
   for (const a of g.agents) for (const role of a.roles) {
     readers++;
     const token = issueToken(g.root, a.name, role === "reader" ? "reader" : undefined);
@@ -136,7 +146,11 @@ export async function check(g: Generated, doors: readonly Door[] = DOORS): Promi
     const names = carved.flatMap((c) => c.names.map((n) => ({ value: n, from: c.id })));
     const inValues = leakFinder(values), inNames = leakFinder(names);
     const ids = carved.filter((c) => c.whole).map((c) => ({ id: c.id, re: new RegExp(`(^|[^\\w/-])${c.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\w-])`) }));
+    const owed = await owedFor(g.root, a.name, opts);
+    owedCount += owed.length;
+    const pagesRead = new Map<string, string>();
     for (const door of doors) {
+      pagesRead.clear();
       // Each door spends the same per-agent request budget (src/budget.ts); the check reads far
       // faster than an assistant does, so each door starts with a fresh minute.
       resetBudgets();
@@ -145,6 +159,7 @@ export async function check(g: Generated, doors: readonly Door[] = DOORS): Promi
         let text = await s.get(ask);
         if (text === undefined) continue;
         answers++;
+        if (ask.read === "read") pagesRead.set(ask.id, text);
         const arg = argOf(ask);
         // Only the argument as a whole: "notes/x" asked for is not taken out of "notes/x-dup".
         if (arg && arg.length > 2) text = text.replace(new RegExp(`(?<![\\p{L}\\p{N}-])${arg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}-])`, "gu"), " ");
@@ -159,13 +174,18 @@ export async function check(g: Generated, doors: readonly Door[] = DOORS): Promi
           for (const d of c.dates) if (/^(199|200|201)\d-/.test(d) && !shownDates.has(d) && text.includes(d)) add("date", d, c.id);
         }
       }
+      // The other direction (G815): each fact this reader is owed is in the read of its page.
+      for (const o of owed) if (!servedIn(pagesRead.get(o.id), o.value)) missing.push({ agent: a.name, role, door, id: o.id, attr: o.attr });
     }
   }
-  return { findings, answers, pages, facts, readers };
+  return { findings, missing, owed: owedCount, answers, pages, facts, readers };
 }
 
 export const report = (g: Generated, f: Finding[]) => `seed ${g.seed} (replay: CARVE_SEED=${g.seed} bun test test/carve-property.test.ts; CARVE_FREEZE=1 to freeze it)${g.ops.length ? `\n  ops: ${g.ops.join("; ")}` : ""}\n` +
   [...new Map(f.map((x) => [`${x.agent}/${x.role} ${x.door} ${x.kind} ${x.what}`, x])).values()].slice(0, 12).map((x) => `  ${x.agent} (${x.role} token) got ${x.kind} "${x.what}" of ${x.from} through ${x.door}, in ${x.tool}`).join("\n");
+
+export const reportMissing = (g: Generated, m: Missing[]) => !m.length ? "" : `seed ${g.seed} (replay: CARVE_SEED=${g.seed} bun test test/carve-property.test.ts)${g.ops.length ? `\n  ops: ${g.ops.join("; ")}` : ""}\n` +
+  [...new Map(m.map((x) => [`${x.agent}/${x.role} ${x.door} ${x.id}#${x.attr}`, x])).values()].slice(0, 12).map((x) => `  ${x.agent} (${x.role} token) is owed ${x.id}#${x.attr} and a read through ${x.door} did not carry it`).join("\n");
 
 // The brain a seed makes, with its merges, handoffs and the page writer run over it.
 export async function brainOf(seed: number): Promise<Generated> {

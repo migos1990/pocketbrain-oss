@@ -31,6 +31,34 @@ export function logCall(root: string, agent: string, tool: string, refusal?: str
   try { appendJsonl(file(root), line); } catch { /* the call itself never fails on its log line */ }
 }
 
+// MCP revisions from this one on have no initialize handshake: the client stamps each request with
+// its version (docs/refusals.md "A protocol the hub doesn't speak yet"). The door refuses those and
+// logs each as "mcp <version> <method>"; only a date and a plain method name are kept of what was sent.
+export const MODERN_MCP_FROM = "2026-07-28";
+export const modernMcp = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && v >= MODERN_MCP_FROM;
+export const methodName = (m: unknown) => typeof m === "string" && /^[a-z]{1,24}(\/[a-z_]{1,24})?$/.test(m) ? m : "other";
+export const modernCall = (version: string | undefined, method: unknown) => `mcp ${version ?? "unstamped"} ${methodName(method)}`;
+
+// The last day's requests in a protocol the hub doesn't speak, per assistant: versions and methods.
+// `ever` says whether the log holds any, so the self-check appears only once one has been seen.
+export function modernAsks(root: string, now = new Date()): { ever: boolean; count: number; by: { agent: string; versions: string[]; methods: string[] }[] } {
+  const by = new Map<string, { versions: Set<string>; methods: Set<string> }>();
+  let ever = false, count = 0;
+  for (const l of readJsonl<CallLine>(file(root))) {
+    const m = typeof l.tool === "string" ? l.tool.match(/^mcp (\d{4}-\d{2}-\d{2}|unstamped) ([a-z/_]+)$/) : null;
+    if (!m || !l.agent) continue;
+    ever = true;
+    const age = now.getTime() - Date.parse(String(l.at));
+    if (!(age >= 0 && age <= 24 * 3_600_000)) continue;
+    count++;
+    const e = by.get(l.agent) ?? { versions: new Set<string>(), methods: new Set<string>() };
+    if (m[1] !== "unstamped") e.versions.add(m[1]);
+    e.methods.add(m[2]);
+    by.set(l.agent, e);
+  }
+  return { ever, count, by: [...by].map(([agent, e]) => ({ agent, versions: [...e.versions].sort(), methods: [...e.methods] })) };
+}
+
 // An API route without its ids: /v1/notes/people/jane-roy → GET /v1/notes, /v1/disputes/c-0001/resolve → POST /v1/disputes/resolve.
 export function routeName(method: string, path: string): string {
   const parts = path.replace(/\/+$/, "").split("/").filter(Boolean);

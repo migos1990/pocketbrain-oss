@@ -236,6 +236,7 @@ a.mark.not::after{content:"";position:absolute;inset:-10px}
 .more{margin:14px 0 0}
 .quiet{color:var(--muted)}
 .late{display:block;margin:8px 0 4px;padding:8px 0 8px 12px;border-left:4px solid var(--marker-ink);color:var(--text);font-size:15px;line-height:22px;font-weight:500;overflow-wrap:anywhere}
+.late.night-go{border-left-color:var(--headline-ink);font-weight:700}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;margin:0 0 4px}
 .tile{border-top:2px solid var(--text);padding:8px 0 14px;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;color:var(--text)}
 .tile b{display:block;font-size:54px;line-height:1;font-weight:900;letter-spacing:-.04em}.tile span{font-size:15px;line-height:20px;font-weight:700}
@@ -399,7 +400,7 @@ const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
 const isQuestion = (w: Waiting) => !!w.teach || !!w.link;
 const group = (head: string, hint: string, cards: string[], n: number | null = cards.length) => cards.length ? `<h2 class="group">${esc(head)}${n === null ? "" : ` <b>${n}</b>`}</h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
 const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
-export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean; undo?: string } = {}): string {
+export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean; undo?: string; night?: string } = {}): string {
   const all = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
   // The face: what waits, then the memories worth acting on, six cards in all (MIND_CAP); the full
   // list (?all=1) is every line with its Undo.
@@ -420,7 +421,9 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   // A late or failing job: one quiet line under the count, linking to Settings' list (G691).
   const late = (v.late ? `<a class="late" role="status" href="/overview#jobs">${esc(v.late)}</a>` : "")
     // An assistant gone quiet by its own habit: the same quiet shape, to Who knows (G697).
-    + (v.quiet ? `<a class="late" role="status" href="/who">${esc(v.quiet)}</a>` : "");
+    + (v.quiet ? `<a class="late" role="status" href="/who">${esc(v.quiet)}</a>` : "")
+    // While you slept (night.ts): one link while last night has something to say and is unread.
+    + (o.night ? `<a class="late night-go" href="/night">${esc(o.night)}</a>` : "");
   return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}${late}
 ${reply}
 ${asks}${mems.length ? `${asks ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}

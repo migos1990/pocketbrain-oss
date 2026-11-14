@@ -34,7 +34,7 @@ import { waitingMcp } from "./access-request";
 import { readCapped, appendJsonl, alert, codeAtStart } from "./util";
 import { newRequestId, withRequest, noteRequest, doorOf, requestsFile, type RequestCtx, type RequestLine } from "./reqid";
 import { whyText } from "./why";
-import { logCall, routeName } from "./calls";
+import { logCall, routeName, modernMcp, modernCall, methodName } from "./calls";
 import { queryOpts, requestPass } from "./semantic";
 import { meaningOnly } from "./retrieve";
 
@@ -459,6 +459,21 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
   const fail = (code: number, message: string) => json({ jsonrpc: "2.0", id: msg.id ?? null, error: { code, message } });
   if (msg.id === undefined) return new Response(null, { status: 202 }); // notifications
   if (msg.jsonrpc !== "2.0") return fail(-32600, "invalid request: jsonrpc must be \"2.0\"");
+  // A client of MCP 2026-07-28 or later sends no initialize: it stamps each request with its version
+  // (header and params._meta) and may ask server/discover first. This door speaks the handshake
+  // protocols only, and has to look like it: such a client falls back to initialize on a 4xx whose
+  // body is not one of the newer protocol's own errors (-32022 and its neighbours), and stays stuck
+  // on anything else, a 200 "method not found" included (G816). Nothing runs; the try is logged
+  // (src/calls.ts) and the daily self-check tells the owner. initialize itself always answers.
+  if (msg.method !== "initialize") {
+    const meta = (msg.params as { _meta?: Record<string, unknown> } | undefined)?._meta;
+    const stamp = [req.headers.get("mcp-protocol-version"), meta && typeof meta === "object" ? meta["io.modelcontextprotocol/protocolVersion"] : undefined].find(modernMcp);
+    if (stamp || msg.method === "server/discover") {
+      logCall(root, agent, modernCall(stamp, msg.method), "protocol version not spoken");
+      const speaks = `this server speaks MCP ${SUPPORTED_PROTOCOLS.join(", ")}: start with initialize`;
+      return json({ jsonrpc: "2.0", id: msg.id, error: stamp ? { code: -32600, message: `invalid request: MCP ${stamp} is not spoken here; ${speaks}` } : { code: -32601, message: `method not found: server/discover; ${speaks}` } }, 400);
+    }
+  }
   switch (msg.method) {
     case "initialize": {
       const asked = String(msg.params?.protocolVersion ?? "");
@@ -526,6 +541,7 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
       }
     }
   }
+  logCall(root, agent, `unknown method ${methodName(msg.method)}`, "method not found");
   return fail(-32601, `method not found: ${msg.method}`);
 }
 

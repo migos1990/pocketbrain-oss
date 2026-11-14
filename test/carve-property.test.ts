@@ -20,7 +20,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generate, freeze, thaw, type Generated } from "./carve-gen";
-import { check, report, brainOf, DOORS } from "./carve-check";
+import { check, report, reportMissing, servedIn, brainOf, DOORS } from "./carve-check";
+import { owedFor } from "./carve-owed";
 import { handle } from "../src/server";
 import { issueToken } from "../src/auth";
 import { loadBrain } from "../src/brain";
@@ -45,17 +46,24 @@ function brainFor(seed: number): Promise<Generated> {
   return built.get(seed)!;
 }
 
-test(`carve property: ${SEEDS.length} random brains, every agent and token, ${EVERY_DOOR ? "every door" : "the doors in turn"} (${DOORS.join(", ")}), no carved value, name, id or date in any answer`, async () => {
-  const failed: string[] = [];
+test(`carve property: ${SEEDS.length} random brains, every agent and token, ${EVERY_DOOR ? "every door" : "the doors in turn"} (${DOORS.join(", ")}), no carved value, name, id or date in any answer, and every owed fact served`, async () => {
+  const failed: string[] = [], missing: string[] = [];
+  let owed = 0;
   for (const [i, seed] of SEEDS.entries()) {
     const g = await brainFor(seed);
-    const f = (await check(g, doorsOf(i))).findings;
+    const c = await check(g, doorsOf(i));
+    const f = c.findings;
+    owed += c.owed;
+    if (c.missing.length) missing.push(reportMissing(g, c.missing));
     if (f.length) {
       failed.push(report(g, f));
       if (process.env.CARVE_FREEZE) freeze(g, join(FIXTURES, `seed-${seed}`));
     }
   }
   expect(failed.join("\n")).toBe("");
+  // The other direction (G815): every fact a reader is owed came back, and the run owed something.
+  expect(missing.join("\n")).toBe("");
+  if (!process.env.CARVE_SEED) expect(owed).toBeGreaterThan(SEEDS.length * 5);
 }, Math.max(600_000, SEEDS.length * 20_000)); // three doors take about 3 s a brain; the soak's 300 need room
 
 // Frozen seeds: a found leak stays a test until it's fixed. A fixture with a gap id in its
@@ -72,9 +80,10 @@ for (const name of frozen) {
     const meta = await Bun.file(join(FIXTURES, name, "meta.json")).json();
     // A fixture found with cells on ("cells": true) is replayed the way the hub serves, whichever lane runs.
     if (meta.cells) useCells(true);
-    let f: Awaited<ReturnType<typeof check>>["findings"];
+    let f: Awaited<ReturnType<typeof check>>["findings"], m = "";
     // Through the door it leaked by ("doors" in meta.json, the MCP door when it names none).
-    try { f = (await check(g, EVERY_DOOR ? DOORS : meta.doors ?? ["mcp"])).findings; } finally { restoreCells(); }
+    try { const c = await check(g, EVERY_DOOR ? DOORS : meta.doors ?? ["mcp"]); f = c.findings; m = reportMissing(g, c.missing); } finally { restoreCells(); }
+    expect(m).toBe("");
     if (meta.gap) expect([meta.gap, f.length > 0]).toEqual([meta.gap, true]);
     else expect(report(g, f)).toBe(report(g, []));
   }, 120_000);
@@ -157,4 +166,21 @@ test("carve fixtures: one that stands in for others (same_as) is itself replayed
   // The three G810 memories are one fault: one guards the fix on every run, two wait for every door.
   expect([sameAs("seed-7238"), sameAs("seed-7288"), sameAs("seed-7042")]).toEqual(["seed-7042", "seed-7042", undefined]);
   expect(named.filter((n) => !all.includes(n) || sameAs(n))).toEqual([]);
+});
+
+// G815: the property used to count only what must not come out. A hub that gave every assistant
+// an empty view read "0 leaks". The owed oracle and servedIn are the other half.
+test("carve property, the other direction: readers are owed facts, and an answer without one is a miss", async () => {
+  const g = await brainFor(SEEDS[0]);
+  const owed = (await Promise.all(g.agents.flatMap((a) => a.roles.map((role) => owedFor(g.root, a.name, role === "reader" ? { role: "reader" } : {}))))).flat();
+  expect(owed.length).toBeGreaterThan(0);
+  const o = owed[0];
+  expect(servedIn(`- **${o.attr}** [current]: ${o.value} (as of 2011-07-07)`, o.value)).toBe(true);
+  // What a hub that serves nothing says: the hidden-or-missing answer, an empty page, no answer.
+  for (const nothing of [`no note ${o.id} in your view`, "", undefined]) expect(servedIn(nothing, o.value)).toBe(false);
+  // A reader token is owed no more than its assistant.
+  for (const a of g.agents.filter((x) => x.roles.includes("reader"))) {
+    const full = new Set((await owedFor(g.root, a.name)).map((x) => `${x.id}#${x.attr}`));
+    expect((await owedFor(g.root, a.name, { role: "reader" })).filter((x) => !full.has(`${x.id}#${x.attr}`))).toEqual([]);
+  }
 });

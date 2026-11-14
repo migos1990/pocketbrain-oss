@@ -10,7 +10,7 @@ import type { Note, FactRecord } from "../brain";
 import { isList, isDisputed, sensitivityRank } from "../brain";
 import { carve, grantFor, records, type CarveResult } from "../carve";
 import { scrubLeaves } from "../view";
-import { displayName, sayYearly } from "../diary";
+import { displayName, sayDay, sayYearly } from "../diary";
 import type { State } from "./data";
 import { browsable, folderOf, KINDS } from "./browse";
 import { agentTitle, cap } from "./labels";
@@ -18,6 +18,8 @@ import { markAgents } from "./marks";
 import { plain, attrWords } from "./home";
 import { esc, href, signInAgain } from "./html-home";
 import { appPage } from "./html-app";
+import { lastSliceProof, sliceProofLine, sliceProofs, sliceProofStreak } from "../slice-proof";
+import { ownerDay } from "../clock";
 
 export const SEE_COPY = {
   you: "You",
@@ -45,6 +47,10 @@ export const SEE_COPY = {
   factsOf: "{given} of {of} facts",
   wordsOnly: "its words only",
   nameOnly: "its name only",
+  tested: "How the cut is tested",
+  testedOn: "Every night, made-up memories are read as each of their assistants, through every door an assistant reads by, and each answer is checked. It tests the code that makes the cut, not your own memory.",
+  testedStreak: "No leak for {n} nights.",
+  testedLeak: "A leak here is a fault in this version of the code, found on made-up data. It is not a leak of your memory.",
 };
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
 
@@ -168,8 +174,22 @@ const SEE_CSS = `
 .rows .given{flex:none;font-size:13px;line-height:18px;font-weight:500;color:var(--muted);text-align:right}
 .rows .bar{flex:none;width:72px;height:16px}
 h2.kind-head{margin:26px 0 6px}
+.tested{margin:30px 0 0;padding:14px 0 0;border-top:2px solid var(--text)}
+.tested h2{margin:0}
+.tested-line{margin:8px 0 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;font-size:19px;line-height:25px}
+.tested-line span{font-size:14px;color:var(--muted)}
+.tested .see-note{margin-top:8px}
 `;
 
+// The nightly check of the cut (docs/slice-proof.md): the last finished run as it is, with its day
+// and what it was run on. Nothing before the first run. `full` adds how long it has held.
+function tested(s: State, full: boolean): string {
+  const p = lastSliceProof(s.root);
+  if (!p) return "";
+  const streak = full && !p.leaks ? sliceProofStreak(sliceProofs(s.root)).nights : 0;
+  const more = p.leaks ? SEE_COPY.testedLeak : streak > 1 ? fill(SEE_COPY.testedStreak, { n: streak }) : "";
+  return `<section class="tested"><h2>${SEE_COPY.tested}</h2><p class="tested-line"><b>${esc(sliceProofLine(p))}</b><span>${esc(sayDay(ownerDay(s.rules, p.at)))}</span></p><p class="see-note">${esc(SEE_COPY.testedOn)}${more ? ` ${esc(more)}` : ""}</p></section>`;
+}
 export function seePage(s: State, csrf: string, agent: string, n: Note, o: { fresh?: boolean } = {}): string | undefined {
   const v = seeView(s, agent, n, o);
   if (!v) return undefined;
@@ -186,7 +206,7 @@ export function seePage(s: State, csrf: string, agent: string, n: Note, o: { fre
     const words = v.text === "none" || v.closed ? "" : `<h2>${SEE_COPY.words}</h2><p class="words">${v.text === "given" ? esc(fill(SEE_COPY.wordsGiven, { name: v.name })) : BAR}</p>`;
     body = `${count}${facts}${words}`;
   }
-  return appPage(`${v.title} · ${SEE_COPY.as} ${v.name}`, "who", `${head}${body}${note}`, { css: SEE_CSS });
+  return appPage(`${v.title} · ${SEE_COPY.as} ${v.name}`, "who", `${head}${body}${note}${tested(s, false)}`, { css: SEE_CSS });
 }
 
 // A given page's row in words: all of it, how many of its facts, its words and no fact, or its name.
@@ -201,5 +221,5 @@ export function seeListPage(s: State, agent: string, o: { fresh?: boolean } = {}
   const count = l.paused ? `<p class="none">${esc(fill(SEE_COPY.paused, { name: l.name }))}</p>`
     : `<p class="count see-count"><b>${l.given} of ${l.of}</b><span>${esc(fill(l.given === 1 ? SEE_COPY.pagesOne : SEE_COPY.pagesMany, { name: l.name }))}${l.part ? `, ${esc(fill(SEE_COPY.part, { n: l.part }))}` : ""}.</span></p>`;
   const kinds = l.kinds.map((k) => `<h2 class="kind-head">${esc(k.label)}</h2><ul class="rows">${k.pages.map((r) => `<li class="changed"><a href="${seeHref(agent, r.id)}"><span class="page"><b>${esc(r.title)}</b></span>${how(r)}</a></li>`).join("")}</ul>`).join("");
-  return appPage(`${SEE_COPY.as} ${l.name}`, "who", `<header class="top see-top"><p class="day"><a class="top-link" href="/who">‹ ${SEE_COPY.back}</a></p><h1>${SEE_COPY.as} ${name}</h1></header>${count}<p class="see-note">${esc(fill(SEE_COPY.what, { name: l.name }))}</p>${kinds}`, { css: SEE_CSS });
+  return appPage(`${SEE_COPY.as} ${l.name}`, "who", `<header class="top see-top"><p class="day"><a class="top-link" href="/who">‹ ${SEE_COPY.back}</a></p><h1>${SEE_COPY.as} ${name}</h1></header>${count}<p class="see-note">${esc(fill(SEE_COPY.what, { name: l.name }))}</p>${tested(s, true)}${kinds}`, { css: SEE_CSS });
 }

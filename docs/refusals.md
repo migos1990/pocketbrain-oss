@@ -13,6 +13,12 @@ A route is recorded by its resource, never by a note's path or a dispute's numbe
 
 The kind is the refusal text cut to its first eight words, with quoted text, numbers, note paths, addresses and links taken out. "no note people/jane-roy in your view" becomes `no note <id> in your view`. So the same refusal reads the same each time, and no note content lands in the log. Like the other files in `log/`, it stays on your Mac and only you read it.
 
+## A protocol the hub doesn't speak yet
+
+MCP's 2026-07-28 revision drops the `initialize` handshake: an app stamps every request with its version and may first ask `server/discover`. The hub speaks the handshake versions only. A request stamped 2026-07-28 or later, and `server/discover`, get HTTP 400 with a plain error that names the versions the hub speaks and says to start with `initialize`; nothing runs. That is the answer an app that speaks both needs in order to fall back, so the hub never answers with the newer protocol's own "unsupported version" error, which would tell the app not to.
+
+Each try is a line here: `mcp 2026-07-28 tools/list`, or `mcp unstamped server/discover`. Only a date and a plain method name are kept of what the app sent. A method the hub doesn't know is `unknown method <name>`. The daily self-check `mcp_version` (`docs/real-use-bar.md`) tells you once which assistant asked, so you can check it still reads the brain.
+
 ## When a door skips the log
 
 Every agent read comes through a door that logs a call, so `pocketbrain doctor` warns (`call log`) when an assistant read the brain in the last day with no line here: the call log is missing a door, and its refusal stats would be wrong without saying so.

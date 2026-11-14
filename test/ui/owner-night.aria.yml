@@ -1,0 +1,31 @@
+- main:
+  - paragraph:
+    - link "‹ On your mind":
+      - /url: /home
+    - text: 8 Oct 2026
+  - heading "While you slept" [level=1]
+  - paragraph: A quiet night. Nothing in your memory changed while you slept.
+  - heading "Could not decide" [level=2]
+  - paragraph: Two sources disagree, and only you can say which is right.
+  - list:
+    - listitem:
+      - 'link "Next for Atlas launch: freeze the beta build on 15 October. Or 22 October? Settle"':
+        - /url: /settle/c-0001
+    - listitem:
+      - link "Grace is customer success director. Or head of customer experience? Settle":
+        - /url: /settle/c-0002
+    - listitem:
+      - 'link "Next for Kitchen renovation: take the tile delivery on 12 October. Or 19 October? Settle"':
+        - /url: /settle/c-0003
+  - paragraph:
+    - link "1 more thing waits on On your mind":
+      - /url: /home
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask Braniac":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

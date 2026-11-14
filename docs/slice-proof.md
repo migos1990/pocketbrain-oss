@@ -4,11 +4,11 @@ The claim: one memory, and each assistant is given only its own slice of it. Thi
 
 The line the app and the site show comes from here:
 
-> 300 memories, 3 doors, 0 leaks
+> 300 memories, 3 doors, 0 leaks, 0 missing
 
 with the day it was last run.
 
-Code: `test/carve-check.ts` (the check), `test/carve-gen.ts` (the made-up memories), `evals/lib/oracle.ts` (what counts as a leak), `scripts/slice-proof.ts` (the run), `src/slice-proof.ts` (the nightly job and the line). Tests: `test/carve-property.test.ts`, `test/slice-proof.test.ts`.
+Code: `test/carve-check.ts` (the check), `test/carve-gen.ts` (the made-up memories), `evals/lib/oracle.ts` (what counts as a leak), `test/carve-owed.ts` (what each assistant is owed), `scripts/slice-proof.ts` (the run), `src/slice-proof.ts` (the nightly job and the line). Tests: `test/carve-property.test.ts`, `test/slice-proof.test.ts`.
 
 ## What one run does
 
@@ -25,6 +25,7 @@ Code: `test/carve-check.ts` (the check), `test/carve-gen.ts` (the made-up memori
 
    Every page is asked for by id, whether or not the assistant may see it.
 5. **It checks every answer against the oracle.** The oracle reads the rules files and decides, without calling the code that makes the cut, what each assistant must never receive: every value of a page or fact kept from it, in any spelling the matcher sees through (spacing, dashes, case, reformatted amounts), and every such page's title, other names, id and dates. One of these in one answer is a leak. What the assistant itself typed (the id it asked for, its search word) is taken out of that answer first.
+6. **It reads back what each assistant is owed (G815).** A second oracle, also written from the rules files without the code that makes the cut, lists the facts each assistant and token must be given: every plain fact of a page in an area or in the whole memory the assistant holds outright, that no rule keeps from it. Each one must be in the read of its page, through every door, found by the same matcher that finds a leak. A memory where any owed fact is absent counts as one "missing". Without this half, a hub that gave every assistant nothing would read 0 leaks.
 
 A door that stops answering never counts as a door that leaks nothing: a refused sign-in, a request turned away or an error fails the run.
 
@@ -42,11 +43,13 @@ A night that finds a leak says so: the line reads "300 memories, 3 doors, 1 leak
 
 `src/slice-proof.ts`:
 
-- `lastSliceProof(root)`: the last finished run: `at` (when), `code` (the version checked), `memories`, `doors`, `leaks`, and the counts behind them (`pages`, `facts`, `readers`, `answers`).
-- `sliceProofLine(p)`: the sentence, the same words everywhere: `300 memories, 3 doors, 0 leaks`. Print the day from `at` beside it.
-- `sliceProofStreak(sliceProofs(root))`: how many nights in a row, and how many memories, with no leak.
+- `lastSliceProof(root)`: the last finished run: `at` (when), `code` (the version checked), `memories`, `doors`, `leaks`, `missing`, and the counts behind them (`pages`, `facts`, `readers`, `answers`, and `owed`, the owed facts read back).
+- `sliceProofLine(p)`: the sentence, the same words everywhere: `300 memories, 3 doors, 0 leaks, 0 missing`. Print the day from `at` beside it. A night recorded before owed facts were read back has no `missing` and its line stops at the leaks.
+- `sliceProofStreak(sliceProofs(root))`: how many nights in a row, and how many memories, with no leak and nothing missing.
 
 Show the last finished run as it is. A night with a leak is shown as a leak, never replaced by an older clean night.
+
+See as shows it (`tested` in `src/dashboard/see.ts`, `test/see-proof.test.ts`): on `/see/<agent>` and under each page there, with the day, the sentence that the memories are made up, and nothing before the first finished run.
 
 ## What this does not prove
 
@@ -57,6 +60,7 @@ Say these with the line, or don't say "proof".
 - **A value said in other words gets through.** The oracle and the hub's own checks match a value in any spelling, not in a paraphrase ("about four hundred thousand"). No matcher can. The rows are in `test/ceilings.test.ts`.
 - **A page merely outside an assistant's slices is not "kept from it".** The oracle counts what the rules carve out on purpose (a kind not shared, a page excluded by name, a level above the ceiling, a fact shared with others only). A page in an area an assistant was never given answers "not in your view", the same as a page that doesn't exist, and that is what is tested for it.
 - **The word an assistant searched for.** What it typed is taken out of its answer before the check, since repeating a question leaks nothing. When the check searches for a word that is itself kept from that assistant, an answer that gave the word back from a hidden page is not told apart from an echo (G811). The page's other values, its name, id and dates are still checked in every other read.
+- **"0 missing" covers the plain part of a slice.** The owed list holds the facts with one reading only: a page in an area the assistant holds, or anywhere when it holds the whole memory, read by its id. Pages an assistant reaches only through a slice of its own making (by kind, tag or a list of attributes) are not on it, nor are facts that link another page, facts made of parts, or a value that contains something kept from that assistant. Left off too: a value the check cannot tell from ordinary text (under four characters, a common word, a bare year or date, a word in small letters only, a web address), a fact that has ended or been retired, a page folded into another, and the assistants' own pages. A fact of one of those kinds withheld by mistake would not be counted. Whether search or a topic finds an owed fact is not checked either; usefulness is measured elsewhere (`docs/prove-the-loop.md#usefulness`).
 - **Three doors, not every path out.** Mail between assistants through the relay, the act door (an assistant asks to send one mail), the sealed copy served while the hub sleeps (`docs/edge.md`), one-time reads you approve yourself, and an export of one assistant's slice are each tested on their own (`test/contracts/`, `evals/cases/redteam.ts`), not by this run.
 - **What an assistant already remembers is its own.** The test covers what the memory gives out today. It cannot take back what an assistant was given before you changed a rule.
 

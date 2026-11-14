@@ -67,6 +67,7 @@ import { undoFact } from "../undo";
 import { fixEverywhere } from "../beliefs";
 import { withRadar } from "./home-beliefs";
 import { seePage, seeListPage } from "./see";
+import { nightView, nightPage, nightLink, markNightSeen } from "./night";
 import { mapPage, mapGrid } from "./html-map";
 import { fgaPage, fgaGrid } from "./html-fga";
 import { loadOAuth, listPending, cleanupReplaced } from "../oauth";
@@ -326,7 +327,8 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const of = marksFor(rules, notes);
     v.since = withMarks(v.since, rules, notes, of);
     v.earlier = v.earlier.map((d) => ({ ...d, lines: withMarks(d.lines, rules, notes, of) }));
-    return new Response(homePage(v, csrf, { said, reply, flash, done, ...(tok ? { undo: tok } : {}) }), { headers: PAGE_HEADERS });
+    const night = nightLink(root, rules, notes, clock());
+    return new Response(homePage(v, csrf, { said, reply, flash, done, ...(tok ? { undo: tok } : {}), ...(night ? { night } : {}) }), { headers: PAGE_HEADERS });
   };
   const who = (csrf: string, fresh: boolean, flash?: string) => {
     const rules = loadRules(root), notes = loadBrain(root, { shared: true });
@@ -962,11 +964,12 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const s = loadState(root);
     const p = url.pathname.replace(/\/+$/, "") || "/";
     // Audit v5: only the owner screens open on the 30-day sign-in, each shutting what is private on
-    // its own: the four tabs (Memory lists titles only), the page and settle screens, and See as
-    // (src/dashboard/see.ts: titles, counts and the values a page itself would show). Every other
+    // its own: the four tabs (Memory lists titles only), the page and settle screens, See as
+    // (src/dashboard/see.ts: titles, counts and the values a page itself would show) and While you
+    // slept (src/dashboard/night.ts: the home's own lines and waiting list, nothing else). Every other
     // page can show a private value, so it needs a sign-in from the last 10 minutes, like a private
     // value on /p.
-    if (!/^\/(home|memory|ask|who|let|p\/.+|settle\/.+|see\/.+)?$/.test(p) && !freshSignIn(root, sid, now()))
+    if (!/^\/(home|memory|ask|who|let|night|p\/.+|settle\/.+|see\/.+)?$/.test(p) && !freshSignIn(root, sid, now()))
       return html({ title: "Sign in again", tab: "", body: ownerErrorHtml("dash.sign-in-again", {}, esc) + signInAgain(csrf) }, ownerStatus("dash.sign-in-again"));
     const undo = url.searchParams.get("undo")?.match(/^[0-9a-f]{7,40}$/)?.[0];
     const wrong = url.searchParams.get("wrong")?.match(/^[a-z][a-z0-9_]*$/)?.[0];
@@ -977,6 +980,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (p === "/overview") return withFlash(overview(s, csrf, url.searchParams));
     const op = p.match(/^\/p\/(.+)$/);
     if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()), edit: url.searchParams.get("edit") === "1" }) ?? appOops("app.no-page");
+    // While you slept: last night's diary rows as the home says them. Opening it is what takes the
+    // home's link to it away.
+    if (p === "/night") {
+      const v = nightView(root, s.rules, s.notes, clock());
+      markNightSeen(root, v);
+      return new Response(nightPage(v, csrf), { headers: PAGE_HEADERS });
+    }
     // See as: one assistant's cut of the memory, or of one page. Read from the carve, never logged
     // as a read. An assistant the rules don't name answers like any page that isn't there.
     const see = p.match(/^\/see\/([^/]+)(?:\/(.+))?$/);

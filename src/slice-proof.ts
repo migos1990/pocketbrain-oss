@@ -19,6 +19,9 @@ export interface SliceProof {
   memories: number;    // made-up memories read
   doors: string[];     // the doors each was read through
   leaks: number;       // memories in which any assistant got anything carved out for it
+  missing?: number;    // memories in which any assistant was not given a fact it is owed (G815); absent on older nights
+  owed?: number;       // owed facts read back, across every assistant and token
+  missing_seeds?: number[];
   pages: number; facts: number; readers: number; answers: number;
   seeds: { from: number; to: number };
   failed_seeds: number[]; // replay one: CARVE_SEED=<n> bun test test/carve-property.test.ts
@@ -39,18 +42,19 @@ export function lastSliceProof(root: string): SliceProof | undefined {
 }
 
 // The line, the same words everywhere it is shown. The day is the caller's to print (`at`).
-export function sliceProofLine(p: Pick<SliceProof, "memories" | "doors" | "leaks">): string {
+// A night from before the check read owed facts back has no `missing`, and its line doesn't claim it.
+export function sliceProofLine(p: Pick<SliceProof, "memories" | "doors" | "leaks" | "missing">): string {
   const n = (k: number, one: string, many: string) => `${k.toLocaleString("en-US")} ${k === 1 ? one : many}`;
-  return `${n(p.memories, "memory", "memories")}, ${n(p.doors.length, "door", "doors")}, ${n(p.leaks, "leak", "leaks")}`;
+  return `${n(p.memories, "memory", "memories")}, ${n(p.doors.length, "door", "doors")}, ${n(p.leaks, "leak", "leaks")}${typeof p.missing === "number" ? `, ${p.missing.toLocaleString("en-US")} missing` : ""}`;
 }
 
-// How long the line has held: the unbroken run of finished nights with no leak, newest back, on
-// any code version. A night that leaked or didn't finish ends it.
+// How long the line has held: the unbroken run of finished nights with no leak and nothing missing, newest back, on
+// any code version. A night that leaked, left an owed fact out or didn't finish ends it.
 export function sliceProofStreak(all: SliceProof[]): { nights: number; memories: number; since?: string } {
   let nights = 0, memories = 0, since: string | undefined;
   for (let i = all.length - 1; i >= 0; i--) {
     const p = all[i];
-    if (p.error || p.leaks > 0) break;
+    if (p.error || p.leaks > 0 || (p.missing ?? 0) > 0) break;
     nights++; memories += p.memories; since = p.at;
   }
   return { nights, memories, since };
@@ -101,9 +105,12 @@ export async function sliceProofNight(root: string, o: { day?: string; cases?: n
     // A short run is not a result: every memory asked for, through at least one door, with answers read.
     const asked = seeds.to - seeds.from + 1;
     if (r.memories !== asked || !r.doors.length || !(Number(r.answers) > 0)) return fail(`the run read ${r.memories} of ${asked} memories through ${r.doors.length} door(s)`);
-    const p: SliceProof = { at: now().toISOString(), code: codeAtStart(), memories: r.memories, doors: r.doors.map(String), leaks: r.leaks, pages: Number(r.pages) || 0, facts: Number(r.facts) || 0, readers: Number(r.readers) || 0, answers: Number(r.answers) || 0, seeds, failed_seeds: (r.failed_seeds ?? []).map(Number).slice(0, 50), ms: Date.now() - t0 };
+    // Nor is a run that owed nothing: "0 missing" of nothing says nothing.
+    if (typeof r.missing !== "number" || !(Number(r.owed) > 0)) return fail("the run read back no fact an assistant is owed");
+    const p: SliceProof = { at: now().toISOString(), code: codeAtStart(), memories: r.memories, doors: r.doors.map(String), leaks: r.leaks, missing: r.missing, owed: Number(r.owed), missing_seeds: (r.missing_seeds ?? []).map(Number).slice(0, 50), pages: Number(r.pages) || 0, facts: Number(r.facts) || 0, readers: Number(r.readers) || 0, answers: Number(r.answers) || 0, seeds, failed_seeds: (r.failed_seeds ?? []).map(Number).slice(0, 50), ms: Date.now() - t0 };
     appendJsonl(FILE(root), p);
-    beat(root, "slice_proof", p.leaks ? { ok: false, error: `${sliceProofLine(p)}: this version gave an assistant something its rules keep from it, on made-up memories (seeds ${p.failed_seeds.slice(0, 5).join(", ")})`, ms: p.ms } : { ok: true, ms: p.ms });
+    beat(root, "slice_proof", p.leaks ? { ok: false, error: `${sliceProofLine(p)}: this version gave an assistant something its rules keep from it, on made-up memories (seeds ${p.failed_seeds.slice(0, 5).join(", ")})`, ms: p.ms }
+      : p.missing ? { ok: false, error: `${sliceProofLine(p)}: this version kept from an assistant something its rules give it, on made-up memories (seeds ${p.missing_seeds!.slice(0, 5).join(", ")})`, ms: p.ms } : { ok: true, ms: p.ms });
     return `slice check: ${sliceProofLine(p)} (${p.answers.toLocaleString("en-US")} answers read)`;
   } catch (e) { return fail((e as Error).message); }
   finally { running = false; }

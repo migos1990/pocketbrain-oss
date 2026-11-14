@@ -13,6 +13,7 @@ import { alert, readJsonl, appendJsonl, codeVersion, codeAtStart } from "./util"
 import { loadBackupConfig, lastBackup, lastPush, due } from "./backup";
 import { modelConfigFor, KEY_ENV } from "./model";
 import { keysDir } from "./secrets";
+import { modernAsks } from "./calls";
 import { silentSources } from "./fill";
 import { loadBrain } from "./brain";
 import { loadRules, gardeners, type Rules } from "./rules";
@@ -45,7 +46,7 @@ export const NOTIFY: ReadonlySet<string> = new Set([
   "night", "digest", "searchable", "backfill", "trust", "housekeeping", "pull", "gardener_jobs", "gardener_cleanup", "gardener_rotate",
   "backup", "offsite", "restore_drill", "origin", "model", "texts", "update", "fill", "gardener_runs", "gardener_setup", "gardener_signin", "calendar_pull", "probe",
   // the daily self-check
-  "connections", "disk", "logs", "restarts", "watchdog", "release",
+  "connections", "mcp_version", "disk", "logs", "restarts", "watchdog", "release",
 ]);
 // Early warnings, kept report-only: named so the list above stays a choice (docs/real-use-bar.md).
 export const REPORT_ONLY: ReadonlySet<string> = new Set(["filed_lines", "source_cap", "redecided", "tailnet", "auto_saves"]);
@@ -215,6 +216,12 @@ export function selfChecks(root: string, now = new Date()): Check[] {
       ? { name: "connections", ok: false, warn: true, detail: quiet.map((n) => `${n} hasn't read the brain since ${lastRead.get(n)!.slice(0, 10)}: reconnect it, or pause it if you don't use it now (Pause on its page in Settings, or pocketbrain agent pause ${n})`).join("; ") }
       : { name: "connections", ok: true, detail: `${live.length} assistant(s) reading` });
   }
+  // An assistant that asked in an MCP revision the hub doesn't speak (2026-07-28 on, no initialize):
+  // the door refused it so the client falls back, but one that doesn't fall back just stops reading.
+  const asks = modernAsks(root, now);
+  if (asks.ever) out.push(asks.count
+    ? { name: "mcp_version", ok: false, warn: true, detail: `${asks.count} request${asks.count === 1 ? "" : "s"} in the last day asked for a newer MCP protocol than this hub speaks: ${asks.by.map((a) => `${a.agent} (${a.versions.length ? `MCP ${a.versions.join(", ")}: ` : ""}${a.methods.join(", ")})`).join("; ")}. The hub told each to use the older protocol; check that assistant still reads the brain (Who knows), and update pocketBrain when a release speaks the newer one` }
+    : { name: "mcp_version", ok: true, detail: "no request in a newer MCP protocol in the last day" });
   const logDir = join(root, "log");
   const hubRan = existsSync(join(logDir, "starts.jsonl")) || existsSync(join(logDir, "start-state.json"));
   const mb = hubRan ? freeDiskMb(root) : undefined;

@@ -2076,13 +2076,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
       }
       if (sub === "suggest") {
         const xs = suggestStanding(root);
-        if (!xs.length) console.log("no suggestions: nobody new you write to often");
-        for (const x of xs) console.log(`${x.tier.padEnd(6)} ${x.person} (${x.title}): ${x.why}. pocketbrain standing approve ${x.person}`);
+        if (!xs.length) console.log("no suggestions: nobody new in your address book or that you write to often");
+        for (const x of xs) console.log(`${x.tier.padEnd(6)} ${x.person} (${x.title}): ${x.why.replace(/\.$/, "")}.${x.authority ? ` Authority ${x.authority}: ${x.authority_why}` : ""} pocketbrain standing approve ${x.person}`);
         return 0;
       }
       if (sub === "approve" && args[1]) {
         const e = approveSuggestion(root, args[1]);
-        console.log(`${args[1]}: ${e?.tier}`);
+        console.log(`${args[1]}: ${e?.tier}${e?.authority ? ` (authority ${e.authority})` : ""}`);
         return 0;
       }
     } catch (e) { console.error((e as Error).message); return 1; }

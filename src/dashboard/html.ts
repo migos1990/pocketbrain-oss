@@ -200,7 +200,7 @@ table.log tr{display:flex;flex-wrap:wrap;gap:0 6px;padding:12px 0;border-bottom:
 table.log td{display:inline;border:0;padding:0;white-space:normal;overflow-wrap:anywhere}table.log td:empty{display:none}table.log td+td+td::before{content:"· ";color:var(--muted)}
 table.log td.when{order:9;flex-basis:100%;color:var(--muted);font-size:15px;line-height:24px}table.log td.when+td::before{content:none}table.log td .sub{display:inline;font-size:inherit;line-height:inherit}
 .u-run{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
-.lvl{display:inline-flex;flex-wrap:wrap;gap:0 16px;align-items:baseline;max-width:100%;vertical-align:baseline}.lvl select{min-height:44px;padding:8px 4px 8px 0;max-width:100%}
+.students{margin:0}.students .tick{display:flex;gap:10px;align-items:center;min-height:44px}.students .tick input{width:20px;height:20px;margin:0;flex-shrink:0}.students .acts{margin-top:8px}.lvl{display:inline-flex;flex-wrap:wrap;gap:0 16px;align-items:baseline;max-width:100%;vertical-align:baseline}.lvl select{min-height:44px;padding:8px 4px 8px 0;max-width:100%}
 table.beliefs,table.beliefs tbody{display:block}table.beliefs thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 table.beliefs tr{display:flex;flex-wrap:wrap;gap:0 8px;padding:12px 0;border-bottom:1px solid var(--line)}table.beliefs tbody tr:last-child{border-bottom:0}
 table.beliefs td{display:inline;border:0;padding:0;white-space:normal;overflow-wrap:anywhere;font-size:17px;line-height:28px}table.beliefs td:first-child,table.beliefs td:nth-child(2),table.beliefs td:last-child{flex-basis:100%}

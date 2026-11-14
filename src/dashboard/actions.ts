@@ -265,6 +265,10 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
     case "standing-dismiss":
     case "standing-pin":
     case "standing-undismiss":
+    case "standing-authority":
+    case "standing-authority-dismiss":
+    case "standing-students":
+    case "standing-book":
       return standingAction(root, action, f, need);
     case "same-person-merge":
     case "same-person-not":

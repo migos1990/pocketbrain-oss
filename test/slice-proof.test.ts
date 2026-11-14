@@ -9,10 +9,13 @@ import { sliceProofNight, sliceProofLine, sliceProofStreak, sliceProofs, lastSli
 import { readBeat, lateJobs } from "../src/heartbeat";
 
 const child = (line: string, exit = 0) => () => ({ exited: Promise.resolve(exit), stdout: new Response(line + "\n").body, kill: () => {} });
-const result = (over: Partial<SliceProof> = {}) => JSON.stringify({ memories: 300, doors: ["mcp", "api", "browser"], leaks: 0, pages: 2890, facts: 9000, readers: 1400, answers: 120000, failed_seeds: [], ms: 1, ...over });
+const result = (over: Partial<SliceProof> = {}) => JSON.stringify({ memories: 300, doors: ["mcp", "api", "browser"], leaks: 0, missing: 0, owed: 11400, missing_seeds: [], pages: 2890, facts: 9000, readers: 1400, answers: 120000, failed_seeds: [], ms: 1, ...over });
 
 test("slice proof: the line says memories, doors and leaks, in the same words everywhere", () => {
-  const rows: [Pick<SliceProof, "memories" | "doors" | "leaks">, string][] = [
+  const rows: [Pick<SliceProof, "memories" | "doors" | "leaks" | "missing">, string][] = [
+    [{ memories: 300, doors: ["mcp", "api", "browser"], leaks: 0, missing: 0 }, "300 memories, 3 doors, 0 leaks, 0 missing"],
+    [{ memories: 300, doors: ["mcp", "api", "browser"], leaks: 0, missing: 4 }, "300 memories, 3 doors, 0 leaks, 4 missing"],
+    // A night from before owed facts were read back claims nothing about them.
     [{ memories: 300, doors: ["mcp", "api", "browser"], leaks: 0 }, "300 memories, 3 doors, 0 leaks"],
     [{ memories: 1, doors: ["mcp"], leaks: 1 }, "1 memory, 1 door, 1 leak"],
     [{ memories: 12000, doors: ["mcp", "api", "browser"], leaks: 2 }, "12,000 memories, 3 doors, 2 leaks"],
@@ -34,10 +37,10 @@ test("slice proof: a clean night is one dated record and a good heartbeat; nothi
   const before = Bun.spawnSync(["git", "status", "--porcelain"], { cwd: root }).stdout.toString();
   let cmd: string[] = [];
   const said = await sliceProofNight(root, { day: "2026-11-14", spawn: (c) => { cmd = c; return child(result())(); }, now: () => new Date("2026-11-14T08:40:00Z") });
-  expect(said).toBe("slice check: 300 memories, 3 doors, 0 leaks (120,000 answers read)");
+  expect(said).toBe("slice check: 300 memories, 3 doors, 0 leaks, 0 missing (120,000 answers read)");
   expect(cmd.slice(1)).toEqual([join(import.meta.dir, "..", "scripts", "slice-proof.ts"), "--json", "--from", String(seedsFor("2026-11-14").from), "--cases", "300"]);
   const p = lastSliceProof(root)!;
-  expect({ at: p.at, memories: p.memories, doors: p.doors, leaks: p.leaks, seeds: p.seeds }).toEqual({ at: "2026-11-14T08:40:00.000Z", memories: 300, doors: ["mcp", "api", "browser"], leaks: 0, seeds: seedsFor("2026-11-14") });
+  expect({ at: p.at, memories: p.memories, doors: p.doors, leaks: p.leaks, missing: p.missing, owed: p.owed, seeds: p.seeds }).toEqual({ at: "2026-11-14T08:40:00.000Z", memories: 300, doors: ["mcp", "api", "browser"], leaks: 0, missing: 0, owed: 11400, seeds: seedsFor("2026-11-14") });
   expect(readBeat(root, "slice_proof")?.ok).toBe(true);
   // log/ is not in the brain's git: the brain itself is as it was.
   expect(Bun.spawnSync(["git", "status", "--porcelain"], { cwd: root }).stdout.toString().split("\n").filter((l) => !/ log\//.test(l)).join("\n")).toBe(before);
@@ -56,6 +59,30 @@ test("slice proof: a night that leaked fails its heartbeat, so the home says so,
   expect(lateJobs(root, now()).map((l) => [l.job, l.why])).toContainEqual(["slice_proof", "failed"]);
   expect(sliceProofStreak(sliceProofs(root)).nights).toBe(0);
   expect(lastSliceProof(root)!.leaks).toBe(2); // the line shows the leak; it is never hidden behind an older clean night
+});
+
+// G815: "0 leaks" alone passed a hub that gave every assistant nothing.
+test("slice proof: a night that kept an owed fact from an assistant fails its heartbeat and ends the streak", async () => {
+  const root = makeBrain();
+  const now = () => new Date("2026-11-14T08:40:00Z");
+  await sliceProofNight(root, { day: "2026-11-13", spawn: child(result()), now });
+  const said = await sliceProofNight(root, { day: "2026-11-14", spawn: child(result({ missing: 3, missing_seeds: [1020301, 1020377, 1020400] }), 1), now });
+  expect(said).toContain("300 memories, 3 doors, 0 leaks, 3 missing");
+  const b = readBeat(root, "slice_proof")!;
+  expect([b.ok, b.error]).toEqual([false, expect.stringContaining("kept from an assistant something its rules give it")]);
+  expect(b.error).toContain("seeds 1020301, 1020377, 1020400");
+  expect(sliceProofStreak(sliceProofs(root)).nights).toBe(0);
+});
+
+test("slice proof: a run that read back no owed fact, or says nothing about them, is not a result", async () => {
+  const root = makeBrain();
+  const now = () => new Date("2026-11-14T08:40:00Z");
+  const old = JSON.parse(result()); delete old.missing; delete old.owed;
+  for (const line of [result({ owed: 0 }), JSON.stringify(old)]) {
+    expect(await sliceProofNight(root, { day: "2026-11-14", spawn: child(line), now })).toContain("no fact an assistant is owed");
+    expect(readBeat(root, "slice_proof")?.ok).toBe(false);
+  }
+  expect(lastSliceProof(root)).toBeUndefined();
 });
 
 test("slice proof: a run that broke or never ended is never a result", async () => {
@@ -80,7 +107,8 @@ test("slice proof: a run that broke or never ended is never a result", async () 
 test("slice proof: the script reads made-up memories through three doors and prints one line of counts", async () => {
   const r = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "scripts", "slice-proof.ts"), "--json", "--from", "7000", "--cases", "1"], { env: { PATH: process.env.PATH ?? "", TMPDIR: process.env.TMPDIR ?? "", HOME: process.env.HOME ?? "" } });
   const out = JSON.parse(r.stdout.toString().trim().split("\n").at(-1)!);
-  expect({ exit: r.exitCode, memories: out.memories, doors: out.doors, leaks: out.leaks, error: out.error }).toEqual({ exit: 0, memories: 1, doors: ["mcp", "api", "browser"], leaks: 0, error: undefined });
+  expect({ exit: r.exitCode, memories: out.memories, doors: out.doors, leaks: out.leaks, missing: out.missing, error: out.error }).toEqual({ exit: 0, memories: 1, doors: ["mcp", "api", "browser"], leaks: 0, missing: 0, error: undefined });
+  expect(out.owed).toBeGreaterThan(10);
   expect(out.answers).toBeGreaterThan(200);
   // It names no brain but its own: the script never reads PB_BRAIN or a path argument.
   expect(readFileSync(join(import.meta.dir, "..", "scripts", "slice-proof.ts"), "utf8")).not.toMatch(/process\.env\.PB_BRAIN|--brain/);
