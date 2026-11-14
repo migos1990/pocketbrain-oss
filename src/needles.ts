@@ -7,6 +7,10 @@
 // The two choke points each missed what the other caught (act-door red team, M1). The act door
 // and the relay (checkBetween, so handoffs too, G656) use it; the write path keeps its own.
 //
+// hiddenNames(notes, rules, agent): what names a page left out of the agent's view on purpose:
+// its id, its title and its id's last part, matched whole (G254). The relay uses it, so a handoff
+// that names such a page is held like one that carries its values.
+//
 // outwardScreen(notes, rules, ceiling): what only notes or facts above a ceiling hold, with the
 // note each match comes from, for mail leaving the brain (act-door red team, H2). Its hits flag
 // an item for the owner; they never refuse.
@@ -14,8 +18,8 @@ import type { Note, Sensitivity } from "./brain";
 import { sensitivityRank } from "./brain";
 import type { Rules } from "./rules";
 import { ownerName } from "./rules";
-import { carve, grantFor, records, visibleFacts, shownWords } from "./carve";
-import { needleFor, findCarried, distinctive, squash, type Needle } from "./match";
+import { carve, grantFor, records, visibleFacts, shownWords, folderOf } from "./carve";
+import { needleFor, findCarried, distinctive, squash, decodedVariants, type Needle } from "./match";
 
 // The strings a value carries: itself if a string or number, its fields if an object.
 function scalarStrings(v: unknown): string[] {
@@ -47,6 +51,72 @@ export function hiddenValues(notes: Note[], rules: Rules, agent: string): Map<st
 export function hiddenNeedles(notes: Note[], rules: Rules, agent: string): Needle[] {
   const common = shownWords(carve(notes, rules, grantFor(rules, agent), { flags: false }));
   return [...hiddenValues(notes, rules, agent)].map(([v, from]) => needleFor(v, from, common)).filter((n): n is Needle => !!n);
+}
+
+// Names of the pages carved out for the agent (carve's `purposeful`: a type not shared, excluded by
+// name, above its ceiling): the id, the title, and the id's last part where it says something the
+// title doesn't. A page merely outside the agent's slices is not here: naming it tells the agent
+// nothing its own search wouldn't. Aliases are hiddenValues'.
+// A name is matched as whole words, in order, with only spaces, dashes, slashes, underscores or
+// dots between them, in any case or accents, or run together as one word; so "Main bank" is not
+// in "remain bankrupt" nor "Paul Advisor" in "Paul, advisor to the course". A value is matched
+// more deeply (findCarried); a name is held on less, because one alerted hold stops a sender's
+// later handoffs until the owner looks.
+// A name of one word is often an everyday word too ("Compensation", "Mortgage"), and no list here
+// decides which: it counts only where the text writes it with a capital (or in a script with no
+// capitals), and never when the agent is shown that word anyway.
+// What doesn't count, so everyday text isn't held (rows in test/contracts/relay.contract.test.ts):
+// a name a page in view also carries, a name under six letters or with no letter, a part of a title.
+interface HiddenName { words: string[]; value: string; from: string }
+export type HiddenNames = Map<string, HiddenName[]>; // by first word, squashed
+export function hiddenNames(notes: Note[], rules: Rules, agent: string): HiddenNames {
+  const res = carve(notes, rules, grantFor(rules, agent), { flags: false });
+  const names: HiddenNames = new Map();
+  const out = res.excluded.filter((e) => e.purposeful);
+  if (!out.length) return names;
+  const common = shownWords(res);
+  const inView = new Set<string>();
+  for (const v of res.visible.values()) for (const x of [v.note.fm.title, ...((v.note.fm.aliases as string[] | undefined) ?? [])]) inView.add(squash(String(x ?? "")));
+  const byId = new Map(notes.map((n) => [n.fm.id, n]));
+  const seen = new Set<string>();
+  const add = (name: string, from: string) => {
+    const words = (name.match(/[\p{L}\p{N}]+/gu) ?? []).map(squash).filter(Boolean), sq = words.join("");
+    if (sq.length < 6 || !/\p{L}/u.test(sq) || seen.has(sq) || inView.has(sq) || (words.length === 1 && common.has(sq))) return;
+    seen.add(sq);
+    (names.get(words[0]) ?? names.set(words[0], []).get(words[0])!).push({ words, value: name, from });
+    // Run together ("workshopfund"), a several-word name is one word of the text.
+    // Like a one-word title, it is often an everyday word ("Pay Roll", "payroll"): with a capital
+    // only (findNamed), and never when the agent is shown that word anyway.
+    if (words.length > 1 && !common.has(sq)) (names.get(sq) ?? names.set(sq, []).get(sq)!).push({ words: [sq], value: name, from });
+  };
+  for (const e of out) {
+    const n = byId.get(e.id);
+    if (!n || folderOf(n) === "agents") continue;
+    const id = String(n.fm.id);
+    add(id, id);
+    add(String(n.fm.title ?? ""), id);
+    add(id.slice(id.lastIndexOf("/") + 1), id);
+  }
+  return names;
+}
+
+// The first hidden name the text carries, as written or in an encoding the matcher decodes.
+export function findNamed(text: string, names: HiddenNames): { value: string; from: string } | undefined {
+  if (!names.size) return undefined;
+  for (const variant of decodedVariants(text)) {
+    // Marks that sit inside or around a word without being read (emphasis, an HTML tag, a
+    // zero-width character, a soft hyphen) are taken out first: "**Main** bank" is "Main bank".
+    const plain = variant.replace(/<\/?[a-z][^<>]{0,80}>|[*~`\u200B-\u200D\u2060\uFEFF\u00AD]/gi, "");
+    const toks = [...plain.matchAll(/[\p{L}\p{N}]+/gu)].map((m) => ({ raw: m[0], sq: squash(m[0]), at: m.index!, end: m.index! + m[0].length }));
+    for (let i = 0; i < toks.length; i++) for (const n of names.get(toks[i].sq) ?? []) {
+      // One word: only as a name, with a capital (a letter that has no lower-case form counts).
+      if (n.words.length === 1 && /^\p{Ll}/u.test(toks[i].raw)) continue;
+      let ok = i + n.words.length <= toks.length;
+      for (let k = 1; ok && k < n.words.length; k++) ok = toks[i + k].sq === n.words[k] && /^[\s\-_/\\.]*$/.test(plain.slice(toks[i + k - 1].end, toks[i + k].at));
+      if (ok) return { value: n.value, from: n.from };
+    }
+  }
+  return undefined;
 }
 
 // Outbound mail only (red team M2): single capitalised words of 6+ letters from a hidden value

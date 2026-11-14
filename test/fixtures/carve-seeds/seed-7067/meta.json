@@ -1,7 +1,6 @@
 {
  "seed": 7067,
- "gap": "G254",
- "why": "a handoff names a note the recipient can't see by title and id; the handoff gate checks fact values only",
+ "why": "a handoff names a note the recipient can't see by title and id; the handoff gate checked fact values only (closed by G254)",
  "agents": [
   {
    "name": "ava",

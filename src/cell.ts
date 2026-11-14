@@ -73,20 +73,20 @@ export function cellsOn(): boolean { return enabled; }
 // never sees a half-built cell.
 export function buildCell(root: string, agent: string, notes?: Note[], slices?: string[]): CellInfo {
   notes ??= loadBrain(root, { shared: true });
-  // The cell holds the agent's whole slice whichever token asked; a reader token is capped when it reads.
+  // The agent's own cell holds its whole slice whichever token asked; a reader token reads from its own (freshCell).
   return withoutTokenRole(() => build(root, agent, notes, slices));
 }
 
-// A reader token's cell for the sealed edge (G249): carved under the reader role, so capped below
-// private like any read by that token, and kept apart from the agent's own cell (the hub reads
-// that one and caps per request). The edge seals it under its own key, wrapped for reader tokens
-// only, so a reader token's holder can decrypt nothing above personal.
+// A reader token's cell (G249, G810): carved under the reader role, so capped below private like
+// any read by that token, and kept apart from the agent's own cell. The hub serves a reader
+// token's reads from it (freshCell), and the edge seals it under its own key, wrapped for reader
+// tokens only, so a reader token's holder can decrypt nothing above personal.
 const READER_DIR = ".edge-reader";
 export const readerCellDir = (root: string, agent: string) => join(cellsDir(root), READER_DIR, agent);
-export function buildReaderCell(root: string, agent: string): { dir: string; info: CellInfo } {
+export function buildReaderCell(root: string, agent: string, slices?: string[]): { dir: string; info: CellInfo } {
   const dir = readerCellDir(root, agent);
   mkdirSync(dirname(dir), { recursive: true });
-  const info = withTokenRole(agent, "reader", () => build(root, agent, loadBrain(root, { shared: true }), undefined, dir));
+  const info = withTokenRole(agent, "reader", () => build(root, agent, loadBrain(root, { shared: true }), slices, dir));
   return { dir, info };
 }
 
@@ -95,7 +95,7 @@ export function buildReaderCell(root: string, agent: string): { dir: string; inf
 // notes a change can reach (affectedBy): a full build of a 10k-note brain takes seconds, and
 // the first read after every write waited for it (docs/perf.md).
 interface Deps { grant: string; values: string[]; needles: Map<string, Needle>; visible: Map<string, boolean>; hidden: Map<string, string>; mergedTo: Map<string, string> }
-const built = new Map<string, { deps: Deps; notes: Map<string, Rendered> }>();
+const built = new Map<string, { deps: Deps; notes: Map<string, Rendered>; stamp: string }>();
 // A note's cell file: its source, path, the note it came from and whether the file holds
 // "[withheld]" (the exact pass changed it, so a needle can find what that left).
 interface Rendered { src: string; text: string; note: Note; withheld: boolean }
@@ -262,8 +262,12 @@ function build(root: string, agent: string, notes: Note[], slices?: string[], di
   // The cell still on disk and a change that reaches only some notes: update it in place. Reads
   // run in this process, which is busy here, so none sees it half-updated; a crash mid-update
   // leaves cell.json at the old commit, so the next read builds it again.
-  // Only a cell this code built is updated in place; any other is built again from nothing.
-  const affected = last && infoAt(dir)?.code === cellCode() ? affectedBy(last.deps, deps, res) : undefined;
+  // Only the cell this process wrote last is updated in place; any other is built again from
+  // nothing. Another process builds into the same folder (`edge publish`, under its own slices):
+  // an in-place update on top of its files left the notes of a wider build on disk under a
+  // cell.json that named the narrower one (slice audit of G810).
+  const onDisk = infoAt(dir);
+  const affected = last && onDisk?.code === cellCode() && JSON.stringify(onDisk) === last.stamp ? affectedBy(last.deps, deps, res) : undefined;
   const inPlace = !!affected;
   const target = inPlace ? dir : `${dir}.building`;
   const rendered = new Map<string, Rendered>();
@@ -310,7 +314,7 @@ function build(root: string, agent: string, notes: Note[], slices?: string[], di
     renameSync(target, dir);
     rmSync(`${dir}.old`, { recursive: true, force: true });
   }
-  built.set(dir, { deps, notes: rendered });
+  built.set(dir, { deps, notes: rendered, stamp: JSON.stringify(JSON.parse(JSON.stringify(info))) });
   // Kept only for a chain of in-place updates; a full build starts it again.
   changes.set(dir, inPlace ? [...(changes.get(dir) ?? []), { from, to: gen, paths: touched }].slice(-16) : []);
   return info;
@@ -352,9 +356,15 @@ function infoAt(dir: string): CellInfo | undefined {
 
 // The cell to read from, rebuilt first if the brain moved on since it was built (an upkeep run,
 // an edit by Louis, a write through the CLI).
-export function freshCell(root: string, agent: string, slices?: string[]): { dir: string; info: CellInfo } {
-  let info = cellInfo(root, agent);
+export function freshCell(root: string, agent: string, slices?: string[], role?: "reader"): { dir: string; info: CellInfo } {
+  // A reader token reads from a cell of its own, carved under the reader role (G810). The agent's
+  // own cell holds text already scrubbed for the agent: a link it kept is gone from the file by
+  // then, so a second, narrower carve over that file can no longer tell which page a sentence
+  // names, and a page above the reader's ceiling kept its name in the pages that mention it.
+  const dir = role === "reader" ? readerCellDir(root, agent) : cellDir(root, agent);
+  let info = infoAt(dir);
   const same = !slices || (info && info.slices.length === slices.length && info.slices.every((s, i) => s === slices[i]));
-  if (!info || info.brain_commit !== headCommit(root) || info.rules_hash !== rulesHash(root) || info.code !== cellCode() || !same) info = buildCell(root, agent, undefined, slices);
-  return { dir: cellDir(root, agent), info };
+  if (!info || info.brain_commit !== headCommit(root) || info.rules_hash !== rulesHash(root) || info.code !== cellCode() || !same)
+    info = role === "reader" ? buildReaderCell(root, agent, slices).info : buildCell(root, agent, undefined, slices);
+  return { dir, info };
 }

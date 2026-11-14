@@ -4,12 +4,18 @@
 // The folder is removed when the run exits, so a run leaves no pb-* folders behind.
 // Every run also gets its own config folder, so a brain remembered by a developer's own
 // `pocketbrain init` is never picked up by a test that runs without --brain.
-import { afterAll, beforeEach } from "bun:test";
+import { afterAll, beforeEach, setDefaultTimeout } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useFreeDisk } from "../src/textline/items";
 import { isolateGit } from "../evals/lib/gitenv";
+
+// A test with no limit of its own gets 20 s, not bun's 5 s. CI's runners differ by more than 2x:
+// a 2 s test (test/box-day-one.test.ts, G708) took 5.2 s on a slow one and failed PR 174 on
+// 2026-11-14. This limit is for a hang; how long the suite takes is the gate's CI-time line.
+export const TEST_TIMEOUT_MS = 20_000;
+setDefaultTimeout(TEST_TIMEOUT_MS);
 import { missingTools } from "./tools";
 import { cellsOn } from "../src/cell";
 import { LANE_CELLS, restoreCells } from "./cells";
@@ -29,6 +35,9 @@ if (!process.env.PB_TEST_RUN_DIR) {
   process.env.PB_VECTOR_DIR = join(run, "vectors");
   // Coming calendar events (src/upcoming.ts) likewise.
   process.env.PB_UPCOMING_DIR = join(run, "upcoming");
+  // The hub's nightly slice check (src/slice-proof.ts) is a long child process: a test that runs
+  // a night pass doesn't start it. test/slice-proof.test.ts runs it with a child of its own.
+  process.env.PB_SLICE_PROOF = "0";
   // The machine's own Claude Code is never changed (G393): HOME is the run's, and a fake `claude`
   // that only records its arguments comes first on PATH. src/cli.ts refuses either outside the run.
   process.env.PB_REAL_HOME = process.env.HOME ?? "";

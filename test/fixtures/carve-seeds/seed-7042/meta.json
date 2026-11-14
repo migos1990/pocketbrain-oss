@@ -1,0 +1,37 @@
+{
+ "seed": 7042,
+ "cells": true,
+ "why": "cells on, a reader token: a page's hub-written sentence and summary name a linked private page the agent's own token sees and its reader token doesn't; the agent's cell had already redacted the link, so the reader's carve over it withheld nothing (closed by G810)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  }
+ ],
+ "ops": [
+  "handoff ava -> bex about projects/fupan-fosyl: ho-20261008042736-mmi1"
+ ]
+}

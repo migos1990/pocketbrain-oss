@@ -102,7 +102,8 @@ function snapshot(root: string, agent: string): { notes: Note[]; rules: Rules; r
   if (cellsOn()) {
     // Reads come from the agent's cell, which holds only its slice (as narrowed by OpenFGA,
     // src/fga.ts, when on); the kill switch above still reads the hub's own rules.
-    const { dir, info } = freshCell(root, agent, grantFor(rules, agent).slices);
+    // A reader token has a cell of its own, carved under its role (src/cell.ts freshCell, G810).
+    const { dir, info } = freshCell(root, agent, grantFor(rules, agent).slices, tokenRole(agent) === "reader" ? "reader" : undefined);
     const gen = cellGeneration(dir);
     const key = JSON.stringify([info, gen, today(), tokenRole(agent) ?? "", upcomingStamp(root)]); // a reader token gets a narrower carve
     const hit = cellSnapshots.get(dir);

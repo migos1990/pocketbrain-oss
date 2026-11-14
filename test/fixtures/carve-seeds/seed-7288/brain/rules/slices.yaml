@@ -1,0 +1,24 @@
+slices:
+  s3:
+    exclude_tags:
+      - beta
+    max_sensitivity: private
+    only_attributes:
+      - place
+      - contact
+      - code
+      - split
+  s2:
+    types:
+      - projects
+      - money
+      - notes
+      - orgs
+    exclude_attributes:
+      - contact
+  s1:
+    types:
+      - projects
+      - money
+      - people
+    max_sensitivity: public

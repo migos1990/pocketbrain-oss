@@ -143,7 +143,9 @@ export function generate(seed: number): Generated {
   const agents: Record<string, any> = {};
   const gen: GenAgent[] = [];
   for (const name of agentNames) {
-    const a: Record<string, any> = { tier: r.pick(["core", "trial"]), slices: [...new Set([r.pick(sliceNames), ...r.some(sliceNames, 0.25)])] };
+    // Every agent may use the browser door (`browser: true`, docs/browser-door.md), so the property
+    // reads through it too; the flag draws nothing from the seed's stream.
+    const a: Record<string, any> = { tier: r.pick(["core", "trial"]), slices: [...new Set([r.pick(sliceNames), ...r.some(sliceNames, 0.25)])], browser: true };
     if (r.chance(0.5)) a.exclude_types = [r.pick(TYPES)];
     if (r.chance(0.3)) a.max_sensitivity = r.pick(LEVELS);
     if (r.chance(0.2)) a.exclude = [r.pick(notes).fm.id];
@@ -219,6 +221,13 @@ export function freeze(g: Generated, dir: string) {
 export function thaw(dir: string, root: string): Generated {
   const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
   cpSync(join(dir, "brain"), root, { recursive: true });
+  // A fixture frozen before the property read through the browser door: its agents get the door too.
+  const pf = join(root, "rules", "policy.yaml");
+  const policy = YAML.parse(readFileSync(pf, "utf8"));
+  if (Object.values(policy.agents ?? {}).some((a: any) => !a.browser)) {
+    for (const a of Object.values(policy.agents) as Record<string, unknown>[]) a.browser = true;
+    writeFileSync(pf, YAML.stringify(policy));
+  }
   if (!existsSync(join(root, ".git"))) {
     const git = (args: string[]) => Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "-c", "commit.gpgsign=false", ...args], { cwd: root });
     git(["init", "-q", "-b", "main"]); git(["add", "-A"]); git(["commit", "-q", "-m", "carve fixture"]);

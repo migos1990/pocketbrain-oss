@@ -35,6 +35,7 @@ import { loadRules } from "./rules";
 import { ownerClock } from "./clock";
 import { adoptHandEdits } from "./wiki";
 import { beat } from "./heartbeat";
+import { sliceProofNight } from "./slice-proof";
 import { loadBackupConfig } from "./backup";
 
 export interface Schedule { night_hour: number; digest_hour: number }
@@ -207,6 +208,10 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
         log(`${stamp()} ${await runJob(root, "proofread", () => proofreadLine(proofread(root)))}`);
         // Hub logs rotated, git packed, .git against its budget (src/growth.ts).
         log(`${stamp()} ${await runJob(root, "housekeeping", () => housekeeping(root))}`);
+        // What each assistant is given, checked on made-up memories through every door
+        // (src/slice-proof.ts): a child process of its own, started here and not waited for, so
+        // the write queue is free while it reads. It beats `slice_proof` itself when it ends.
+        void sliceProofNight(root).then((line) => log(`${stamp()} ${line}`)).catch((e) => log(`${stamp()} slice check: ${(e as Error).message}`));
       }
     }
   }, { limitMs: (JOB_MINUTES + 5) * 60_000 });

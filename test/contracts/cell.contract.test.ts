@@ -386,3 +386,46 @@ test("contract cell: a next step the calendar serves after the cell was built is
   expect(helper).not.toContain("Maple Trust");
   expect(JSON.stringify(core.readNote(root, "steward", "projects/course-a"))).toContain("Course A fees with Maple Trust Bank");
 });
+
+// G810 (found by the nightly slice check, seeds 7042, 7238 and 7288): the agent's own cell holds
+// text scrubbed for the agent, and a link by title is gone from it by then, so a reader token's
+// narrower carve over that cell could not tell which page a sentence names.
+test("contract cell: a reader token reads from a cell carved for it, so a page above its ceiling is not named by the pages that link it (G810)", async () => {
+  const root = brain();
+  const ref = `as_of: 2026-10-01, ${SRC}`;
+  mkdirSync(join(root, "money"), { recursive: true });
+  writeFileSync(join(root, "money/quellmere-fund.md"), `---\nid: money/quellmere-fund\ntype: money\ntitle: Quellmere Fund\narea: work\nsensitivity: private\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  balance: { value: "CAD 7,731.20", ${ref} }\n---\n`);
+  writeFileSync(join(root, "projects/course-q.md"), `---\nid: projects/course-q\ntype: project\ntitle: Course Q\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  partner: { value: "[[Quellmere Fund]]", ${ref} }\n---\nThe partner of Course Q is Quellmere Fund.\n`);
+  git(root, ["add", "-A"]); git(root, ["commit", "-qm", "fund"]);
+  const read = async (token: string) => JSON.stringify(await (await handle(root, new Request("http://pb/v1/notes/projects%2Fcourse-q", { headers: { authorization: `Bearer ${token}` } }))).json());
+  const full = issueToken(root, "steward"), reader = issueToken(root, "steward", "reader");
+  useCells(false);
+  const want = { full: (await read(full)).includes("Quellmere"), reader: (await read(reader)).includes("Quellmere") };
+  expect(want).toEqual({ full: true, reader: false });
+  useCells(true);
+  // The agent's own token first, so its cell is built and current when the reader token reads.
+  expect({ full: (await read(full)).includes("Quellmere"), reader: (await read(reader)).includes("Quellmere") }).toEqual(want);
+  // Each reads its own folder: the reader's holds nothing above its ceiling.
+  expect(existsSync(join(cellDir(root, "steward"), "money/quellmere-fund.md"))).toBe(true);
+  expect(files(readerCellDir(root, "steward")).some((f) => readFileSync(join(readerCellDir(root, "steward"), f), "utf8").includes("Quellmere"))).toBe(false);
+  // Through its cell the page above the ceiling answers like one that isn't there (invariant 3).
+  const miss = async (id: string) => { const r = await handle(root, new Request(`http://pb/v1/notes/${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${reader}` } })); return [r.status, (await r.text()).split(id).join("ID")]; };
+  expect(await miss("money/quellmere-fund")).toEqual(await miss("money/nothing-here"));
+});
+
+// Slice audit of G810: `edge publish` runs in another process and builds a reader's cell into the
+// same folder under its own slices. The hub's next build, under the narrower slices OpenFGA
+// confirms, updated that folder in place from its own memory of what it had written, so the wider
+// build's extra notes stayed on disk under a cell.json naming the narrow slices.
+test("contract cell: a cell another process built wider is built again from nothing, never updated in place (G810)", () => {
+  const root = brain();
+  const narrow = ["area:work"];
+  const first = freshCell(root, "steward", narrow, "reader");
+  const before = files(first.dir).filter((f) => f.endsWith(".md") && !f.startsWith("rules/"));
+  // What a second process does: this process keeps its memory of the narrow build.
+  const child = Bun.spawnSync(["bun", "-e", `import { buildReaderCell } from ${JSON.stringify(join(import.meta.dir, "../../src/cell.ts"))}; console.log(buildReaderCell(${JSON.stringify(root)}, "steward").info.notes);`], { env: process.env });
+  expect(Number(child.stdout.toString().trim())).toBeGreaterThan(first.info.notes);
+  const again = freshCell(root, "steward", narrow, "reader");
+  expect(again.info.slices).toEqual(narrow);
+  expect(files(again.dir).filter((f) => f.endsWith(".md") && !f.startsWith("rules/"))).toEqual(before);
+});

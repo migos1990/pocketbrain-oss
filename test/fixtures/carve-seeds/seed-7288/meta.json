@@ -1,0 +1,39 @@
+{
+ "seed": 7288,
+ "cells": true,
+ "same_as": "seed-7042",
+ "why": "cells on, reader tokens: a summary names a linked page above the reader's ceiling, read from the agent's own cell (closed by G810)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  }
+ ],
+ "ops": [
+  "merge people/bimugan-deviger-dup -> people/bimugan-deviger: ok"
+ ]
+}

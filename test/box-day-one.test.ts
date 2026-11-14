@@ -4,7 +4,7 @@
 // to…", "My dentist is Dr Lam, next visit 12 Dec") land on the owner's own page or the page they
 // name, where before seven of ten bounced with "I didn't catch who or what that's about"; and the
 // facts `init` starts a brain with are on the home's diary from the first day.
-import { test, expect, beforeAll } from "bun:test";
+import { test, expect, beforeAll, setDefaultTimeout } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +14,11 @@ import { makeModel } from "../src/model";
 import { loadBrain } from "../src/brain";
 import { readDiary } from "../src/diary";
 import { initBrain } from "../src/init";
+
+// Each test here is several owner sentences, each one a commit on the demo brain: 2 s on a fast
+// machine, over bun's 5 s limit on a slow CI runner (PR 174, twice on 2026-11-14). A test that
+// runs out of time has its git child killed, which reads as a refused sentence.
+setDefaultTimeout(30_000);
 
 const ME = "people/robin-lefebvre";
 let root: string;

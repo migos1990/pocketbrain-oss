@@ -1,0 +1,24 @@
+slices:
+  s2:
+    types:
+      - people
+      - notes
+      - orgs
+      - decisions
+      - people
+    tags:
+      - gamma
+    max_sensitivity: public
+    exclude:
+      - notes/bedyqax-vomipon
+  s1:
+    types:
+      - projects
+      - notes
+      - decisions
+      - projects
+    exclude_tags:
+      - gamma
+    max_sensitivity: private
+    exclude_attributes:
+      - code

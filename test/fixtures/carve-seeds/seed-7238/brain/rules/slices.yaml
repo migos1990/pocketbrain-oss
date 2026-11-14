@@ -1,0 +1,26 @@
+slices:
+  s3:
+    tags:
+      - alpha
+    exclude_tags:
+      - gamma
+  s2:
+    types:
+      - projects
+      - decisions
+      - projects
+    exclude_tags:
+      - beta
+  s1:
+    types:
+      - people
+      - notes
+      - projects
+    tags:
+      - alpha
+    only_attributes:
+      - role
+      - amount
+      - place
+      - detail
+      - code

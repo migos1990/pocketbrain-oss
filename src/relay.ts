@@ -16,7 +16,7 @@ import { grantFor, records } from "./carve";
 import { findSecret, findInjection, categoryWords, moneyAsk, redactSecrets, hardSecretIn } from "./checks";
 import { putHeld, getHeld, dropHeld, listHeld, dropHeldFile } from "./quotes";
 import { needleFor, findCarried, unhide, type Needle } from "./match";
-import { hiddenNeedles } from "./needles";
+import { hiddenNeedles, hiddenNames, findNamed } from "./needles";
 import { hasWord, alert, sha256, readJsonl } from "./util";
 import { git } from "./git";
 import { loadCanaries } from "./canary";
@@ -110,6 +110,10 @@ export function checkBetween(notes: Note[], rules: Rules, cfg: RelayConfig, id: 
   //    count too (G656: the relay's own list skipped object values, so a handoff carried them).
   const hit = findCarried(text, hiddenNeedles(notes, rules, recipient));
   if (hit) { reasons.push(`contains "${hit.value}", which ${recipient} can't see (${hit.from})`); alert = true; }
+  // 2b. A page the recipient isn't allowed to see, named by its id or title (G254): every other
+  //     surface answers as if it didn't exist, so a message can't be what tells the recipient it does.
+  const named = hit ? undefined : findNamed(text, hiddenNames(notes, rules, recipient));
+  if (named) { reasons.push(`names "${named.value}", a page ${recipient} can't see (${named.from})`); alert = true; }
   // 3. Requests for, or mentions of, categories withheld from either side.
   const categories = categoryWords(rules.checks);
   // Everyday phrases that contain a category word but aren't about Louis's data (G7).

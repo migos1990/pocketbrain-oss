@@ -1,0 +1,38 @@
+{
+ "seed": 7238,
+ "cells": true,
+ "same_as": "seed-7042",
+ "why": "cells on, a reader token: a summary names a merged page above the reader's ceiling, read from the agent's own cell (closed by G810)",
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full"
+   ]
+  }
+ ],
+ "ops": [
+  "merge notes/nafax-rufanyr -> notes/nafax-rufanyr-dup: ok",
+  "handoff ava -> bex about projects/loqoden-rytukyn: ho-20261008042746-ugig"
+ ]
+}

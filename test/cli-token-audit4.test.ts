@@ -30,7 +30,10 @@ test("G335: a lock just created and not yet filled in is live, never taken over"
 // A stress check, not the proof: without the G335 fix it double-spent in only about 2 of 15 trials,
 // so it can pass on unfixed code. The tests that always fail without the fix are the empty-lock test
 // above and the half-written-lock test in test/cli-token-audit5.test.ts.
-test("G335: one code, twelve terminals released at the same instant, fifteen times: one token each time", async () => {
+// Each trial waits 2.5 s for its barrier, so the default run does 4 trials (about 12 s) and
+// `PB_STRESS=1 bun test test/cli-token-audit4.test.ts` does the full 15 (about 48 s on CI's runner).
+const TRIALS = process.env.PB_STRESS ? 15 : 4;
+test(`G335: one code, twelve terminals released at the same instant, ${TRIALS} times: one token each time`, async () => {
   const dir = mkdtempSync(join(tmpdir(), "pb-barrier-"));
   const child = join(dir, "spend.ts");
   writeFileSync(child, `const { main } = await import(${JSON.stringify(join(SRC, "cli.ts"))});
@@ -42,7 +45,7 @@ main(["token", "--agent", "steward", "--code", code, "--brain", root]);
 console.log = log; log(/pb_steward_/.test(out.join("\\n")) ? "MINTED" : "refused");
 `);
   const minted: number[] = [];
-  for (let trial = 0; trial < 15; trial++) {
+  for (let trial = 0; trial < TRIALS; trial++) {
     resetEnrollLimits();
     const root = makeBrain();
     const code = codeOf(runAction({ root }, "token-code", { agent: "steward" }));
@@ -52,7 +55,7 @@ console.log = log; log(/pb_steward_/.test(out.join("\\n")) ? "MINTED" : "refused
     minted.push(outs.filter((o) => o.includes("MINTED")).length);
   }
   rmSync(dir, { recursive: true, force: true });
-  expect(minted).toEqual(Array(15).fill(1));
+  expect(minted).toEqual(Array(TRIALS).fill(1));
 }, 300_000);
 
 test("G336: a revoke under a held lock never leaves the agent's open code working after its keys are gone; its sign-ins go regardless", () => {

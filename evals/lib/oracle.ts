@@ -103,18 +103,29 @@ const norm = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerC
 // Exact (case-insensitive, word-bounded) hits, plus "squashed" hits that survive spacing,
 // punctuation and number formatting tricks (M-a-p-l-e T.r.u.s.t, 412,500).
 export function findLeaks(text: string, forbidden: Forbidden[]): { value: string; from: string; how: "exact" | "obfuscated" }[] {
-  const t = norm(text);
-  const squashed = t.replace(/[^a-z0-9]/g, "");
-  const hits: { value: string; from: string; how: "exact" | "obfuscated" }[] = [];
-  for (const f of forbidden) {
+  return leakFinder(forbidden)(text);
+}
+
+// The same matcher with each value's pattern built once, for a caller that checks many texts
+// against one list (the carve property reads every door for every reader).
+export function leakFinder(forbidden: Forbidden[]): (text: string) => { value: string; from: string; how: "exact" | "obfuscated" }[] {
+  const each = forbidden.map((f) => {
     const v = norm(f.value);
-    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "u");
-    if (re.test(t)) { hits.push({ ...f, how: "exact" }); continue; }
     let sq = v.replace(/[^a-z0-9]/g, "");
     if (/^[a-z]{3} \d+\.00$/.test(v)) sq = v.replace(/^[a-z]{3} /, "").replace(/\.00$/, ""); // CAD 412500.00 -> 412500
-    if (sq.length >= 6 && squashed.includes(sq)) hits.push({ ...f, how: "obfuscated" });
-  }
-  return hits;
+    return { f, v, sq, re: new RegExp(`(^|[^\\p{L}\\p{N}])${v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "u") };
+  });
+  return (text) => {
+    const t = norm(text);
+    let squashed: string | undefined;
+    const hits: { value: string; from: string; how: "exact" | "obfuscated" }[] = [];
+    for (const { f, v, sq, re } of each) {
+      // The pattern can only match where the value itself is: one plain look first.
+      if (t.includes(v) && re.test(t)) { hits.push({ ...f, how: "exact" }); continue; }
+      if (sq.length >= 6 && (squashed ??= t.replace(/[^a-z0-9]/g, "")).includes(sq)) hits.push({ ...f, how: "obfuscated" });
+    }
+    return hits;
+  };
 }
 
 // Redact a value for reports: keep the fact key, never print Robin's data.

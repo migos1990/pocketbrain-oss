@@ -272,3 +272,85 @@ The boat costs are split.
     expect([text, !v.deliver, v.reasons.some((r) => /can't see/.test(r))]).toEqual([text, held, held]);
   }
 });
+
+test("contract relay: a page the recipient is not allowed to see, named by its id or title, is held (G254)", () => {
+  const root = makeBrain();
+  const note = (id: string, title: string, extra = "") => writeFileSync(join(root, `${id}.md`), `---
+id: ${id}
+type: money
+title: ${title}
+area: personal
+sensitivity: private
+status: active
+created: 2026-10-06
+updated: 2026-10-06
+by: steward
+${extra}---
+Kept by the steward.
+`);
+  note("money/workshop-fund", "Workshop fund");
+  note("money/quarrymoor-plan-2026", "Lending plan");
+  note("money/midterm", "Midterm"); // one word the recipient reads on its own pages
+  note("money/taxes", "Taxes"); // under six letters
+  note("money/pay-roll", "Pay Roll");
+  note("money/quellmere", "Quellmere"); // one word the recipient reads nowhere
+  note("money/etudier", "\u00c9tudier");
+  note("money/2026-10-08", "2026-10-08");
+  const check = checker(root);
+  // Rows: text -> held for naming a page. The carve property found the first two (seed 7067): the
+  // gate looked for hidden values only, so the recipient's whats_new showed a hidden page's id and title.
+  const rows: [string, boolean][] = [
+    ["Payment comes from money/workshop-fund.", true],
+    ["Payment comes from the Workshop Fund.", true],
+    ["Payment comes from the workshop-fund, or workshop_fund, or WorkshopFund.", true],
+    ["It is under money workshop fund.", true],
+    ["See money%2Fworkshop-fund.", true],
+    ["See quarrymoor-plan-2026 for the rest.", true], // the id's last part, where the title says something else
+    // A one-word title the recipient is shown nowhere, written with a capital, wherever it stands.
+    ["Ask Robin about Quellmere.", true],
+    ["Quellmere", true],
+    ["Next: QUELLMERE.", true],
+    ["Robin said \u00c9tudier has it.", true], // accents and capitals outside ASCII
+    // Marks that are not read (slice audit of G810): emphasis, a tag, a zero-width character.
+    ["Payment comes from the **Workshop** fund.", true],
+    ["Payment comes from the Workshop <b>fund</b>.", true],
+    ["Payment comes from the Work\u200bshop\u200b fund.", true],
+    ["Payment comes from Workshop*fund.", true],
+    ["Ask Robin about the Pay Roll page, or PayRoll.", true],
+    // Not held: a page merely outside the recipient's slices (hidden answers like missing, and its
+    // own search says as much), and everyday text.
+    ["Robin asked about decisions/2026-09-01-pick-bank.", false],
+    ["Can you draft the midterm reminder for Course A?", false],
+    // Whole words only: a name inside other words, or broken by a comma, is not that name.
+    ["The suppliers remain bankrupt, so find another caterer.", false], // hidden page: Main bank
+    ["We are blending plans for both sections.", false], // hidden page: Lending plan
+    ["Paul, advisor to the course, wants the syllabus.", false], // hidden page: Paul Advisor
+    ["The reminder is due 2026-10-08.", false], // hidden page titled 2026-10-08: a date names nothing
+    // Ceiling, known and accepted: one word the recipient is shown anyway, a name under six
+    // letters, and a part of a title name nothing.
+    ["The midterm is on Friday.", false],
+    ["Robin's taxes are due in April.", false],
+    ["The workshop needs chairs.", false],
+    // Ceiling: a one-word title is often an everyday word, and no word list says which, so in
+    // lower case it names nothing (evals rl-ok-salary-word: a page titled Compensation).
+    ["Ask Robin about quellmere.", false],
+    // The same for a several-word title run together (hidden pages: Workshop fund, Pay Roll):
+    // "payroll" is everyday text, "PayRoll" and "Pay Roll" are the page.
+    ["Payment comes from the workshopfund.", false],
+    ["Please run payroll on Friday.", false],
+    // Ceiling: a name is matched as words, not letter by letter as a value is.
+    ["Payment comes from the w-o-r-k-s-h-o-p f u n d.", false],
+    ["Payment comes from the fund for the workshop.", false],
+    // Ceiling (slice audit of G810): punctuation that is read between the words (a comma already
+    // above), a word put between them, and look-alike digits. A value is held on these; a name is not.
+    ["Payment comes from the Workshop (fund).", false],
+    ["Payment comes from the Workshop & fund.", false],
+    ["Payment comes from the Workshop's fund.", false],
+    ["Payment comes from the Workshop the fund.", false],
+    ["Payment comes from the Worksh0p fund.", false],
+  ];
+  for (const [text, held] of rows) {
+    const v = check(msg(`steward@${D}`, `relay+planner@${D}`, text));
+    expect([text, v.reasons.some((r) => /^names ".*", a page planner can't see/.test(r)), v.alert]).toEqual([text, held, held]);
+  }
+});

@@ -17,7 +17,7 @@ jobs:
   test:
     runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
     # Step timeouts sit below the job's, so a hang turns a step red instead of the job "cancelled".
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -115,12 +115,12 @@ jobs:
         run: bun scripts/lane.ts "origin/${{ github.base_ref }}" | tee -a "$GITHUB_STEP_SUMMARY"
       # Includes the UI regression (test/ui-regression.test.ts): every dashboard and /b page against
       # its saved snapshot in test/ui/, on the fictional sample brain. Screenshots go up as an artifact.
-      - run: bun test
-        timeout-minutes: 15
+      - run: bun test --timeout 20000
+        timeout-minutes: 40
         env:
           PB_UI_SHOT_DIR: ui-shots
-      - run: PB_CELLS=1 bun test   # every read through per-agent cells
-        timeout-minutes: 15
+      - run: PB_CELLS=1 bun test --timeout 20000   # every read through per-agent cells
+        timeout-minutes: 40
       # A skipped browser suite looks like a pass: require one screenshot per snapshot.
       - name: the UI regression ran
         run: |
