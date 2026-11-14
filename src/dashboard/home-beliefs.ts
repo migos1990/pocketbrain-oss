@@ -63,14 +63,13 @@ export function assistantsWrong(root: string, rules: Rules, notes: Note[]): Assi
 }
 
 // See as on the home (outside review, 2026-10-29): how much of the brain each assistant gets, with a
-// link to the page that shows it exactly as that assistant does (/map?as=, behind a fresh sign-in
-// like every page past the home). Counts only: no title or value. Same assistants as the radar.
+// link to See as (/see/<agent>, src/dashboard/see.ts: that assistant's cut, page by page). Counts only: no title or value. Same assistants as the radar.
 export interface AssistantView { agent: string; label: string; sees: number; of: number; href: string }
 export function assistantViews(root: string, rules: Rules, notes: Note[]): AssistantView[] {
   return beliefs(root).agents.filter((a) => rules.policy.agents[a]?.status !== "paused").map((agent) => ({
     agent, label: rules.policy.agents[agent]?.label ?? agent,
     sees: carve(notes, rules, grantFor(rules, agent), { flags: false }).visible.size, of: notes.length,
-    href: `/map?as=${encodeURIComponent(agent)}`,
+    href: `/see/${encodeURIComponent(agent)}`,
   }));
 }
 

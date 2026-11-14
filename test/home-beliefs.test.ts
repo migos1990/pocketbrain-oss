@@ -102,7 +102,7 @@ test("G491: See as on the home: how many pages each assistant gets, as counts, w
   const steward = v.find((x) => x.agent === "steward")!, helper = v.find((x) => x.agent === "helper")!;
   expect(steward.sees).toBe(notes.length);
   expect(helper.sees).toBeLessThan(steward.sees);
-  expect(helper.href).toBe("/map?as=helper");
+  expect(helper.href).toBe("/see/helper");
   expect(JSON.stringify(v)).not.toContain("Jane");
 });
 
@@ -117,7 +117,7 @@ test("G491: Who knows has one row per assistant: what it read today, what it get
   const html = await (await d.handle(new Request(`http://${H}/who`, { headers: { host: H, cookie } }))).text();
   expect(html).toContain("<h2>Your assistants</h2>");
   expect(html).toMatch(/<b>Helper<\/b>(<span class="badge">trial<\/span>)?<small>Hasn&#39;t read your brain today<\/small>/);
-  expect(html).toContain('href="/map?as=helper"');
+  expect(html).toContain('href="/see/helper"');
   expect(html).toMatch(/Sees (\d+ pages|all your pages)/);
   expect(html).toContain("Helper remembers “She&#39;s a Teaching assistant” · your brain says Course coordinator");
   expect(html).toContain('action="/action/fix-everywhere"');

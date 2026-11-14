@@ -66,6 +66,7 @@ import type { Model } from "../model";
 import { undoFact } from "../undo";
 import { fixEverywhere } from "../beliefs";
 import { withRadar } from "./home-beliefs";
+import { seePage, seeListPage } from "./see";
 import { mapPage, mapGrid } from "./html-map";
 import { fgaPage, fgaGrid } from "./html-fga";
 import { loadOAuth, listPending, cleanupReplaced } from "../oauth";
@@ -961,10 +962,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const s = loadState(root);
     const p = url.pathname.replace(/\/+$/, "") || "/";
     // Audit v5: only the owner screens open on the 30-day sign-in, each shutting what is private on
-    // its own: the four tabs (Memory lists titles only), the page and settle screens. Every other
+    // its own: the four tabs (Memory lists titles only), the page and settle screens, and See as
+    // (src/dashboard/see.ts: titles, counts and the values a page itself would show). Every other
     // page can show a private value, so it needs a sign-in from the last 10 minutes, like a private
     // value on /p.
-    if (!/^\/(home|memory|ask|who|let|p\/.+|settle\/.+)?$/.test(p) && !freshSignIn(root, sid, now()))
+    if (!/^\/(home|memory|ask|who|let|p\/.+|settle\/.+|see\/.+)?$/.test(p) && !freshSignIn(root, sid, now()))
       return html({ title: "Sign in again", tab: "", body: ownerErrorHtml("dash.sign-in-again", {}, esc) + signInAgain(csrf) }, ownerStatus("dash.sign-in-again"));
     const undo = url.searchParams.get("undo")?.match(/^[0-9a-f]{7,40}$/)?.[0];
     const wrong = url.searchParams.get("wrong")?.match(/^[a-z][a-z0-9_]*$/)?.[0];
@@ -975,6 +977,16 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (p === "/overview") return withFlash(overview(s, csrf, url.searchParams));
     const op = p.match(/^\/p\/(.+)$/);
     if (op) return pageScreen(csrf, op[1]!.split("/").map(decodeURIComponent).join("/"), { flash: url.searchParams.get("ok") ?? url.searchParams.get("err") ?? undefined, undo: url.searchParams.get("ok") ? undo : undefined, fresh: freshSignIn(root, sid, now()), edit: url.searchParams.get("edit") === "1" }) ?? appOops("app.no-page");
+    // See as: one assistant's cut of the memory, or of one page. Read from the carve, never logged
+    // as a read. An assistant the rules don't name answers like any page that isn't there.
+    const see = p.match(/^\/see\/([^/]+)(?:\/(.+))?$/);
+    if (see) {
+      const agent = decodeURIComponent(see[1]!), fresh = freshSignIn(root, sid, now());
+      const id = see[2]?.split("/").map(decodeURIComponent).join("/");
+      const note = id ? s.notes.find((n) => n.fm.id === id) : undefined;
+      const page = id ? note && seePage(s, csrf, agent, note, { fresh }) : seeListPage(s, agent, { fresh });
+      return page ? new Response(page, { headers: PAGE_HEADERS }) : appOops("app.no-page");
+    }
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];

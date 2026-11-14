@@ -16,6 +16,8 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - From this update the nightly pass folds same-name project and org pages into one (docs/fold-twins.md). Run `pocketbrain fold` first to see what would fold and how many conflicts it would open, and `pocketbrain fold off` before the night if you'd rather it only counted (G635).
 
 ### What you see
+
+- **See as.** On Who knows, See as now opens that assistant's cut of your memory: every page with what it is given from it, and each page fact by fact, with a hatched bar where a fact is kept from it. A row of readers flips the same page between you and each assistant.
 - Two different due dates for one page, from two different calendar events or mails, no longer ask you to pick: a course's report and its final both stay, and both show in your week. Only the same event or mail giving a new date moves it, and an ask that is left reads "When is Course B due?", not "What is Course B's due?" (G799).
 - A birthday kept without its year reads as a day, "26 Jul", on the page, in its Details, on your home and in Ask's answer. It read "07-26". Pages the hub already wrote that way are written again on the next night, and the nightly read now counts a raw one as a machine date (G786).
 - Your own page no longer lists a flight, a booking, an appointment, a game or a provider's mail (a survey, a contest) as one of your projects, and new mail and calendar items no longer start a project page for an appointment or a provider's mail. Flights and stays sit under their trip. Areas read as their org writes them: "Your NCA projects", not "Your nca projects" (G787).

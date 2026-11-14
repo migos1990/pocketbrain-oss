@@ -1,0 +1,355 @@
+- main:
+  - paragraph:
+    - link "‹ Who knows":
+      - /url: /who
+  - heading "As Gemini" [level=1]
+  - paragraph: 83 of 99 pages given to Gemini today, 50 of them in part.
+  - paragraph: This is what your memory gives Gemini today, not what Gemini already remembers.
+  - heading "People" [level=2]
+  - list:
+    - listitem:
+      - link "Ahmed Saleh 1 of 5 facts":
+        - /url: /see/gemini/people/ahmed-saleh
+    - listitem:
+      - link "Aisha Rahman all of it":
+        - /url: /see/gemini/people/aisha-rahman
+    - listitem:
+      - link "Anne Ellis 1 of 6 facts":
+        - /url: /see/gemini/people/anne-ellis
+    - listitem:
+      - link "Antoine Lavoie 2 of 6 facts":
+        - /url: /see/gemini/people/antoine-lavoie
+    - listitem:
+      - link "Bea Thompson 1 of 5 facts":
+        - /url: /see/gemini/people/bea-thompson
+    - listitem:
+      - link "Ben Carter all of it":
+        - /url: /see/gemini/people/ben-carter
+    - listitem:
+      - link "Camille Lefebvre its name only":
+        - /url: /see/gemini/people/camille-lefebvre
+    - listitem:
+      - link "Chloé Gagnon all of it":
+        - /url: /see/gemini/people/chloe-gagnon
+    - listitem:
+      - link "Claire Dubois 2 of 6 facts":
+        - /url: /see/gemini/people/claire-dubois
+    - listitem:
+      - link "Daniel Okoro all of it":
+        - /url: /see/gemini/people/daniel-okoro
+    - listitem:
+      - link "Diego Alvarez its name only":
+        - /url: /see/gemini/people/diego-alvarez
+    - listitem:
+      - link "Elena Rossi all of it":
+        - /url: /see/gemini/people/elena-rossi
+    - listitem:
+      - link "Emma Wilson its name only":
+        - /url: /see/gemini/people/emma-wilson
+    - listitem:
+      - link "Ethan Brooks 2 of 6 facts":
+        - /url: /see/gemini/people/ethan-brooks
+    - listitem:
+      - link "Fatima Diallo 2 of 6 facts":
+        - /url: /see/gemini/people/fatima-diallo
+    - listitem:
+      - link "Felix Moreau all of it":
+        - /url: /see/gemini/people/felix-moreau
+    - listitem:
+      - link "Grace Liu all of it":
+        - /url: /see/gemini/people/grace-liu
+    - listitem:
+      - link "Hannah Becker all of it":
+        - /url: /see/gemini/people/hannah-becker
+    - listitem:
+      - link "Hélène Lefebvre 1 of 7 facts":
+        - /url: /see/gemini/people/helene-lefebvre
+    - listitem:
+      - link "Hugo Martin its name only":
+        - /url: /see/gemini/people/hugo-martin
+    - listitem:
+      - link "Inès Bouchard 1 of 6 facts":
+        - /url: /see/gemini/people/ines-bouchard
+    - listitem:
+      - link "Isabelle Roy 2 of 6 facts":
+        - /url: /see/gemini/people/isabelle-roy
+    - listitem:
+      - link "Jacob Stein 2 of 6 facts":
+        - /url: /see/gemini/people/jacob-stein
+    - listitem:
+      - link "Jordan Ellis 1 of 6 facts":
+        - /url: /see/gemini/people/jordan-ellis
+    - listitem:
+      - link "Julie Tran all of it":
+        - /url: /see/gemini/people/julie-tran
+    - listitem:
+      - link "Kai Nakamura 1 of 5 facts":
+        - /url: /see/gemini/people/kai-nakamura
+    - listitem:
+      - link "Karen Liu 1 of 5 facts":
+        - /url: /see/gemini/people/karen-liu
+    - listitem:
+      - link "Kenji Watanabe all of it":
+        - /url: /see/gemini/people/kenji-watanabe
+    - listitem:
+      - link "Laila Haddad 2 of 6 facts":
+        - /url: /see/gemini/people/laila-haddad
+    - listitem:
+      - link "Léa Lefebvre 1 of 5 facts":
+        - /url: /see/gemini/people/lea-lefebvre
+    - listitem:
+      - link "Lina Sato 2 of 6 facts":
+        - /url: /see/gemini/people/lina-sato
+    - listitem:
+      - link "Luc Gauthier 2 of 6 facts":
+        - /url: /see/gemini/people/luc-gauthier
+    - listitem:
+      - link "Lucas Bergeron 2 of 6 facts":
+        - /url: /see/gemini/people/lucas-bergeron
+    - listitem:
+      - link "Lucas Fontaine all of it":
+        - /url: /see/gemini/people/lucas-fontaine
+    - listitem:
+      - link "Marc Lefebvre 1 of 6 facts":
+        - /url: /see/gemini/people/marc-lefebvre
+    - listitem:
+      - link "Marc-André Côté 2 of 6 facts":
+        - /url: /see/gemini/people/marc-andre-cote
+    - listitem:
+      - link "Marcus Webb all of it":
+        - /url: /see/gemini/people/marcus-webb
+    - listitem:
+      - link "Martin Leclerc its name only":
+        - /url: /see/gemini/people/martin-leclerc
+    - listitem:
+      - link "Maya Chen all of it":
+        - /url: /see/gemini/people/maya-chen
+    - listitem:
+      - link "Mei Lin 2 of 6 facts":
+        - /url: /see/gemini/people/mei-lin
+    - listitem:
+      - link "Nadia Lefebvre 1 of 4 facts":
+        - /url: /see/gemini/people/nadia-lefebvre
+    - listitem:
+      - link "Nina Petrova all of it":
+        - /url: /see/gemini/people/nina-petrova
+    - listitem:
+      - link "Olivier Pelletier 2 of 5 facts":
+        - /url: /see/gemini/people/olivier-pelletier
+    - listitem:
+      - link "Omar Haddad all of it":
+        - /url: /see/gemini/people/omar-haddad
+    - listitem:
+      - link "Patrick O'Neil 1 of 5 facts":
+        - /url: /see/gemini/people/patrick-o-neil
+    - listitem:
+      - link "Peter Novak 2 of 6 facts":
+        - /url: /see/gemini/people/peter-novak
+    - listitem:
+      - link "Priya Shah all of it":
+        - /url: /see/gemini/people/priya-shah
+    - listitem:
+      - link "Rachel Adler 2 of 6 facts":
+        - /url: /see/gemini/people/rachel-adler
+    - listitem:
+      - link "Ravi Menon all of it":
+        - /url: /see/gemini/people/ravi-menon
+    - listitem:
+      - link "Robert Ellis 1 of 4 facts":
+        - /url: /see/gemini/people/robert-ellis
+    - listitem:
+      - link "Robin Lefebvre 2 of 5 facts":
+        - /url: /see/gemini/people/robin-lefebvre
+    - listitem:
+      - link "Sam Patel all of it":
+        - /url: /see/gemini/people/sam-patel
+    - listitem:
+      - link "Sarah Kim 2 of 6 facts":
+        - /url: /see/gemini/people/sarah-kim
+    - listitem:
+      - link "Simone Laurent 2 of 6 facts":
+        - /url: /see/gemini/people/simone-laurent
+    - listitem:
+      - link "Sofia Marquez all of it":
+        - /url: /see/gemini/people/sofia-marquez
+    - listitem:
+      - link "Sophie Girard 1 of 5 facts":
+        - /url: /see/gemini/people/sophie-girard
+    - listitem:
+      - link "Theo Lefebvre its name only":
+        - /url: /see/gemini/people/theo-lefebvre
+    - listitem:
+      - link "Tomás Rivera all of it":
+        - /url: /see/gemini/people/tomas-rivera
+    - listitem:
+      - link "Valérie Roy 2 of 6 facts":
+        - /url: /see/gemini/people/valerie-roy
+    - listitem:
+      - link "Yusuf Kaya 1 of 5 facts":
+        - /url: /see/gemini/people/yusuf-kaya
+    - listitem:
+      - link "Zoe Harper 2 of 6 facts":
+        - /url: /see/gemini/people/zoe-harper
+  - heading "Projects" [level=2]
+  - list:
+    - listitem:
+      - link "Atlas launch all of it":
+        - /url: /see/gemini/projects/atlas-launch
+    - listitem:
+      - link "Book club, November Not given":
+        - /url: /see/gemini/projects/book-club-november
+        - text: Book club, November
+        - img "Not given"
+    - listitem:
+      - link "Choir winter concert Not given":
+        - /url: /see/gemini/projects/choir-winter-concert
+        - text: Choir winter concert
+        - img "Not given"
+    - listitem:
+      - link "Final projects Not given":
+        - /url: /see/gemini/projects/final-projects
+        - text: Final projects
+        - img "Not given"
+    - listitem:
+      - link "Gaspésie trip Not given":
+        - /url: /see/gemini/projects/gaspesie-trip
+        - text: Gaspésie trip
+        - img "Not given"
+    - listitem:
+      - link "Guest lectures Not given":
+        - /url: /see/gemini/projects/guest-lecture-series
+        - text: Guest lectures
+        - img "Not given"
+    - listitem:
+      - link "Kitchen renovation Not given":
+        - /url: /see/gemini/projects/kitchen-renovation
+        - text: Kitchen renovation
+        - img "Not given"
+    - listitem:
+      - link "Mom's move Not given":
+        - /url: /see/gemini/projects/moms-move
+        - text: Mom's move
+        - img "Not given"
+    - listitem:
+      - link "Pinecrest pilot all of it":
+        - /url: /see/gemini/projects/pinecrest-partnership
+    - listitem:
+      - link "Pricing page refresh all of it":
+        - /url: /see/gemini/projects/pricing-page-refresh
+    - listitem:
+      - link "Product Discovery course Not given":
+        - /url: /see/gemini/projects/product-discovery-course
+        - text: Product Discovery course
+        - img "Not given"
+    - listitem:
+      - link "Q1 roadmap all of it":
+        - /url: /see/gemini/projects/q1-roadmap
+    - listitem:
+      - link "Red River climbing trip Not given":
+        - /url: /see/gemini/projects/red-river-trip
+        - text: Red River climbing trip
+        - img "Not given"
+    - listitem:
+      - link "Senior designer hire all of it":
+        - /url: /see/gemini/projects/designer-hire
+  - heading "Organisations" [level=2]
+  - list:
+    - listitem:
+      - link "Atelier Boréal its name only":
+        - /url: /see/gemini/orgs/atelier-boreal
+    - listitem:
+      - link "Fernwood Climbing Gym its name only":
+        - /url: /see/gemini/orgs/fernwood-climbing
+    - listitem:
+      - link "Fieldnote its name only":
+        - /url: /see/gemini/orgs/fieldnote
+    - listitem:
+      - link "Gaspé Cottages its name only":
+        - /url: /see/gemini/orgs/gaspe-cottages
+    - listitem:
+      - link "Harbourline Software all of it":
+        - /url: /see/gemini/orgs/harbourline
+    - listitem:
+      - link "Lakeshore College its name only":
+        - /url: /see/gemini/orgs/lakeshore-college
+    - listitem:
+      - link "Maison des Pins its name only":
+        - /url: /see/gemini/orgs/maison-des-pins
+    - listitem:
+      - link "Northgate Design Studio all of it":
+        - /url: /see/gemini/orgs/northgate-design
+    - listitem:
+      - link "Parc Avenue Books its name only":
+        - /url: /see/gemini/orgs/parc-avenue-books
+    - listitem:
+      - link "Pinecrest Labs all of it":
+        - /url: /see/gemini/orgs/pinecrest-labs
+    - listitem:
+      - link "Rosemont Children's Choir its name only":
+        - /url: /see/gemini/orgs/rosemont-choir
+    - listitem:
+      - link "Tilehouse Supply its name only":
+        - /url: /see/gemini/orgs/tilehouse-supply
+  - heading "Money" [level=2]
+  - list:
+    - listitem:
+      - link "Household taxes Not given":
+        - /url: /see/gemini/money/household-taxes
+        - text: Household taxes
+        - img "Not given"
+    - listitem:
+      - link "Kitchen budget Not given":
+        - /url: /see/gemini/money/kitchen-budget
+        - text: Kitchen budget
+        - img "Not given"
+  - heading "Decisions" [level=2]
+  - list:
+    - listitem:
+      - link "Atelier Boréal for the kitchen Not given":
+        - /url: /see/gemini/decisions/2026-08-30-kitchen-contractor
+        - text: Atelier Boréal for the kitchen
+        - img "Not given"
+    - listitem:
+      - link "Atlas beta scope all of it":
+        - /url: /see/gemini/decisions/2026-09-08-atlas-beta-scope
+    - listitem:
+      - link "Final projects in teams of four Not given":
+        - /url: /see/gemini/decisions/2026-09-10-final-project-format
+        - text: Final projects in teams of four
+        - img "Not given"
+    - listitem:
+      - link "Hire a senior designer, not two juniors all of it":
+        - /url: /see/gemini/decisions/2026-09-15-hire-senior-designer
+    - listitem:
+      - link "Mom moves in December Not given":
+        - /url: /see/gemini/decisions/2026-09-28-mom-moves-in-december
+        - text: Mom moves in December
+        - img "Not given"
+    - listitem:
+      - link "Northgate for the pricing page all of it":
+        - /url: /see/gemini/decisions/2026-09-22-pick-northgate
+    - listitem:
+      - link "Red River in April Not given":
+        - /url: /see/gemini/decisions/2026-09-25-red-river-dates
+        - text: Red River in April
+        - img "Not given"
+    - listitem:
+      - link "Three guest speakers this term Not given":
+        - /url: /see/gemini/decisions/2026-09-24-three-guest-speakers
+        - text: Three guest speakers this term
+        - img "Not given"
+    - listitem:
+      - link "Three-month Pinecrest pilot all of it":
+        - /url: /see/gemini/decisions/2026-09-29-pinecrest-pilot-length
+    - listitem:
+      - link "Weekly Atlas review on Wednesdays all of it":
+        - /url: /see/gemini/decisions/2026-10-01-weekly-team-review
+- navigation "Tabs":
+  - link "On your mind":
+    - /url: /home
+  - link "Memory":
+    - /url: /memory
+  - link "Ask Braniac":
+    - /url: /ask
+  - link "Who knows":
+    - /url: /who

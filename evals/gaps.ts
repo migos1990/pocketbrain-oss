@@ -5,6 +5,40 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G806: {
+    closed: "claude/see-as",
+    title: "A typed See as address reached a secret page and a conflict packet the list leaves out",
+    severity: "low",
+    finding: "Code review of PR 172, 2026-11-14: the list at /see/<agent> keeps secret pages (until a fresh sign-in) and conflict packets off it, but /see/<agent>/<id> rendered any note id, so a typed address showed a secret page's title and whether that assistant is given it on the 30-day sign-in.",
+    fix: "src/dashboard/see.ts: one list (`listed`) decides both; seeView and seePage answer like a missing page for a note it leaves out. test/see-page.test.ts.",
+  },
+  G807: {
+    closed: "claude/see-as",
+    title: "See as called a page given by its words and none of its facts \"its name only\"",
+    severity: "low",
+    finding: "Code review of PR 172, 2026-11-14: a row with no fact given read \"its name only\" even when the page's own words are given, which understates what the assistant gets.",
+    fix: "src/dashboard/see.ts rowWords: \"its words only\" when the words are given and no fact is. test/see-page.test.ts.",
+  },
+  G803: {
+    closed: "claude/see-as",
+    title: "See as drew a cut for the hub's own reader, which has no read door",
+    severity: "low",
+    finding: "Slice audit of the See as screen, 2026-11-14: /see/<agent> rendered for any name policy.yaml holds, so the address of an inside_wall agent (the hub's reader of mail and captures) showed every page as given, while that agent has no door to be given anything through (previewRead answers not found). Owner-only and not linked from any screen.",
+    fix: "src/dashboard/see.ts cutFor: an inside_wall agent gets no screen, the same answer as a name the rules don't hold. test/see-page.test.ts.",
+  },
+  G804: {
+    title: "See as shows an assistant's own grant, not what a narrower token or an OpenFGA copy serves",
+    severity: "low",
+    finding: "Slice audit, 2026-11-14: the screen's cut is carve() with grantFor(rules, agent) on the hub's notes. A reader token of the same assistant is capped at personal at request time (src/tokenrole.ts), and snapshot() in src/core.ts can narrow a cell by an OpenFGA copy and adds the calendar overlays; none of that is in the screen's cut. So for such a token the screen can call given a fact that door does not serve. Never the other way: a door serves no more than the grant. The home's counts (assistantViews) read the same hub carve.",
+    fix: "Proposed, not built: the screen names the token role when an assistant holds a reader token and draws that cut too, and reads the cell's own cut once a cell can be asked without building it as a read. Said in docs/owner-home.md and at cutFor until then.",
+  },
+  G805: {
+    closed: "claude/see-as",
+    title: "See as showed a private page's fact counts on the 30-day sign-in",
+    severity: "low",
+    finding: "Slice audit, 2026-11-14: a private page's own screen shows no fact count until a fresh sign-in, but its See as screen and its row in the assistant's list showed \"2 of 3 facts\". Counts only, no value or attribute name.",
+    fix: "src/dashboard/see.ts: a closed page shows no count, and its row says all of it or part of it. test/see-page.test.ts.",
+  },
   G799: {
     closed: "2cf2721e",
     title: "Two due dates from two calendar events asked the owner to pick one",
@@ -82,7 +116,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/write.ts: the owner's accept of the proposal its card showed (the card sends proposalSeen, a hash of the file as drawn; any other bytes are refused as changed since shown) no longer re-runs the checks whose outcome is to ask the owner; refusals still refuse, twins the card didn't show and the hub's own yes are weighed as before, and no door passes write() options. decideOne answers a proposal already in inbox/decided as a no-op. src/dashboard: Already answered., That question isn't waiting any more., and no brain file name in any owner-facing error. Tests: test/accept-leaves.test.ts.",
   },
   G783: {
-    closed: "claude/how-private-field",
+    closed: "2e030e43",
     title: "How private on a page was the browser's own small grey field and button",
     severity: "low",
     finding: "Screens review 2026-11-10, pass 3 (demo brain, 390px dark): under Change who sees it, the How private field and its Save were unstyled browser controls, 19px tall, in the system font, on a screen where every other control is 44px and in the app's type.",

@@ -76,6 +76,8 @@ export const DASHBOARD_PAGES: [string, string][] = [
   ["owner-project", "/p/projects/atlas-launch"],
   ["owner-page-edit", "/p/people/maya-chen?edit=1"],
   ["settle", "/settle/c-0001"],
+  ["see", "/see/gemini"],
+  ["see-page", "/see/gemini/people/helene-lefebvre"],
 ];
 
 // The same rig with o.busy: lists with items in them.

@@ -15,7 +15,7 @@
     - listitem:
       - text: ChatGPT Read your brain 3 times today
       - link "See as":
-        - /url: /map?as=chatgpt
+        - /url: /see/chatgpt
       - paragraph: Sees 97 pages
       - list:
         - listitem:
@@ -27,13 +27,13 @@
     - listitem:
       - text: Claude Read your brain 6 times today
       - link "See as":
-        - /url: /map?as=claude
+        - /url: /see/claude
       - paragraph: Sees 99 pages
       - group: What it asked today (6)
     - listitem:
       - text: Geminitrial Hasn't read your brain today
       - link "See as":
-        - /url: /map?as=gemini
+        - /url: /see/gemini
       - paragraph: Sees 83 pages · what it writes waits for you
   - 'link "Settings Everything else: sign-ins, sources, spending, history"':
     - /url: /overview
