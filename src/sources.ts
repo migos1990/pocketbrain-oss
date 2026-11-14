@@ -161,6 +161,19 @@ export function sourceRank(r: Pick<FactRecord, "sources" | "verification" | "con
   return 0;
 }
 
+// The state of a line (plans/wrong-grouping-family-2026-11-14.md, rule 5, G844): the owner's word
+// ("yours": confirmed by the owner, an exact owner ref, or the owner's Yes on it), a source that
+// states it ("sourced": an exact source, neither unverified nor inferred), or a guess (an assistant's
+// memory or note, imported free text, the hub's own inference). A guess is said as a guess, links no
+// page and feeds no other rule.
+export type LineState = "yours" | "sourced" | "guess";
+export function lineState(r: Pick<FactRecord, "sources" | "verification" | "confidence">): LineState {
+  const refs = (r.sources ?? []).map(refString);
+  if (ownerVouched(r) || refs.some(isExactLouisRef) || r.verification === "confirmed-by-co-owner") return "yours";
+  if (r.verification !== "unverified" && r.confidence !== "inferred" && refs.some((x) => SCHEMES[schemeOf(x) ?? ""] === "exact")) return "sourced";
+  return "guess";
+}
+
 // Pull every recognisable ref out of free text (Notion "Source" columns, bodies).
 export function extractRefs(text: string): string[] {
   const out = new Set<string>();

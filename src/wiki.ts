@@ -16,7 +16,7 @@ import YAML from "yaml";
 import { join } from "node:path";
 import { records, carve, grantFor } from "./carve";
 import { CAPDIRS, ownerTitle, ownerOf } from "./capture";
-import { SCHEMES, normalizeRef, refString } from "./sources";
+import { SCHEMES, normalizeRef, refString, lineState } from "./sources";
 import { sayYearly, YEARLY_ATTRIBUTES } from "./diary";
 
 export function summaryOf(n: Note): string | undefined {
@@ -321,6 +321,8 @@ const isPage = (n: Note) => summaryOf(n) !== undefined || parentOf(n) !== undefi
 const REF_RE = new RegExp(`\\b(?:${Object.keys(SCHEMES).map((s) => s.replace(/[-]/g, "\\-")).join("|")}):[^\\s)\\],;]+`, "g");
 // A value the owner hasn't seen yet (phone UI spec §7) isn't said on the page, listed or linked.
 const live = (r: FactRecord) => !r.valid_to && !r.retired && !r.unseen;
+// A live line something firmer than a guess stands behind: only these tie pages together (G844).
+const firm = (r: FactRecord) => live(r) && lineState(r) !== "guess";
 // The source refs a reference names, like gmail:<id> in "Email, Oct 2 (gmail:<id>)".
 export const refsIn = (text: string) => [...new Set(text.match(REF_RE) ?? [])];
 
@@ -760,7 +762,27 @@ function namesBySource(root: string, notes: Note[], owner: string): Map<string, 
 // again too, touched or not, until its text says the day; then it is like any other page.
 function touchedPages(root: string, notes: Note[], since: string, always?: string): Note[] {
   const touched = new Set(git(root, ["log", `--since=${since}`, "--name-only", "--format="]).split("\n").filter((p) => p.endsWith(".md")));
-  return notes.filter((n) => (touched.has(n.path) || n.fm.id === always || rawYearly(n)) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
+  const guessed = rawGuess(notes);
+  return notes.filter((n) => (touched.has(n.path) || n.fm.id === always || rawYearly(n) || guessed.has(n.fm.id)) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
+}
+
+// Pages written before guesses were said as guesses (G844), healed without waiting to be touched:
+// a page with a guess line its text doesn't say as one, and a page that lists or links someone only
+// a guess ties to it. Text that comes out the same is never written.
+function rawGuess(notes: Note[]): Set<string> {
+  const out = new Set<string>();
+  const guessRecs = (f: Fact) => { const rs = records(f).filter(live); return rs.length > 0 && rs.every((r) => lineState(r) === "guess") ? rs : []; };
+  for (const n of notes) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+    if (attr === "family" || NOT_PROSE.test(attr) || isDisputed(f)) continue;
+    const rs = guessRecs(f);
+    if (!rs.length) continue;
+    if (!(n.body ?? "").includes("Not confirmed:")) out.add(n.fm.id);
+    for (const r of rs) for (const m of shown(r.value).matchAll(/\[\[([^\]|]+)/g)) {
+      const to = notes.find((x) => x.fm.id === m[1]!.trim());
+      if (to && (to.body ?? "").includes(`[[${n.fm.id}`)) out.add(to.fm.id);
+    }
+  }
+  return out;
 }
 
 function rawYearly(n: Note): boolean {
@@ -842,7 +864,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   let folders: Set<string> | undefined;
   const idShaped = (v: string) => { const m = v.trim().match(/^([a-z0-9-]+)\/[a-z0-9][a-z0-9._-]*$/i); return !!m && (folders ??= new Set([...o.byId.keys()].map((k) => k.split("/")[0]!.toLowerCase()))).has(m[1]!.toLowerCase()); };
   const linkWords = (s: string) => s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, to: string, words?: string) => { const id = o.resolve?.(to); return id ? `[[${id}|${words ?? o.byId.get(id)?.fm.title ?? to}]]` : `[[${to}${words ? `|${words}` : ""}]]`; });
-  const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean; src?: string[] }[] = [];
+  const facts: { attr: string; vals: string[]; labs: string[]; waits: boolean; src?: string[]; guess?: boolean }[] = [];
   for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     if (NOT_PROSE.test(attr) || isDisputed(f) || o.hidden(`${n.fm.id}#${attr}`)) continue;
     // The owner's own page says what is true of him, not how he knows himself (G624).
@@ -864,10 +886,15 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     // page; a value that is a page's id ("orgs/town") is that page, read by its name. Plain words
     // stay plain words when some reader of this page can't see that org page: the reader is shown
     // the value as written, and the sentence must read like one whose words name no page.
-    const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (v.includes("[[")) return v; if (o.byId.has(v.trim()) || idShaped(v)) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" && !o.blind(id) ? `[[${v.trim()}]]` : v; });
-    facts.push({ attr, vals, labs: [lab], waits, src: [...new Set(recs.flatMap((r) => (r.sources ?? []).map((x) => refString(x))))] });
+    // A line only a guess stands behind (an assistant's memory, imported free text) is said as a
+    // guess and links no page: a link would say the page is the thing (G844).
+    // Upkeep's family guess (G546) is worded as one already and keeps its link to the owner's page.
+    const guess = attr !== "family" && recs.every((r) => lineState(r) === "guess");
+    const unlinked = (v: string) => v.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, id: string, name?: string) => name ?? String(o.byId.get(o.resolve?.(id.trim()) ?? id.trim())?.fm.title ?? id.trim().split("/").pop()));
+    const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (guess) return unlinked(o.byId.has(v.trim()) ? `[[${v.trim()}]]` : v); if (v.includes("[[")) return v; if (o.byId.has(v.trim()) || idShaped(v)) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" && !o.blind(id) ? `[[${v.trim()}]]` : v; });
+    facts.push({ attr, vals, labs: [lab], waits, src: [...new Set(recs.flatMap((r) => (r.sources ?? []).map((x) => refString(x))))], guess });
     if (!refs.some((x) => x.label === lab)) refs.push({ label: lab, text });
-    for (const r of recs) for (const s of r.sources ?? []) for (const to of o.names.get(itemOf(refString(s))) ?? [])
+    if (!guess) for (const r of recs) for (const s of r.sources ?? []) for (const to of o.names.get(itemOf(refString(s))) ?? [])
       if (to !== n.fm.id && to !== o.ownerPage && o.byId.has(to) && !o.blind(to)) seen.set(to, (seen.get(to) ?? new Set()).add(lab));
   }
   // A person's role and org are one sentence, where the first of them stood, with both their
@@ -876,7 +903,7 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
   const role = facts.findIndex((x) => x.attr === "role"), org = facts.findIndex((x) => x.attr === "org");
   // Glued only when one source says both and the role is a plain noun phrase (audit v13: "is the
   // guest lecturer at …" from two sources, "is the student, team lead for … at …"; G773).
-  if (n.fm.type === "person" && role >= 0 && org >= 0 && [role, org].every((i) => facts[i]!.vals.length === 1 && !facts[i]!.waits)
+  if (n.fm.type === "person" && role >= 0 && org >= 0 && !!facts[role]!.guess === !!facts[org]!.guess && [role, org].every((i) => facts[i]!.vals.length === 1 && !facts[i]!.waits)
     && (facts[role]!.src ?? []).some((x) => (facts[org]!.src ?? []).includes(x)) && isPhrase(facts[role]!.vals[0]!, 14) && !facts[role]!.vals[0]!.includes(",")) {
     // A role that already names its org ("organiser of the Option Voisins board") is said once,
     // the org's name in it linking its page, never "… Option Voisins board at Option Voisins"
@@ -888,8 +915,8 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     const at = r.includes("[[") ? -1 : nameAt(r, oname);
     const labs = [...new Set([...facts[role]!.labs, ...facts[org]!.labs])];
     const both = at >= 0
-      ? { attr: "role", vals: [oid && o.byId.has(oid) ? `${r.slice(0, at)}[[${oid}|${r.slice(at, at + oname.length)}]]${r.slice(at + oname.length)}` : r], labs, waits: false }
-      : { attr: "role+org", vals: [r, ov], labs, waits: false };
+      ? { attr: "role", vals: [oid && o.byId.has(oid) && !facts[org]!.guess ? `${r.slice(0, at)}[[${oid}|${r.slice(at, at + oname.length)}]]${r.slice(at + oname.length)}` : r], labs, waits: false, guess: facts[org]!.guess }
+      : { attr: "role+org", vals: [r, ov], labs, waits: false, guess: facts[org]!.guess };
     facts.splice(Math.max(role, org), 1);
     facts.splice(Math.min(role, org), 1, both);
   }
@@ -935,7 +962,8 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     }
     const raw = sentence(n, x.attr, x.vals, o.owner, o.spec?.(x.attr), lines.length && short ? short : undefined);
     if (!raw) continue;
-    const said = linkWords(raw);
+    // A guess is said as one (G844).
+    const said = x.guess ? `Not confirmed: ${raw}` : linkWords(raw);
     lines.push(`${said}${x.labs.map((l) => `[^${l}]`).join("")}${x.waits ? " A different value is waiting to be checked." : ""}`);
   }
   // The pages whose title names the course ("PROD 20410: intra exam due …") gather on it (G712).
@@ -1247,7 +1275,7 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
     if (p.fm.type !== "person" || ["archived", "merged", "superseded"].includes(String(p.fm.status))) continue;
     const f = p.fm.facts?.org;
     if (!f || isDisputed(f)) continue;
-    const recs = records(f).filter(live).filter((r) => !r.share_with && r.value !== undefined && r.value !== null);
+    const recs = records(f).filter(firm).filter((r) => !r.share_with && r.value !== undefined && r.value !== null);
     const to = new Set(recs.flatMap((r) => { const v = shown(r.value); return v.includes("[[") ? [...v.matchAll(/\[\[([^\]|]+)/g)].map((m) => resolve(m[1])) : [resolve(v.trim())].filter((id) => id && byId.get(id)?.fm.type === "org"); }).filter((x): x is string => !!x));
     for (const id of to) at.set(id, [...(at.get(id) ?? []), { id: p.fm.id, recs }]);
   }
@@ -1260,7 +1288,7 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
     if (!PAGE_DIRS.has(p.fm.id.split("/")[0]) || ["archived", "merged", "superseded"].includes(String(p.fm.status))) continue;
     for (const [attr, f] of Object.entries(p.fm.facts ?? {})) {
       if (NOT_PROSE.test(attr) || isDisputed(f)) continue;
-      for (const rec of records(f).filter(live).filter((r) => !r.share_with && r.value !== undefined && r.value !== null))
+      for (const rec of records(f).filter(firm).filter((r) => !r.share_with && r.value !== undefined && r.value !== null))
         for (const to of new Set((rec.sources ?? []).flatMap((x) => names.get(itemOf(refString(x))) ?? [])))
           if (to !== p.fm.id) namedIn.set(to, [...(namedIn.get(to) ?? []), { from: p.fm.id, attr, rec }]);
     }
@@ -1273,7 +1301,7 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
     if (!PAGE_DIRS.has(p.fm.id.split("/")[0]) || p.fm.type === "hub" || ["archived", "merged", "superseded"].includes(String(p.fm.status))) continue;
     for (const [attr, f] of Object.entries(p.fm.facts ?? {})) {
       if (NOT_PROSE.test(attr) || isDisputed(f)) continue;
-      for (const rec of records(f).filter(live).filter((r) => !r.share_with && r.value !== undefined && r.value !== null))
+      for (const rec of records(f).filter(firm).filter((r) => !r.share_with && r.value !== undefined && r.value !== null))
         for (const item of new Set((rec.sources ?? []).map((x) => itemOf(refString(x))).filter((x) => /^(gmail|gcal|imsg|mail|notion):/.test(x))))
           citing.set(item, [...(citing.get(item) ?? []), { from: p.fm.id, attr, rec }]);
     }
@@ -1288,7 +1316,7 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
   // Page -> the facts on other pages whose value links it: it links back ("See also").
   const active = (p: Note) => PAGE_DIRS.has(p.fm.id.split("/")[0]) && p.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(p.fm.status));
   const seeAlso = new Map<string, { from: string; attr: string; rec: FactRecord }[]>();
-  const liveRecs = (p: Note) => Object.entries(p.fm.facts ?? {}).filter(([attr, f]) => !NOT_PROSE.test(attr) && !isDisputed(f)).flatMap(([attr, f]) => records(f).filter(live).filter((r) => !r.share_with && r.value !== undefined && r.value !== null).map((rec) => ({ attr, rec })));
+  const liveRecs = (p: Note) => Object.entries(p.fm.facts ?? {}).filter(([attr, f]) => !NOT_PROSE.test(attr) && !isDisputed(f)).flatMap(([attr, f]) => records(f).filter(attr === "family" ? live : firm).filter((r) => !r.share_with && r.value !== undefined && r.value !== null).map((rec) => ({ attr, rec })));
   for (const p of notes) {
     if (!active(p)) continue;
     for (const { attr, rec } of liveRecs(p)) {

@@ -342,7 +342,7 @@ test("page writer: a longer text in the owner's commit stays on top, the facts' 
   expect(r.kept).toContain("people/ana-diaz");
   const b = body(root, "people/ana-diaz");
   expect(b).toStartWith("Met Ana at the spring retreat;");
-  expect(b).toContain("## From its facts\nAna Diaz's role is coach tennis.[^pf-role] Ana works at North College.");
+  expect(b).toContain("## From its facts\nAna Diaz's role is coach tennis.[^pf-role] Not confirmed: Ana works at North College.");
   // Every reference says what kind of source it is.
   expect(b).toMatch(/^\[\^pf-org\]: Notion import, 2026-10-05 \(notion:import\/2026-09-15\)$/m);
   // A fact with no checked source says an assistant told it, never which one (G720).

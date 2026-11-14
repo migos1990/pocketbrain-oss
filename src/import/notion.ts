@@ -284,20 +284,8 @@ function findProjectByTitle(ctx: Ctx, title: string): Note | undefined {
     ?? all.find((x) => k.split(" ").filter((w) => w.length > 3).every((w) => compareKey(x.fm.title).includes(w)));
 }
 
-function orgNote(ctx: Ctx, raw: string, area: string, r: Row): Note {
-  const m = raw.match(/^([^()]+?)\s*\(([^)]+)\)\s*$/);
-  const title = (m ? m[1] : raw).trim();
-  const aliases = m && !/^(unclear|unknown|\?)$/i.test(m[2].trim()) ? [m[2].trim()] : [];
-  const existing = ctx.notes.find((x) => x.fm.type === "org" && [x.fm.title, ...(x.fm.aliases ?? [])].some((t) => compareKey(t) === compareKey(title)));
-  if (existing) return existing;
-  const n = newNote(ctx, "orgs", title, { url: "", Fingerprint: s(r, "Fingerprint"), "Author agent": s(r, "Author agent") }, "org", area, "personal", "");
-  delete n.fm.legacy;
-  ctx.byLegacy.delete("");
-  if (aliases.length) n.fm.aliases = aliases;
-  n.fm.sources = [`notion:${pageId(r)}`];
-  n.body = `Created by the Notion import from the free-text Org field.\n`;
-  return n;
-}
+// An Org field that names two organizations: two names either side of " / " or " | " (G653).
+const twoOrgs = (raw: string) => raw.split(/\s+[/|]\s+/).filter((x) => /\p{L}{2}/u.test(x)).length > 1;
 
 function importPeople(ctx: Ctx) {
   for (const r of readRows(ctx, "people")) {
@@ -305,7 +293,9 @@ function importPeople(ctx: Ctx) {
     const c = common(ctx, "people", r, title);
     const rel = cleanText(s(r, "Related project"));
     const proj = rel ? findProjectByTitle(ctx, rel) : undefined;
-    let area = proj?.fm.area ?? areaFromText(`${rel} ${s(r, "Org")} ${s(r, "Role")}`);
+    // The person's area comes from the project the row links, never from words in its free-text
+    // fields: an Org or Role word matching an area hint is a guess (G843).
+    let area = proj?.fm.area;
     if (!area) { area = "personal"; flag(ctx, "Area guessed", `people "${title}": no related project${rel ? ` matched "${rel}"` : ""} -> personal`); }
     if (rel && !proj) flag(ctx, "Unresolved links", `people "${title}": Related project "${rel}" matches no project or decision`);
     const n = newNote(ctx, "people", title, r, "person", area, c.sens, c.body);
@@ -315,10 +305,12 @@ function importPeople(ctx: Ctx) {
     const relationship = cleanText(s(r, "Relationship"));
     if (role) setFact(n, "role", record(ctx, role, { ...c.base, by }));
     if (relationship) setFact(n, "relationship", record(ctx, relationship, { ...c.base, by }));
+    // The Org field is free text, so a guess: kept as the person's org in its own words, never a page
+    // or a link (G843). Two organisations in one field (G653) are listed for the owner to say which.
     const org = cleanText(s(r, "Org"));
     if (org) {
-      const o = orgNote(ctx, org, area, r);
-      setFact(n, "org", record(ctx, `[[${o.fm.id}]]`, { ...c.base, by }));
+      setFact(n, "org", record(ctx, org, { ...c.base, by }));
+      if (twoOrgs(org)) flag(ctx, "Two organizations in one Org field (kept as written; say which one)", `\`${n.fm.id}\`: "${org}"`);
     }
     const last = s(r, "date:Last contact:start");
     if (last) setFact(n, "last_contact", record(ctx, last, { ...c.base, as_of: last, as_of_approx: undefined, by }));
@@ -331,11 +323,6 @@ function importPeople(ctx: Ctx) {
       n.fm.tags = ["finance"];
       flag(ctx, "Tagged finance (kept out of contacts-basic)", `\`${n.fm.id}\``);
     }
-  }
-  // An org whose only contacts are finance contacts (a bank, a brokerage) is finance too.
-  for (const o of ctx.notes.filter((x) => x.fm.type === "org")) {
-    const people = ctx.notes.filter((p) => p.fm.type === "person" && (p.fm.facts?.org as FactRecord | undefined)?.value === `[[${o.fm.id}]]`);
-    if (people.length && people.every((p) => p.fm.tags?.includes("finance"))) o.fm.tags = ["finance"];
   }
 }
 

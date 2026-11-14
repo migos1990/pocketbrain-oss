@@ -19,6 +19,9 @@ export interface Case {
   gap?: string; // id in gaps.ts
   llm?: boolean; // needs a model; skipped in --ci
   run: () => Promise<Result>;
+  // Decides the case from all its runs together (k=1 included) instead of pass^k, for a case scored
+  // by lines whose runs are too short to judge one by one (evals/lib/pooled.ts, G813).
+  pool?: (results: Result[]) => Result;
 }
 
 export interface Scored extends Case { result: Result; ms: number; runs?: { pass: number; k: number } } // runs: with --k > 1, llm cases only

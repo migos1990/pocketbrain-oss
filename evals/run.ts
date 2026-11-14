@@ -10,7 +10,8 @@
 //   --save-baseline [name]   save per-case results to evals/baselines/<name|default>.json
 //   --compare [name]         pair this run with that baseline by case id; exits 1 on a regression
 //   --compare-files a.json b.json   pair two saved results or baseline files, running nothing
-//   --k <n>   runs each llm case n times (pass^k: passes only if every run does; runs: {pass, k})
+//   --k <n>   runs each llm case n times (pass^k: passes only if every run does; runs: {pass, k});
+//             a case with `pool` is decided on all its runs' lines together instead (evals/lib/pooled.ts)
 // The real brain is used when PB_BRAIN points at it (never modified: every case copies it).
 import { mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -73,7 +74,9 @@ async function runOne(c: Case): Promise<Scored> {
   const keys = [...new Set(ms.flatMap((m) => Object.keys(m)))];
   const mean = (key: string) => { const xs = ms.map((m) => m[key]).filter((x) => typeof x === "number" && Number.isFinite(x)); return xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100 : undefined; };
   const metrics = Object.fromEntries(keys.map((key) => [key, mean(key)]).filter(([, v]) => v !== undefined)) as Record<string, number>;
-  const result = { ...shown, ...(Object.keys(metrics).length ? { metrics } : {}) };
+  // A pooled case is decided on every scored run at once (G813); its runs still count passes one by one.
+  const scoredRuns = results.filter((r) => r.pass !== "n/a");
+  const result = c.pool && scoredRuns.length ? c.pool(scoredRuns) : { ...shown, ...(Object.keys(metrics).length ? { metrics } : {}) };
   const s: Scored = { ...c, result, ms: Date.now() - t0, ...(reps > 1 && results.some((r) => r.pass !== "n/a") ? { runs: { pass: passes, k: reps } } : {}) };
   if (!flag("--json")) process.stderr.write(`${mark(s)} ${c.id}${s.runs ? ` (${passes}/${reps})` : ""}  ${result.detail ?? ""}`.slice(0, 400) + (reps > 1 && result.metrics ? ` | metrics: ${Object.entries(result.metrics).map(([key, v]) => `${key}=${v}`).join(" ")}` : "") + "\n");
   return s;

@@ -13,6 +13,16 @@ pocketBrain is worth it only if this works every day: one assistant learns a fac
 
 If any step breaks (the write is lost, the owner's accept doesn't land, a door shows the old room or drops the source), the case fails and names the step.
 
+## A pass on a few lines
+
+Some paid checks score each line a model writes as right or wrong, a dozen or two lines a run (the check that says what a page is to you, `page-about-personas`, G789). At that size one run proves little: 11 right out of 12 is 92%, but the true share could be anywhere from about 65% to 99%. So such a check (a case with `pool`, evals/lib/pooled.ts) is decided on all its runs' lines together, and the bar stays 70%:
+
+- it passes when we can be 95% sure that at least 70% of the lines are right (the one-sided 95% Wilson lower bound of right lines over all lines);
+- at least 80% of the lines it files are right, since those are the ones assistants read; a guess stays with the owner until they say yes;
+- no line lands on a decoy; no lines at all fails, and so does any run that broke before counting its lines, since the pool can't speak for it.
+
+Every earlier paid run of the page check fails this rule (59 of 78, 56 of 85, 11 of 20), and so does its best single run, 11 of 12: one run is not enough. Three runs of 12 lines need about 30 right (83%); 60 lines need about 48 (80%), so more labelled pages make a pass cheaper to earn honestly, never easier to fake (G813). The result line gives filed and guessed lines apart, and the 95% floor, before anyone reads a pass into it. These checks run on made-up brains (the personas and the demo brain) only: a fix is tuned there, and the owner's own brain is never used to tune one, so it stays an honest test of what they will see.
+
 ## The golden set
 
 `e2e-loop-golden-1` to `-5` are the owner's weekly questions. Each one names the topic an assistant would ask the brain and what a right answer must say. A case passes when Town's context pack for that topic holds the right note and the answer.

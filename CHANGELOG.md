@@ -17,6 +17,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A line on a page that only an assistant's memory, an assistant's note or an import stands behind now reads as a guess, "Not confirmed: …", links no page, and no longer lists that person on the organisation's page. Pages that stated one plainly are written again on the next night (G844).
 - **Who matters suggests who you know and who holds authority, each with its reason.** People in your address book are suggested as known. Your own contact card's manager or assistant, or your own word, suggests who holds authority, and a class you teach asks once about the people in its mails: tick, untick, one tap. Nothing is read from a title or a role word, nothing applies before your tap, and the picker no longer says "no authority either way" when nothing was set (G865).
 - **While you slept.** A new morning page, `/night`: what your memory learned and tidied overnight, each line with Undo, and what it could not decide, each with Settle. On your mind links to it once, until you have opened it. A quiet night says so in one line.
 - See as now says how the cut is tested: last night's line ("300 memories, 3 doors, 0 leaks"), its day, and that the memories it reads are made up. It appears the morning after the first nightly check.
@@ -148,9 +149,10 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- The Notion import no longer makes an organisation page from a person's free-text Org field, links it, or picks the person's area from its words: the field is kept as the person's org as written, and one naming two organisations is listed in the import report (G843, which absorbs G653).
+- A paid model check scored by lines (each line it writes right or wrong) now passes on all its runs' lines together, not run by run. It passes only when we can be 95% sure that at least 70% of the lines are right, at least 80% of the lines it files are right, and none is on a decoy. Before, three runs of a dozen lines each had to clear 70% one by one, and a pass could not tell 60% right from 90%. Every earlier paid run of the check that says what a page is to you fails this rule too, and its best single run is not enough on its own (evals/lib/pooled.ts, docs/prove-the-loop.md, G813).
 - `who_is` says someone holds authority over the owner only through an address the owner pinned or confirmed himself, at any level; before, a known person kept it through an address a mail had vouched for (G826).
 - The nightly slice check now reads both ways: besides finding nothing an assistant's rules keep from it, each fact its rules give it must come back through every door, so the line reads "300 memories, 3 doors, 0 leaks, 0 missing" and a version that gave an assistant nothing fails the night (G815).
-
 - The merge gate shows how close CI's test steps run to their time limit (the latest run and the median of the last five on main) and blocks a merge when the median is over 70% of the limit, so a slow runner no longer turns main red without warning (G814). CI's two test steps may now take 25 minutes and its test job 60.
 - An assistant whose app moved to the newer MCP protocol (2026-07-28, no handshake) is now told plainly that this hub speaks the older one, so an app that speaks both falls back and keeps reading; before, it got an answer it could not act on. Each such try is logged, and the daily self-check tells you once which assistant asked (`mcp_version`). Speaking the newer protocol itself comes in a later release (G816).
 - A read-only token's reads through a cell come from a cell carved for that token. Before, they came from the assistant's own cell with a second cut on top, and a page that mentioned a private page could still say its name to the read-only token. Found by the new nightly check on its first full run (3 of 300 made-up memories), fixed before it shipped (G810).

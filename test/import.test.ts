@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { test, expect } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { importNotion, cleanText } from "../src/import/notion";
@@ -47,7 +47,7 @@ function snapshot(root: string): string {
       if (f.isDirectory()) walk(p); else out.push(p + "\n" + readFileSync(join(root, p), "utf8"));
     }
   };
-  for (const d of ["projects", "people", "orgs", "money"]) walk(d);
+  for (const d of ["projects", "people", "orgs", "money"]) if (existsSync(join(root, d))) walk(d);
   return out.join("\n");
 }
 
@@ -66,9 +66,10 @@ test("import maps rows to the memory-shape format", () => {
 
   const ana = notes.find((n) => n.fm.id === "people/ana-lopez")!;
   expect(ana.fm.area).toBe("work"); // from its related project
-  expect((ana.fm.facts!.org as FactRecord).value).toBe("[[orgs/acme]]");
+  // The free-text Org field is kept in its own words, never a page or a link (G843).
+  expect((ana.fm.facts!.org as FactRecord).value).toBe("Acme (Acme Labs)");
   expect((ana.fm.facts!.role as FactRecord).sources).toEqual(["gmail:f000000000000001"]); // pass 2 upgrade
-  expect(notes.find((n) => n.fm.id === "orgs/acme")?.fm.aliases).toEqual(["Acme Labs"]);
+  expect(notes.filter((n) => n.fm.type === "org")).toEqual([]);
 
   const money = notes.find((n) => n.fm.id === "money/savings")!;
   expect(money.fm.sensitivity).toBe("private");
