@@ -7,7 +7,7 @@ import { attributeSpec, isDeclared } from "../rules";
 import { factFreshness, daysBetween, lifeOf, type Freshness } from "../freshness";
 import { buildIndex, rank, terms } from "../retrieve";
 import { isOwnerId } from "../owner";
-import { schemeOf, refString } from "../sources";
+import { schemeOf, refString, lineState } from "../sources";
 import type { SourceRef } from "../brain";
 import { ownerView } from "./edit-chat";
 import { agentLabel } from "./labels";
@@ -177,7 +177,13 @@ function sourceUrl(ref: string): string | undefined {
 export function connections(s: State, n: Note): Connections {
   const fm = n.fm as Note["fm"] & { superseded_by?: string; supersedes?: string | string[]; merged_into?: string };
   const byId = new Map(s.notes.map((x) => [x.fm.id, x]));
-  const linksOf = (x: Note) => new Set([...linksIn(x.body), ...linksIn(JSON.stringify(x.fm.facts ?? {}))]);
+  // A link counts from a page's own text and from its firm lines: the owner's word or an exact
+  // source. A line only a guess stands behind says "Not confirmed" on its own page and ties no
+  // pages together (G828, as the page writer since G844); only the hub's own family guess keeps
+  // its link to the owner's page, as it does there (G546), and an ended line links nothing.
+  const firmFacts = (x: Note) => Object.entries(x.fm.facts ?? {}).flatMap(([attr, f]) =>
+    (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]).filter((r) => !r.valid_to && !r.retired && ((attr === "family" && r.by === "hub") || lineState(r) !== "guess")).map((r) => r.value));
+  const linksOf = (x: Note) => new Set([...linksIn(x.body), ...linksIn(JSON.stringify(firmFacts(x)))]);
   const linksTo = [...linksOf(n)].filter((id) => id !== n.fm.id && byId.has(id)).map((id) => byId.get(id)!);
   // Who links to whom, built once per brain version: scanning every note per page was most of it.
   const backlinks = keptFor(s.root, "backlinks", s.version, () => {

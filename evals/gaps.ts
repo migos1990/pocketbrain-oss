@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G828: {
+    closed: "claude/authority-not-set",
+    title: "Mentioned on listed a page whose only link was a guess",
+    severity: "medium",
+    finding: "Wrong-grouping thread, 2026-11-15 (src/dashboard/browse.ts connections): after G844 the page writer ties pages only through firm lines, but the owner's Mentioned on and Links to lists still read every [[link]] in a page's facts, so a person whose employer only an assistant's memory stood behind was listed on that org's page as a plain connection.",
+    fix: "connections() reads links from a page's own text and from its firm records only (lineState not guess, not ended; only the hub's own family guess keeps its link, as in the page writer). test/mentioned-on-guess.test.ts.",
+  },
   G850: {
     title: "A word list on a project's title decides what the page is",
     severity: "high",
@@ -138,7 +145,7 @@ export const GAPS: Record<string, Gap> = {
     title: "The people screen never suggested authority, and Make known recorded none without saying so",
     severity: "medium",
     finding: "Wrong-grouping family sweep, 2026-11-14 (src/standing.ts suggestStanding, src/dashboard/people.ts suggestionItem): known and close were suggested from mail counts alone; authority was never suggested and the suggestion's form started on \"no authority either way\", so every student and manager had to be set by hand and a tap on Make known stored no authority as if that had been decided.",
-    fix: "src/standing.ts: known from a card the hub read in the owner's address book, asked as one card for all of them (bookSet, approveBook); authority only from a typed manager or assistant relation on the owner's own card or his confirmed word on his page (never a title, a role word, an assistant's write or a mail); a class he said he teaches is one question over the people in its mails (classSets, approveStudents). Each tap sends what it showed and is refused when the hub derives something else (a post with no authority counts as none shown; lists compare in one order). src/dashboard/people.ts shows each reason and \"authority not set\". test/people-prefill.test.ts.",
+    fix: "src/standing.ts: known from a card the hub read in the owner's address book, asked as one card for all of them (bookSet, approveBook); authority only from a typed manager or assistant relation on the owner's own card or his confirmed word on his page (never a title, a role word, an assistant's write or a mail); a class he said he teaches is one question over the people in its mails (classSets, approveStudents). Each tap sends what it showed and is refused when the hub derives something else (a post with no authority counts as none shown; lists compare in one order). src/dashboard/people.ts shows each reason and \"authority not set\" (on the owner's list and Add someone too, after the first deploy still showed the old words there). test/people-prefill.test.ts.",
   },
   G823: {
     closed: "claude/while-you-slept",

@@ -23,13 +23,13 @@ const WHAT: Record<string, string> = {
 const titleOf = (s: { notes: Note[] }, id: string) => s.notes.find((n) => n.fm.id === id)?.fm.title ?? id;
 const noteLink = (s: State, id: string) => `<a href="/p/${id.split("/").map(encodeURIComponent).join("/")}"><b>${esc(titleOf(s, id))}</b></a>`;
 
-// `unset`: on a suggestion nothing says who holds authority, so the form says it is not set
-// instead of claiming there is none (G865). What is stored is the same.
-function levelForm(csrf: string, person: string, tier: StandingTier | undefined, authority: string | undefined, label: string, unset = false) {
+// With no authority stored, the picker says it is not set: nothing records that the owner
+// decided there is none (G865). What is stored is the same.
+function levelForm(csrf: string, person: string, tier: StandingTier | undefined, authority: string | undefined, label: string) {
   const opt = (v: string, l: string, on: boolean) => `<option value="${v}"${on ? " selected" : ""}>${esc(l)}</option>`;
   return `<form class="inline lvl" method="post" action="/action/standing-set"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="person" value="${esc(person)}">`
     + `<select name="tier" aria-label="level">${TIERS.map((t) => opt(t, LABEL[t], t === tier)).join("")}</select> `
-    + `<select name="authority" aria-label="authority">${opt("none", unset ? "authority not set" : "no authority either way", !authority)}${opt("owner", "you hold authority (a student, a report)", authority === "owner")}${opt("them", "they hold authority (a dean, a manager)", authority === "them")}</select> `
+    + `<select name="authority" aria-label="authority">${opt("none", "authority not set", !authority)}${opt("owner", "you hold authority (a student, a report)", authority === "owner")}${opt("them", "they hold authority (a dean, a manager)", authority === "them")}</select> `
     + `<button>${esc(label)}</button></form>`;
 }
 
@@ -40,7 +40,7 @@ function suggestionItem(s: State, csrf: string, x: Suggestion) {
   // The tap sends the level and the authority it showed; the server derives both again.
   const go = x.authority ? `Make ${LABEL[x.tier]}, ${AUTH[x.authority]}` : `Make ${LABEL[x.tier]}`;
   return `<div class="item"><div class="what"><span class="kind">suggested: ${esc(LABEL[x.tier])}</span>${noteLink(s, x.person)}<div class="sub">${esc(x.why)}</div>${via ? `<div class="sub">Counted from ${via}</div>` : ""}${x.authority ? `<div class="sub"><b>${HOLDS[x.authority]}.</b> ${esc(x.authority_why ?? "")}</div>` : ""}</div>
-<div class="acts">${button(csrf, "standing-approve", { person: x.person, tier: x.tier, authority: x.authority ?? "none" }, go, "go")}${levelForm(csrf, x.person, x.tier, x.authority, "Set", true)}${button(csrf, "standing-dismiss", { person: x.person, tier: x.tier }, "Not now")}</div></div>`;
+<div class="acts">${button(csrf, "standing-approve", { person: x.person, tier: x.tier, authority: x.authority ?? "none" }, go, "go")}${levelForm(csrf, x.person, x.tier, x.authority, "Set")}${button(csrf, "standing-dismiss", { person: x.person, tier: x.tier }, "Not now")}</div></div>`;
 }
 
 // Someone already on the list with no authority, where the owner's card or word says one.
@@ -116,7 +116,7 @@ ${hidden.length ? `<div class="item"><div class="what"><span class="kind">not no
 <div class="card">${TIERS.flatMap((t) => placed.filter(([, e]) => e.tier === t)).map(([id, e]) => row(id, e)).join("") || '<div class="empty">Nobody yet. Start with your inner circle below.</div>'}
 ${orphans.size ? `<div class="item"><div class="what"><span class="kind">no longer applies</span>${[...orphans].map(esc).join(", ")}<div class="sub">The note is gone or was replaced, so assistants don't see these. Remove them with <code>pocketbrain standing set &lt;id&gt; none</code>.</div></div></div>` : ""}</div>
 <h2>Add someone</h2>
-<div class="card">${persons.length ? `<form class="inline lvl" method="post" action="/action/standing-set"><input type="hidden" name="csrf" value="${esc(csrf)}"><select name="person" aria-label="person">${persons.map((n) => `<option value="${esc(n.fm.id)}">${esc(n.fm.title)}</option>`).join("")}</select> <select name="tier" aria-label="level">${TIERS.map((t) => `<option value="${t}"${t === "known" ? " selected" : ""}>${esc(LABEL[t])}</option>`).join("")}</select> <select name="authority" aria-label="authority"><option value="none">no authority either way</option><option value="owner">you hold authority</option><option value="them">they hold authority</option></select> <button class="go">Add</button></form>` : '<div class="empty">Everyone with a person note is on the list.</div>'}
+<div class="card">${persons.length ? `<form class="inline lvl" method="post" action="/action/standing-set"><input type="hidden" name="csrf" value="${esc(csrf)}"><select name="person" aria-label="person">${persons.map((n) => `<option value="${esc(n.fm.id)}">${esc(n.fm.title)}</option>`).join("")}</select> <select name="tier" aria-label="level">${TIERS.map((t) => `<option value="${t}"${t === "known" ? " selected" : ""}>${esc(LABEL[t])}</option>`).join("")}</select> <select name="authority" aria-label="authority"><option value="none">authority not set</option><option value="owner">you hold authority</option><option value="them">they hold authority</option></select> <button class="go">Add</button></form>` : '<div class="empty">Everyone with a person note is on the list.</div>'}
 <div class="sub" style="margin-top:8px">${TIERS.map((t) => `<b>${esc(LABEL[t])}</b>: ${esc(WHAT[t])}`).join(" · ")}. Anyone else is unknown: assistants don't act quickly on their asks.</div></div>`;
   return { title: "Who matters", tab: "people", body };
 }

@@ -18,6 +18,8 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A page's Mentioned on list no longer names a page whose only link to it is a guess (a line shown as "Not confirmed"). A sourced line, your own word or a link in the page's text still counts (G828).
+- Who matters says "authority not set" everywhere nobody set one, on your list and under Add someone too (G865).
 - A line on a page that only an assistant's memory, an assistant's note or an import stands behind now reads as a guess, "Not confirmed: …", links no page, and no longer lists that person on the organisation's page. Pages that stated one plainly are written again on the next night (G844).
 - **Who matters suggests who you know and who holds authority, each with its reason.** People in your address book are suggested as known. Your own contact card's manager or assistant, or your own word, suggests who holds authority, and a class you teach asks once about the people in its mails: tick, untick, one tap. Nothing is read from a title or a role word, nothing applies before your tap, and the picker no longer says "no authority either way" when nothing was set (G865).
 - **While you slept.** A new morning page, `/night`: what your memory learned and tidied overnight, each line with Undo, and what it could not decide, each with Settle. On your mind links to it once, until you have opened it. A quiet night says so in one line.
