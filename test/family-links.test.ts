@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The owner's phone, 2026-10-31: his father's page (same surname as his) said "Nothing written here
 // yet" and linked nowhere, and a mail's "M. <surname>" (him) was a person page of its own.
-// G546: a person page with the owner's surname gets one inferred fact, "may be family", linking
-// the owner's page, filed by upkeep with a diary line and Undo, never twice; nothing asks.
+// G546: a person page with the owner's surname gets one inferred fact, "may be family", filed by
+// upkeep with a diary line and Undo, never twice; nothing asks. It is a guess, so it links nothing
+// until the owner says how they are related (G866).
 // G547: "M." and "Monsieur" are titles like "Mr"; a titled surname on the owner's page (the name a
 // merge leaves there) is the owner whatever title of the same kind a source uses, never one of the
 // other kind ("Mme").
@@ -18,6 +19,7 @@ import { undoFact } from "../src/undo";
 import { personKey, resolveEntity, sameTitled, write } from "../src/write";
 import { ownerOf } from "../src/capture";
 import { familyPages } from "../src/family";
+import { rawGuess } from "../src/wiki";
 import { inboundLinks } from "../scripts/north-star";
 
 const person = (root: string, slug: string, title: string, facts = "", aliases = "", area = "personal") => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${title}\n${aliases ? `aliases: [${aliases}]\n` : ""}area: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n${facts || "  {}"}\n---\n`);
@@ -39,7 +41,7 @@ function brain(o: { on?: boolean; father?: string; area?: string } = {}): string
 }
 const page = (root: string, id: string) => loadBrain(root).find((n) => n.fm.id === id)!;
 
-test("a page with the owner's surname gets 'may be family', linking the owner's page both ways", async () => {
+test("a page with the owner's surname gets 'may be family', said as a guess that links nothing (G546, G866)", async () => {
   const root = brain();
   expect(familyPages(loadRules(root), loadBrain(root)).map((p) => p.id)).toEqual(["people/alain-lake"]);
   upkeep(root);
@@ -52,17 +54,80 @@ test("a page with the owner's surname gets 'may be family', linking the owner's 
   const rows = readDiary(root).filter((r) => r.why === "family");
   expect(rows.map((r) => [r.kind, r.fact_key])).toEqual([["new", "people/alain-lake#family"]]);
   expect(Bun.spawnSync(["git", "log", "-1", "--format=%an%x00%B", "--grep=^Kind: family"], { cwd: root }).stdout.toString()).toMatch(/^hub\0[\s\S]*^Why: \S/m);
-  // The page text links the owner's page, and the owner's page links back.
+  // A guess from two names: the page says it as one and links nothing, and the owner's page
+  // neither links nor lists the person (G866). No assistant is told the two pages are linked.
   const notes = loadBrain(root);
-  expect(page(root, "people/alain-lake").body).toMatch(/\[\[people\/robin-lake\|/);
-  const inbound = inboundLinks(notes);
-  expect(inbound.get("people/robin-lake") ?? 0).toBeGreaterThan(0);
-  expect(inbound.get("people/alain-lake") ?? 0).toBeGreaterThan(0);
+  expect(page(root, "people/alain-lake").body).toContain("Not confirmed: Alain may be family: same surname as Robin Lake.");
+  expect(page(root, "people/alain-lake").body).not.toContain("[[people/robin-lake");
+  expect(page(root, "people/robin-lake").body).not.toContain("alain-lake");
+  expect(page(root, "people/robin-lake").body).not.toContain("Alain");
+  const { carve, grantFor } = await import("../src/carve");
+  const { neighbours } = await import("../src/links");
+  for (const agent of Object.keys(loadRules(root).policy.agents ?? {})) {
+    const res = carve(notes, loadRules(root), grantFor(loadRules(root), agent), { flags: false });
+    expect(neighbours(res, "people/alain-lake").linksTo.map((l) => l.id)).not.toContain("people/robin-lake");
+    expect(neighbours(res, "people/robin-lake").mentionedIn.map((l) => l.id)).not.toContain("people/alain-lake");
+  }
   const { homeView } = await import("../src/dashboard/home");
   const v = homeView(root, loadRules(root), notes, new Date(), { all: true });
   expect(v.since.map((l) => l.what)).toContain("Alain may be family: same surname as you.");
   // Asks nothing.
   expect(v.waiting.map((w) => w.what).join(" ")).not.toMatch(/Alain/);
+});
+
+// A page written while the guess still linked (before G866) is healed without being touched, also
+// when another guess on it is said properly already; nothing else brings these pages in.
+test("a family guess written as a link before is healed on the next pass, untouched", async () => {
+  const root = brain({ father: said("city", "Lyon", 2) + `  hobby: { value: "sailing", as_of: 2026-10-28, sources: ["agent:steward"], verification: self-reported, by: steward, recorded: 2026-10-28 }\n` });
+  upkeep(root);
+  const alain = page(root, "people/alain-lake"), robin = page(root, "people/robin-lake");
+  expect(alain.body).toContain("Not confirmed: Alain's hobby is sailing.");
+  // As the hub wrote both pages before G866.
+  alain.body = alain.body.replace("Not confirmed: Alain may be family: same surname as Robin Lake.", "Alain may be family: same surname as [[people/robin-lake|Robin Lake]].");
+  expect(alain.body).toContain("[[people/robin-lake|");
+  robin.body = robin.body.replace("\n\n(Written by the hub", " See also [[people/alain-lake|Alain Lake]].[^pf-family]\n\n(Written by the hub");
+  expect(robin.body).toContain("alain-lake");
+  saveNote(root, alain); saveNote(root, robin);
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=hub", "-c", "user.email=h@x", "commit", "-qm", "hub: pages written"], { cwd: root });
+  const { renderTouchedPages } = await import("../src/wiki");
+  renderTouchedPages(root, "2099-01-01T00:00:00Z"); // nothing changed since: only the healing (git reads a year past 2099 as no limit)
+  expect(page(root, "people/alain-lake").body).toContain("Not confirmed: Alain may be family: same surname as Robin Lake.");
+  expect(page(root, "people/alain-lake").body).not.toContain("[[people/robin-lake");
+  expect(page(root, "people/robin-lake").body).not.toContain("alain-lake");
+});
+
+// The owner's own word on how he knows the person, in any words, makes the tie real: his page
+// lists them, and the guess is no longer said beside his word. His word on someone the guess does
+// not name ties nothing.
+test("the owner's word on how they are related lists the person on his page and replaces the guess", () => {
+  const root = brain();
+  upkeep(root);
+  const own = (id: string, value: string) => write(root, { agent: "owner", id, attribute: "relationship", value, as_of: "2026-10-08", sources: ["owner:2026-10-08/dashboard"] } as never, { owner: true });
+  expect(own("people/alain-lake", "my father").outcome).toBe("committed");
+  expect(own("people/kim-lakeman", "my climbing partner").outcome).toBe("committed");
+  upkeep(root);
+  const alain = page(root, "people/alain-lake").body, robin = page(root, "people/robin-lake").body;
+  expect(alain).toContain("How you know Alain: my father.");
+  expect(alain).not.toContain("may be family");
+  expect(robin).toContain("See also [[people/alain-lake|Alain Lake]]");
+  expect(robin).not.toContain("kim-lakeman");
+  expect(inboundLinks(loadBrain(root)).get("people/alain-lake") ?? 0).toBeGreaterThan(0);
+  // The guess has no sentence here by design, so the heal step is owed nothing (review of PR 199).
+  expect([...rawGuess(loadBrain(root))]).not.toContain("people/alain-lake");
+});
+
+test("a private word on how they are related stays off both pages: the guess stays, his page lists nobody", () => {
+  const root = brain();
+  upkeep(root);
+  // More private than the page: the page writer never says it, so the guess must not go either
+  // (its going would tell a reader the owner said something), and it ties nothing to his page.
+  expect(write(root, { agent: "owner", id: "people/alain-lake", attribute: "relationship", value: "my father", as_of: "2026-10-08", sources: ["owner:2026-10-08/dashboard"], sensitivity: "private" } as never, { owner: true }).outcome).toBe("committed");
+  upkeep(root);
+  const alain = page(root, "people/alain-lake"), robin = page(root, "people/robin-lake").body;
+  expect(String((alain.fm.facts!.relationship as { sensitivity?: string }).sensitivity)).toBe("private");
+  expect(alain.body).not.toContain("my father");
+  expect(alain.body).toContain("may be family");
+  expect(robin).not.toContain("alain-lake");
 });
 
 test("its Undo takes it out, and upkeep never files it again", () => {

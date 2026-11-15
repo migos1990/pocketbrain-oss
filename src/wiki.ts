@@ -624,7 +624,7 @@ function sentence(n: Note, attr: string, values: string[], owner: string[] = [],
   }
   // A few attributes say the same thing every page does, so they read as a person would say it.
   if (attr === "relationship" && person) return `How you know ${t}: ${v}.`;
-  // Upkeep's guess from the surname (src/family.ts): said as a guess, linking the owner's page.
+  // Upkeep's guess from the surname (src/family.ts): said as a guess; pageLead takes its link out (G866).
   if (attr === "family" && person) return `${t} may be family: same surname as ${v}.`;
   // A role is said as the role it is: "the" in front only fits some ("the coach tennis" doesn't).
   if (attr === "role") return phrase ? `${whose(t)} role is ${v}.` : quoted("Role", v!);
@@ -766,20 +766,36 @@ function touchedPages(root: string, notes: Note[], since: string, always?: strin
   return notes.filter((n) => (touched.has(n.path) || n.fm.id === always || rawYearly(n) || guessed.has(n.fm.id)) && PAGE_DIRS.has(n.fm.id.split("/")[0]) && n.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(n.fm.status)));
 }
 
+// Text links exactly this id: [[id]] or [[id|words]], never an id this one only starts ("people/sam"
+// is not "people/samuel").
+const linksId = (text: string, id: string) => text.includes(`[[${id}]]`) || text.includes(`[[${id}|`);
+// A firm line the page writer would say: not shared away, not more private than the page, not empty,
+// no secret. pageLead adds what its readers may not see (o.hidden).
+const firmSaid = (n: Note, x: Fact) => !isDisputed(x) && records(x).some((r) => firm(r) && !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)) && r.value !== undefined && r.value !== null && !!shown(r.value).trim() && !findSecret(shown(r.value)));
 // Pages written before guesses were said as guesses (G844), healed without waiting to be touched:
 // a page with a guess line its text doesn't say as one, and a page that lists or links someone only
 // a guess ties to it. Text that comes out the same is never written.
-function rawGuess(notes: Note[]): Set<string> {
+export function rawGuess(notes: Note[]): Set<string> {
   const out = new Set<string>();
-  const guessRecs = (f: Fact) => { const rs = records(f).filter(live); return rs.length > 0 && rs.every((r) => lineState(r) === "guess") ? rs : []; };
+  // Only records the page writer would say (the same filter as pageLead's): a guess the page keeps
+  // back, shared away or more private than the page, has no line to heal (G868).
+  const guessRecs = (n: Note, f: Fact) => { const rs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity))); return rs.length > 0 && rs.every((r) => lineState(r) === "guess") ? rs : []; };
   for (const n of notes) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
-    if (attr === "family" || NOT_PROSE.test(attr) || isDisputed(f)) continue;
-    const rs = guessRecs(f);
+    if (NOT_PROSE.test(attr) || isDisputed(f)) continue;
+    const rs = guessRecs(n, f);
     if (!rs.length) continue;
-    if (!(n.body ?? "").includes("Not confirmed:")) out.add(n.fm.id);
+    // The surname guess beside a firm line on how the owner knows them has no sentence by design
+    // (pageLead), so no "Not confirmed:" is owed for it; a link its text still carries is caught below.
+    const unsaid = attr === "family" && Object.entries(n.fm.facts ?? {}).some(([a, x]) => a !== "family" && FAMILY_ATTRS.has(a) && firmSaid(n, x));
+    if (!unsaid && !(n.body ?? "").includes("Not confirmed:")) out.add(n.fm.id);
     for (const r of rs) for (const m of shown(r.value).matchAll(/\[\[([^\]|]+)/g)) {
+      // The page's own text still links what only this guess names (a page with another guess line
+      // said properly already, G866).
+      // A firm fact of the page's own that links the same page keeps that link: nothing to heal.
+      const firmly = Object.values(n.fm.facts ?? {}).some((x) => !isDisputed(x) && records(x).some((q) => firm(q) && linksId(shown(q.value), m[1]!.trim())));
+      if (!firmly && linksId(n.body ?? "", m[1]!.trim())) out.add(n.fm.id);
       const to = notes.find((x) => x.fm.id === m[1]!.trim());
-      if (to && (to.body ?? "").includes(`[[${n.fm.id}`)) out.add(to.fm.id);
+      if (to && linksId(to.body ?? "", n.fm.id)) out.add(to.fm.id);
     }
   }
   return out;
@@ -826,6 +842,8 @@ export async function backfillNameKeys(root: string, since: string, max = NAME_K
   return { read, failed };
 }
 
+// The hub's surname guess on a person's page names this page (src/family.ts).
+const guessedFamily = (p: Note, to: string) => { const f = p.fm.facts?.family; return p.fm.type === "person" && !!f && !isDisputed(f) && records(f).some((r) => live(r) && lineState(r) === "guess" && linksId(shown(r.value), to)); };
 // The opening text for one page, with its references, or undefined when no fact may be said.
 const FAMILY_ATTRS = new Set(["family", "relationship"]);
 // How many other pages a page's sources tie it to, at most (G624).
@@ -869,6 +887,11 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     if (NOT_PROSE.test(attr) || isDisputed(f) || o.hidden(`${n.fm.id}#${attr}`)) continue;
     // The owner's own page says what is true of him, not how he knows himself (G624).
     if (o.self && attr === "relationship") continue;
+    // The surname guess is not said beside a firm line on how the owner knows them (G866), and only
+    // beside one this page says: a firm line kept back (hidden from a reader, shared away, more
+    // private than the page) leaves the guess where it was, or its going would tell on that line.
+    const saidHere = (a: string, x: Fact) => !o.hidden(`${n.fm.id}#${a}`) && firmSaid(n, x);
+    if (attr === "family" && records(f).filter(live).every((r) => lineState(r) === "guess") && Object.entries(n.fm.facts ?? {}).some(([a, x]) => FAMILY_ATTRS.has(a) && saidHere(a, x))) continue;
     const recs = records(f).filter(live).filter((r) => !r.share_with && (!r.sensitivity || sensitivityRank(r.sensitivity) <= sensitivityRank(n.fm.sensitivity)) && r.value !== undefined && r.value !== null && shown(r.value).trim());
     if (!recs.length || recs.some((r) => findSecret(shown(r.value)))) continue;
     // A value a section of the page already says (the Gardener's "Your relationship") isn't said twice.
@@ -888,8 +911,9 @@ export function pageLead(n: Note, o: { hidden: (key: string) => boolean; blind: 
     // the value as written, and the sentence must read like one whose words name no page.
     // A line only a guess stands behind (an assistant's memory, imported free text) is said as a
     // guess and links no page: a link would say the page is the thing (G844).
-    // Upkeep's family guess (G546) is worded as one already and keeps its link to the owner's page.
-    const guess = attr !== "family" && recs.every((r) => lineState(r) === "guess");
+    // Upkeep's family guess from two names (G546) is a guess like any other: no link to the owner's
+    // page (G866).
+    const guess = recs.every((r) => lineState(r) === "guess");
     const unlinked = (v: string) => v.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, id: string, name?: string) => name ?? String(o.byId.get(o.resolve?.(id.trim()) ?? id.trim())?.fm.title ?? id.trim().split("/").pop()));
     const vals = recs.flatMap((r) => Array.isArray(r.value) ? r.value.map(shown) : [shown(r.value)]).map((v) => { if (guess) return unlinked(o.byId.has(v.trim()) ? `[[${v.trim()}]]` : v); if (v.includes("[[")) return v; if (o.byId.has(v.trim()) || idShaped(v)) return `[[${v.trim()}]]`; if (attr !== "org" || n.fm.type !== "person") return v; const id = o.resolve?.(v.trim()); return id && o.byId.get(id)?.fm.type === "org" && !o.blind(id) ? `[[${v.trim()}]]` : v; });
     facts.push({ attr, vals, labs: [lab], waits, src: [...new Set(recs.flatMap((r) => (r.sources ?? []).map((x) => refString(x))))], guess });
@@ -1316,12 +1340,16 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
   // Page -> the facts on other pages whose value links it: it links back ("See also").
   const active = (p: Note) => PAGE_DIRS.has(p.fm.id.split("/")[0]) && p.fm.type !== "hub" && !["archived", "merged", "superseded"].includes(String(p.fm.status));
   const seeAlso = new Map<string, { from: string; attr: string; rec: FactRecord }[]>();
-  const liveRecs = (p: Note) => Object.entries(p.fm.facts ?? {}).filter(([attr, f]) => !NOT_PROSE.test(attr) && !isDisputed(f)).flatMap(([attr, f]) => records(f).filter(attr === "family" ? live : firm).filter((r) => !r.share_with && r.value !== undefined && r.value !== null).map((rec) => ({ attr, rec })));
+  const liveRecs = (p: Note) => Object.entries(p.fm.facts ?? {}).filter(([attr, f]) => !NOT_PROSE.test(attr) && !isDisputed(f)).flatMap(([attr, f]) => records(f).filter(firm).filter((r) => !r.share_with && r.value !== undefined && r.value !== null).map((rec) => ({ attr, rec })));
   for (const p of notes) {
     if (!active(p)) continue;
     for (const { attr, rec } of liveRecs(p)) {
       const v = shown(rec.value);
       const tos = new Set([...v.matchAll(/\[\[([^\]|]+)/g)].map((m) => resolve(m[1].trim())).concat(byId.has(v.trim()) ? [v.trim()] : []));
+      // The owner's own word on how he knows a person the surname guess names (src/family.ts) makes
+      // the guess's tie real, whether or not his words link his page ("my father"): his page lists
+      // them (G866). His word on anyone else ties nothing here.
+      if (attr === "relationship" && self && p.fm.id !== self && lineState(rec) === "yours" && guessedFamily(p, self)) tos.add(self);
       for (const to of tos) if (to && to !== p.fm.id && byId.has(to)) seeAlso.set(to, [...(seeAlso.get(to) ?? []), { from: p.fm.id, attr, rec }]);
     }
   }

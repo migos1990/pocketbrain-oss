@@ -46,7 +46,7 @@ export interface DiaryRow {
   settles?: string; // on a `settled` row: the conflict it answered (its Undo opens it again)
   ref?: string; // on a `held` or `set_aside` row: the proposal's file under inbox/
   until?: string; // on a `held` row: the owner's day the hold ends
-  why?: "receipt" | "family" | "machine" | "both-dates"; // "receipt": a held receipt page an earlier upkeep step set aside (removed, G862; old rows still undo); "machine": a fact an assistant filed from machine mail, set aside (G668); or a page upkeep linked as maybe family (src/family.ts) "both-dates": a date the night pass kept beside another from another item, closing their conflict (src/dated.ts, G800)
+  why?: "receipt" | "family" | "machine" | "both-dates"; // "receipt": a held receipt page an earlier upkeep step set aside (removed, G862; old rows still undo); "machine": a fact an assistant filed from machine mail, set aside (G668); or a page upkeep noted as maybe family (src/family.ts) "both-dates": a date the night pass kept beside another from another item, closing their conflict (src/dated.ts, G800)
   added?: string[]; // on a `confirmed` row: the source refs the filing added (Undo takes them out)
 }
 

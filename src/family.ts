@@ -3,8 +3,10 @@
 // "Nothing written here yet" and linked nowhere; G546). A person page named with a first name of its
 // own and the owner's surname gets one fact, `family`, whose value links the owner's page: inferred,
 // inferred from the two names alone, so it cites no source of its own ("unverified"), filed by upkeep in one hub
-// commit with a diary line and Undo. The page text then links the owner's page, and the owner's page
-// links back. Never on the owner's own page or a namesake's, never where the page already says how
+// commit with a diary line and Undo. It is a guess (lineState in src/sources.ts), so the page says
+// it as one and nothing links: not the page's text, not the owner's page, not an assistant's
+// links_to (G866). Once the owner says in his own word how he knows them (`relationship`), his page
+// lists them and the guess is no longer said (src/wiki.ts). Never on the owner's own page or a namesake's, never where the page already says how
 // the owner knows them (relationship) or holds a family fact, never on a title and surname alone
 // ("M. Lake" may be the owner), and never twice: an Undo holds. Nothing asks.
 // It copies no other fact's refs (builder's slice audits of b532242, b1619f30, da6497e0): a ref
@@ -82,6 +84,6 @@ export function linkFamily(root: string): { filed: string[]; counted: number } {
     logWrite(root, { at, agent: "hub", kind: "family", key: `${f.id}#family`, outcome: "committed", sources: f.sources.length });
     rel = appendDiary(root, { ...diaryRow({ at, factKey: `${f.id}#family`, title: String(n.fm.title ?? f.id), kind: "new", from: undefined, to: rec.value, incoming: rec, acceptedBy: "hub", rank: 9, sensitivity: n.fm.sensitivity }), why: "family" }, month);
   }
-  commitPaths(root, [...paths, rel], `hub: ${found.length} page${found.length === 1 ? "" : "s"} may be family\n\nWhy: ${found.length === 1 ? "this person has" : "these people have"} your surname and a first name of their own, so each page now says they may be family and links your page. Inferred from the name only; each has a diary line with Undo, and an Undo holds.\nKind: family`, "hub");
+  commitPaths(root, [...paths, rel], `hub: ${found.length} page${found.length === 1 ? "" : "s"} may be family\n\nWhy: ${found.length === 1 ? "this person has" : "these people have"} your surname and a first name of their own, so each page now says they may be family, as a guess that links nothing. Inferred from the name only; each has a diary line with Undo, and an Undo holds.\nKind: family`, "hub");
   return { filed: found.map((f) => f.id), counted: found.length };
 }

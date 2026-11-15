@@ -41,9 +41,9 @@ test("Who matters never says 'no authority either way' for someone whose authori
   expect(html).not.toContain("no authority either way");
 });
 
-test("G828 only the hub's own family guess keeps its link, and an ended line links nothing, single or listed", () => {
+test("G828, G866 no guess links, the hub's own family guess included, and an ended line links nothing, single or listed", () => {
   const root = makeBrain();
-  const hub = `{ value: "[[people/kin]]", as_of: 2026-10-05, sources: ["agent:hub/2026-10-05"], verification: unverified, confidence: inferred, by: hub, recorded: 2026-10-05 }`;
+  const hub = `{ value: "[[people/kin]]", as_of: 2026-10-05, sources: ["unverified"], verification: unverified, confidence: inferred, by: hub, recorded: 2026-10-05 }`;
   const page = (slug: string, title: string, facts: string) => writeFileSync(join(root, "people", `${slug}.md`), `${head(`people/${slug}`, "person", title)}facts:\n${facts}---\n`);
   page("kin", "Kim Kin", "");
   page("hub-family", "Hal Hub", `  family: ${hub}\n`);
@@ -52,5 +52,5 @@ test("G828 only the hub's own family guess keeps its link, and an ended line lin
   page("ended-list", "Eli Ended", `  friends:\n    items:\n      - { value: "[[people/kin]]", as_of: 2026-10-05, sources: ["owner:2026-10-05/dashboard"], verification: confirmed-by-owner, by: owner, recorded: 2026-10-05, valid_to: 2026-10-06 }\n`);
   Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=planner", "-c", "user.email=p@x", "commit", "-qm", "people"], { cwd: root });
   const s = loadState(root);
-  expect(connections(s, s.notes.find((n) => n.fm.id === "people/kin")!).mentionedIn.map((n) => n.fm.id).sort()).toEqual(["people/hub-family"]);
+  expect(connections(s, s.notes.find((n) => n.fm.id === "people/kin")!).mentionedIn.map((n) => n.fm.id).sort()).toEqual([]);
 });

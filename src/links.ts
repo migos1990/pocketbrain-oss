@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Links both ways, as one agent sees them (docs/wiki.md "What assistants see"). The dashboard's
-// "Mentioned in" (src/dashboard/browse.ts connections) for agents: computed per carve, never
+// "Mentioned in" (src/dashboard/browse.ts connections, which leaves out a guess's link too, G828) for agents: computed per carve, never
 // stored. A link counts only where the agent itself can see it: in a body it has the grant for, or
 // in a fact it is shown, after the same scrub it gets (scrubPage, agentFact), and only to a note in its
 // view. So a hidden note is never named, and no link the agent couldn't read is revealed.
 import { linksIn } from "./brain";
 import { visibleFacts, type CarveResult } from "./carve";
+import { isDisputed, isList, type Fact } from "./brain";
+import { lineState } from "./sources";
 import { scrubPage, agentFact } from "./view";
 
 export interface Linked { id: string; title: string }
 export interface Neighbours { linksTo: Linked[]; mentionedIn: Linked[] }
+
+// The fact without the records only a guess stands behind (src/sources.ts lineState), record by
+// record as the page writer ties pages (G844, G866). A disputed fact is left whole.
+function firmOnly(f: Fact): Fact | undefined {
+  if (isDisputed(f)) return f;
+  if (isList(f)) return { ...f, items: f.items.filter((r) => lineState(r) !== "guess") };
+  return lineState(f) === "guess" ? undefined : f;
+}
 
 const built = new WeakMap<CarveResult, Map<string, Neighbours>>();
 // At most this many of each are named; the rest are counted.
@@ -30,7 +40,9 @@ function graphOf(res: CarveResult): Map<string, Neighbours> {
       // (audit v10, G612; redactLinks alone kept that link).
       ...(v.body ? linksIn(scrubPage(v.note.body, v, res)) : []),
       // Facts as the agent reads them (agentFact): no writer fields, scrubbed like read's.
-      ...linksIn(JSON.stringify(visibleFacts(v, res).map(([, f]) => agentFact(f, res.grant.agent, res, v)))),
+      // A fact only a guess stands behind links no page (G844, G866): its value is still read, as
+      // the guess it is, but it is no tie between two pages.
+      ...linksIn(JSON.stringify(visibleFacts(v, res).flatMap(([, f]) => { const firm = firmOnly(f); return firm ? [agentFact(firm, res.grant.agent, res, v)] : []; }))),
     ];
     for (const to of seen) {
       if (to === id || !res.visible.has(to)) continue;

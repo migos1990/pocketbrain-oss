@@ -255,8 +255,8 @@ export function setLinkNames(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { link_names: mode === "on" }, `link_names ${mode}`);
 }
 
-// `pocketbrain wiki family on|off`: whether upkeep links a person page with the owner's surname to
-// the owner's page as maybe family (src/family.ts, G546), or only counts them. Off until turned on.
+// `pocketbrain wiki family on|off`: whether upkeep notes a person page with the owner's surname
+// as maybe family, a guess that links nothing (src/family.ts, G546, G866), or only counts them. Off until turned on.
 export function setFamilyLinks(root: string, mode: string): string {
   if (mode !== "on" && mode !== "off") throw new OwnerSetError("wiki family on | off");
   return setRulesKeys(root, "policy.yaml", { family_links: mode === "on" }, `family_links ${mode}`);

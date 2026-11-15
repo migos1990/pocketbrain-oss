@@ -192,13 +192,13 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const filed = fileUnfiled(root);
     if (filed.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
   }
-  // 1c3. A person with the owner's surname may be family (src/family.ts): one inferred fact linking
-  //      the owner's page, a diary line each with Undo; one hub commit with a why.
+  // 1c3. A person with the owner's surname may be family (src/family.ts): one inferred fact, a guess
+  //      that links nothing (G866), a diary line each with Undo; one hub commit with a why.
   //      Off until the owner turns it on: then a count only, never a name.
   {
     const fam = linkFamily(root);
     if (fam.filed.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
-    else if (fam.counted) add({ rule: "family-links", key: "family-links", kind: "review", detail: `${fam.counted} person page${fam.counted === 1 ? " has" : "s have"} your surname and may be family; \`pocketbrain wiki family on\` links them to your page` });
+    else if (fam.counted) add({ rule: "family-links", key: "family-links", kind: "review", detail: `${fam.counted} person page${fam.counted === 1 ? " has" : "s have"} your surname and may be family; \`pocketbrain wiki family on\` notes it on their pages, as a guess that links nothing` });
   }
 
   // 1c2. One thing, one page (src/fold.ts, docs/fold-twins.md, G635): a page a writer made because

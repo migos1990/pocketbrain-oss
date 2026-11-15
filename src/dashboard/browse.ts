@@ -179,10 +179,10 @@ export function connections(s: State, n: Note): Connections {
   const byId = new Map(s.notes.map((x) => [x.fm.id, x]));
   // A link counts from a page's own text and from its firm lines: the owner's word or an exact
   // source. A line only a guess stands behind says "Not confirmed" on its own page and ties no
-  // pages together (G828, as the page writer since G844); only the hub's own family guess keeps
-  // its link to the owner's page, as it does there (G546), and an ended line links nothing.
-  const firmFacts = (x: Note) => Object.entries(x.fm.facts ?? {}).flatMap(([attr, f]) =>
-    (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]).filter((r) => !r.valid_to && !r.retired && ((attr === "family" && r.by === "hub") || lineState(r) !== "guess")).map((r) => r.value));
+  // pages together (G828, as the page writer since G844), the hub's own family guess included
+  // (G866, the owner's answer 2026-11-15), and an ended line links nothing.
+  const firmFacts = (x: Note) => Object.entries(x.fm.facts ?? {}).flatMap(([, f]) =>
+    (isList(f) ? f.items : isDisputed(f) ? f.candidates : [f as FactRecord]).filter((r) => !r.valid_to && !r.retired && lineState(r) !== "guess").map((r) => r.value));
   const linksOf = (x: Note) => new Set([...linksIn(x.body), ...linksIn(JSON.stringify(firmFacts(x)))]);
   const linksTo = [...linksOf(n)].filter((id) => id !== n.fm.id && byId.has(id)).map((id) => byId.get(id)!);
   // Who links to whom, built once per brain version: scanning every note per page was most of it.

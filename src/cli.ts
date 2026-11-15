@@ -338,7 +338,7 @@ const USAGE = `pocketbrain <command>
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
                                      (policy.yaml; docs/sources-pull.md)
   aftercheck classify on|off [--cap <$>]  the second-opinion classifier after an agent's write, and its own monthly cap (docs/aftercheck.md)
-  wiki family on|off                 whether upkeep links a person page with your surname to your page as maybe family (off: counts only; docs/owner-home.md)
+  wiki family on|off                 whether upkeep notes a person page with your surname as maybe family, a guess that links nothing (off: counts only; docs/owner-home.md)
   wiki parents on|off                whether upkeep puts a project page under the project it is part of (off: counts only; docs/wiki.md)
   wiki trips on|off                  whether upkeep puts a flight, stay or booking page under its trip (on by default; docs/wiki.md)
   wiki links on|off|preview          whether upkeep links a name that fits exactly one note (off: nothing); preview lists what it would link (policy.yaml; docs/wiki.md)

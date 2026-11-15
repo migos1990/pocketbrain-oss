@@ -164,12 +164,16 @@ export function sourceRank(r: Pick<FactRecord, "sources" | "verification" | "con
 // The state of a line (plans/wrong-grouping-family-2026-11-14.md, rule 5, G844): the owner's word
 // ("yours": confirmed by the owner, an exact owner ref, or the owner's Yes on it), a source that
 // states it ("sourced": an exact source, neither unverified nor inferred), or a guess (an assistant's
-// memory or note, imported free text, the hub's own inference). A guess is said as a guess, links no
+// memory or note, imported free text, the hub's own inference, a private or money fact from a sender
+// no person page holds). A guess is said as a guess, links no
 // page and feeds no other rule.
 export type LineState = "yours" | "sourced" | "guess";
-export function lineState(r: Pick<FactRecord, "sources" | "verification" | "confidence">): LineState {
+export function lineState(r: Pick<FactRecord, "sources" | "verification" | "confidence" | "sender">): LineState {
   const refs = (r.sources ?? []).map(refString);
   if (ownerVouched(r) || refs.some(isExactLouisRef) || r.verification === "confirmed-by-co-owner") return "yours";
+  // A sender no person page holds can claim a thing, not establish it (G868): the mark write() puts
+  // on a stranger's private or money fact (src/sender.ts) makes it a guess, whatever mail it cites.
+  if (r.sender === "unknown") return "guess";
   if (r.verification !== "unverified" && r.confidence !== "inferred" && refs.some((x) => SCHEMES[schemeOf(x) ?? ""] === "exact")) return "sourced";
   return "guess";
 }

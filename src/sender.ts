@@ -5,9 +5,11 @@
 // hold addresses). Known: an address a person page (the owner's own included) holds on the owner's
 // word or a source checked and found (G615). Standing and the contacts log never count (CLAUDE.md invariant 14:
 // standing sets priority, never trust), so whom the owner wrote to doesn't vouch for a sender.
-// Filing asks unknownSenderWait before a pulled fact files itself (src/filing.ts fileVerdict), and the
-// save path refuses the hub's own accept of one that should have waited (src/write.ts decideOne,
-// G429), so no tick or retry files it.
+// The hub's own accept of a stranger's private or money fact (unknownSenderWait, asked by
+// strangerWaits in src/write.ts) files it under the serving hold: saved `unseen` and marked
+// `sender: unknown`, served to no assistant until the owner lets it out (G429, G454; src/seen.ts).
+// A record with that mark is a guess (lineState in src/sources.ts, G868): said as not confirmed,
+// linking nothing, also after the owner lets assistants have it; only his own yes makes it his word.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";

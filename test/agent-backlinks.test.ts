@@ -99,3 +99,22 @@ test("context_pack stays inside its budget with the Connected lines, and names w
   expect(tokensOf(pack)).toBeLessThanOrEqual(150);
   expect(pack).toMatch(/over your context budget of 150 tokens/);
 });
+
+// G844, G866: a guess ties nothing. A fact record only a guess stands behind (an assistant's own
+// note, the hub's inference) is still read with its value, but it is no link between two pages,
+// record by record as the page writer counts them; a sourced record beside it still links.
+test("a record only a guess stands behind is no link, a sourced one beside it still is", () => {
+  const root = makeBrain();
+  const src = `as_of: 2026-09-01, sources: ["gmail:f000000000000001"], verification: verified-by-source, by: planner, recorded: 2026-10-01`;
+  const memo = `as_of: 2026-09-01, sources: ["agent:planner"], verification: self-reported, by: planner, recorded: 2026-10-01`;
+  edit(root, "people/jane-roy", (s) => s.replace("facts:\n", `facts:\n  advisor: { value: "[[${PAUL}]]", ${memo} }\n  works_on: { items: [{ value: "[[money/main-bank]]", ${memo} }, { value: "[[${PAUL}]]", ${src} }] }\n`));
+  // One guess record and one sourced record name Paul: the sourced one links; the bank is only guessed.
+  const both = readNote(root, "steward", "people/jane-roy");
+  expect(ids(both.links_to).sort()).toEqual([PAUL, COURSE].sort());
+  expect(JSON.stringify(both)).toContain("money/main-bank"); // the value is still read
+  expect(ids(readNote(root, "steward", "money/main-bank").mentioned_in)).not.toContain("people/jane-roy");
+  // With the sourced record gone, only guesses name Paul: no link.
+  edit(root, "people/jane-roy", (s) => s.replace(`, { value: "[[${PAUL}]]", ${src} }`, ""));
+  expect(ids(readNote(root, "steward", "people/jane-roy").links_to)).toEqual([COURSE]);
+  expect(ids(readNote(root, "steward", PAUL).mentioned_in)).not.toContain("people/jane-roy");
+});

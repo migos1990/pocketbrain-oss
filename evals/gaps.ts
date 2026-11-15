@@ -12,12 +12,32 @@ export const GAPS: Record<string, Gap> = {
     finding: "Plan thread, 2026-11-15 (plans/close-three-gaps Q1): src/usefulness.ts rows held only answered and pointer, so \"gemini 19/35\" on the demo brain hid that most of its misses were questions outside its cut, and the real brain's \"claude 24/77\" mixed the owner's choice of what claude may read with retrieval misses. A page that came back as a note without the needed value also counted as only pointed to.",
     fix: "Each missed row gets one reason by code (outside_cut from the assistant's whole view via previewAll, pointer_only, several, value_not_shown, not_returned; missReason, wholeCut); a contested value served as current is value_not_shown, never outside the cut; countsText prints answered of answerable with outside its cut beside the strict count, the reasons and a Wilson 95% interval; a pointer is a page named and not brought. test/usefulness.test.ts.",
   },
+  G869: {
+    title: "A stranger's mark never comes off, and an assistant's own write citing a stranger's mail has none",
+    severity: "low",
+    finding: "Independent review of G868, 2026-11-15: the same-value merge in write() and the hub's recheck (src/pull.ts) add sources to a record marked sender unknown but never clear the mark, so a later mail from a known sender stating the same value leaves it a guess until the owner confirms. And the mark is set only on the hub's accept of a pulled capture: an assistant's direct remember citing a stranger's mail, self-reported, reads as sourced.",
+    fix: "Open. Belongs with the placement-basis work: sourced should mean the hub itself read the item and found the value (a source-confirm, as src/trust.ts counts), not the writer's label plus a ref's scheme.",
+  },
+  G868: {
+    closed: "6dd60d40",
+    title: "A private fact from an unknown sender's mail read as sourced",
+    severity: "medium",
+    finding: "The live hub, 2026-11-14 (shape only): the hub filed, from a pulled mail whose sender no person page holds, how the owner knows a person, self-reported, citing the mail. write() held it (unseen, sender unknown), but lineState (src/sources.ts) called it sourced because it cited an exact mail, so once seen the page said it as fact, linked what it named and tied pages by it.",
+    fix: "src/sources.ts lineState: a record marked sender unknown is a guess whatever it cites, unless the owner vouched for it. src/sender.ts header corrected. rawGuess in src/wiki.ts heals only lines the page writer would say. Reach: only the mark write() sets on the hub's own accept of a pulled capture; an assistant's direct write citing a stranger's mail carries no mark (G869). Not done here: the held value still counts as an ask (held_by_serving), which is the owner's to change. test/guess-lines.test.ts.",
+  },
+  G866: {
+    closed: "3a83545a",
+    title: "The surname guess linked the owner's page both ways",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/family.ts files `family: [[owner page]]` from two names alone, and src/wiki.ts exempted it from the guess rule in three places (the page's sentence kept its link, the owner's page linked back with See also, the heal skipped it); src/links.ts told every assistant the two pages were tied, for this and any other guess fact whose value names a page.",
+    fix: "src/wiki.ts: the family guess is a guess like any other (no link, no See also from the owner's page, pages written before are healed); src/links.ts leaves guess records out of links_to and mentioned_in, record by record. The owner's own word on how he knows a person the guess names lists them on his page and replaces the guess sentence. The owner's own Mentioned on list (src/dashboard/browse.ts connections, G828) drops its family exception too. test/family-links.test.ts, test/agent-backlinks.test.ts.",
+  },
   G828: {
     closed: "claude/authority-not-set",
     title: "Mentioned on listed a page whose only link was a guess",
     severity: "medium",
     finding: "Wrong-grouping thread, 2026-11-15 (src/dashboard/browse.ts connections): after G844 the page writer ties pages only through firm lines, but the owner's Mentioned on and Links to lists still read every [[link]] in a page's facts, so a person whose employer only an assistant's memory stood behind was listed on that org's page as a plain connection.",
-    fix: "connections() reads links from a page's own text and from its firm records only (lineState not guess, not ended; only the hub's own family guess keeps its link, as in the page writer). test/mentioned-on-guess.test.ts.",
+    fix: "connections() reads links from a page's own text and from its firm records only (lineState not guess, not ended; the hub's own family guess kept its link here until G866 took that exception out everywhere). test/mentioned-on-guess.test.ts.",
   },
   G829: {
     closed: "claude/people-from-traffic",

@@ -9,7 +9,8 @@ import { test, expect, afterAll } from "bun:test";
 import { writeFileSync, readFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain } from "./fixture";
-import { renderTouchedPages } from "../src/wiki";
+import { renderTouchedPages, rawGuess } from "../src/wiki";
+import { loadBrain } from "../src/brain";
 import { lineState } from "../src/sources";
 
 const roots: string[] = [];
@@ -73,7 +74,65 @@ test("a page written before stating a guess plainly is healed on the next pass, 
   writeFileSync(oli, readFileSync(oli, "utf8") + "\nOli Stone works at [[orgs/northwind-brightwell|Northwind / Brightwell]].[^pf-org]\n\n(Written by the hub from this page's facts.)\n\n[^pf-org]: An assistant's memory, 2026-09-15 (instinct-mem:entities/people/oli)\n");
   sh(root, "hub", "commit", "-qam", "hub: pages written");
   // Nothing changed since now: only the healing brings these pages in.
-  renderTouchedPages(root, "2100-01-01T00:00:00Z");
+  renderTouchedPages(root, "2099-01-01T00:00:00Z");
   expect(body(root, "people/oli-stone")).toContain("Not confirmed: Oli Stone works at Northwind / Brightwell.");
   expect(body(root, "orgs/northwind-brightwell")).not.toContain("people/oli-stone");
+});
+
+// The live hub, 2026-11-14 (shape only): an assistant filed how the owner knows someone from a mail
+// whose sender no person page holds; it cited the mail, so it read as sourced. A sender nobody
+// vouches for can claim a thing, not establish it: a record filed under that mark (`sender:
+// unknown`, set by write() on a stranger's private or money fact, src/sender.ts) is a guess whatever
+// its attribute (G868). The owner's own yes on it is still the owner's word.
+test("a record from a sender no page holds is a guess, whatever it cites; the owner's yes makes it his", () => {
+  const mail = { value: "x", sources: ["gmail:f0000000000000a1"], verification: "verified-by-source" };
+  expect(lineState({ ...mail, sender: "unknown" } as never)).toBe("guess");
+  expect(lineState({ ...mail, verification: "self-reported", sender: "unknown" } as never)).toBe("guess");
+  expect(lineState({ ...mail, sources: [...mail.sources, "approved:2026-10-08/inbox"], sender: "unknown" } as never)).toBe("yours");
+  expect(lineState({ ...mail, verification: "confirmed-by-owner", sender: "unknown" } as never)).toBe("yours");
+});
+
+test("on the page it is said as a guess, links nothing and lists nobody (G868)", () => {
+  const root = brain();
+  // Let out by the owner already (no `unseen`): the mark stays, and so does the guess.
+  writeFileSync(join(root, "people", "pat-quill.md"), `${head("people/pat-quill", "person", "Pat Quill")}facts:\n  org: { value: "[[orgs/harbourline]]", as_of: 2026-09-15, sources: ["gmail:f0000000000000b2"], verification: self-reported, by: planner, recorded: 2026-09-15, sender: unknown }\n---\n`);
+  sh(root, "planner", "add", "-A"); sh(root, "planner", "commit", "-qm", "planner: a stranger's mail");
+  renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  expect(body(root, "people/pat-quill")).toContain("Not confirmed: Pat Quill works at Harbourline.");
+  expect(body(root, "people/pat-quill")).not.toContain("[[orgs/harbourline");
+  expect(body(root, "orgs/harbourline")).not.toContain("people/pat-quill");
+  expect(body(root, "orgs/harbourline")).toContain("people/maya-chen");
+});
+
+test("a stranger's guess the page keeps back gives the heal step nothing to do (G868)", () => {
+  const root = brain();
+  // Private on a personal page: the page writer never says it, so there is no line to heal.
+  writeFileSync(join(root, "people", "pat-quill.md"), `${head("people/pat-quill", "person", "Pat Quill")}facts:\n  org: { value: "[[orgs/harbourline]]", as_of: 2026-09-15, sources: ["gmail:f0000000000000b2"], verification: self-reported, by: planner, recorded: 2026-09-15, sender: unknown, sensitivity: private }\n---\n`);
+  sh(root, "planner", "add", "-A"); sh(root, "planner", "commit", "-qm", "planner: a stranger's private mail");
+  renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  expect(body(root, "people/pat-quill")).not.toContain("Harbourline");
+  expect([...rawGuess(loadBrain(root))]).not.toContain("people/pat-quill");
+});
+
+test("a page whose firm fact links the same page a guess names has nothing to heal", () => {
+  const root = brain();
+  // Sourced: Maya works at Harbourline. A guess beside it names the same page.
+  writeFileSync(join(root, "people", "maya-chen.md"), `${head("people/maya-chen", "person", "Maya Chen")}facts:\n  org: ${rec("[[orgs/harbourline]]", "gmail:f0000000000000a1", "verified-by-source")}\n  met_at: ${rec("[[orgs/harbourline]]", "instinct-mem:entities/people/maya")}\n---\n`);
+  sh(root, "planner", "add", "-A"); sh(root, "planner", "commit", "-qm", "planner: a guess beside a source");
+  renderTouchedPages(root, "2000-01-01T00:00:00Z");
+  expect(body(root, "people/maya-chen")).toContain("[[orgs/harbourline");
+  expect(body(root, "people/maya-chen")).toContain("Not confirmed:");
+  expect([...rawGuess(loadBrain(root))]).not.toContain("people/maya-chen");
+});
+
+test("a link is its exact id: a firm fact linking a longer id keeps nothing for a guess naming a shorter one", () => {
+  const root = brain();
+  writeFileSync(join(root, "orgs", "harbour.md"), `${head("orgs/harbour", "org", "Harbour")}---\n`);
+  // Written before the rule: the text links the page only a guess names. The firm fact links
+  // orgs/harbourline, whose id starts with orgs/harbour.
+  writeFileSync(join(root, "people", "maya-chen.md"), `${head("people/maya-chen", "person", "Maya Chen")}facts:\n  org: ${rec("[[orgs/harbourline]]", "gmail:f0000000000000a1", "verified-by-source")}\n  met_at: ${rec("[[orgs/harbour]]", "instinct-mem:entities/people/maya")}\n---\nNot confirmed: something else.\n\nMaya Chen met you at [[orgs/harbour|Harbour]].\n`);
+  expect([...rawGuess(loadBrain(root))]).toContain("people/maya-chen");
+  // And the other way: text that links only the longer id owes the shorter guess nothing.
+  writeFileSync(join(root, "people", "maya-chen.md"), `${head("people/maya-chen", "person", "Maya Chen")}facts:\n  met_at: ${rec("[[orgs/harbour]]", "instinct-mem:entities/people/maya")}\n---\nNot confirmed: Maya Chen met you at Harbour.\n\nSee [[orgs/harbourline|Harbourline]].\n`);
+  expect([...rawGuess(loadBrain(root))]).not.toContain("people/maya-chen");
 });
