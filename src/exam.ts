@@ -122,15 +122,17 @@ function syncRow(fs: ReturnType<typeof state>["feeds"], late: string): ExamRow["
 function gradeRow(r: ExamRow): ExamRow {
   const fail: string[] = [], watch: string[] = [];
   if (r.memory.stale.length) fail.push(`stale in its own memory: ${r.memory.stale.join(", ")}`);
-  if (r.corrections.stillWrong) fail.push(`${r.corrections.stillWrong} correction(s) still wrong after a re-ask`);
-  if (r.slice.alerts) fail.push(`${r.slice.alerts} leak alert(s)`);
-  if (r.memory.unanswered) watch.push(`${r.memory.unanswered} question(s) unanswered for a day: it isn't calling memory_check`);
-  if (r.memory.differs) watch.push(`${r.memory.differs} answer(s) differ from the brain without a known old value`);
-  if (r.corrections.needsHand) watch.push(`${r.corrections.needsHand} correction(s) need a hand fix`);
-  if (r.brainFirst.writes && r.brainFirst.unread / r.brainFirst.writes > UNREAD_SHARE) watch.push(`${r.brainFirst.unread} of ${r.brainFirst.writes} write(s) with no read first`);
-  if (r.citations.refused) watch.push(`${r.citations.refused} write(s) refused for their source`);
-  if (r.sync.unconfirmed) watch.push(`${r.sync.unconfirmed} changed fact(s) not confirmed for a day: its own memory may still hold the old values`);
-  if (r.slice.probes) watch.push(`${r.slice.probes} ask(s) for notes outside its view`);
+  // "1 write", "2 writes": a count reads as a person would say it (G889).
+  const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  if (r.corrections.stillWrong) fail.push(`${n(r.corrections.stillWrong, "correction")} still wrong after a re-ask`);
+  if (r.slice.alerts) fail.push(`${n(r.slice.alerts, "leak alert")}`);
+  if (r.memory.unanswered) watch.push(`${n(r.memory.unanswered, "question")} unanswered for a day: it isn't calling memory_check`);
+  if (r.memory.differs) watch.push(`${n(r.memory.differs, "answer")} differ${r.memory.differs === 1 ? "s" : ""} from the brain without a known old value`);
+  if (r.corrections.needsHand) watch.push(`${n(r.corrections.needsHand, "correction")} need${r.corrections.needsHand === 1 ? "s" : ""} a hand fix`);
+  if (r.brainFirst.writes && r.brainFirst.unread / r.brainFirst.writes > UNREAD_SHARE) watch.push(`${r.brainFirst.unread} of ${n(r.brainFirst.writes, "write")} with no read first`);
+  if (r.citations.refused) watch.push(`${n(r.citations.refused, "write")} refused for their source`);
+  if (r.sync.unconfirmed) watch.push(`${n(r.sync.unconfirmed, "changed fact")} not confirmed for a day: its own memory may still hold the old values`);
+  if (r.slice.probes) watch.push(`${n(r.slice.probes, "read")} refused for notes outside its view`);
   const evidence = r.memory.answered + r.memory.unanswered + r.brainFirst.writes + r.citations.writes + r.slice.probes + r.slice.alerts + r.corrections.verified + r.corrections.open + r.sync.sent;
   // Only an agent that uses the brain is chased: an idle or paused one stays as it is.
   const quiet = !r.routine.lastCheck || Date.parse(iso()) - Date.parse(r.routine.lastCheck) > CHECK_DAYS * DAY;

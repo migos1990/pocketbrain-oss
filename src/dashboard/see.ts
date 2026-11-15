@@ -142,7 +142,7 @@ export function seeList(s: State, agent: string, o: { fresh?: boolean } = {}): S
   const folders = [...KINDS.map(([f]) => f), ...[...new Set(rows.map((r) => r.folder))].filter((f) => !KINDS.some(([k]) => k === f)).sort()];
   const label = (f: string) => KINDS.find(([k]) => k === f)?.[1] ?? cap(f);
   return {
-    agent, name: cut.name, paused: cut.paused, of: rows.length,
+    agent, name: cut.name, paused: cut.paused, of: browsable(s).length,
     given: rows.filter((r) => r.state !== "not").length, part: rows.filter((r) => r.state === "part").length,
     kinds: folders.map((f) => ({ label: label(f), pages: rows.filter((r) => r.folder === f).sort((a, b) => a.title.localeCompare(b.title)).map(({ folder: _f, ...r }) => r) })).filter((k) => k.pages.length),
   };

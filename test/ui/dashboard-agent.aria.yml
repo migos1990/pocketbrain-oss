@@ -7,7 +7,7 @@
       - /url: /overview
 - main:
   - heading "Claude active" [level=1]
-  - paragraph: Sees 99 of 102 notes and 459 facts, with 1 fact held back. 12 reads and 2 writes so far.
+  - paragraph: Sees 99 of 99 notes and 459 facts, with 1 fact held back. 12 reads and 2 writes so far.
   - term: Trust
   - definition: trusted
   - term: Connects as
@@ -149,15 +149,17 @@
   - term: Grade
   - definition: watch
   - term: Memory in sync
-  - definition: 0 of 0 answers
+  - definition: not asked yet
   - term: Read before writing
   - definition: 0% of 2 writes
   - term: Refused for the source
   - definition: "0"
-  - term: Outside its view
-  - definition: 0 asks, 0 leak alerts
+  - term: Asked you to see a page
+  - definition: 0 times
+  - term: Reads refused
+  - definition: 0 for pages outside its view, 0 leak alerts
   - list:
-    - listitem: 2 of 2 write(s) with no read first
+    - listitem: 2 of 2 writes with no read first
     - listitem: "hasn't called memory_check in 2 days: it isn't syncing on its own (sync routine: not set up)"
   - heading "Notes it can see" [level=2]
   - heading "Decisions (10)" [level=3]

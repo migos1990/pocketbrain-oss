@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
-import { loadBrain, today, sensitivityRank, type Note } from "./brain";
+import { loadBrain, memoryPages, today, sensitivityRank, type Note } from "./brain";
 import { loadRules, RESERVED_AGENTS, type Rules, type Slice } from "./rules";
 import { carve, grantFor, narrowSlice, visibleFacts, PROBE_AREA, type CarveResult, type Grant } from "./carve";
 import { buildView, renderNote } from "./view";
@@ -179,7 +179,7 @@ export async function propose(root: string, agent: string, intent: string, model
   const flags = `--slices ${c.slices.join(",")} --exclude-types ${c.exclude_types.join(",") || "none"}`;
   return {
     agent, intent: text, isNew, by, note,
-    ...c, ...examples(notes, res, text), notes: res.visible.size, total: notes.length, before,
+    ...c, ...examples(notes, res, text), notes: res.visible.size, total: memoryPages(notes).length, before,
     widens: !!existing && widensToday(moreThanToday(notes, rules, agent, c)),
     command: isNew ? `pocketbrain add ${agent} ${flags}` : `pocketbrain consent ${agent} --apply ${flags}`,
   };

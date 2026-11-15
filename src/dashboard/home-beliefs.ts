@@ -5,7 +5,7 @@
 // new is asked to read anything. Owner-only, like the rest of the home. A private value, or one
 // that waits for the owner's Show, names only its page: what the assistant said is not shown.
 import type { Note } from "../brain";
-import { sensitivityRank } from "../brain";
+import { memoryPages, sensitivityRank } from "../brain";
 import { records, carve, grantFor } from "../carve";
 import type { Rules } from "../rules";
 import { beliefs, type CellState } from "../beliefs";
@@ -68,7 +68,7 @@ export interface AssistantView { agent: string; label: string; sees: number; of:
 export function assistantViews(root: string, rules: Rules, notes: Note[]): AssistantView[] {
   return beliefs(root).agents.filter((a) => rules.policy.agents[a]?.status !== "paused").map((agent) => ({
     agent, label: rules.policy.agents[agent]?.label ?? agent,
-    sees: carve(notes, rules, grantFor(rules, agent), { flags: false }).visible.size, of: notes.length,
+    sees: carve(notes, rules, grantFor(rules, agent), { flags: false }).visible.size, of: memoryPages(notes).length,
     href: `/see/${encodeURIComponent(agent)}`,
   }));
 }

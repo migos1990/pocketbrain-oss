@@ -951,6 +951,13 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           return html(pg ? { ...pg, flash: { msg } } : { title: "One-time code", tab: "agents", body: "", flash: { msg } });
         } catch (e) { return go(back, { err: fail(e) }); }
       }
+      // The review page it came from is for a sign-in that waits; once approved that address answers
+      // "isn't waiting any more". So a yes lands on the new assistant's own page, and a no on the
+      // list, each with its message (G884).
+      if (action === "oauth-new-agent") {
+        try { const ok = runAction({ root, transport: opts.transport }, action, form); return go(`/agent/${encodeURIComponent((form.agent ?? "").trim())}`, { ok }); }
+        catch (e) { return go("/agents", { err: fail(e) }); }
+      }
       if (action) {
         try { const ok = runAction({ root, transport: opts.transport }, action, form); return go(back, { ok }); }
         catch (e) { return go(back, { err: fail(e) }); }

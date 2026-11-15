@@ -2,7 +2,7 @@
 // What the Brain tab reads for someone who has never seen a fact key: instant search (BM25 on
 // the owner's whole view, no model), notes by kind, what changed this week, which facts need a
 // look, and who can see a note. Nothing here writes.
-import { isDisputed, isList, today, linksIn, type Note, type FactRecord } from "../brain";
+import { isDisputed, isList, memoryPages, today, linksIn, type Note, type FactRecord } from "../brain";
 import { attributeSpec, isDeclared } from "../rules";
 import { factFreshness, daysBetween, lifeOf, type Freshness } from "../freshness";
 import { buildIndex, rank, terms } from "../retrieve";
@@ -19,7 +19,7 @@ export const KINDS: [string, string][] = [["people", "People"], ["projects", "Pr
 export const kindLabel = (folder: string) => KINDS.find(([f]) => f === folder)?.[1] ?? folder;
 export const folderOf = (id: string) => id.split("/")[0];
 
-export const browsable = (s: State) => s.notes.filter((n) => folderOf(n.fm.id) !== "disputes");
+export const browsable = (s: State) => memoryPages(s.notes);
 
 export function kindCounts(s: State): { folder: string; label: string; count: number }[] {
   const count = new Map<string, number>();

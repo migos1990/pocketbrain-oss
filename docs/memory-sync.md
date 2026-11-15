@@ -353,7 +353,8 @@ and counts, never a value; each run adds one line to `log/exam.jsonl`.
   calls `memory_check`. The command exits 1 when an agent fails.
 - **On the dashboard:** the Assistants page's table has a Memory exam column (the grade, with why on hover),
   and each assistant's page has a Memory exam section with the counts and stale fact keys, live over the
-  last 7 days.
+  last 7 days. Where nothing was counted it says so in words ("no writes yet"), and it counts the
+  assistant's asks to see a page apart from the reads the hub refused.
 - **Before a change reaches the real agents:** the agent eval suite has memory episodes
   (`bun evals/run.ts --llm --only agents-memory`): a real model with a stale note in its own
   memory must answer from the brain, report its memory honestly to `memory_check`, apply a signed

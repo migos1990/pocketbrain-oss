@@ -40,7 +40,8 @@ test("after a write, pages that show no assistant's view don't carve; the ones t
   const st = (await import("../src/dashboard/data")).loadState(root);
   const helper = st.agents.find((a) => a.name === "helper")!;
   expect(helper.notes).toBe(st.carves.get("helper")!.visible.size);
-  expect(home.text).toContain(`sees ${helper.notes} of ${st.notes.length} note`);
+  // of the memory's pages: a conflict packet is never one (G888)
+  expect(home.text).toContain(`sees ${helper.notes} of ${(await import("../src/brain")).memoryPages(st.notes).length} note`);
 });
 
 test("a carve made for one page is kept for the next until the brain changes", async () => {

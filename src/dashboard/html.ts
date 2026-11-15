@@ -17,6 +17,7 @@ import { usageItem } from "../usage";
 import { peopleNeedsYou } from "./people";
 import { term, plain, cap, noteName, factName, withNames, agentName, agentLabel, ownAreaWords, questionWords } from "./labels";
 import { sourceWords, kindLabel } from "./browse";
+import { memoryPages } from "../brain";
 import { autoSaves, autoDecisions, newQueues, CONFLICT, type Queues } from "../filing";
 import { sensitiveShape, reasonText } from "../shape";
 import { waitingCount, factSentence, privateNow } from "./home";
@@ -113,14 +114,14 @@ td button,td .btn,.item button{font-size:15px}td>.acts{flex-wrap:nowrap;justify-
 form.inline{display:inline}
 table{width:100%;border-collapse:collapse;font-size:15px;line-height:24px;margin:0}
 th{text-align:left;font-weight:400;color:var(--muted);font-size:15px;line-height:24px;padding:4px 16px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
-td{font-variant-numeric:tabular-nums;padding:8px 16px 8px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td{padding:8px 16px 8px 0;border-bottom:1px solid var(--line);vertical-align:top}
 tbody tr:last-child td{border-bottom:0}
 th:last-child,td:last-child{padding-right:0}
 td a{font-weight:500}
-td.num,th.num{text-align:right}td:first-child,td[title]{white-space:nowrap}
+td.num,th.num{text-align:right}td.num{font-variant-numeric:tabular-nums}td:first-child,td[title]{white-space:nowrap}
 .wrap{overflow-x:auto;max-width:100%}
 .status{display:inline-flex;align-items:center;gap:8px;font-weight:400;font-size:15px;line-height:24px;padding:0;background:none}.status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
-.st-active{color:var(--good)}.st-paused{color:var(--bad)}.st-read-only{color:var(--warn)}
+.st-active{color:var(--good)}.st-off{color:var(--text-2)}.st-paused{color:var(--bad)}.st-read-only{color:var(--warn)}
 .h1-sub{color:var(--bad);font-weight:400}
 h1 .status{vertical-align:middle;margin-left:12px;font-size:17px;letter-spacing:0}
 .flash{padding:0 0 16px;margin:0 0 40px;border-bottom:1px solid var(--line)}.flash.err{color:var(--bad)}
@@ -193,6 +194,7 @@ table.agents,table.agents tbody,table.alerts,table.alerts tbody{display:block}ta
 table.agents tr,table.alerts tr{display:flex;flex-wrap:wrap;gap:0 12px;padding:12px 0;border-bottom:1px solid var(--line)}table.agents tbody tr:last-child,table.alerts tbody tr:last-child{border-bottom:0}
 table.agents td,table.alerts td{display:inline;border:0;padding:0;white-space:normal}table.agents td:first-child{flex-basis:100%;white-space:normal}table.agents td .sub{display:inline;font-size:inherit;line-height:inherit}table.agents td:first-child .sub::before,table.agents td.num .sub::before{content:" · "}
 table.agents td:not(:first-child):not(:last-child)+td:not(:last-child)::before{content:"· ";color:var(--muted)}table.agents tbody tr td:not(:first-child):not(:last-child):nth-child(6)::before{content:"· last seen "}table.agents tbody tr td:not(:first-child):not(:last-child):nth-child(7)::before{content:"· access "}table.agents tbody tr td:not(:first-child):not(:last-child):nth-child(8)::before{content:"· memory exam "}table.agents tbody tr td:not(:first-child):not(:last-child):nth-child(n+6)::before{color:var(--muted)}table.agents td:last-child{flex-basis:100%}table.agents td>.acts{justify-content:flex-start;flex-wrap:wrap;margin-top:4px}
+table.signins,table.signins tbody,table.signins tr,table.signins td{display:block}table.signins tr{padding:12px 0;border-bottom:1px solid var(--line)}table.signins tr:last-child{border-bottom:0}table.signins td{border:0;padding:2px 0;min-width:0}table.signins td.mono{overflow-wrap:anywhere}table.signins td:last-child{margin-top:8px}table.signins input[type=text],table.signins select{max-width:100%}
 table.alerts td:first-child{flex-basis:100%;color:var(--muted);font-size:15px;line-height:24px}table.alerts td+td+td+td{flex-basis:100%}table.alerts td.sub{font-size:inherit;line-height:inherit;color:var(--text-2)}
 td .kind{white-space:nowrap}
 table.log,table.log tbody{display:block}table.log thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
@@ -307,14 +309,25 @@ function examPill(r?: ExamRow) {
 function examSection(s: State, name: string) {
   const r = s.exams.get(name);
   if (!r) return "";
-  const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : "n/a");
+  const pct = (a: number, b: number) => `${Math.round((100 * a) / b)}%`;
+  // Its own asks to see a page in the exam's 7 days, never the owner's offers: a different thing
+  // from a read the hub refused, which the next line counts (G889).
+  const since = new Date(s.now.getTime() - 7 * 86_400_000).toISOString();
+  const asked = s.asks.filter((a) => a.agent === name && !a.offered && a.at >= since).length;
   return `<h2 id="exam">Memory exam</h2><p class="sub">Its own memory against your brain, last 7 days, from the logs. <code>pocketbrain exam</code> runs it weekly; fix drift with <code>pocketbrain memsync list</code>.</p>
-<div class="card"><dl class="props"><dt>Grade</dt><dd>${examPill(r)}</dd><dt>Memory in sync</dt><dd>${r.memory.inSync} of ${r.memory.answered} answer${r.memory.answered === 1 ? "" : "s"}${r.memory.unanswered ? `, ${r.memory.unanswered} unanswered` : ""}</dd><dt>Read before writing</dt><dd>${pct(r.brainFirst.writes - r.brainFirst.unread, r.brainFirst.writes)} of ${r.brainFirst.writes} write${r.brainFirst.writes === 1 ? "" : "s"}</dd><dt>Refused for the source</dt><dd>${r.citations.refused}</dd><dt>Outside its view</dt><dd>${r.slice.probes} ask${r.slice.probes === 1 ? "" : "s"}, ${r.slice.alerts} leak alert${r.slice.alerts === 1 ? "" : "s"}</dd></dl>
+<div class="card"><dl class="props"><dt>Grade</dt><dd>${examPill(r)}</dd><dt>Memory in sync</dt><dd>${r.memory.answered ? `${r.memory.inSync} of ${r.memory.answered} answer${r.memory.answered === 1 ? "" : "s"}` : "not asked yet"}${r.memory.unanswered ? `, ${r.memory.unanswered} unanswered` : ""}</dd><dt>Read before writing</dt><dd>${r.brainFirst.writes ? `${pct(r.brainFirst.writes - r.brainFirst.unread, r.brainFirst.writes)} of ${r.brainFirst.writes} write${r.brainFirst.writes === 1 ? "" : "s"}` : "no writes yet"}</dd><dt>Refused for the source</dt><dd>${r.citations.refused}</dd><dt>Asked you to see a page</dt><dd>${asked} time${asked === 1 ? "" : "s"}</dd><dt>Reads refused</dt><dd>${r.slice.probes} for pages outside its view, ${r.slice.alerts} leak alert${r.slice.alerts === 1 ? "" : "s"}</dd></dl>
 ${r.memory.stale.length ? `<div>Stale in its memory: ${r.memory.stale.map((k) => `<code>${esc(k)}</code>`).join(", ")}</div>` : ""}${r.why.length ? `<ul>${r.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}</div>`;
 }
 
 function statusPill(st: string) {
   return `<span class="status st-${esc(st)}">${esc(st)}</span>`;
+}
+
+// An assistant with no key and no sign-in gets nothing whatever its status says, so the page says
+// that and not "active" (G886). One whose view the owner pastes by hand never had either.
+const cutOff = (a: AgentRow) => a.transport !== "paste" && !a.tokens && !a.signins;
+function agentPill(a: AgentRow) {
+  return cutOff(a) && a.status === "active" ? '<span class="status st-off">not connected</span>' : statusPill(a.status);
 }
 
 export function killSwitches(csrf: string, a: AgentRow) {
@@ -331,7 +344,7 @@ export function killSwitches(csrf: string, a: AgentRow) {
 function agentsTable(s: State, csrf: string) {
   return `<div class="card wrap"><table class="agents"><thead><tr><th>Assistant</th><th>Status</th><th>Trust</th><th>Holds</th><th>Last 24 h</th><th>Last seen</th><th title="tokens">Access keys</th><th title="its own memory against the brain, last 7 days">Memory exam</th><th></th></tr></thead><tbody>
 ${s.agents.map((a) => `<tr><td><a href="/agent/${encodeURIComponent(a.name)}"${a.label !== a.name ? ` title="${esc(a.name)}"` : ""}><b>${esc(a.label)}</b></a><div class="sub">${term(a.transport)}${a.resolver ? ` · ${term("resolver")}` : ""}</div></td>
-<td>${statusPill(a.status)}</td><td>${term(a.tier)}</td><td class="num">${a.notes} note${a.notes === 1 ? "" : "s"}<div class="sub">${a.facts} fact${a.facts === 1 ? "" : "s"}</div></td><td class="num">${a.reads24} read${a.reads24 === 1 ? "" : "s"}<div class="sub">${a.writes24} write${a.writes24 === 1 ? "" : "s"}</div></td>
+<td>${agentPill(a)}</td><td>${term(a.tier)}</td><td class="num">${a.notes} note${a.notes === 1 ? "" : "s"}<div class="sub">${a.facts} fact${a.facts === 1 ? "" : "s"}</div></td><td class="num">${a.reads24} read${a.reads24 === 1 ? "" : "s"}<div class="sub">${a.writes24} write${a.writes24 === 1 ? "" : "s"}</div></td>
 <td>${ago(a.lastSeen, s.now)}</td><td>${a.tokens || a.signins ? [a.tokens ? `<span title="issued ${esc(a.issued)}">${a.tokens} key${a.tokens > 1 ? "s" : ""}</span>` : "", a.signins ? `${a.signins} sign-in${a.signins > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ") : '<span class="sub">none</span>'}</td><td>${examPill(s.exams.get(a.name))}</td><td>${killSwitches(csrf, a)}</td></tr>`).join("")}
 </tbody></table></div>`;
 }
@@ -386,10 +399,11 @@ function askItem(s: State, a: Ask, csrf: string) {
 // hub with a backup); the agent is then asked again. Stuck fixes show with why.
 function memsyncItem(s: State, c: Correction, csrf: string) {
   const who = agentName(s.rules, c.agent);
-  const where = c.from.file ? `<span class="sub" title="${esc(c.from.file)}">line ${c.from.line ?? "?"} of its memory file</span>` : "";
-  const what = c.kind === "pointer" ? `keeps its own copy, "${esc(c.wrong)}", of ${esc(c.about)} ${where}. Approve swaps it for a pointer to your brain.`
-    : c.kind === "forget" ? `still remembers "${esc(c.wrong)}" for ${esc(c.about)} ${where}, which your brain no longer holds. Approve tells it to delete it.`
-    : `remembers "${esc(c.wrong)}" for ${esc(c.about)} ${where}; your brain says <b>${esc(c.right ?? "")}</b>. Approve sends it the fix.`;
+  // With its own leading space, so a card with no file puts none before the next mark (G901).
+  const where = c.from.file ? ` <span class="sub" title="${esc(c.from.file)}">line ${c.from.line ?? "?"} of its memory file</span>` : "";
+  const what = c.kind === "pointer" ? `keeps its own copy, "${esc(c.wrong)}", of ${esc(c.about)}${where}. Approve swaps it for a pointer to your brain.`
+    : c.kind === "forget" ? `still remembers "${esc(c.wrong)}" for ${esc(c.about)}${where}, which your brain no longer holds. Approve tells it to delete it.`
+    : `remembers "${esc(c.wrong)}" for ${esc(c.about)}${where}; your brain says <b>${esc(c.right ?? "")}</b>. Approve sends it the fix.`;
   if (c.state !== "proposed") return `<div class="item"><div class="what"><span class="kind k-alert">memory fix stuck</span><b>${who}</b> ${what}<div class="sub">${c.state === "still-wrong" ? "It said it applied the fix, but asked again it still gives the old value." : `It couldn't apply it${c.note ? `: ${esc(c.note)}` : ""}.`} Fix it by hand in that assistant.</div></div><div class="acts"><a class="btn" href="/agent/${encodeURIComponent(c.agent)}">Open</a></div></div>`;
   return `<div class="item"><div class="what"><span class="kind">memory fix</span><b>${who}</b> ${what} <span class="sub" title="${esc(c.at)}">${ago(c.at, s.now)}</span></div>
 <div class="acts">${button(csrf, "memsync-approve", { id: c.id }, "Approve", "go")}${button(csrf, "memsync-decline", { id: c.id }, "Decline", "danger")}</div></div>`;
@@ -650,8 +664,8 @@ function needsYou(s: State, csrf: string) {
 // One line per assistant in the owner's words: what it did today, what it sees, its off switches.
 function assistantItem(s: State, csrf: string, a: AgentRow) {
   const did = a.reads24 || a.writes24 ? `read ${a.reads24} time${a.reads24 === 1 ? "" : "s"}, wrote ${a.writes24} today` : "nothing today";
-  return `<div class="item${a.status === "paused" ? " paused" : ""}"><div class="what"><a href="/agent/${encodeURIComponent(a.name)}"${a.label !== a.name ? ` title="${esc(a.name)}"` : ""}><b>${esc(a.label)}</b></a>${a.status !== "active" ? ` ${statusPill(a.status)}` : ""}
-<div class="sub">${did} · sees ${a.notes} of ${s.notes.length} note${s.notes.length === 1 ? "" : "s"} · last seen ${ago(a.lastSeen, s.now)}</div></div>${killSwitches(csrf, a)}</div>`;
+  return `<div class="item${a.status === "paused" ? " paused" : ""}"><div class="what"><a href="/agent/${encodeURIComponent(a.name)}"${a.label !== a.name ? ` title="${esc(a.name)}"` : ""}><b>${esc(a.label)}</b></a>${a.status !== "active" || cutOff(a) ? ` ${agentPill(a)}` : ""}
+<div class="sub">${did} · sees ${a.notes} of ${memoryPages(s.notes).length} note${memoryPages(s.notes).length === 1 ? "" : "s"} · last seen ${ago(a.lastSeen, s.now)}</div></div>${killSwitches(csrf, a)}</div>`;
 }
 
 // The owner checks in; the assistants and the Gardener do the work. So: what needs you, then what
@@ -793,9 +807,9 @@ export function agentPage(s: State, csrf: string, name: string, q = new URLSearc
   const writes = s.writes.filter((r) => r.agent === name);
   const top = new Map<string, number>();
   for (const r of reads) for (const id of (r.ids as string[]) ?? []) if (id !== "*") top.set(id, (top.get(id) ?? 0) + 1);
-  const body = `<h1${a.label !== name ? ` title="${esc(name)}"` : ""}>${esc(a.label)} ${statusPill(a.status)}</h1>
-<p class="lede">Sees <b>${a.notes} of ${s.notes.length}</b> notes and ${a.facts} fact${a.facts === 1 ? "" : "s"}${res.hiddenFacts.length ? `, with <b>${res.hiddenFacts.length} fact${res.hiddenFacts.length === 1 ? "" : "s"} held back</b>` : ""}. ${reads.length || writes.length ? `${reads.length} read${reads.length === 1 ? "" : "s"} and ${writes.length} write${writes.length === 1 ? "" : "s"} so far.` : "Hasn't connected yet."}${a.flags ? ` <a href="#check" class="hot">${a.flags} thing${a.flags === 1 ? "" : "s"} to check</a>` : ""}</p>
-<dl class="props"><dt>Trust</dt><dd>${term(a.tier)}</dd><dt>Connects as</dt><dd>${term(a.transport)}</dd><dt><span title="slices">Sees</span></dt><dd>${esc(a.slices.map(plain).join(", ") || "nothing")} <span class="sub" title="ceiling">· up to ${esc(res.grant.ceiling)} notes</span></dd>${res.grant.exclude_types.length ? `<dt>Not shared</dt><dd>${esc(res.grant.exclude_types.map(plain).join(", "))}</dd>` : ""}<dt>Last seen</dt><dd>${ago(a.lastSeen, s.now)}</dd><dt>Budget</dt><dd>${budgetLine(s, name)}</dd><dt>Writes</dt><dd>${qualityLine(s, name, a.label)}</dd></dl>
+  const body = `<h1${a.label !== name ? ` title="${esc(name)}"` : ""}>${esc(a.label)} ${agentPill(a)}</h1>
+<p class="lede">Sees <b>${a.notes} of ${memoryPages(s.notes).length}</b> notes and ${a.facts} fact${a.facts === 1 ? "" : "s"}${res.hiddenFacts.length ? `, with <b>${res.hiddenFacts.length} fact${res.hiddenFacts.length === 1 ? "" : "s"} held back</b>` : ""}. ${reads.length || writes.length ? `${reads.length} read${reads.length === 1 ? "" : "s"} and ${writes.length} write${writes.length === 1 ? "" : "s"} so far.` : "Hasn't connected yet."}${a.flags ? ` <a href="#check" class="hot">${a.flags} thing${a.flags === 1 ? "" : "s"} to check</a>` : ""}</p>
+${cutOff(a) ? '<p class="lede">It has no key and no sign-in, so it gets nothing from your memory until you connect it.</p>' : ""}<dl class="props"><dt>Trust</dt><dd>${term(a.tier)}</dd><dt>Connects as</dt><dd>${term(a.transport)}</dd><dt><span title="slices">Sees</span></dt><dd>${esc(a.slices.map(plain).join(", ") || "nothing")} <span class="sub" title="ceiling">· up to ${esc(res.grant.ceiling)} notes</span></dd>${res.grant.exclude_types.length ? `<dt>Not shared</dt><dd>${esc(res.grant.exclude_types.map(plain).join(", "))}</dd>` : ""}<dt>Last seen</dt><dd>${ago(a.lastSeen, s.now)}</dd><dt>Budget</dt><dd>${budgetLine(s, name)}</dd><dt>Writes</dt><dd>${qualityLine(s, name, a.label)}</dd></dl>
 ${killSwitches(csrf, a)}${terminalKeyCard(s, csrf, name)}<div style="height:28px"></div>
 ${s.rules.policy.agents[name]?.inside_wall || s.rules.policy.agents[name]?.role === "gardener" ? "" : consentCard(csrf, name, a.label)}
 

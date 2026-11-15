@@ -28,7 +28,7 @@
       - text: Claude Read your brain 6 times today
       - link "See as":
         - /url: /see/claude
-      - paragraph: Sees 99 pages
+      - paragraph: Sees all your pages
       - group: What it asked today (6)
     - listitem:
       - text: Geminitrial Hasn't read your brain today

@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { loadRules, RESERVED_AGENTS, type Rules } from "./rules";
-import { loadBrain, sensitivityRank, type Sensitivity } from "./brain";
+import { loadBrain, memoryPages, sensitivityRank, type Sensitivity } from "./brain";
 import { carve, grantFor, renderPreview } from "./carve";
 import { buildView } from "./view";
 import { git } from "./git";
@@ -158,7 +158,7 @@ export function previewNewAgent(root: string, a: NewAgent): NewAgentPreview {
   return {
     agent: a.agent,
     notes: vis.length,
-    total: notes.length,
+    total: memoryPages(notes).length,
     areas: [...new Set(vis.map((n) => n.fm.area).filter((x): x is string => !!x))].sort(),
     kinds,
     money: vis.some((n) => n.fm.id.startsWith("money/") || n.fm.type === "money"),

@@ -13,7 +13,7 @@ import { loadBrain, slugify } from "../brain";
 import { TYPE_FOLDER } from "../checks";
 import { decideHeld, fileTransport, type MailTransport } from "../relay";
 import { confirmHeldAnswer, ownerDecide, CoreError } from "../core";
-import { revokeTokens } from "../auth";
+import { revokeTokens, tokenInfo } from "../auth";
 import { dropAgentKey } from "../local-apps";
 import { undoRun } from "../upkeep";
 import { digest } from "../digest";
@@ -158,6 +158,7 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
     case "agent-revoke": {
       const agent = need("agent");
       const ids = clientsOf(root, agent);
+      const keys = tokenInfo(root)[agent]?.length ?? 0;
       // G352: paused first (no lock needed), so a revoke that fails on a busy invites lock still
       // leaves the agent cut off; it goes back to how it was only once the revoke went through.
       const pa = loadRules(root).policy.agents[agent];
@@ -168,9 +169,13 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       if (was !== "paused") setAgentStatus(root, agent, was as AgentStatus);
       cancelAsks(root, agent);
       cancelActions(root, agent, "access revoked");
-      if (!ids.length || !loadOAuth(root)?.management_client_id) return `revoked ${n} token(s) for ${agent}`;
+      // A key is a key and a sign-in is a sign-in, each counted for what it is (G887).
+      const count = (k: number, one: string) => (k ? [`${k} ${one}${k === 1 ? "" : "s"}`] : []);
+      const what = [...count(Math.min(keys, n), "key"), ...count(Math.max(0, n - keys), "sign-in")].join(" and ");
+      const said = what ? `revoked ${what} for ${agent}` : `${agent} had no key or sign-in to revoke`;
+      if (!ids.length || !loadOAuth(root)?.management_client_id) return said;
       void cutAtAuthServer(root, ids).catch(() => {});
-      return `revoked ${n} token(s) for ${agent}; removing its connection at the sign-in service too`;
+      return `${said}; removing its connection at the sign-in service too`;
     }
     case "upkeep-undo": {
       const run = need("run");
@@ -245,7 +250,7 @@ export function runAction(ctx: ActionContext, action: string, f: Record<string, 
       if (!listPendingIds(root).includes(id)) throw new CoreError(404, "that connection isn't waiting any more");
       const name = f.name?.trim().slice(0, 60);
       const old = bindClient(root, id, need("agent"), name || undefined);
-      return `connection approved: it now connects as ${need("agent")}${old.length ? `. It replaced ${old.length} old connection(s), cut off now; delete ${old.length === 1 ? "it" : "them"} at the sign-in service below` : ""}`;
+      return `connection approved: it now connects as ${need("agent")}${old.length ? `. It replaced ${old.length} old connection${old.length === 1 ? "" : "s"}, cut off now; delete ${old.length === 1 ? "it" : "them"} at the sign-in service below` : ""}`;
     }
     case "oauth-new-agent": {
       const id = need("client_id");

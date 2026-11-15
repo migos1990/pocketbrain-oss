@@ -1506,7 +1506,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     }
     if (sub === "brainfirst") {
       for (const u of memsync.brainFirst(root, Number(args[1] ?? 7))) {
-        console.log(`${u.agent}: ${u.unread.length} of ${u.writes} write(s) without reading the brain first`);
+        console.log(`${u.agent}: ${u.unread.length} of ${u.writes} write${u.writes === 1 ? "" : "s"} without reading the brain first`);
         for (const x of u.unread.slice(-10)) console.log(`  ${x.at.slice(0, 16)}  ${x.key}  ${x.outcome}`);
       }
       return 0;

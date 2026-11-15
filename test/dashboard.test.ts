@@ -100,7 +100,7 @@ test("read-only lets an agent read but refuses its writes and dispute moves", as
 test("revoke deletes the agent's tokens", async () => {
   const { login, act, agent } = setup();
   await login();
-  expect((await act("agent-revoke", { agent: "helper" })).ok).toBe("revoked 1 token(s) for helper");
+  expect((await act("agent-revoke", { agent: "helper" })).ok).toBe("revoked 1 key for helper");
   expect((await agent("helper", "GET", "/v1/context")).status).toBe(401);
 });
 

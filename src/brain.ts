@@ -87,6 +87,9 @@ export interface Note {
 
 // Folders that hold content notes. rules/, inbox/, comms/, views/, import/ are not content.
 export const CONTENT_DIRS = ["people", "orgs", "projects", "decisions", "notes", "money", "agents", "disputes"];
+// The pages of a memory, for any count shown to its owner: a conflict packet is the memory's own
+// bookkeeping, never a page, so every screen gives one total (G888).
+export const memoryPages = <T extends { fm: { id: string } }>(notes: T[]): T[] => notes.filter((n) => !n.fm.id.startsWith("disputes/"));
 
 export function isList(f: Fact | undefined): f is ListFact {
   return !!f && typeof f === "object" && Array.isArray((f as ListFact).items);

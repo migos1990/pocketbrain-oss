@@ -134,11 +134,21 @@ function offerable(notes: Note[], rules: Rules, p: AskPolicy, agent: string): { 
 // Words the agent sends become a search over what it doesn't hold; the best few matches are
 // what the owner is shown. The agent learns none of this.
 function match(root: string, rules: Rules, p: AskPolicy, agent: string, what: string): Ask["candidates"] {
-  const { res, rules: r } = offerable(loadBrain(root), rules, p, agent);
-  return rank(buildIndex(res, r), what, 3).map((h) => {
-    const n = res.visible.get(h.id)!.note;
-    return { id: n.fm.id, title: n.fm.title, sensitivity: n.fm.sensitivity, type: n.fm.type };
-  });
+  const notes = loadBrain(root);
+  const { res, rules: r } = offerable(notes, rules, p, agent);
+  // The search runs on the owner's full view of each page, but the owner's yes hands the page over
+  // cut for this assistant: a page can match on words that stay withheld from it. So the best few
+  // are put in order of how well the text that would be handed says what was asked; a tie keeps
+  // the search's order. The same pages are offered as before (G902).
+  const probe = `match-${randomBytes(6).toString("hex")}`; // a slice name no rules file holds
+  const says = (n: Note) => { const h = handed(notes, rules, agent, n, probe); return rank(buildIndex(h.res, h.one), what, 1)[0]?.score ?? 0; };
+  const hits = rank(buildIndex(res, r), what, 3);
+  // The same work whether three pages matched or none, so how long an ask takes says nothing
+  // about what the memory holds outside the asker's view (invariant 13).
+  for (const v of [...res.visible.values()].filter((v) => !hits.some((h) => h.id === v.note.fm.id)).slice(0, 3 - hits.length)) says(v.note);
+  return hits.map((h, i) => { const n = res.visible.get(h.id)!.note; return { n, i, s: says(n) }; })
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+    .map(({ n }) => ({ id: n.fm.id, title: n.fm.title, sensitivity: n.fm.sensitivity, type: n.fm.type }));
 }
 
 const CODE = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -335,22 +345,30 @@ export async function askStatus(root: string, agent: string, id: string, approve
 
 // The one read: the approved note alone, rendered as a view holding only that note, so its links
 // to anything else show as [[redacted]] and its secret or share_with-limited facts stay out.
+// One page as this assistant gets it on the owner's yes: carved for it alone, so what stays hidden
+// from it elsewhere stays [withheld] here too. handOver serves this; match orders by it.
+function handed(notes: Note[], rules: Rules, agent: string, note: Note, askId: string, offered = false): { res: ReturnType<typeof carve>; one: Rules } {
+  const co = coOwnerOf(rules, agent);
+  const noteId = note.fm.id;
+  const left = leftOutByName(rules, agent);
+  const one: Rules = { ...rules, slices: { ...rules.slices, [`ask:${askId}`]: { include: [noteId], ...(left.exclude_attributes.length ? { exclude_attributes: left.exclude_attributes } : {}) } } };
+  // The owner's offer reads at the assistant's own ceiling at most (G555); an assistant's ask, as before.
+  const ceiling = note.fm.sensitivity === "private" && !co ? "private" : "personal";
+  const res = carve(notes, one, { agent, slices: [`ask:${askId}`], exclude_types: [], exclude: left.exclude, ceiling: offered && sensitivityRank(grantFor(rules, agent).ceiling) < sensitivityRank(ceiling) ? grantFor(rules, agent).ceiling : ceiling });
+  return { res, one };
+}
+
 function handOver(root: string, agent: string, a: Ask): string {
   const rules = loadRules(root);
   const noteId = a.approved!.note;
   const notes = loadBrain(root);
   const note = notes.find((n) => n.fm.id === noteId);
   // Changed under it (made secret, moved to a never type, deleted): the approval no longer holds.
-  const co = coOwnerOf(rules, agent);
   if (!note || !releasable(rules, agent, note, a.offered)) {
     event(root, { ask: a.id, ev: "expired", why: "the note changed since the approval" });
     throw new CoreError(410, `this approval no longer holds; ask ${ownerName(rules)} again`);
   }
-  const left = leftOutByName(rules, agent);
-  const one: Rules = { ...rules, slices: { ...rules.slices, [`ask:${a.id}`]: { include: [noteId], ...(left.exclude_attributes.length ? { exclude_attributes: left.exclude_attributes } : {}) } } };
-  // The owner's offer reads at the assistant's own ceiling at most (G555); an assistant's ask, as before.
-  const ceiling = note.fm.sensitivity === "private" && !co ? "private" : "personal";
-  const res = carve(notes, one, { agent, slices: [`ask:${a.id}`], exclude_types: [], exclude: left.exclude, ceiling: a.offered && sensitivityRank(grantFor(rules, agent).ceiling) < sensitivityRank(ceiling) ? grantFor(rules, agent).ceiling : ceiling });
+  const { res, one } = handed(notes, rules, agent, note, a.id, a.offered);
   const v = res.visible.get(noteId)!;
   const md = renderNote(v, res, one).join("\n") + "\n";
   event(root, { ask: a.id, ev: "used", agent, note: noteId });
