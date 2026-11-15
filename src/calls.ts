@@ -32,9 +32,11 @@ export function logCall(root: string, agent: string, tool: string, refusal?: str
 }
 
 // MCP revisions from this one on have no initialize handshake: the client stamps each request with
-// its version (docs/refusals.md "A protocol the hub doesn't speak yet"). The door refuses those and
-// logs each as "mcp <version> <method>"; only a date and a plain method name are kept of what was sent.
+// its version. The door speaks MODERN_PROTOCOLS of them (src/mcp-era.ts); a later one it refuses and
+// logs as "mcp <version> <method>" (docs/refusals.md "A protocol the hub doesn't speak yet"); only
+// a date and a plain method name are kept of what was sent.
 export const MODERN_MCP_FROM = "2026-07-28";
+export const MODERN_PROTOCOLS = ["2026-07-28"];
 export const modernMcp = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && v >= MODERN_MCP_FROM;
 export const methodName = (m: unknown) => typeof m === "string" && /^[a-z]{1,24}(\/[a-z_]{1,24})?$/.test(m) ? m : "other";
 export const modernCall = (version: string | undefined, method: unknown) => `mcp ${version ?? "unstamped"} ${methodName(method)}`;
@@ -46,7 +48,8 @@ export function modernAsks(root: string, now = new Date()): { ever: boolean; cou
   let ever = false, count = 0;
   for (const l of readJsonl<CallLine>(file(root))) {
     const m = typeof l.tool === "string" ? l.tool.match(/^mcp (\d{4}-\d{2}-\d{2}|unstamped) ([a-z/_]+)$/) : null;
-    if (!m || !l.agent) continue;
+    // A line from before the hub spoke that version (or its server/discover) is no longer news.
+    if (!m || !l.agent || m[1] === "unstamped" || MODERN_PROTOCOLS.includes(m[1])) continue;
     ever = true;
     const age = now.getTime() - Date.parse(String(l.at));
     if (!(age >= 0 && age <= 24 * 3_600_000)) continue;

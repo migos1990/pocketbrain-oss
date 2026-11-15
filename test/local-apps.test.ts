@@ -137,6 +137,36 @@ test("the bridge round-trips MCP to the local hub with the agent's own key", asy
   expect(replies[0].result.content[0].text).not.toContain("Maple Trust");
 });
 
+test("G817: the bridge gives a request stamped MCP 2026-07-28 the headers the hub checks, from its body", async () => {
+  const root = makeBrain();
+  expect(run(root, "add", "cursor", "--kind", "cursor", "--yes").code).toBe(0);
+  const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
+  const out: string[] = [];
+  const code = await bridge({
+    agent: "cursor",
+    lines: lines(
+      { jsonrpc: "2.0", id: 1, method: "server/discover", params: { _meta: meta } },
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "context_pack", arguments: {}, _meta: meta } },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "no such tool é", arguments: {}, _meta: meta } },
+      { jsonrpc: "2.0", id: 4, method: "tools/list" },
+      { jsonrpc: "2.0", id: 5, method: "logging/setLevel", params: { level: "info", _meta: meta } },
+    ),
+    write: (s) => out.push(s), fetch: viaHub(root),
+  });
+  expect(code).toBe(0);
+  const replies = out.join("").trim().split("\n").map((l) => JSON.parse(l));
+  expect(replies.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
+  // A method the hub doesn't have, in any spelling, still travels with its headers: not found, not a header error.
+  expect(replies[4].error.code).toBe(-32601);
+  expect(replies[0].result.supportedVersions[0]).toBe("2026-07-28");
+  expect(replies[1].result.resultType).toBe("complete");
+  expect(replies[1].result.content[0].text).toContain("Course A");
+  expect(replies[2].result.isError).toBe(true);
+  // An unstamped line goes as before, with no such header, and is answered as before.
+  expect(replies[3].result.resultType).toBeUndefined();
+  expect(replies[3].result.tools.length).toBeGreaterThan(5);
+});
+
 test("the bridge only talks to this machine: any other address is refused before a request", async () => {
   const root = makeBrain();
   expect(run(root, "add", "cursor", "--kind", "cursor", "--yes").code).toBe(0);

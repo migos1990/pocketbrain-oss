@@ -81,7 +81,33 @@ Each assistant's page on the dashboard shows its budget live: requests in the la
 
 ## The MCP door
 
-`/mcp` (token in the `Authorization` header only; `/mcp/<token>` is refused) speaks MCP over JSON-RPC 2.0, protocol versions 2025-06-18, 2025-03-26 and 2024-11-05: `initialize` answers the client's version when it is one of these, else the newest. A body that isn't JSON gets error -32700, a batch (an array) or a message without `"jsonrpc": "2.0"` gets -32600, and a `tools/call` without a tool name gets -32602. Before a tool runs, its top-level arguments are checked against its input schema: a missing required argument, a value outside an enum or a wrong type comes back as a tool error naming the argument ("query is required; nothing was done, call search again with it fixed") and nothing runs. Numbers and true/false sent as strings pass, since models often quote them. An unknown tool, or one this agent isn't offered, is a tool error too, so the model reads why. `test/mcp-conformance.test.ts` checks every tool's schema and these answers on both paths.
+`/mcp` (token in the `Authorization` header only; `/mcp/<token>` is refused) speaks MCP over JSON-RPC 2.0, protocol version 2026-07-28 (no handshake, see "MCP 2026-07-28" below) and the handshake versions 2025-06-18, 2025-03-26 and 2024-11-05: `initialize` answers the client's version when it is one of those three, else the newest of them. A body that isn't JSON gets error -32700, a batch (an array) or a message without `"jsonrpc": "2.0"` gets -32600, and a `tools/call` without a tool name gets -32602. Before a tool runs, its top-level arguments are checked against its input schema: a missing required argument, a value outside an enum or a wrong type comes back as a tool error naming the argument ("query is required; nothing was done, call search again with it fixed") and nothing runs. Numbers and true/false sent as strings pass, since models often quote them. An unknown tool, or one this agent isn't offered, is a tool error too, so the model reads why. `test/mcp-conformance.test.ts` checks every tool's schema and these answers on both paths.
+
+### MCP 2026-07-28
+
+The 2026-07-28 revision of MCP has no `initialize`: every request carries its version, and the hub answers each one on its own. Both kinds of client use the same address, and how a request opens picks the answer (`src/mcp-era.ts`):
+
+- A request stamped 2026-07-28 or later (the `MCP-Protocol-Version` header, or `io.modelcontextprotocol/protocolVersion` in `params._meta`), or a `server/discover`, is answered the new way. Results carry `resultType: "complete"` and the server's name in `_meta`; `tools/list`, `prompts/list` and `server/discover` also carry `ttlMs: 0` and `cacheScope: "private"`, because each differs per assistant and a pause must show on the next call.
+- Anything else, and `initialize` whatever it is stamped with, is answered exactly as before.
+
+`server/discover` gives the versions the hub speaks, its capabilities (tools and prompts) and the same short instructions `initialize` gives that assistant. The tools, their checks, the budget and the kill switches are the same for both; who is calling comes from the token, never from what the client says about itself.
+
+A stamped request is checked before anything runs:
+
+| What is wrong | HTTP | JSON-RPC error |
+|---|---|---|
+| No `MCP-Protocol-Version` header, or it differs from the version in `_meta` | 400 | -32020 |
+| No `Mcp-Method` header, or it differs from the body's method | 400 | -32020 |
+| On `tools/call` and `prompts/get`: no `Mcp-Name` header, or it differs from the body's name (a `=?base64?…?=` value is decoded first) | 400 | -32020 |
+| No version, or no `io.modelcontextprotocol/clientCapabilities` object, in `_meta` | 400 | -32602 |
+| A version later than the hub speaks | 400 | -32022, with `supported` and `requested` |
+| `ping`, or a method the hub doesn't have | 404 | -32601 |
+
+Not offered: `subscriptions/listen` (the door answers with JSON, never a stream, and says no list changes), tasks, requests for input from the client, and `x-mcp-header` on tool parameters. An unknown tool is still a tool error the model can read, not -32602.
+
+The stdio bridge (`pocketbrain mcp --agent <a>`, `docs/connect.md`) adds the three headers from the body of a stamped request, since stdio carries none. A sign-in that still waits for the owner's approval on the OAuth door is answered the same two ways (`docs/add-an-agent.md`).
+
+On the OAuth door, the 2026-07-28 changes to sign-in (the `iss` parameter on the authorization answer, `application_type` at registration, Client ID Metadata Documents in place of dynamic registration) are between the app and the sign-in service; the hub checks the token it is given as before (`docs/oauth.md`).
 
 ## How a search hit explains itself
 

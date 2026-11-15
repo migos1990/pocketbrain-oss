@@ -15,9 +15,9 @@ The kind is the refusal text cut to its first eight words, with quoted text, num
 
 ## A protocol the hub doesn't speak yet
 
-MCP's 2026-07-28 revision drops the `initialize` handshake: an app stamps every request with its version and may first ask `server/discover`. The hub speaks the handshake versions only. A request stamped 2026-07-28 or later, and `server/discover`, get HTTP 400 with a plain error that names the versions the hub speaks and says to start with `initialize`; nothing runs. That is the answer an app that speaks both needs in order to fall back, so the hub never answers with the newer protocol's own "unsupported version" error, which would tell the app not to.
+The hub speaks MCP 2026-07-28 and the handshake versions before it (`docs/hub.md`, "MCP 2026-07-28"). A request stamped with a later version gets HTTP 400 and the protocol's own "unsupported version" error, which lists the versions the hub speaks so the app can pick one; nothing runs.
 
-Each try is a line here: `mcp 2026-07-28 tools/list`, or `mcp unstamped server/discover`. Only a date and a plain method name are kept of what the app sent. A method the hub doesn't know is `unknown method <name>`. The daily self-check `mcp_version` (`docs/real-use-bar.md`) tells you once which assistant asked, so you can check it still reads the brain.
+Each such try is a line here: `mcp 2027-01-15 tools/list`. Only a date and a plain method name are kept of what the app sent. A method the hub doesn't know is `unknown method <name>`. The daily self-check `mcp_version` (`docs/real-use-bar.md`) tells you once which assistant asked, so you can check it still reads the brain and update pocketBrain.
 
 ## When a door skips the log
 

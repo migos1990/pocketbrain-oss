@@ -34,7 +34,8 @@ import { waitingMcp } from "./access-request";
 import { readCapped, appendJsonl, alert, codeAtStart } from "./util";
 import { newRequestId, withRequest, noteRequest, doorOf, requestsFile, type RequestCtx, type RequestLine } from "./reqid";
 import { whyText } from "./why";
-import { logCall, routeName, modernMcp, modernCall, methodName } from "./calls";
+import { logCall, routeName, modernCall, methodName } from "./calls";
+import { ALL_PROTOCOLS, LEGACY_PROTOCOLS, SERVER_INFO, UNSUPPORTED_VERSION, mcpEra, modernResult } from "./mcp-era";
 import { queryOpts, requestPass } from "./semantic";
 import { meaningOnly } from "./retrieve";
 
@@ -423,7 +424,8 @@ async function callTool(root: string, agent: string, name: string, a: Record<str
 const GARDENER_ONLY = new Set(GARDENER_TOOLS.map((x) => x.name).filter((n) => ![...TOOLS, ...ASK_TOOLS, ...ACT_TOOLS, ...MEMORY_TOOLS].some((t) => t.name === n)));
 export const allTools = () => [...TOOLS, ...ASK_TOOLS, ...ACT_TOOLS, ...MEMORY_TOOLS, ...GARDENER_TOOLS];
 // MCP protocol versions this server speaks, newest first.
-export const SUPPORTED_PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
+// The handshake protocols; 2026-07-28 is served without one (src/mcp-era.ts).
+export const SUPPORTED_PROTOCOLS = LEGACY_PROTOCOLS;
 
 // Top-level arguments checked against the tool's input schema before it runs, so a model gets
 // "query is required" instead of a search for "" (backlog 293). Numbers and booleans sent as
@@ -455,24 +457,26 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
   if (text.trim()) try { parsed = JSON.parse(text); } catch { return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error: the body must be JSON" } }); }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "invalid request: send one JSON-RPC object (batches aren't supported)" } });
   const msg = parsed as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
-  const reply = (result: unknown) => json({ jsonrpc: "2.0", id: msg.id, result });
   const fail = (code: number, message: string) => json({ jsonrpc: "2.0", id: msg.id ?? null, error: { code, message } });
   if (msg.id === undefined) return new Response(null, { status: 202 }); // notifications
   if (msg.jsonrpc !== "2.0") return fail(-32600, "invalid request: jsonrpc must be \"2.0\"");
-  // A client of MCP 2026-07-28 or later sends no initialize: it stamps each request with its version
-  // (header and params._meta) and may ask server/discover first. This door speaks the handshake
-  // protocols only, and has to look like it: such a client falls back to initialize on a 4xx whose
-  // body is not one of the newer protocol's own errors (-32022 and its neighbours), and stays stuck
-  // on anything else, a 200 "method not found" included (G816). Nothing runs; the try is logged
-  // (src/calls.ts) and the daily self-check tells the owner. initialize itself always answers.
-  if (msg.method !== "initialize") {
-    const meta = (msg.params as { _meta?: Record<string, unknown> } | undefined)?._meta;
-    const stamp = [req.headers.get("mcp-protocol-version"), meta && typeof meta === "object" ? meta["io.modelcontextprotocol/protocolVersion"] : undefined].find(modernMcp);
-    if (stamp || msg.method === "server/discover") {
-      logCall(root, agent, modernCall(stamp, msg.method), "protocol version not spoken");
-      const speaks = `this server speaks MCP ${SUPPORTED_PROTOCOLS.join(", ")}: start with initialize`;
-      return json({ jsonrpc: "2.0", id: msg.id, error: stamp ? { code: -32600, message: `invalid request: MCP ${stamp} is not spoken here; ${speaks}` } : { code: -32601, message: `method not found: server/discover; ${speaks}` } }, 400);
-    }
+  // MCP 2026-07-28 has no handshake: each request is stamped with its version and checked on its
+  // own (src/mcp-era.ts, G817). A stamped request that is wrong gets the newer protocol's own error
+  // and HTTP status before anything runs; a version this door doesn't speak is also logged
+  // (src/calls.ts) so the daily self-check tells the owner (G816). Anything unstamped is answered
+  // as the handshake protocols always were, and initialize always answers.
+  const era = mcpEra(req.headers, msg);
+  if (era.modern && era.refuse) {
+    if (era.refuse.code === UNSUPPORTED_VERSION && era.refuse.version) logCall(root, agent, modernCall(era.refuse.version, msg.method), "protocol version not spoken");
+    return json({ jsonrpc: "2.0", id: msg.id, error: { code: era.refuse.code, message: era.refuse.message, ...(era.refuse.data ? { data: era.refuse.data } : {}) } }, era.refuse.status);
+  }
+  const modern = era.modern;
+  // `listed`: the lists and discover, which the newer protocol wants caching hints on.
+  const reply = (result: Record<string, unknown>, listed = false) => json({ jsonrpc: "2.0", id: msg.id, result: modern ? modernResult(result, listed) : result });
+  const contract = () => core.orientation(root, agent, "mcp", "connect").contract;
+  if (modern && msg.method === "server/discover") {
+    logCall(root, agent, "server/discover");
+    return reply({ supportedVersions: ALL_PROTOCOLS, capabilities: { tools: {}, prompts: {} }, instructions: contract() }, true);
   }
   switch (msg.method) {
     case "initialize": {
@@ -481,12 +485,13 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
       return reply({
         protocolVersion: SUPPORTED_PROTOCOLS.includes(asked) ? asked : SUPPORTED_PROTOCOLS[0],
         capabilities: { tools: {}, prompts: {} },
-        serverInfo: { name: "pocketbrain", version: "0.1.0" },
+        serverInfo: SERVER_INFO,
         // The five-line contract; the orientation tool holds the full guide.
-        instructions: core.orientation(root, agent, "mcp", "connect").contract,
+        instructions: contract(),
       });
     }
-    case "ping": return reply({});
+    // The newer protocol has no ping: there it is an unknown method, below.
+    case "ping": if (modern) break; return reply({});
     // An agent whose logs aren't taken (policy logs.accept: false) isn't offered the log tools.
     case "tools/list": {
       const rules = loadRules(root);
@@ -494,7 +499,7 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
         : tokenRole(agent) === "reader" ? TOOLS.filter((t) => !["search_logs", "read_log"].includes(t.name)) : TOOLS;
       const withAct = actOn(rules, agent) && tokenRole(agent) !== "reader" ? [...tools, ...ACT_TOOLS] : tools;
       const withAsk = asksOn(rules, agent) ? [...withAct, ...ASK_TOOLS] : withAct;
-      return reply({ tools: rules.policy.agents[agent]?.role === "gardener" ? [...withAsk, ...GARDENER_TOOLS] : [...withAsk, ...MEMORY_TOOLS] });
+      return reply({ tools: rules.policy.agents[agent]?.role === "gardener" ? [...withAsk, ...GARDENER_TOOLS] : [...withAsk, ...MEMORY_TOOLS] }, true);
     }
     // The owner loads these in one click where a client offers prompts (backlog 344), instead of
     // pasting. The words are the ones `connect` prints and the orientation ends with.
@@ -503,7 +508,7 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
       return reply({ prompts: [
         { name: "standing_instruction", description: `The block to save in your own instructions, so you use ${O}'s brain without being asked` },
         { name: "start_conversation", description: `Start a conversation with ${O}'s brain: orientation, what's new, memory check` },
-      ] });
+      ] }, true);
     }
     case "prompts/get": {
       const name = msg.params?.name;
@@ -542,7 +547,8 @@ async function mcp(root: string, agent: string, req: Request): Promise<Response>
     }
   }
   logCall(root, agent, `unknown method ${methodName(msg.method)}`, "method not found");
-  return fail(-32601, `method not found: ${msg.method}`);
+  // The newer protocol answers an unknown method with HTTP 404; the method is said back only as a plain name.
+  return modern ? json({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: `method not found: ${methodName(msg.method)}` } }, 404) : fail(-32601, `method not found: ${msg.method}`);
 }
 
 // A capture is stored inside the write queue; extraction (a model call) runs after the reply,

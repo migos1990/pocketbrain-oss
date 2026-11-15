@@ -216,11 +216,11 @@ export function selfChecks(root: string, now = new Date()): Check[] {
       ? { name: "connections", ok: false, warn: true, detail: quiet.map((n) => `${n} hasn't read the brain since ${lastRead.get(n)!.slice(0, 10)}: reconnect it, or pause it if you don't use it now (Pause on its page in Settings, or pocketbrain agent pause ${n})`).join("; ") }
       : { name: "connections", ok: true, detail: `${live.length} assistant(s) reading` });
   }
-  // An assistant that asked in an MCP revision the hub doesn't speak (2026-07-28 on, no initialize):
-  // the door refused it so the client falls back, but one that doesn't fall back just stops reading.
+  // An assistant that asked in an MCP revision later than the hub speaks: the door told it which
+  // versions it speaks, but a client that speaks none of them just stops reading.
   const asks = modernAsks(root, now);
   if (asks.ever) out.push(asks.count
-    ? { name: "mcp_version", ok: false, warn: true, detail: `${asks.count} request${asks.count === 1 ? "" : "s"} in the last day asked for a newer MCP protocol than this hub speaks: ${asks.by.map((a) => `${a.agent} (${a.versions.length ? `MCP ${a.versions.join(", ")}: ` : ""}${a.methods.join(", ")})`).join("; ")}. The hub told each to use the older protocol; check that assistant still reads the brain (Who knows), and update pocketBrain when a release speaks the newer one` }
+    ? { name: "mcp_version", ok: false, warn: true, detail: `${asks.count} request${asks.count === 1 ? "" : "s"} in the last day asked for a newer MCP protocol than this hub speaks: ${asks.by.map((a) => `${a.agent} (${a.versions.length ? `MCP ${a.versions.join(", ")}: ` : ""}${a.methods.join(", ")})`).join("; ")}. The hub told each which versions it speaks; check that assistant still reads the brain (Who knows), and update pocketBrain when a release speaks the newer one` }
     : { name: "mcp_version", ok: true, detail: "no request in a newer MCP protocol in the last day" });
   const logDir = join(root, "log");
   const hubRan = existsSync(join(logDir, "starts.jsonl")) || existsSync(join(logDir, "start-state.json"));

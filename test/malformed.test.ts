@@ -12,6 +12,11 @@ import { issueToken } from "../src/auth";
 const rpc = (name: string, args: unknown) => JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
 const POSTS: [string, string][] = [
   ["/mcp", "null"], ["/mcp", "1"], ["/mcp", '"x"'], ["/mcp", "[]"],
+  // MCP 2026-07-28 shapes with the wrong types (G817): never a 500.
+  ["/mcp", JSON.stringify({ jsonrpc: "2.0", id: 1, method: "server/discover", params: "x" })],
+  ["/mcp", JSON.stringify({ jsonrpc: "2.0", id: 1, method: "server/discover", params: { _meta: [] } })],
+  ["/mcp", JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: 5, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": 7 } } })],
+  ["/mcp", JSON.stringify({ jsonrpc: "2.0", id: 1, method: ["tools/list"], params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } })],
   ["/mcp", rpc("log_session", { text: "hi", title: 5 })],
   ["/mcp", rpc("log_session", { text: "hi", channel: null, title: ["a"] })],
   ["/mcp", rpc("log_session", { turns: [{ role: 5, text: null }] })],

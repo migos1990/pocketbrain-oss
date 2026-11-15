@@ -76,7 +76,7 @@ The same probe also looks for what would otherwise end in a hand fix before the 
 | Check | Warns when |
 |---|---|
 | `connections` | an assistant that read the brain in the last 14 days has been silent for 3 days: its token or connection probably stopped working (paused agents and the gardener are left out). The line says what to do: reconnect it, or pause it (Pause on its page in Settings, or `pocketbrain agent pause <agent>`); a paused assistant drops out of this line and the Who knows quiet line, its reads and keys kept, and comes back when you resume it (G747) |
-| `mcp_version` | an assistant's app asked in the last day in an MCP protocol newer than the hub speaks (2026-07-28 on). The hub told it to use the older one; the line names the assistant and what it asked, so you can check on Who knows that it still reads the brain (`docs/refusals.md`) |
+| `mcp_version` | an assistant's app asked in the last day in an MCP protocol newer than the hub speaks (later than 2026-07-28). The hub told it which versions it speaks; the line names the assistant and what it asked, so you can check on Who knows that it still reads the brain (`docs/refusals.md`) |
 | `logs` | the `.json` and `.jsonl` files directly in `log/` total over 500 MB (`PB_LOG_MAX_MB`); names the biggest. Subfolders such as `log/sources/` aren't counted |
 | `release` | `main` has had changes the `release` branch lacks for over 7 days, from the auto-update's `deploy.json` (`unreleased_since`, see [release.md](release.md)). Not checked while auto-update is on hold (`deploy.ts hold`) |
 

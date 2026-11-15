@@ -140,6 +140,29 @@ test("the owner sees the request escaped, reviews it prefilled, and one Approve 
   expect((await rpc(c.token(), "tools/list")).json.result.tools.map((t: any) => t.name)).not.toContain("request_access");
 });
 
+test("G817: a waiting sign-in that speaks MCP 2026-07-28 waits the same way, with no handshake", async () => {
+  const { call, rpc, signIn } = await setup();
+  const c = await signIn();
+  const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
+  const modern = async (method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}) => {
+    const res = await call("/mcp/oauth", { method: "POST", headers: { authorization: `Bearer ${c.token()}`, "MCP-Protocol-Version": "2026-07-28", "Mcp-Method": method, ...(typeof params.name === "string" ? { "Mcp-Name": params.name } : {}), ...headers }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: meta } }) });
+    return { status: res.status, json: await res.json() as any };
+  };
+  const d = await modern("server/discover");
+  expect(d.status).toBe(200);
+  expect(d.json.result).toMatchObject({ resultType: "complete", capabilities: { tools: {} }, ttlMs: 0, cacheScope: "private" });
+  expect(d.json.result.supportedVersions[0]).toBe("2026-07-28");
+  expect(d.json.result.instructions).toBe((await rpc(c.token(), "initialize")).json.result.instructions);
+  const list = await modern("tools/list");
+  expect(list.json.result.tools.map((t: { name: string }) => t.name)).toEqual(["request_access"]);
+  expect((await modern("tools/call", { name: "search", arguments: { query: "plans" } })).json.result.isError).toBe(true);
+  expect((await modern("tools/call", { name: "search", arguments: {} }, { "Mcp-Name": "request_access" })).json.error.code).toBe(-32020);
+  const ping = await modern("ping");
+  expect([ping.status, ping.json.error.code]).toEqual([404, -32601]);
+  // The handshake never answers with a version it doesn't speak as one.
+  expect((await rpc(c.token(), "initialize", { protocolVersion: "2026-07-28" })).json.result.protocolVersion).toBe("2025-06-18");
+});
+
 test("a revoked sign-in gets no waiting session, and one past the hourly cap can't file a request", async () => {
   const { root, rpc, ask, signIn } = await setup();
   const c = await signIn();

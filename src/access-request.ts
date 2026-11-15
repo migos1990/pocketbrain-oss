@@ -9,6 +9,7 @@ import { setPendingRequest, type AccessRequest, type OAuthConfig } from "./oauth
 import { AGENT_NAME, RESERVED, lookalike, lookalikeBase } from "./addagent";
 import { isOwnerId } from "./owner";
 import { readCapped } from "./util";
+import { ALL_PROTOCOLS, LEGACY_PROTOCOLS, SERVER_INFO, mcpEra, modernResult } from "./mcp-era";
 
 const MAX_BODY = 16_000;
 
@@ -108,20 +109,26 @@ export async function waitingMcp(root: string, clientId: string, req: Request): 
     const parsed: unknown = JSON.parse(text);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) msg = parsed as typeof msg;
   } catch { /* answered below */ }
-  const json = (body: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: msg.id ?? null, ...body as object }), { headers: { "content-type": "application/json" } });
-  const reply = (result: unknown) => json({ result });
-  const toolText = (t: string, isError: boolean) => reply({ content: [{ type: "text", text: t }], isError });
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify({ jsonrpc: "2.0", id: msg.id ?? null, ...body as object }), { status, headers: { "content-type": "application/json" } });
   if (msg.id === undefined && msg.method) return new Response(null, { status: 202 }); // notifications
+  // A client of MCP 2026-07-28 waits the same way, with no handshake (src/mcp-era.ts, G817).
+  const era = mcpEra(req.headers, msg);
+  if (era.modern && era.refuse) return json({ error: { code: era.refuse.code, message: era.refuse.message, ...(era.refuse.data ? { data: era.refuse.data } : {}) } }, era.refuse.status);
+  const modern = era.modern;
+  const reply = (result: Record<string, unknown>, listed = false) => json({ result: modern ? modernResult(result, listed) : result });
+  const toolText = (t: string, isError: boolean) => reply({ content: [{ type: "text", text: t }], isError });
+  if (modern && msg.method === "server/discover") return reply({ supportedVersions: ALL_PROTOCOLS, capabilities: { tools: {} }, instructions: WAITING(areaSlices(root)) }, true);
   switch (msg.method) {
     case "initialize":
       return reply({
-        protocolVersion: String(msg.params?.protocolVersion ?? "2025-06-18"),
+        // The client's version when it is a handshake protocol the hub speaks, else the newest of those.
+        protocolVersion: LEGACY_PROTOCOLS.includes(String(msg.params?.protocolVersion)) ? String(msg.params?.protocolVersion) : LEGACY_PROTOCOLS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: "pocketbrain", version: "0.1.0" },
+        serverInfo: SERVER_INFO,
         instructions: WAITING(areaSlices(root)),
       });
-    case "ping": return reply({});
-    case "tools/list": return reply({ tools: [toolFor(areaSlices(root))] });
+    case "ping": if (modern) break; return reply({});
+    case "tools/list": return reply({ tools: [toolFor(areaSlices(root))] }, true);
     case "tools/call": {
       if (msg.params?.name !== TOOL.name) return toolText("This connection is waiting for the owner's approval; the only tool until then is request_access.", true);
       const r = shapeRequest(root, (msg.params?.arguments ?? {}) as Record<string, unknown>);
@@ -132,5 +139,5 @@ export async function waitingMcp(root: string, clientId: string, req: Request): 
       return toolText(SENT, false);
     }
   }
-  return json({ error: { code: -32601, message: "this connection is waiting for the owner's approval" } });
+  return json({ error: { code: -32601, message: "this connection is waiting for the owner's approval" } }, modern ? 404 : 200);
 }
