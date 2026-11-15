@@ -18,7 +18,7 @@ import { isOwnerId } from "../owner";
 import { readDiary, shownValue, displayName, sayDay, sayDays, sayYearly, ID_IN_TEXT, type DiaryRow } from "../diary";
 import { ownerLocal } from "../clock";
 import { ownerConflicts, type SettleCase } from "../core";
-import { unseenFacts, keptFacts, type Unseen } from "../seen";
+import { unseenFacts, keptFacts, heldGuesses, type Unseen } from "../seen";
 import { inboxConflicts } from "../settle-inbox";
 import { comms, proposals, type Proposal } from "./data";
 import { agentLabel, agentTitle, cap } from "./labels";
@@ -178,6 +178,10 @@ export const LINE_COPY = {
   moreHeld: "{value} more held from your assistants",
   keptPrivate: "Kept private: something about {title}",
   keptUnnamed: "Kept private: something only you can see",
+  guessHeld: "Not confirmed: something about {title}",
+  guessUnnamed: "Not confirmed: something only you can see",
+  guessMany: "Not confirmed: {value} things about {title}",
+  guessManyUnnamed: "Not confirmed: {value} things only you can see",
   manyNew: "{value} new things about {title}",
   heldUntil: "Something new about {title}, held until {until}",
   questionSetAside: "A question about {title} was set aside, since only a conflict asks you",
@@ -493,6 +497,8 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   const rules = loadRules(root);
   const notes = new Map(loadBrain(root, { shared: true }).map((n) => [n.fm.id, n]));
   const unseen = unseenFacts(root);
+  // A stranger's guess is held the same but waits for nothing (G883): the full list alone names it.
+  const guesses = heldGuesses(root);
   const disagree = (page: string, title: string | undefined, attr: string) => lineWords(attr === "next_step" ? "disagreeNext" : "disagree", { title: displayName(page, title), attr: words(attr) });
   // A conflict says its two values, as the canvas does, only when they could show on any sign-in:
   // worked out from the page as it is now, never from what the conflict stored (audit v7's rule):
@@ -503,7 +509,7 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
     if (!n || c.private || c.sides.length !== 2 || sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
     const f = n.fm.facts?.[c.attr] as { sensitivity?: string; candidates?: { sensitivity?: string }[]; items?: { sensitivity?: string }[] } | undefined;
     if ([f, ...(f?.candidates ?? []), ...(f?.items ?? [])].some((r) => r?.sensitivity && sensitivityRank(r.sensitivity as never) >= sensitivityRank("private"))) return undefined;
-    if (unseen.some((u) => u.page === c.page)) return undefined;
+    if (unseen.some((u) => u.page === c.page) || guesses.some((u) => u.page === c.page)) return undefined;
     const say = (v: unknown) => plain(v, (x) => { const t = notes.get(x)?.fm.title; return t === undefined ? undefined : String(t); }, slugsOf(notes));
     const vals = c.sides.map((x) => say(x.value));
     if (vals.some((v) => !v || v.length > 80) || sensitiveShape(rules, c.attr, ...vals)) return undefined;
@@ -560,6 +566,16 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   // The full list also shows what the owner kept private, counted nowhere (n: 0), each with Let
   // them have it, so Keep it private is never final (review of #60, G630).
   const kept: Waiting[] = expand ? keptFacts(root).map((u) => ({ n: 0, what: ((name) => name ? lineWords("keptPrivate", { title: name }) : lineWords("keptUnnamed", {}))(heldName(rules, notes.get(u.page), u)), verb: "kept private", href: `/p/${u.page.split("/").map(encodeURIComponent).join("/")}`, seen: u.fact_key, ...(fresh ? { look: [factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)] } : {}), ...(u.unknownSender ? { stranger: true } : {}) })) : [];
+  // A stranger's guess (heldGuesses): on the full list only, counted nowhere, read before it is
+  // let out or kept like any held value. Its page is named under the held card's rule (heldName),
+  // and guesses that would read the same are one card (the keys, one per line), as held cards are.
+  const guessGroups = new Map<string, Unseen[]>();
+  if (expand) for (const u of guesses) { const name = heldName(rules, notes.get(u.page), u) ?? ""; guessGroups.set(name, [...(guessGroups.get(name) ?? []), u]); }
+  const guessed: Waiting[] = [...guessGroups].map(([name, us]) => {
+    const one = us.length === 1, page = us[0]!.page;
+    const what = name ? lineWords(one ? "guessHeld" : "guessMany", { title: name, value: String(us.length) }) : lineWords(one ? "guessUnnamed" : "guessManyUnnamed", { value: String(us.length) });
+    return { n: 0, what, verb: "not confirmed", href: us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(fresh ? { look: pageSentences(us.map((u) => ({ page: u.page, title: notes.get(u.page)?.fm.title ?? u.title, attr: u.attr, value: u.value })), notes) } : {}), stranger: true };
+  });
   // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
   const asking = settleCards(open.filter((c) => !c.held), inboxConflicts(root)).map((cs) => card(cs, "tap to settle"));
   // A message the relay held between two assistants: send it or not, on its own settle screen.
@@ -579,7 +595,7 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   });
   // What waits on Settings (src/waiting.ts): one card that counts it and links there (G626).
   const settings: Waiting[] = asks.settings > 0 ? [{ n: asks.settings, what: settingsWords(asks), verb: "on Settings", href: SETTINGS_HREF }] : [];
-  return { waiting: [...asking, ...mail, ...teach, ...link, ...shown, ...kept, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
+  return { waiting: [...asking, ...mail, ...teach, ...link, ...shown, ...kept, ...guessed, ...settings], gardener: open.filter((c) => c.held).map((c) => line(c, "the Gardener looks tonight")) };
 }
 
 // The home's waiting cards alone, for a test or a probe.

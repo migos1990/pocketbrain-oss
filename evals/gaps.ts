@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G883: {
+    closed: "claude/private-guess-no-ask",
+    title: "A stranger's private guess counted as an ask on the home",
+    severity: "medium",
+    finding: "The owner's home, 2026-11-15: 4 asks, 1 a contradiction; the other 3 were private values an assistant filed from mail whose sender no page holds. Since G868 such a value is a guess, yet src/waiting.ts still counted each one under held_by_serving and the home listed it as a locked card. The home asks only on a conflict (invariant 6).",
+    fix: "The owner's pick on the decision card of 2026-11-15 13:11Z (\"Stop asking, keep as guess\"). src/seen.ts: a held value whose every waiting record carries sender unknown and that nobody vouched for (lineState guess) is in heldGuesses, never in unseenFacts, so ownerAsks, the home's number and the north star's asks all drop it (guess_held is printed, not counted). It stays unseen, hidden from every carve as before; the home's full list names it under Not confirmed, uncounted, with the same read first, Let them have it and Keep it private. A value with one waiting record from anyone else still asks. Review of #200: a guess card whose group spans pages links to the full list and showed under the held heading too; the held heading never takes a guess card (src/dashboard/html-app.ts). Not done here: a row for it on the page itself (src/dashboard/html-page.ts waits for the second-level pages branch). test/private-guess-no-ask.test.ts.",
+  },
   G890: {
     closed: "claude/cold-install",
     title: "A new brain's first assistant save was refused twice, then saved where no screen showed it",

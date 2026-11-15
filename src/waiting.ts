@@ -3,7 +3,9 @@
 // count the same items. Every open decision the hub won't file on its own (src/textline/items.ts
 // openItems, less src/filing.ts autoSaves and its queues), the other cards that wait for a tap, a
 // capture held past its day, and each value the serving hold keeps until the owner taps Show it
-// (src/seen.ts), and a question about a class the owner may teach (src/teaching.ts, G715). The
+// (src/seen.ts; never a stranger's guess, which is held but waits for nothing, G883: the owner's
+// pick on the decision card of 2026-11-15 13:11Z, "Stop asking, keep as guess", and his typed
+// yes in the UI thread at 13:56Z), and a question about a class the owner may teach (src/teaching.ts, G715). The
 // home lists conflicts, held mail, held values and the teaching questions itself; the rest wait on
 // Settings, and the home counts them under one heading that links there.
 // What counts here is the owner's to change (scripts/north-star.ts head); G626 rests on the
@@ -15,7 +17,7 @@ import { openItems, type Item } from "./textline/items";
 import { autoSaves, newQueues, heldByAccess, type Queues } from "./filing";
 import { heldCount } from "./capture";
 import { inboxConflicts } from "./settle-inbox";
-import { unseenFacts } from "./seen";
+import { unseenFacts, heldGuesses } from "./seen";
 import { waitingTeachAsks } from "./teaching";
 import { waitingLinkAsks } from "./dangling";
 
@@ -31,6 +33,7 @@ export interface OwnerAsks {
   other: Item[]; // the other cards that ask
   stuck: number; // captures held past their day
   serving: number; // values the serving hold keeps for Show it
+  guesses: number; // held values that are only a stranger's guess: not an ask, in no count (G883)
   teach: number; // questions about a class the owner may teach, answered on the home
   link: number; // questions about a fact linking a page the brain doesn't have, answered on the home (G749)
   total: number;
@@ -70,5 +73,5 @@ export function ownerAsks(root: string, now = new Date(), later = now): OwnerAsk
   if (link) by.link = link;
   const total = Object.values(by).reduce((a, b) => a + b, 0);
   const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + serving + teach + link;
-  return { by, waiting, other, stuck, serving, teach, link, total, settings: total - onHome, queues, homeConflicts, byAccess };
+  return { by, waiting, other, stuck, serving, guesses: heldGuesses(root).length, teach, link, total, settings: total - onHome, queues, homeConflicts, byAccess };
 }

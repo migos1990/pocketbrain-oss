@@ -12,7 +12,7 @@ import { makeBrain } from "./fixture";
 import { homeView, waitingCount } from "../src/dashboard/home";
 import { loadRules } from "../src/rules";
 import { loadBrain } from "../src/brain";
-import { unseenFacts } from "../src/seen";
+import { unseenFacts, heldGuesses } from "../src/seen";
 import { dashboardHandler } from "../src/dashboard/server";
 
 const fact = (src: string, sender: string) => `{ value: "x", as_of: 2026-10-28, sources: ["gmail:${src}"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true, sender: ${sender} }`;
@@ -33,15 +33,18 @@ const NOW = new Date("2026-10-29T23:00:00Z");
 
 test("held cards never name a stranger's subject or a money page, and the same card shows once", () => {
   const root = brain();
-  expect(unseenFacts(root)).toHaveLength(3);
-  const v = homeView(root, loadRules(root), loadBrain(root), NOW);
+  // A stranger's held values are guesses (G883): off the home's face and its count, one card on the full list.
+  expect(unseenFacts(root)).toHaveLength(0);
+  expect(heldGuesses(root)).toHaveLength(3);
+  expect(homeView(root, loadRules(root), loadBrain(root), NOW).waiting).toEqual([]);
+  const v = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
   const held = v.waiting.filter((w) => w.seen);
-  expect(held.map((w) => w.what)).toEqual(["3 new things only you can see."]);
+  expect(held.map((w) => w.what)).toEqual(["Not confirmed: 3 things only you can see."]);
   expect(held[0]!.stranger).toBe(true);
   expect(held[0]!.seen!.split("\n").sort()).toEqual(["money/apple-payment-1#amount", "money/apple-payment-2#amount", "notes/louis-manulife-group-benefits-claim#status"]);
   const words = JSON.stringify([...v.waiting, ...v.since, ...v.earlier.flatMap((d) => d.lines)].map((l) => l.what));
   expect(words).not.toMatch(/Apple|payment|Manulife|benefits/);
-  expect(waitingCount(root, NOW)).toBe(3); // one card, three things (G625)
+  expect(waitingCount(root, NOW)).toBe(0);
 });
 
 test("Read it on a grouped card shows each of its values", async () => {
@@ -50,13 +53,13 @@ test("Read it on a grouped card shows each of its values", async () => {
   const d = dashboardHandler(root, { port: 8794, loginKey: "k".repeat(32), now: () => NOW });
   const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
-  const home = await (await d.handle(new Request(`http://${H}/home`, { headers: { host: H, cookie } }))).text();
+  const home = await (await d.handle(new Request(`http://${H}/home?all=1`, { headers: { host: H, cookie } }))).text();
   const m = home.match(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="([^"]*)"><input type="hidden" name="key" value="([^"]+)"/)!;
   expect(m).not.toBeNull();
   const key = m[2]!.replace(/&#10;/g, "\n");
   const r = await d.handle(new Request(`http://${H}/action/diary-seen`, { method: "POST", headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: `http://${H}` }, body: new URLSearchParams({ csrf: m[1]!, key }).toString() }));
   expect(r.status).toBe(303);
-  expect(unseenFacts(root)).toHaveLength(0);
+  expect(heldGuesses(root)).toHaveLength(0);
 });
 
 test("a held value on a page with a plain name from a known sender still names its page", () => {

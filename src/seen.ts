@@ -13,6 +13,7 @@ import { OWNER } from "./owner";
 import { appendDiary, diaryRow, shownValue } from "./diary";
 import { logWrite } from "./write";
 import { renderTouchedPages } from "./wiki";
+import { lineState } from "./sources";
 
 // unknownSender: a held record came from a mail whose sender no page holds (`sender: "unknown"`,
 // never the address; src/sender.ts).
@@ -20,16 +21,32 @@ export interface Unseen { fact_key: string; page: string; title: string; attr: s
 
 const liveUnseen = (f: unknown): FactRecord[] => (f ? records(f as never).filter((r) => r.unseen && !r.valid_to && !r.retired) : []);
 
-// Every fact with a value the owner hasn't seen yet. A value the owner read and kept private
-// (keepPrivate) stays held from every agent but waits for nothing (G630).
-export function unseenFacts(root: string): Unseen[] {
+const unseenOf = (n: { fm: { id: string; title?: unknown; sensitivity: string } }, attr: string, f: unknown, recs: FactRecord[]): Unseen =>
+  ({ fact_key: `${n.fm.id}#${attr}`, page: n.fm.id, title: String(n.fm.title ?? n.fm.id), attr, value: shownValue(f as never), sensitivity: recs.map((r) => r.sensitivity).find(Boolean) ?? n.fm.sensitivity, unknownSender: recs.some((r) => (r as { sender?: unknown }).sender === "unknown") });
+
+// A held value that is only a stranger's claim (G883): every record of it that waits came from a
+// sender no person page holds and nobody vouched for it since, so each is a guess (lineState,
+// G868). One record from anyone else and the value waits like any held value.
+const strangerGuess = (recs: FactRecord[]) => recs.length > 0 && recs.every((r) => (r as { sender?: unknown }).sender === "unknown" && lineState(r) === "guess");
+
+function held(root: string, pick: "waits" | "guess"): Unseen[] {
   const out: Unseen[] = [];
   for (const n of loadBrain(root)) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     const recs = liveUnseen(f).filter((r) => !r.kept_private);
-    if (recs.length) out.push({ fact_key: `${n.fm.id}#${attr}`, page: n.fm.id, title: String(n.fm.title ?? n.fm.id), attr, value: shownValue(f), sensitivity: recs.map((r) => r.sensitivity).find(Boolean) ?? n.fm.sensitivity, unknownSender: recs.some((r) => (r as { sender?: unknown }).sender === "unknown") });
+    if (recs.length && strangerGuess(recs) === (pick === "guess")) out.push(unseenOf(n, attr, f, recs));
   }
   return out;
 }
+
+// Every fact with a value that waits for the owner to see it. A value the owner read and kept
+// private (keepPrivate) stays held from every agent but waits for nothing (G630), and so does a
+// stranger's guess (heldGuesses): the home asks only on a conflict (owner's pick, 2026-11-15).
+export const unseenFacts = (root: string): Unseen[] => held(root, "waits");
+
+// The held values that are only a stranger's guess: held from every agent exactly as before
+// (carve.ts reads `unseen`), waiting for nothing and counted nowhere. The home's full list shows
+// them, each with Let them have it and Keep it private (markSeen, keepPrivate).
+export const heldGuesses = (root: string): Unseen[] => held(root, "guess");
 
 // shareWith: the only assistants the value goes to after Show (another person's health, school,
 // legal or money matter is kept for the resolver alone, src/write.ts), [] for none; undefined: all

@@ -19,6 +19,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- Your home no longer counts or lists a private value that came from an address your pages don't hold: it is a guess, and the home asks only on a conflict. It stays held from every assistant. The full list shows it under **Not confirmed**, where you can read it and let your assistants have it or keep it private (G883).
 - **A new brain starts with your own page, and says what to tell it.** `init` makes your page in the area your first assistant reads, so "remember that I prefer short answers" has somewhere to land. Until your page holds three things, your home and init's last line ask you to tell your memory three things about you, and `pocketbrain open` opens your memory's home, signed in, from any terminal (on Linux too) (G890).
 - What an assistant on trial saved about you now shows on your home under "Not confirmed". It stays a guess: it asks you nothing, no assistant reads it, and it goes away by itself; say it in the box to keep it. Before, it was saved where no screen showed it (G890).
 - The box files "I work at Northwind" and "Remember that I live in Lisbon" on your own page. The first made a page called "I", and the second wasn't understood (G891).

@@ -64,7 +64,10 @@ test("a stranger's held values and named ones never make two counts: the card th
   expect(counted).toHaveLength(1);
   expect(held.at(-1)).toBe(counted[0]);
   const n = (w: { what: string }) => /^(\d+) /.exec(w.what) ? Number(/^(\d+) /.exec(w.what)![1]) : 1;
-  expect(held.reduce((a, w) => a + n(w), 0)).toBe(7);
+  // The stranger's three are guesses (G883): held, on the full list, never in this count.
+  expect(held.reduce((a, w) => a + n(w), 0)).toBe(4);
+  const guessed = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true }).waiting.filter((w) => w.verb === "not confirmed");
+  expect(guessed.map((w) => [w.what, w.n, w.seen!.split("\n").length])).toEqual([["Not confirmed: 3 things only you can see.", 0, 3]]);
   // The two named cards release one value each; the card that counts releases nothing.
   expect(held.slice(0, -1).reduce((a, w) => a + w.seen!.split("\n").length, 0)).toBe(2);
   expect(held.at(-1)!.seen).toBeUndefined();
@@ -92,17 +95,19 @@ test("the card that counts the rest links to them and has no Read it: one tap ne
 
 test("receipts from strangers are one card that names none of them (owner's phone, 2026-10-31, G568)", () => {
   const root = receipts(5);
-  const v = homeView(root, loadRules(root), loadBrain(root), NOW);
-  expect(v.waiting.map((w) => w.what)).toEqual(["5 new things only you can see."]);
+  // Guesses since G883: nothing on the home's face, one uncounted card on the full list.
+  expect(homeView(root, loadRules(root), loadBrain(root), NOW).waiting).toEqual([]);
+  const v = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
+  expect(v.waiting.map((w) => w.what)).toEqual(["Not confirmed: 5 things only you can see."]);
   expect(v.waiting[0]!.seen!.split("\n")).toHaveLength(5);
 });
 
 test("one held value keeps its own row and Show", () => {
   const root = receipts(1);
-  const v = homeView(root, loadRules(root), loadBrain(root), NOW);
+  const v = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
   expect(v.waiting).toHaveLength(1);
   expect(v.waiting[0]!.seen).toBe("money/apple-payment-1#amount");
-  expect(v.waiting[0]!.what).toBe("Something new only you can see.");
+  expect(v.waiting[0]!.what).toBe("Not confirmed: something only you can see.");
 });
 
 test("each held value has one Read it on the home: its card, never its memory too (Mac, 2026-10-31, G550)", async () => {

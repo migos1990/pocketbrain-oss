@@ -17,7 +17,9 @@ import { loadRules } from "../src/rules";
 import { upkeep } from "../src/upkeep";
 import { readDiary } from "../src/diary";
 import { undoFact } from "../src/undo";
-import { unseenFacts } from "../src/seen";
+import { unseenFacts as waits, heldGuesses } from "../src/seen";
+// Every held value: the ones that wait and a stranger's guesses (G883).
+const unseenFacts = (root: string) => [...waits(root), ...heldGuesses(root)];
 import { machineFacts, setAsideBefore } from "../src/receipt-pages";
 import { recordMachineMail, machineMail } from "../src/louis";
 import { setMachineMailAside } from "../src/ownerset";

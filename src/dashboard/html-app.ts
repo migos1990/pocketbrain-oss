@@ -60,6 +60,8 @@ export const APP_COPY = {
   keepPrivate: "Keep it private",
   keptHead: "Kept private",
   keptHint: "You kept these from your assistants. Let them have one whenever you like.",
+  guessHead: "Not confirmed",
+  guessHint: "From addresses your pages don't hold. Your assistants don't get these, and nothing waits on you.",
   readIt: "Read it",
   keptPrivate: "Kept private. Your assistants won't get it.",
   settleHead: "To settle",
@@ -400,7 +402,8 @@ const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<
 // settle, held values to show; the Gardener's are apart and not counted. What was just done is a
 // quiet done line, never a card.
 const isKept = (w: Waiting) => w.verb === "kept private";
-const held = (w: Waiting) => (!!w.seen && !isKept(w)) || w.href === "/home?all=1";
+const isGuess = (w: Waiting) => w.verb === "not confirmed";
+const held = (w: Waiting) => !isGuess(w) && ((!!w.seen && !isKept(w)) || w.href === "/home?all=1");
 const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
 const isQuestion = (w: Waiting) => !!w.teach || !!w.link;
 const group = (head: string, hint: string, cards: string[], n: number | null = cards.length) => cards.length ? `<h2 class="group">${esc(head)}${n === null ? "" : ` <b>${n}</b>`}</h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
@@ -412,13 +415,15 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const lines = v.all ? all : faceLines(all, faceRoom(v.waiting.length + v.gardener.length));
   const more = v.all ? 0 : all.length - lines.length + v.folded + v.earlierFolded;
   // Each heading carries its own count, and the two add up to the big number.
-  const settle = v.waiting.filter((w) => !held(w) && !isKept(w) && !onSettings(w) && !isQuestion(w)), questions = v.waiting.filter(isQuestion), hold = v.waiting.filter(held), elsewhere = v.waiting.filter(onSettings), kept = v.waiting.filter(isKept);
+  const settle = v.waiting.filter((w) => !held(w) && !isKept(w) && !isGuess(w) && !onSettings(w) && !isQuestion(w)), questions = v.waiting.filter(isQuestion), hold = v.waiting.filter(held), elsewhere = v.waiting.filter(onSettings), kept = v.waiting.filter(isKept), guessed = v.waiting.filter(isGuess);
   const asks = group(APP_COPY.settleHead, APP_COPY.settleHint, settle.map((w) => waitingCard(w, csrf)), waitingTotal(settle))
     + group(APP_COPY.answerHead, APP_COPY.answerHint, questions.map((w) => waitingCard(w, csrf)), waitingTotal(questions))
     + group(APP_COPY.heldHead, APP_COPY.heldHint, hold.map((w) => waitingCard(w, csrf)), waitingTotal(hold))
     + group(APP_COPY.settingsHead, APP_COPY.settingsHint, elsewhere.map((w) => waitingCard(w, csrf)), waitingTotal(elsewhere))
     // What the owner kept private, on the full list only: nothing waits, so no count (G630).
     + group(APP_COPY.keptHead, APP_COPY.keptHint, kept.map((w) => waitingCard(w, csrf)), null)
+    // A stranger's guess, on the full list only: held, never an ask, so no count (G883).
+    + group(APP_COPY.guessHead, APP_COPY.guessHint, guessed.map((w) => waitingCard(w, csrf)), null)
     + (v.gardener.length ? `<h2 class="group">${esc(APP_COPY.gardenerHead)}</h2><ul class="mind">${v.gardener.map((w) => waitingCard(w, csrf, true)).join("")}</ul>` : "");
   const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
   const unconfirmed = group(APP_COPY.unconfirmedHead, APP_COPY.unconfirmedHint, (v.unconfirmed ?? []).map((u) => `<li class="card">${u.page ? `<a class="what" href="${href(u.page)}">${esc(u.what)}</a>` : `<span class="what">${esc(u.what)}</span>`}<div class="foot"><small>${esc(u.from)}</small></div></li>`), null);
