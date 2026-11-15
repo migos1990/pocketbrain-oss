@@ -55,6 +55,7 @@ sources:
     area: work               # where new notes from this source land
     max_per_day: 30          # items read per day (default 30), counted across the day; the rest waits for the next day
     # skip_bulk: false       # mail: also read list, bulk and machine-sent mail (skipped by default)
+    # count_sent: 90         # gmail: count who you write to from sent mail's To, Cc and Date only (docs/standing.md); set with `pocketbrain sources count-sent`
     new_notes_per_day: 3     # new notes proposed per day (default 3); the rest wait in inbox/held and file the next day
   work-mail:                  # one source per mailbox: each has its own allowlist, cursor and grant
     kind: mail               # gmail | mail (IMAP, Outlook, iCloud: keyed by Message-ID)

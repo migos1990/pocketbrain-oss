@@ -6,7 +6,7 @@
 import { CoreError } from "../core";
 import { loadBrain, type Note } from "../brain";
 import type { StandingTier } from "../rules";
-import { loadStanding, setStanding, suggestStanding, approveSuggestion, dismissSuggestion, dismissedSuggestions, undismissSuggestion, suggestAuthority, approveAuthority, dismissAuthority, classSets, approveStudents, bookSet, approveBook, standingProblem, unpinnedAddresses, confirmedAddresses, orphanStanding, TIERS, type Suggestion, type AuthoritySuggestion, type ClassSet } from "../standing";
+import { loadStanding, setStanding, suggestStanding, approveSuggestion, dismissSuggestion, dismissedSuggestions, undismissSuggestion, suggestAuthority, approveAuthority, dismissAuthority, classSets, approveStudents, bookSet, approveBook, toldSet, approveTold, mailWithoutSent, standingProblem, unpinnedAddresses, confirmedAddresses, orphanStanding, TIERS, type Suggestion, type AuthoritySuggestion, type ClassSet } from "../standing";
 import { samePersonProposals, mergeSamePerson, notSamePerson, undoPersonMerge, personMerges, type SamePerson } from "../sameperson";
 import { esc, button, type Page } from "./html";
 import type { State } from "./data";
@@ -36,10 +36,10 @@ function levelForm(csrf: string, person: string, tier: StandingTier | undefined,
 // The addresses that produced the counts, and who vouched for each: an address only a source
 // vouched for can come from a forged message, so the owner sees it before approving.
 function suggestionItem(s: State, csrf: string, x: Suggestion) {
-  const via = x.via.map((v) => `${esc(v.address)} <span class="sub">(${v.confirmed ? "you confirmed it" : "from a source only, not confirmed by you"})</span>`).join(", ");
+  const via = x.via.map((v) => `${v.by_name ? `<b>${esc(v.address)}</b>` : esc(v.address)} <span class="sub">(${v.by_name ? "matched by the name on mail you sent; it is not on their page" : v.confirmed ? "you confirmed it" : "from a source only, not confirmed by you"})</span>`).join(", ");
   // The tap sends the level and the authority it showed; the server derives both again.
   const go = x.authority ? `Make ${LABEL[x.tier]}, ${AUTH[x.authority]}` : `Make ${LABEL[x.tier]}`;
-  return `<div class="item"><div class="what"><span class="kind">suggested: ${esc(LABEL[x.tier])}</span>${noteLink(s, x.person)}<div class="sub">${esc(x.why)}</div>${via ? `<div class="sub">Counted from ${via}</div>` : ""}${x.authority ? `<div class="sub"><b>${HOLDS[x.authority]}.</b> ${esc(x.authority_why ?? "")}</div>` : ""}</div>
+  return `<div class="item"><div class="what"><span class="kind">suggested: ${esc(LABEL[x.tier])}</span>${noteLink(s, x.person)}<div class="sub">${esc(x.why)}</div>${(x.more ?? []).map((w) => `<div class="sub">${esc(w)}</div>`).join("")}${via ? `<div class="sub">Counted from ${via}</div>` : ""}${x.authority ? `<div class="sub"><b>${HOLDS[x.authority]}.</b> ${esc(x.authority_why ?? "")}</div>` : ""}</div>
 <div class="acts">${button(csrf, "standing-approve", { person: x.person, tier: x.tier, authority: x.authority ?? "none" }, go, "go")}${levelForm(csrf, x.person, x.tier, x.authority, "Set")}${button(csrf, "standing-dismiss", { person: x.person, tier: x.tier }, "Not now")}</div></div>`;
 }
 
@@ -69,6 +69,16 @@ ${people.map((p) => `<label class="tick"><input type="checkbox" name="tick:${esc
 <div class="acts"><button class="go">${n === 1 ? "Make known" : "Make them known"}</button><button name="none" value="1">None of them</button></div></form></div>`;
 }
 
+// People the owner told the memory about, and nothing else to go on: one question, none ticked.
+function toldItem(csrf: string, people: { id: string; title: string; times: number }[]) {
+  const n = people.length;
+  return `<div class="item"><div class="what"><span class="kind">from your own words</span>${n === 1 ? "You told the memory about this person. Are they someone you deal with?" : `You told the memory about these ${n} people. Tick the ones you deal with.`}</div>
+<form class="students" method="post" action="/action/standing-told"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="shown" value="${esc(people.map((p) => p.id).join(","))}">
+${people.map((p) => `<label class="tick"><input type="checkbox" name="tick:${esc(p.id)}" value="1"> ${esc(p.title)} <span class="sub">(${p.times} things you said)</span></label>`).join("")}
+<div class="sub">Known is normal priority: people you deal with. Anyone you leave unticked is not asked about again.</div>
+<div class="acts"><button class="go">Make the ticked ones known</button><button name="none" value="1">None of them</button></div></form></div>`;
+}
+
 // "Same person?": two person notes sharing a trusted address (src/sameperson.ts). Merge keeps the
 // older note; Swap keeps the other; Not the same hides the pair until a new shared address shows.
 // A pair the rules keep apart (areas, excludes by name, an open dispute) shows why, and no Merge
@@ -88,7 +98,9 @@ export function peoplePage(s: State, csrf: string): Page {
   const authorities = suggestAuthority(s.root, s.notes);
   const classes = classSets(s.root, s.notes);
   const book = bookSet(s.root, s.notes);
-  const asks = suggestions.length + authorities.length + classes.length + (book.length ? 1 : 0);
+  const unsent = mailWithoutSent(s.root);
+  const told = toldSet(s.root, s.notes);
+  const asks = suggestions.length + authorities.length + classes.length + (book.length ? 1 : 0) + (told.length ? 1 : 0);
   const orphans = new Set(orphanStanding(s.root, s.notes));
   const placed = Object.entries(st.people).filter(([id]) => !orphans.has(id));
   const hidden = dismissedSuggestions(s.root);
@@ -106,11 +118,12 @@ ${pins.length ? `<div class="sub">${pins.map((a) => button(csrf, "standing-pin",
   const merged = personMerges(s.root).slice(-5);
   const body = `<h1>Who matters</h1>
 ${broken ? `<div class="flash err">${esc(broken)}. Until you fix it by hand, every sender counts as unknown and these buttons change nothing.</div>` : ""}
-<p class="sub">How much weight your assistants give someone's ask. It never changes what anyone can see, and a message counts only from an address you trust. Suggestions come from your own address book, mail and texts, each with its reason; nothing changes until you click, and only you put someone in your inner circle.</p>
+<p class="sub">How much weight your assistants give someone's ask. It never changes what anyone can see, and a message counts only from an address you trust. Suggestions come from your own address book, mail, meetings and what you told the memory, each with its reason; nothing changes until you click, and only you put someone in your inner circle.</p>
 ${same.length || merged.length ? `<h2>Same person?${same.length ? ` (${same.length})` : ""}</h2>
 <div class="card">${same.map((p) => samePersonItem(s, csrf, p)).join("")}${merged.map((m) => `<div class="item"><div class="what"><span class="kind">merged</span>${esc(m.drop)} into ${noteLink(s, m.keep)}</div><div class="acts">${button(csrf, "same-person-undo", { id: m.id }, "Undo", "", `Put ${m.drop} back as its own note?`)}</div></div>`).join("")}</div>` : ""}
 <h2>Suggested${asks ? ` (${asks})` : ""}</h2>
-<div class="card">${classes.map((c) => classItem(csrf, c)).join("")}${authorities.map((x) => authorityItem(s, csrf, x)).join("")}${suggestions.map((x) => suggestionItem(s, csrf, x)).join("")}${book.length ? bookItem(csrf, book) : ""}${asks ? "" : '<div class="empty">No suggestions. They come from your address book, mail and texts.</div>'}
+${unsent.length ? `<p class="sub">Your mail source ${unsent.map((n) => `"${esc(n)}"`).join(", ")} reads your inbox but not the mail you send, so nobody can be suggested from mail yet. To count who you write to (names and dates only, never what you wrote), run <code>pocketbrain sources count-sent ${esc(unsent[0]!)} on</code>.</p>` : ""}
+<div class="card">${classes.map((c) => classItem(csrf, c)).join("")}${authorities.map((x) => authorityItem(s, csrf, x)).join("")}${suggestions.map((x) => suggestionItem(s, csrf, x)).join("")}${book.length ? bookItem(csrf, book) : ""}${told.length ? toldItem(csrf, told) : ""}${asks ? "" : '<div class="empty">No suggestions. They come from your address book, mail, meetings and your own words.</div>'}
 ${hidden.length ? `<div class="item"><div class="what"><span class="kind">not now</span>${hidden.map((id) => `${esc(titleOf(s, id))} ${button(csrf, "standing-undismiss", { person: id }, "Suggest again")}`).join(" ")}<div class="sub">Hidden at the level you dismissed; a higher level is still suggested.</div></div></div>` : ""}</div>
 <h2>Your list</h2>
 <div class="card">${TIERS.flatMap((t) => placed.filter(([, e]) => e.tier === t)).map(([id, e]) => row(id, e)).join("") || '<div class="empty">Nobody yet. Start with your inner circle below.</div>'}
@@ -167,6 +180,12 @@ export function standingAction(root: string, action: string, f: Record<string, s
     const ticked = f.none === "1" ? [] : Object.keys(f).filter((k) => k.startsWith("tick:") && f[k] === "1").map((k) => k.slice(5));
     const done = wrap(() => approveStudents(root, course, shown, ticked));
     return done.length ? `${done.length === 1 ? "1 person is" : `${done.length} people are`} now under your authority.` : "None of them. They won't be asked about again.";
+  }
+  if (action === "standing-told") {
+    const shown = (f.shown ?? "").split(",").filter(Boolean);
+    const ticked = f.none === "1" ? [] : Object.keys(f).filter((k) => k.startsWith("tick:") && f[k] === "1").map((k) => k.slice(5));
+    const done = wrap(() => approveTold(root, shown, ticked));
+    return done.length ? `${done.length === 1 ? "1 person is" : `${done.length} people are`} now known.` : "None of them. They won't be asked about again.";
   }
   if (action === "standing-book") {
     const shown = (f.shown ?? "").split(",").filter(Boolean);

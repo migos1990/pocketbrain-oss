@@ -20,7 +20,7 @@ import { findInjection, redactSecrets } from "./checks";
 // to a person's page by an address the page holds (G695); not the owner, not a room.
 // `names`: the guests' names as the invite gives them (a display name, or an address shaped
 // first.last), hashed the same way; a page ties by one only as a guess, said as one (G746).
-export interface Upcoming { id: string; version: string; summary: string; location?: string; start: string; source: string; sensitivity?: Sensitivity; who?: string[]; names?: string[] }
+export interface Upcoming { id: string; version: string; summary: string; location?: string; start: string; source: string; sensitivity?: Sensitivity; who?: string[]; names?: string[]; mine?: "organizer" | "accepted" }
 interface CacheFile { sources: Record<string, { at: string; events: Upcoming[] }> }
 
 const DAYS = 60;          // how far ahead the cache reaches
@@ -47,7 +47,10 @@ export function toUpcoming(r: Record<string, any>, source: string, sensitivity?:
   const guests = (Array.isArray(r.attendees) ? r.attendees : []).filter((a: Record<string, unknown>) => a && !a.self && !a.resource && typeof a.email === "string" && !/@resource\.calendar\.google\.com$/i.test(String(a.email)) && a.responseStatus !== "declined");
   const who = guests.length && guests.length <= GUESTS ? [...new Set(guests.map((a: Record<string, unknown>) => guestKey(String(a.email))))] as string[] : [];
   const names = who.length ? [...new Set(guests.flatMap((a: Record<string, unknown>) => guestNames(String(a.email), a.displayName)).map(nameKeyOf))] as string[] : [];
-  return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}), ...(who.length ? { who } : {}), ...(names.length ? { names } : {}) };
+  // The owner's own part in it (G829): he set it up, or said yes. An invite he never answered has neither.
+  const self = (Array.isArray(r.attendees) ? r.attendees : []).find((a: Record<string, unknown>) => a?.self);
+  const mine = r.organizer?.self ? "organizer" as const : self?.responseStatus === "accepted" ? "accepted" as const : undefined;
+  return { id: String(r.id), version: String(r.etag ?? r.updated ?? "1").replace(/"/g, ""), summary, ...(location ? { location } : {}), start, source, ...(sensitivity ? { sensitivity } : {}), ...(who.length ? { who } : {}), ...(names.length ? { names } : {}), ...(mine ? { mine } : {}) };
 }
 
 const EMAIL_ATTR = /^(?:\w+_)?e-?mails?$/i;

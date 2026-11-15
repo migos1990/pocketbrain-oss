@@ -21,7 +21,10 @@ import { factHiddenReason, records, visibleFacts, type CarveResult, type Visible
 import { normalizeValue } from "./normalize";
 import { ownerVouched, refString } from "./sources";
 import { OWNER, isOwnerConfirmed } from "./owner";
-import { hubReadRefs } from "./pull";
+import { hubReadRefs, loadSources } from "./pull";
+import { guestKey, loadCalendar, nameKeyOf } from "./upcoming";
+import { lineState } from "./sources";
+import { today } from "./brain";
 import { personKey } from "./write";
 import { ownerOf, ownerTitle, CAPDIRS } from "./capture";
 import { sensitivityRank } from "./brain";
@@ -106,6 +109,10 @@ export function parseAddress(raw: string): string | undefined {
   return undefined;
 }
 
+// Exactly these, or an attribute the brain's checks.yaml gives an email or phone rule. Narrower on
+// purpose than the calendar's join (src/upcoming.ts EMAIL_ATTR, any `x_email`): an `assistant_email`
+// or `spouse_email` on a page is someone else's address, and here an address carries the page's
+// priority and, once pinned, its authority (slice audit of 59a6714, G880).
 const ADDRESS_ATTRS = new Set(["email", "emails", "phone", "phones"]);
 function isAddressAttr(rules: Rules, type: string, attr: string) {
   const n = attributeSpec(rules, type, attr).normalize;
@@ -275,7 +282,28 @@ export function orphanStanding(root: string, notes = loadBrain(root)): string[] 
 
 // ---------- signals from the owner's own traffic ----------
 
-interface Contact { in: number; out: number; first: string; last: string; last_in?: string; last_out?: string; reply_minutes?: number[] }
+// `names`: hashed keys of the name the owner's own mail put on the To line for this address (or of
+// a first.last address he wrote to with no name), each with the time of the earliest mail of his
+// that carried it (G829). A reply's To line repeats the name the sender chose, so a name counts
+// only when it is older than the first mail from that address (`first_in`; slice audit, G881).
+interface Contact { in: number; out: number; first: string; last: string; first_in?: string; last_in?: string; last_out?: string; reply_minutes?: number[]; names?: Record<string, string> }
+// The names that are the owner's own: on mail he sent before that address ever wrote to him.
+const ownNames = (c: Contact): string[] => {
+  const firstIn = c.first_in ?? (c.in > 0 ? c.first : undefined);
+  return Object.entries(c.names && !Array.isArray(c.names) ? c.names : {}).filter(([, t]) => !firstIn || t < firstIn).map(([k]) => k);
+};
+// A To or Cc line cut into its entries: a comma inside quotes or angle brackets is part of one entry.
+export function toEntries(line: string): string[] {
+  const out: string[] = [];
+  let cur = "", quoted = false, angle = false;
+  for (const ch of line) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && ch === "<") angle = true;
+    else if (!quoted && ch === ">") angle = false;
+    if (ch === "," && !quoted && !angle) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  return [...out, cur].map((x) => x.trim()).filter(Boolean);
+}
 const contactsFile = (root: string) => join(root, "log", "standing", "contacts.json");
 function loadContacts(root: string): Record<string, Contact> {
   try { return existsSync(contactsFile(root)) ? JSON.parse(readFileSync(contactsFile(root), "utf8")) : {}; } catch { return {}; }
@@ -286,16 +314,42 @@ function loadContacts(root: string): Record<string, Contact> {
 // owner arrive as from "me").
 // `sent`, when the source knows it (Gmail's SENT label, a Sent folder, a text from "me"), decides the
 // direction: mail claiming the owner's address that wasn't sent by him is forged and counts for nothing.
-export function recordInteraction(root: string, m: { kind: string; from?: string; to?: string; at?: string; sent?: boolean }) {
-  const me = new Set((loadStanding(root).me ?? []).map((a) => parseAddress(a)).filter(Boolean));
+// The owner's own addresses, derived: the me list in rules, the addresses on his own page in his
+// own word, and each mail source's own mailbox address. So his address is never counted as a
+// contact when the me list is empty (G829: a mail he sent that also named himself counted him).
+export function ownAddresses(root: string, notes = loadBrain(root)): Set<string> {
+  const out = new Set<string>((loadStanding(root).me ?? []).map((a) => parseAddress(a)).filter((a): a is string => !!a));
+  try {
+    const rules = loadRules(root), title = ownerTitle(rules), mine = title ? ownerOf(rules, notes, title)?.page : undefined;
+    const me = mine ? notes.find((n) => n.fm.id === mine) : undefined;
+    if (me) for (const a of addressesIn(me, rules, undefined, ownerVouched)) out.add(a);
+  } catch { /* rules that don't parse: the me list alone */ }
+  try { for (const c of Object.values(loadSources(root).sources ?? {})) { const a = c?.address ? parseAddress(String(c.address)) : undefined; if (a) out.add(a); } } catch { /* no sources file */ }
+  return out;
+}
+// The name on one To entry as the owner's mail wrote it: two words at least. With no name at all,
+// an address shaped first.last reads as "first last". A one-word name gives nothing.
+function toName(piece: string, address: string): string | undefined {
+  const shown = piece.includes("<") ? piece.slice(0, piece.lastIndexOf("<")).replace(/["']/g, "").trim() : "";
+  // A name with a comma or an address inside it is not a plain name: it gives nothing.
+  if (shown) return /\S\s+\S/.test(shown) && shown.length >= 4 && !/[,@<>]/.test(shown) ? shown : undefined;
+  if (!address.includes("@")) return undefined;
+  const parts = address.split("@")[0]!.split(/[._-]/).filter((x) => /^[a-z]{2,}$/.test(x));
+  return parts.length === 2 ? parts.join(" ") : undefined;
+}
+export function recordInteraction(root: string, m: { kind: string; from?: string; to?: string; at?: string; sent?: boolean }, mine?: ReadonlySet<string>) {
+  const me = mine ?? ownAddresses(root);
   const at = m.at && !Number.isNaN(Date.parse(m.at)) ? new Date(m.at).toISOString() : new Date().toISOString();
   const from = m.from === "me" ? "me" : parseAddress(m.from ?? "");
   const claimsOwner = from === "me" || (!!from && me.has(from));
   if (m.sent === false && claimsOwner) return;
   const outbound = m.sent ?? claimsOwner;
+  const pieces = outbound ? toEntries(String(m.to ?? "")) : [];
+  const named = new Map<string, string>();
+  for (const p of pieces) { const a = parseAddress(p), nm = a ? toName(p, a) : undefined; if (a && nm) named.set(a, nameKeyOf(nm)); }
   const others = outbound
-    ? String(m.to ?? "").split(/,(?![^<]*>)/).map((x) => parseAddress(x)).filter((x): x is string => !!x && !me.has(x))
-    : from ? [from] : [];
+    ? pieces.map((x) => parseAddress(x)).filter((x): x is string => !!x && !me.has(x))
+    : from && !me.has(from) ? [from] : [];
   if (!others.length) return;
   const c = loadContacts(root);
   for (const a of new Set(others)) {
@@ -306,14 +360,20 @@ export function recordInteraction(root: string, m: { kind: string; from?: string
       if (x.last_in && (!x.last_out || x.last_in > x.last_out) && at >= x.last_in)
         x.reply_minutes = [...(x.reply_minutes ?? []), Math.round((Date.parse(at) - Date.parse(x.last_in)) / 60_000)].slice(-20);
       x.out++; if (!x.last_out || at > x.last_out) x.last_out = at;
-    } else { x.in++; if (!x.last_in || at > x.last_in) x.last_in = at; }
+      const k = named.get(a);
+      if (k) {
+        const names = x.names && !Array.isArray(x.names) ? x.names : {};
+        if (!names[k] || at < names[k]) names[k] = at;
+        x.names = Object.fromEntries(Object.entries(names).sort((p, q) => p[1].localeCompare(q[1])).slice(0, 4));
+      }
+    } else { x.in++; if (!x.last_in || at > x.last_in) x.last_in = at; if (!x.first_in || at < x.first_in) x.first_in = at; }
   }
   mkdirSync(join(root, "log", "standing"), { recursive: true });
   writeFileSync(join(root, "log", "standing", ".gitignore"), "*\n"); // the owner's own traffic, local only
   writeFileSync(contactsFile(root), JSON.stringify(c, null, 2) + "\n");
 }
 
-export interface Suggestion { person: string; title: string; tier: "close" | "known"; why: string; via: { address: string; confirmed: boolean }[]; authority?: "owner" | "them"; authority_why?: string }
+export interface Suggestion { person: string; title: string; tier: "close" | "known"; why: string; via: { address: string; confirmed: boolean; by_name?: boolean }[]; more?: string[]; authority?: "owner" | "them"; authority_why?: string }
 
 // ---------- known and authority from structure only (G865) ----------
 // What may suggest: a typed relation on the owner's own contact card, as the hub read it and filed
@@ -476,6 +536,77 @@ export function approveStudents(root: string, course: string, shown: string[], t
 
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor((s.length - 1) / 2)] : undefined; };
 
+// ---------- known from what a mail-and-calendar brain holds (G829) ----------
+// Three kinds of evidence, each the owner's own act, each with its bar, known at most and never
+// authority: mail both ways with an address his own To line named for exactly one page; meetings he
+// organized or accepted with a guest whose address the page holds; facts on the page in his own
+// word. A name a sender gave itself, an invite he never answered and a private page give nothing.
+const MAIL_OUT = 2, MAIL_TOTAL = 4, MEETINGS = 3, MEETING_GUESTS = 8, OWN_FACTS = 3, OWN_DAYS = 2;
+const fullNames = (n: Note) => [n.fm.title, ...(Array.isArray(n.fm.aliases) ? n.fm.aliases : [])].filter((x): x is string => typeof x === "string" && x.trim().length >= 4 && /\S\s+\S/.test(x.trim()));
+interface Soft { why: string[]; told?: number; via?: string[] }
+function softEvidence(root: string, notes: Note[], rules: Rules, contacts: Record<string, Contact>, me?: string): Map<string, Soft> {
+  const P = sensitivityRank("private");
+  const people = notes.filter((n) => n.fm.type === "person" && n.fm.id !== me && activeNote(n) && sensitivityRank(n.fm.sensitivity) < P);
+  const out = new Map<string, Soft>();
+  const at = (id: string) => { const x = out.get(id) ?? { why: [] }; out.set(id, x); return x; };
+  const add = (id: string, why: string) => { at(id).why.push(why); };
+  // Mail: the address is on no page; the name his To line gave fits exactly one person page.
+  const byName = new Map<string, Set<string>>();
+  for (const n of notes) if (n.fm.type === "person" && activeNote(n)) for (const t of fullNames(n)) { const k = nameKeyOf(t); byName.set(k, (byName.get(k) ?? new Set()).add(n.fm.id)); }
+  const held = new Set(notes.filter((n) => n.fm.type === "person").flatMap(addressesOf));
+  const mail = new Map<string, { in: number; out: number; via: string[] }>();
+  for (const [a, c] of Object.entries(contacts)) {
+    const names = ownNames(c);
+    if (held.has(a) || !names.length) continue;
+    const fits = new Set(names.flatMap((k) => [...(byName.get(k) ?? [])]));
+    if (fits.size !== 1 || names.some((k) => !byName.has(k))) continue;
+    const id = [...fits][0]!, t = mail.get(id) ?? { in: 0, out: 0, via: [] };
+    mail.set(id, { in: t.in + c.in, out: t.out + c.out, via: [...t.via, a] });
+  }
+  // Meetings: by the page's own trusted addresses only, days counted once.
+  const day = today();
+  const events = loadCalendar(root, day).filter((e) => e.mine && e.start.slice(0, 10) <= day && (e.who?.length ?? 0) >= 1 && e.who!.length <= MEETING_GUESTS);
+  for (const n of people) {
+    const m = mail.get(n.fm.id);
+    if (m && m.out >= MAIL_OUT && m.in >= 1 && m.in + m.out >= MAIL_TOTAL) { add(n.fm.id, `You write to each other: ${m.in} from them, ${m.out} from you.`); at(n.fm.id).via = m.via.sort(); }
+    const keys = new Set(addressesIn(n, rules).filter((a) => a.includes("@")).map(guestKey));
+    const met = keys.size ? events.filter((e) => e.who!.some((k) => keys.has(k))) : [];
+    const days = [...new Set(met.map((e) => e.start.slice(0, 10)))].sort();
+    if (days.length >= MEETINGS) add(n.fm.id, `You met ${days.length} times since ${new Date(`${days[0]}T12:00:00Z`).toLocaleDateString("en", { month: "long", timeZone: "UTC" })}.`);
+    const said = Object.values(n.fm.facts ?? {}).flatMap((f) => isDisputed(f) ? [] : records(f)).filter((r) => liveRec(r) && lineState(r) === "yours");
+    if (said.length >= OWN_FACTS && new Set(said.map((r) => String(r.recorded ?? r.as_of ?? "").slice(0, 10))).size >= OWN_DAYS) at(n.fm.id).told = said.length;
+  }
+  return out;
+}
+
+const TOLD_SHOWN = 10; // one question stays readable; the rest follow once these are answered
+const toldLine = (n: number) => `You told the memory about them ${n} times.`;
+// People whose only evidence is the owner's own word on their page, as one question with a tick
+// each, none ticked: a person he wrote facts about is not always a person he deals with. Ten at
+// most, the ones he said most about first.
+export function toldSet(root: string, notes = loadBrain(root)): { id: string; title: string; times: number }[] {
+  let soft: Map<string, Soft>;
+  const st = structure(root, notes);
+  try { soft = softEvidence(root, notes, loadRules(root), loadContacts(root), st.me?.fm.id); } catch { return []; }
+  const own = new Set([...suggestStanding(root, notes).map((x) => x.person), ...bookSet(root, notes).map((x) => x.id)]);
+  const placed = new Set([...Object.keys(loadStanding(root).people), ...droppedStanding(root)]), dismissed = loadDismissed(root);
+  return notes.filter((n) => soft.get(n.fm.id)?.told && !soft.get(n.fm.id)!.why.length && !placed.has(n.fm.id) && !own.has(n.fm.id)
+    && !(dismissed[n.fm.id] && dismissed[n.fm.id]!.note_created === String(n.fm.created ?? "")))
+    .map((n) => ({ id: n.fm.id, title: String(n.fm.title ?? n.fm.id), times: soft.get(n.fm.id)!.told! })).sort((a, b) => b.times - a.times || byId(a, b)).slice(0, TOLD_SHOWN);
+}
+export function approveTold(root: string, shown: string[], ticked: string[]): string[] {
+  onHub(root);
+  const notes = loadBrain(root);
+  return approveGroup(root, notes, toldSet(root, notes).map((p) => p.id), shown, ticked, "the list of people you told the memory about");
+}
+
+// A Gmail source whose label list leaves out the mail the owner sends, with no `count_sent`:
+// nothing he writes is ever counted, so nobody can meet a bar that needs his own mail to them.
+// Named on Who matters, with the command that turns the count on.
+export function mailWithoutSent(root: string): string[] {
+  try { return Object.entries(loadSources(root).sources ?? {}).filter(([, c]) => c?.kind === "gmail" && Array.isArray(c.where) && c.where.length > 0 && !c.where.includes("SENT") && !(Number(c.count_sent) > 0)).map(([name]) => name).sort(); } catch { return []; }
+}
+
 // Suggestions for people the owner hasn't placed, matched through trusted addresses only. Never
 // inner (only the owner names family), never anyone already in standing.yaml, never applied here.
 export function suggestStanding(root: string, notes = loadBrain(root)): Suggestion[] {
@@ -485,6 +616,8 @@ export function suggestStanding(root: string, notes = loadBrain(root)): Suggesti
   const dismissed = loadDismissed(root);
   const rules = { checks: readYaml(join(root, "rules", "checks.yaml"), { checks: [], types: {} }) } as unknown as Rules;
   const st = structure(root, notes), hid = loadAuthorityDismissed(root);
+  let soft = new Map<string, Soft>();
+  try { soft = softEvidence(root, notes, loadRules(root), contacts, st.me?.fm.id); } catch { /* rules that don't parse: no evidence */ }
   const out: Suggestion[] = [];
   for (const n of notes) {
     if (n.fm.type !== "person" || placed.has(n.fm.id) || n.fm.id === st.me?.fm.id) continue;
@@ -496,13 +629,17 @@ export function suggestStanding(root: string, notes = loadBrain(root)): Suggesti
       : inn + out_ >= 4 && out_ >= 1 ? "known" : undefined;
     // A card in the owner's own address book is known at least, whatever the mail counts say.
     // With an authority to say, they get their own row; the rest of the address book is one card (bookSet).
-    const tier = counted ?? (st.book.has(n.fm.id) && st.authority.has(n.fm.id) ? "known" : undefined);
+    // His own word alone is one grouped question (toldSet); beside mail or meetings it is a second line.
+    const ev = soft.get(n.fm.id), reasons = ev?.why.length ? [...ev.why, ...(ev.told ? [toldLine(ev.told)] : [])] : [];
+    const tier = counted ?? (st.book.has(n.fm.id) && st.authority.has(n.fm.id) ? "known" : reasons.length ? "known" : undefined);
     const d = dismissed[n.fm.id];
     if (!tier || (d && d.note_created === String(n.fm.created ?? "") && RANK[tier] <= RANK[d.tier])) continue;
     const confirmed = new Set(addressesIn(n, rules, undefined, ownerVouched));
     const a = st.authority.get(n.fm.id);
-    out.push({ person: n.fm.id, title: n.fm.title, tier, why: counted ? `${inn} from them, ${out_} from you${reply !== undefined ? `, usually answered within ${reply < 60 ? `${reply} min` : `${Math.round(reply / 60)} h`}` : ""}` : ADDRESS_BOOK,
-      via: counted ? used.map((address) => ({ address, confirmed: confirmed.has(address) })) : [],
+    out.push({ person: n.fm.id, title: n.fm.title, tier, why: counted ? `${inn} from them, ${out_} from you${reply !== undefined ? `, usually answered within ${reply < 60 ? `${reply} min` : `${Math.round(reply / 60)} h`}` : ""}` : st.book.has(n.fm.id) && st.authority.has(n.fm.id) ? ADDRESS_BOOK : reasons[0]!,
+      ...(reasons.length > (counted || (st.book.has(n.fm.id) && st.authority.has(n.fm.id)) ? 0 : 1) ? { more: reasons.slice(counted || (st.book.has(n.fm.id) && st.authority.has(n.fm.id)) ? 0 : 1) } : {}),
+      // An address matched by name is shown so the owner can judge it; it is on no page and is never pinned.
+      via: counted ? used.map((address) => ({ address, confirmed: confirmed.has(address) })) : (ev?.via ?? []).map((address) => ({ address, confirmed: false, by_name: true })),
       ...(a && hid[n.fm.id] !== a.authority ? { authority: a.authority, authority_why: a.why } : {}) });
   }
   return out.sort((a, b) => RANK[b.tier] - RANK[a.tier] || a.person.localeCompare(b.person));
@@ -522,8 +659,11 @@ export function bookSet(root: string, notes = loadBrain(root)): { id: string; ti
 // when the list moved. Ticked people become known; an unticked one is hidden like a Not now.
 export function approveBook(root: string, shown: string[], ticked: string[]): string[] {
   onHub(root);
-  const notes = loadBrain(root), ids = bookSet(root, notes).map((p) => p.id);
-  if ([...shown].sort().join("\n") !== [...ids].sort().join("\n")) throw new Error("your address book list changed since you looked; nothing was changed, look again");
+  const notes = loadBrain(root);
+  return approveGroup(root, notes, bookSet(root, notes).map((p) => p.id), shown, ticked, "your address book list");
+}
+function approveGroup(root: string, notes: Note[], ids: string[], shown: string[], ticked: string[], what: string): string[] {
+  if ([...shown].sort().join("\n") !== [...ids].sort().join("\n")) throw new Error(`${what} changed since you looked; nothing was changed, look again`);
   if (ticked.some((id) => !ids.includes(id))) throw new Error("a ticked person is not on that list; nothing was changed");
   for (const id of ticked) setStanding(root, id, "known", {}, notes);
   const d = loadDismissed(root);
@@ -572,6 +712,9 @@ export function dropPersonStanding(root: string, note: Note, others: Note[]): { 
   const kept = new Set(others.filter((n) => n.fm.id !== id).flatMap(addressesOf));
   const c = loadContacts(root);
   for (const a of addressesOf(note)) if (c[a] && !kept.has(a)) { traces.contacts[a] = c[a]; delete c[a]; }
+  // Traffic counted under their name alone (G829), unless another person page carries that name.
+  const mineK = new Set(fullNames(note).map(nameKeyOf)), otherK = new Set(others.filter((n) => n.fm.id !== id && n.fm.type === "person").flatMap(fullNames).map(nameKeyOf));
+  for (const [a, x] of Object.entries(c)) if (Object.keys(x.names ?? {}).some((k) => mineK.has(k) && !otherK.has(k)) && !kept.has(a)) { traces.contacts[a] = x; delete c[a]; }
   if (Object.keys(traces.contacts).length) writeFileSync(contactsFile(root), JSON.stringify(c, null, 2) + "\n");
   return { inFile, traces };
 }

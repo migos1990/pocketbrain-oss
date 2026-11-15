@@ -181,6 +181,29 @@ export async function fetchGmailMessage(cfg: SourceConfig, id: string): Promise<
   return m._notFound ? { id, deleted: true } : { ...m, text: bodyText(m.payload) };
 }
 
+// Who the owner wrote to, for standing counts (`count_sent`, src/pull.ts countSent): the SENT
+// label's messages as headers only (To, Cc, Date; format metadata, so no body is fetched), oldest
+// first, `max` a pass. The first pass looks `days` back; a later one goes on from `cursor`.
+export async function fetchSentHeaders(cfg: SourceConfig, cursor: string | undefined, days: number, max = 300): Promise<{ id: string; to: string; at: string }[]> {
+  const token = await accessToken(cfg.account);
+  const q = cursor ? `after:${Math.floor(Date.parse(cursor) / 1000)}` : `newer_than:${days}d`;
+  const ids: string[] = [];
+  let page: string | undefined;
+  do {
+    const r = await get(token, "messages", { q, labelIds: "SENT", maxResults: "500", ...(page ? { pageToken: page } : {}) });
+    for (const m of r.messages ?? []) ids.push(String(m.id));
+    page = r.nextPageToken;
+  } while (page); // the whole window: ids only, so the oldest are never cut off behind newer ones
+  const out: { id: string; to: string; at: string }[] = [];
+  for (const id of ids.reverse().slice(0, max)) {
+    const m = await get(token, `messages/${id}`, { format: "metadata", metadataHeaders: ["To", "Cc", "Date"] });
+    if (m._notFound || !m.internalDate) continue;
+    const h = (n: string) => String((m.payload?.headers ?? []).find((x: Raw) => String(x.name).toLowerCase() === n)?.value ?? "");
+    out.push({ id, to: [h("to"), h("cc")].filter(Boolean).join(", "), at: new Date(Number(m.internalDate)).toISOString() });
+  }
+  return out;
+}
+
 // ---------- connecting a mailbox: OAuth on the Mac, loopback redirect with PKCE ----------
 
 export function saveKey(name: string, value: string) {

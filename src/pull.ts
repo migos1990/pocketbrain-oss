@@ -24,7 +24,7 @@ import { loadEscalation } from "./textline/policy";
 import { clock, ownerDay } from "./clock";
 import { refString, sourceRank } from "./sources";
 import { extractCapture, fileCard, checkCandidate, releaseHeldDaily, captureModel, findCapture, senderKey, previewExtraction, readCapture, unfinishedPull, type CaptureItem } from "./capture";
-import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchCalendarResync, fetchUpcoming, fetchDrive, fetchDriveFile, fetchContacts, fetchContact } from "./google";
+import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetchCalendarResync, fetchUpcoming, fetchSentHeaders, fetchDrive, fetchDriveFile, fetchContacts, fetchContact } from "./google";
 import { cardItem, readCard, cardCandidates, cardAdjust, ownerRelations, fetchVcards, withoutDetails } from "./contacts";
 import { fetchDiscord, fetchDiscordMessage, fetchTexts, fetchText, fetchGranola, fetchGranolaNote } from "./feeds";
 import { findInjection, redactSecrets } from "./checks";
@@ -35,7 +35,7 @@ import { senderHash } from "./sameperson";
 import { senderStanding } from "./sender";
 import { createHash } from "node:crypto";
 import type { Model } from "./model";
-import { recordInteraction } from "./standing";
+import { recordInteraction, ownAddresses } from "./standing";
 import { saveUpcoming, toUpcoming, unreadComing } from "./upcoming";
 import { keepWords, keptQuotes } from "./quotes";
 
@@ -79,6 +79,7 @@ export interface SourceConfig {
   guild?: string;              // discord: the server id, when where: names channels ("#dev")
   path?: string;               // texts, granola: a database or cache other than the Mac's default
   silent_after_hours?: number; // no proposal or re-confirmation this long is a failing probe check (default 72; 0: never)
+  count_sent?: number;         // gmail: count who the owner writes to from his sent mail's To, Cc and Date headers only, this many days back the first time; no body is read and no fact filed (src/standing.ts, G829)
   upcoming?: boolean;          // gcal: keep the coming 60 days' titles and times so next_* facts answer live (src/upcoming.ts)
   new_notes_per_day?: number;  // new notes proposed per day; the rest wait in inbox/held (default 3, backlog 396)
 }
@@ -338,7 +339,7 @@ type Fetched = Raw[] | { items: Raw[]; cursor?: string; more?: boolean };
 // seen(id, version?): the hub has this item (at that version) and nothing about it is waiting.
 type Seen = (id: string, version?: string) => boolean;
 // known(id): the hub has read this item before, whether or not something about it is waiting.
-type PullOpts = { upcoming?: (cfg: SourceConfig) => Raw[] | Promise<Raw[]>; fetch?: (cfg: SourceConfig, cursor?: string, seen?: Seen, known?: (id: string) => boolean) => Fetched | Promise<Fetched>; model?: Model | null; dryRun?: boolean };
+type PullOpts = { sent?: (cfg: SourceConfig, cursor?: string) => SentHeader[] | Promise<SentHeader[]>; upcoming?: (cfg: SourceConfig) => Raw[] | Promise<Raw[]>; fetch?: (cfg: SourceConfig, cursor?: string, seen?: Seen, known?: (id: string) => boolean) => Fetched | Promise<Fetched>; model?: Model | null; dryRun?: boolean };
 const LIVE: Partial<Record<SourceKind, (cfg: SourceConfig, cursor?: string, seen?: Seen, known?: (id: string) => boolean) => Promise<Fetched>>> = {
   gmail: fetchGmail, gcal: fetchCalendar, gdoc: fetchDrive, discord: fetchDiscord,
   imessage: async (cfg, cursor, _seen, known) => fetchTexts(cfg, cursor, known), granola: async (cfg, cursor) => fetchGranola(cfg, cursor),
@@ -352,6 +353,8 @@ export async function pullSource(root: string, name: string, opts: PullOpts = {}
   if (!r.refused) {
     try { await refreshUpcoming(root, name, opts.upcoming); }
     catch (e) { r = { ...r, refused: `${name}: coming events: ${(e as Error).message}` }; }
+    // Counting never fails a pull that read its mail: it says so and tries again next pass.
+    try { await countSent(root, name, opts.sent); } catch (e) { console.error(`standing signals: ${name}: sent mail not counted: ${(e as Error).message}`); }
   }
   if (r.refused) failed(root, name, r.refused);
   appendJsonl(runsPath(root), { at: clock().toISOString(), ...r, preview: undefined });
@@ -365,6 +368,38 @@ async function refreshUpcoming(root: string, name: string, fetch?: (cfg: SourceC
   if (!cfg || cfg.kind !== "gcal" || !cfg.upcoming) return;
   const raw = fetch ? await fetch(cfg) : cfg.fixture ? fetchFixture(root, cfg) : await fetchUpcoming(cfg);
   saveUpcoming(root, name, raw.flatMap((r) => toUpcoming(r, name, cfg.min_sensitivity) ?? []));
+}
+
+// A Gmail source the owner gave `count_sent: <days>` (pocketbrain sources count-sent): who he wrote
+// to and when, from the To, Cc and Date headers of his sent mail, for standing suggestions only
+// (G829). No body is fetched, nothing goes to a model, no capture, fact or ref comes of it. The
+// first pass looks back that many days, later ones go on from where it stopped. Its place is kept
+// with the counts (log/standing, local only). A source that reads SENT itself (its label list names
+// it, or it has no label list) is already counted by its pull and is left alone.
+export interface SentHeader { id: string; to: string; at: string }
+const SENT_IDS = 500;
+async function countSent(root: string, name: string, fetch?: (cfg: SourceConfig, cursor?: string) => SentHeader[] | Promise<SentHeader[]>) {
+  const cfg = loadSources(root).sources?.[name];
+  const days = Number(cfg?.count_sent);
+  // No label list reads every label, SENT among them: the pull has counted that mail already (G882).
+  if (!cfg || cfg.kind !== "gmail" || !(days > 0) || !cfg.where?.length || cfg.where.includes("SENT")) return;
+  if (!fetch && cfg.fixture) return;
+  const f = join(root, "log", "standing", `sent-${name.replace(/[^\w-]/g, "_")}.json`);
+  let st: { cursor?: string; ids: string[] } = { ids: [] };
+  // A file that doesn't parse, or holds no id list, is started over (the look-back runs again).
+  try { if (existsSync(f)) { const kept = JSON.parse(readFileSync(f, "utf8")); if (kept && Array.isArray(kept.ids)) st = { ids: kept.ids.map(String), ...(typeof kept.cursor === "string" ? { cursor: kept.cursor } : {}) }; } } catch { /* start over */ }
+  const rows = fetch ? await fetch(cfg, st.cursor) : await fetchSentHeaders(cfg, st.cursor, Math.min(days, 365));
+  const seen = new Set(st.ids), mine = ownAddresses(root);
+  for (const r of [...rows].sort((a, b) => a.at.localeCompare(b.at))) {
+    if (!r?.id || seen.has(r.id) || Number.isNaN(Date.parse(r.at))) continue;
+    recordInteraction(root, { kind: "gmail", from: "me", to: r.to, at: r.at, sent: true }, mine);
+    seen.add(r.id); st.ids.push(r.id);
+    if (!st.cursor || r.at > st.cursor) st.cursor = r.at;
+  }
+  st.ids = st.ids.slice(-SENT_IDS);
+  mkdirSync(join(root, "log", "standing"), { recursive: true });
+  writeFileSync(join(root, "log", "standing", ".gitignore"), "*\n");
+  writeFileSync(f, JSON.stringify(st) + "\n");
 }
 
 const CATCH_UP = 20; // unread coming events read by id per pass (G744)
@@ -470,7 +505,7 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
     // Over today's cap: not seen, not touched; it waits for tomorrow's count.
     if (!short && (state.stored_today ?? 0) >= cap) { out.skipped++; out.deferred = (out.deferred ?? 0) + 1; hold = true; out.capped = true; continue; }
     // Who wrote and who the owner answered, for standing suggestions (addresses and times only).
-    if (!prev && STANDING_KINDS.has(cfg.kind)) {
+    if (!prev && !it.bulk && STANDING_KINDS.has(cfg.kind)) {
       const sent = cfg.kind === "imessage" ? it.from === "me" : cfg.kind === "gmail" ? (it.where ?? "").split(",").includes("SENT") : /^sent\b/i.test(it.where ?? "");
       contacts.push({ kind: cfg.kind, from: it.from, to: it.to ?? (cfg.kind === "imessage" ? it.where : undefined), at: it.at, sent });
     }
@@ -517,8 +552,9 @@ async function pullOne(root: string, name: string, opts: PullOpts): Promise<Pull
   writeFileSync(statePath(root, name), JSON.stringify(state, null, 2) + "\n");
   // Oldest first, whatever order the source listed them in, so reply delays come out right.
   // Recorded once the state is saved, so a pass that fails midway doesn't count anything twice.
+  let mine: Set<string> | undefined;
   for (const c of contacts.sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")))) {
-    try { recordInteraction(root, c); } catch (e) { console.error(`standing signals: ${(e as Error).message}`); }
+    try { recordInteraction(root, c, (mine ??= ownAddresses(root))); } catch (e) { console.error(`standing signals: ${(e as Error).message}`); }
   }
   git(root, ["add", "-A", "log/sources", ...new Set(out.due)]);
   git(root, ["commit", "-q", "-m", `pull: ${name} (${out.stored.length} stored, ${new Set(out.due).size} notes due)\n\nAgent: ${by}\nKind: pull`], by);

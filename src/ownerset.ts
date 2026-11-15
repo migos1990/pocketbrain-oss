@@ -128,6 +128,18 @@ export function setMachineMailAside(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { machine_mail: { set_aside: mode === "on" } }, `machine-mail ${mode}`);
 }
 
+// `pocketbrain sources count-sent <gmail source> on [--days N] | off`: whether the hub counts who
+// the owner writes to from his sent mail's headers (To, Cc, Date; never a body, never a fact), for
+// Who matters suggestions (src/pull.ts countSent, G829). The number is the first look-back in days.
+export function setCountSent(root: string, name: string, mode: string, days = 90): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("sources count-sent <gmail source> on [--days N] | off");
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new OwnerSetError("--days takes a whole number from 1 to 365");
+  return editRules(root, "sources.yaml", (doc) => {
+    if (doc.getIn(["sources", name, "kind"]) !== "gmail") throw new OwnerSetError(`${name} is not a Gmail source in rules/sources.yaml (pocketbrain sources list)`);
+    if (mode === "on") doc.setIn(["sources", name, "count_sent"], days); else doc.deleteIn(["sources", name, "count_sent"]);
+  }, mode === "on" ? `count who you write to from ${name}'s sent mail (headers only, ${days} days back)` : `stop counting ${name}'s sent mail`);
+}
+
 // `pocketbrain fold on|off`: whether the nightly pass folds same-name project and org twins or only
 // counts them (src/fold.ts, docs/fold-twins.md). Off until the owner says so.
 export function setFoldTwins(root: string, mode: string): string {

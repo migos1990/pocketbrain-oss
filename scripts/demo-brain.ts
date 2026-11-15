@@ -389,8 +389,9 @@ export function copyBase(root: string): void {
 // calendar marked `upcoming: true` (src/upcoming.ts), so a person's page says when you last met.
 export async function demoCalendar(root: string) {
   const { toUpcoming, saveUpcoming } = await import("../src/upcoming");
-  const ev = (id: string, summary: string, start: string, guests: string[]) => ({ id: `demo${id}`, etag: `"${id}"`, summary, start: { dateTime: `${start}T14:00:00Z` }, attendees: [{ email: OWNER.address, self: true }, ...guests.map((g) => ({ email: `${g}@example.org` }))] });
+  const ev = (id: string, summary: string, start: string, guests: string[]) => ({ id: `demo${id}`, etag: `"${id}"`, summary, start: { dateTime: `${start}T14:00:00Z` }, organizer: { email: OWNER.address, self: true }, attendees: [{ email: OWNER.address, self: true, responseStatus: "accepted" }, ...guests.map((g) => ({ email: `${g}@example.org` }))] });
   const events = [
+    ev("c00", "Pinecrest intro", "2026-09-17", ["ben.carter"]),
     ev("c01", "Pinecrest pilot kickoff", "2026-09-24", ["ben.carter", "chloe.gagnon"]),
     ev("c02", "Pilot check-in", "2026-10-02", ["ben.carter"]),
     ev("c03", "Atlas design review", "2026-10-05", ["maya.chen", "grace.liu"]),
@@ -402,6 +403,16 @@ export async function demoCalendar(root: string) {
   saveUpcoming(root, "calendar", events.flatMap((e) => toUpcoming(e, "calendar") ?? []), DEMO_DAY);
 }
 
+// Made-up mail traffic for Who matters (G829): the owner and Hugo Martin write to each other at an
+// address his page does not hold, named by the owner's own To line. Addresses and times only, in
+// the local counts file the pulls fill (log/standing, never committed). Reserved example domains.
+export async function demoTraffic(root: string) {
+  const { recordInteraction } = await import("../src/standing");
+  const me = `${OWNER.name} <${OWNER.address}>`;
+  for (const d of ["01", "03", "06"]) recordInteraction(root, { kind: "gmail", from: me, to: "Hugo Martin <hugo@martin.example>", at: `2026-10-${d}T09:00:00Z`, sent: true });
+  for (const d of ["02", "05"]) recordInteraction(root, { kind: "gmail", from: "Hugo <hugo@martin.example>", to: me, at: `2026-10-${d}T16:00:00Z`, sent: false });
+}
+
 if (import.meta.main) {
   const i = Bun.argv.indexOf("--out");
   if (i >= 0) {
@@ -411,6 +422,7 @@ if (import.meta.main) {
     copyBase(out);
     const r = await replayWeek(out);
     await demoCalendar(out);
+    await demoTraffic(out);
     const { loadBrain } = await import("../src/brain");
     console.log(`demo brain in ${out}: ${loadBrain(out).length} pages, ${factCount(loadBrain(out))} facts, ${r.conflicts.length} open conflicts. Now is ${DEMO_NOW}: PB_NOW=${DEMO_NOW} PB_BRAIN=${out} bun src/cli.ts dashboard`);
   } else {

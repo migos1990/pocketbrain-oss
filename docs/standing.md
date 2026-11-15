@@ -57,7 +57,24 @@ The owner sets the top tiers. For everyone else the brain suggests, and the owne
   - `known`: at least 4 messages either way, at least one from the owner.
   Never `inner`: only the owner names family. Never anyone already in `standing.yaml`: the owner's word stands.
 - `pocketbrain standing approve <person>` (or the dashboard's Who matters page) applies a suggestion, with the authority `standing suggest` printed for it if any (an owner commit); nothing applies on its own. The digest's "Worth a look" says how many suggestions wait.
-- `log/standing/contacts.json` is local and never committed. It holds counts, first and last times, and the last 20 reply delays per address.
+- `log/standing/contacts.json` is local and never committed. It holds counts, first and last times, the last 20 reply delays per address, the time of the first mail from that address, and hashed keys of the name the owner's own mail put on the To line for that address, each with the time of the earliest such mail.
+- The owner's own addresses are never a contact: the `me:` list, the addresses on his own page in his own word, and each mail source's `address:` (`ownAddresses`). An attribute counts as an address only when it is `email`, `emails`, `phone` or `phones`, or the brain's `checks.yaml` gives it an email or phone rule. That is narrower on purpose than the calendar's join, which accepts any `x_email`: an `assistant_email` on a page is someone else's address, and here an address carries the page's priority and, once pinned, its authority (G880).
+
+### From a memory with mail and a calendar, no address book (G829)
+
+Three more kinds of evidence suggest `known`, never more and never authority. Each is the owner's own act, and under its bar there is no card.
+
+| Evidence | Bar | Reason shown |
+|---|---|---|
+| Mail both ways with an address no page holds | 2 or more from the owner, 1 or more back, 4 in all, and the name his own To line gave that address (or, with no name there, a `first.last` address) fits exactly one person page; the name counts only from mail he sent before that address ever wrote to him | "You write to each other: N from them, M from you." |
+| Meetings | 3 or more past days in the calendar cache (92 days back), each with 8 guests or fewer, that he organized or accepted, with a guest whose address the page holds on trusted evidence | "You met N times since <month>." |
+| His own word | 3 or more live facts on the page in his own word, recorded on 2 or more days | one grouped question, ten people at most, none ticked |
+
+What never counts: a From display name, the name on a reply to an address that wrote first (a reply's To line repeats the name the sender chose, G881), a To name with a comma or an address inside it, a `first.last` address he never wrote to, an invite he did not answer, a guest's name on an invite, list and machine mail, a private or secret page. The card shows the address a name tied, marked as not on their page. That address never lands on the page and is never pinned, so `who_is` still answers `unknown` for it after the tap.
+
+Not caught: the hub counts mail only from when a source was first read (and, with `count_sent`, sent mail up to the look-back), so a sender who wrote before that and whom the owner then answered twice looks like someone the owner wrote to first, under the name that sender chose. The owner still has to tap, the card shows the address, and the tap makes the named person's page `known` and nothing else. Forgetting a person drops the traffic counted under their name.
+
+`pocketbrain sources count-sent <gmail source> on [--days N]` (off by default) adds `count_sent: N` to that source: after each pull the hub lists the `SENT` label and reads only the To, Cc and Date headers of each message (Gmail's metadata format), `N` days back the first time (default 90) and from its own cursor after that (`log/standing/sent-<source>.json`, local). No body is fetched, nothing reaches a model, and no capture, fact or ref comes of it. A source that reads `SENT` itself (its `where:` names it, or it has no `where:` and so reads every label) is already counted by its pull and is left alone (G882). Who matters names a Gmail source that has neither (`mailWithoutSent`).
 
 ## The dashboard's Who matters page
 

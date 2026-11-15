@@ -51,7 +51,7 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { setAsideMachineMail } from "./receipt-pages";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -224,6 +224,8 @@ const USAGE = `pocketbrain <command>
   sources backfill <name> [--max N] [--dry-run]   facts with no live source: search the mailbox for each value; a mail
                                      that states it and names the note becomes its source (value unchanged)
                                      (safe to paste); --show also prints the facts (don't paste those)
+  sources count-sent <gmail> on [--days N] | off   count who you write to from your sent mail's To, Cc and Date
+                                     (never a body, never a fact), 90 days back the first time: Who matters suggestions
   sources resync <calendar> [--dry-run]   one full read of a calendar: every coming event and series still
                                      meeting that no pull read yet (made long before its date); --dry-run only counts
   sources connect <name>             sign in to a live Gmail, Calendar, Drive or Contacts source (read-only scope); the
@@ -2120,6 +2122,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
         process.exit(0);
       }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
       return -1;
+    }
+    if (args[0] === "count-sent") {
+      // Who the owner writes to, from his sent mail's headers only, for Who matters (G829).
+      const name = args[1] && !args[1].startsWith("--") ? args[1] : undefined, mode = args[2] ?? "";
+      const d = args.indexOf("--days");
+      try { console.log(setCountSent(root, name ?? "", mode, d >= 0 ? Number(args[d + 1]) : 90)); return 0; }
+      catch (e) { if (e instanceof OwnerSetError) { console.error(e.message); return 2; } throw e; }
     }
     if (args[0] === "resync") {
       // A one-off full read of a calendar source (G748); --dry-run counts and writes nothing.

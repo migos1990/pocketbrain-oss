@@ -137,6 +137,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "dashboard/people.ts#peopleNeedsYou": { class: "not-reviewed" },
   "dashboard/people.ts#classItem": { class: "machine-words", why: "HTML attribute values and CSS class names of the students card form; reads no title or text" },
   "dashboard/people.ts#bookItem": { class: "machine-words", why: "HTML attribute values and CSS class names of the address-book card form; reads no title or text" },
+  "dashboard/people.ts#toldItem": { class: "machine-words", why: "HTML attribute values and CSS class names of the own-words card form; reads no title or text" },
   "dashboard/see.ts#seeList": { class: "not-reviewed" },
   "dashboard/see.ts#seePage": { class: "not-reviewed" },
   "dashboard/see.ts#seeListPage": { class: "not-reviewed" },
