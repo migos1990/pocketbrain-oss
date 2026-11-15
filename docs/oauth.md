@@ -2,7 +2,7 @@
 
 Most assistants connect with a pasted token (`pocketbrain token --agent <agent>`, with `--code` from the dashboard for an agent wider than trial, sent as `Authorization: Bearer …` to `/mcp` or `/v1`). Some hosted assistants only offer "add an MCP server by URL" and then sign in with OAuth. Muse is one: its connector form takes only an endpoint and a docs URL, and it registers itself with OAuth dynamic client registration (RFC 7591). The OAuth door is for those assistants.
 
-pocketBrain never issues OAuth tokens itself. A hosted authorization server does that (architecture section 0: no self-built authorization server, ever). pocketBrain only checks the tokens it is shown.
+pocketBrain never issues OAuth tokens itself. A hosted authorization server does that (architecture section 0: no self-built authorization server, ever). pocketBrain only checks the tokens it is shown. How this door, ask to see, revoke and offboarding line up with the usual identity words (scopes, consent, step-up, deprovisioning, audit): [identity.md](identity.md).
 
 ## How it fits
 

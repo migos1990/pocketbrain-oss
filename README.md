@@ -122,7 +122,7 @@ pocketbrain doctor                   # is everything healthy
 
 Commands find the brain from `--brain`, `$PB_BRAIN`, the current folder, or the one `init` made last.
 
-Adding another assistant later, from picking its door to revoking it: [docs/add-an-agent.md](docs/add-an-agent.md).
+Adding another assistant later, from picking its door to revoking it: [docs/add-an-agent.md](docs/add-an-agent.md). The same controls in identity words (scopes, consent, step-up, revoke, audit, offboarding): [docs/identity.md](docs/identity.md).
 
 `init` writes `rules/` (one trial agent that sees your work area and basic contacts, never money or anything private), one note per person, org, project, decision and money item, a report of anything it removed or guessed, and the agent's token. The seed format is in the quickstart; [examples/seed](examples/seed) has a sample text file and exports. Nothing is sent anywhere and no model is called.
 

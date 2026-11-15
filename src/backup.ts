@@ -16,7 +16,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, re
 import { tmpdir, homedir } from "node:os";
 import { sha256 } from "./util";
 import { hardSecretIn } from "./checks";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import YAML from "yaml";
 import { loadBrain, today, isList } from "./brain";
 import { loadRules } from "./rules";
@@ -533,7 +533,7 @@ export async function drill(root: string, o: { identity?: string; key?: string; 
   const work = mkdtempSync(join(tmpdir(), "pb-drill-"));
   const copy = join(work, "brain"), dest = join(work, "backups");
   try {
-    cpSync(root, copy, { recursive: true, verbatimSymlinks: true, filter: (src) => ![join(root, "views"), join(root, ".cells"), join(root, "node_modules")].includes(src) });
+    cpSync(root, copy, { recursive: true, verbatimSymlinks: true, filter: drillCopyFilter(root) });
     const signingKey = o.key ?? (g(copy, "config", "--get", "user.signingkey").out || undefined);
     let identity: Identity, keys: string[] | undefined;
     if (o.identity) identity = { text: readIdentity(o.identity) };
@@ -595,6 +595,27 @@ export function renderDrill(d: DrillResult): string {
   ].join("\n");
 }
 
+// What the drill copies of a live brain: everything but the hub's rebuildable caches, and no git
+// lock file. A lock only marks a git command running now (or one that died); one can vanish
+// between the copy listing it and reading it, which threw ENOENT mid-drill (G931).
+export function drillCopyFilter(root: string): (src: string) => boolean {
+  const skip = [join(root, "views"), join(root, ".cells"), join(root, "node_modules")];
+  const git = join(root, ".git") + sep;
+  return (src) => !skip.includes(src) && !(src.startsWith(git) && src.endsWith(".lock"));
+}
+
+// The sample brain as a git repo at `root`, for the demo drill. Its commit starts no background
+// gc or maintenance, as src/git.ts does for every hub commit: a detached `git maintenance run`
+// still holding its lock while the drill copied .git was the race behind G931.
+export function demoDrillBrain(root: string): void {
+  cpSync(DEMO_BRAIN, root, { recursive: true });
+  const env = { ...process.env, GIT_AUTHOR_NAME: "demo", GIT_AUTHOR_EMAIL: "demo@example.com", GIT_COMMITTER_NAME: "demo", GIT_COMMITTER_EMAIL: "demo@example.com" };
+  for (const a of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "demo brain"]]) {
+    const r = Bun.spawnSync(["git", "-c", "gc.auto=0", "-c", "maintenance.auto=false", ...a], { cwd: root, env });
+    if (r.exitCode !== 0) throw new BackupError(`demo brain: git ${a[0]} failed: ${r.stderr.toString().trim()}`);
+  }
+}
+
 // pocketbrain drill --demo: the whole drill on the sample brain (examples/brain) with a throwaway
 // key, so CI and a new install prove backup and restore end to end without any real data or key.
 // Never reads the owner's brain and records nothing in it.
@@ -603,12 +624,7 @@ export async function demoDrill(): Promise<DrillResult> {
   const work = mkdtempSync(join(tmpdir(), "pb-demo-drill-"));
   try {
     const root = join(work, "brain");
-    cpSync(DEMO_BRAIN, root, { recursive: true });
-    const env = { ...process.env, GIT_AUTHOR_NAME: "demo", GIT_AUTHOR_EMAIL: "demo@example.com", GIT_COMMITTER_NAME: "demo", GIT_COMMITTER_EMAIL: "demo@example.com" };
-    for (const a of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "demo brain"]]) {
-      const r = Bun.spawnSync(["git", ...a], { cwd: root, env });
-      if (r.exitCode !== 0) throw new BackupError(`demo brain: git ${a[0]} failed: ${r.stderr.toString().trim()}`);
-    }
+    demoDrillBrain(root);
     return await drill(root);
   } finally { rmSync(work, { recursive: true, force: true }); }
 }

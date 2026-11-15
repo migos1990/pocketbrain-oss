@@ -51,5 +51,5 @@ test("lists that decide, and lists nobody has classed, only become fewer", () =>
   // The ceilings follow the counts down: lowering a count without lowering its ceiling leaves room to add one back.
   expect(CEILING).toEqual({ decides: count("decides"), "not-reviewed": count("not-reviewed") });
   expect(CEILING.decides).toBeLessThanOrEqual(5);
-  expect(CEILING["not-reviewed"]).toBeLessThanOrEqual(236);
+  expect(CEILING["not-reviewed"]).toBeLessThanOrEqual(235);
 });

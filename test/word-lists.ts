@@ -13,7 +13,7 @@
 // that was in the code that day and nobody has classed yet; none may be added, and each one
 // classed lowers its ceiling.
 export type WordListClass = "tightens-only" | "hints-or-asks" | "phrasing-only" | "parses-a-value" | "search-only" | "machine-words" | "decides" | "not-reviewed";
-export const CEILING = { decides: 5, "not-reviewed": 236 };
+export const CEILING = { decides: 5, "not-reviewed": 235 };
 export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> = {
   "access-request.ts#comingBackText": { class: "not-reviewed" },
   "act.ts#(top)": { class: "not-reviewed" },
@@ -23,7 +23,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "area-follow.ts#DIR": { class: "machine-words", why: "page folders the code defines, by note type" },
   "area-guess.ts#PAGE_TYPES": { class: "machine-words", why: "page types the code defines" },
   "asks.ts#(top)": { class: "not-reviewed" },
-  "backup.ts#demoDrill": { class: "not-reviewed" },
+  "backup.ts#demoDrillBrain": { class: "machine-words", why: "the git subcommands that make the sample brain a repo" },
   "beliefs.ts#(top)": { class: "not-reviewed" },
   "beliefs.ts#LABEL": { class: "not-reviewed" },
   "beliefs.ts#renderBeliefs": { class: "not-reviewed" },

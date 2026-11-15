@@ -19,6 +19,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "LongMemEval thread, 2026-11-15 (src/semantic.ts workerEmbedder, src/embed-worker.ts): a Bun worker sees the environment the process started with, not PB_MODEL_DIR or HOME as set since, so the thread that decided semantic search was on checked one model dir and the worker loaded from another. On any machine with the model installed, test/semantic.test.ts \"a model that won't load\" failed because the real model loaded in the worker.",
     fix: "workerEmbedder tells the worker the model dir this thread checked as its first message; loadLocalEmbedder takes a dir. Ranking unchanged. test/semantic.test.ts (G910).",
   },
+  G931: {
+    closed: "claude/drill-lock-race",
+    title: "The restore drill failed when a git lock vanished mid-copy",
+    severity: "medium",
+    finding: "CI on PR 202, 2026-11-15: `bun src/cli.ts drill --demo` threw ENOENT on .git/objects/maintenance.lock in cpSync (src/backup.ts drill). The demo brain's own `git commit` ran without maintenance.auto=false, so it started a detached `git maintenance run --auto` that took and dropped that lock while the drill copied .git; the copy listed the lock, then could not read it. A required check went red on a docs-only change.",
+    fix: "At the source: demoDrillBrain (src/backup.ts) runs its git commands with gc.auto=0 and maintenance.auto=false, as src/git.ts does for hub commits, so no background git runs during the drill. In the copy: drillCopyFilter leaves out every *.lock under .git, so a lock taken or dropped by any other git process (the owner's own, on a real brain) can't break the copy. Test: test/drill-lock-race.test.ts.",
+  },
   G883: {
     closed: "claude/private-guess-no-ask",
     title: "A stranger's private guess counted as an ask on the home",
