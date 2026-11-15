@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The usefulness number (src/usefulness.ts, docs/prove-the-loop.md#usefulness): how many questions
-// each assistant can answer from what it gets back, in how many tokens, and how much of it is noise.
+// each assistant can answer from what it gets back, of those its whole view answers, why each miss
+// missed, in how many tokens, and how much of it is noise.
 //
 //   bun scripts/usefulness.ts                      the demo brain and its twenty questions
 //   bun scripts/usefulness.ts --compare <json>     ...and the change from a saved run
@@ -69,7 +70,8 @@ function compare(now: UAgent[], file: string): string {
   const d = (x: number) => (x > 0 ? `+${x}` : `${x}`);
   return ["change from the saved run:", ...now.map((a) => {
     const w = was.get(key(a));
-    return w ? `  ${a.agent} by ${a.door}: answered ${d(a.all.answered - w.all.answered)}, median tokens ${d(a.tokens.median - w.tokens.median)}, noise ${d(a.noise - w.noise)} points` : `  ${a.agent} by ${a.door}: new`;
+    const ans = w?.answerable ? `, answerable answered ${d(a.answerable.answered - w.answerable.answered)}` : "";
+    return w ? `  ${a.agent} by ${a.door}: answered ${d(a.all.answered - w.all.answered)}${ans}, median tokens ${d(a.tokens.median - w.tokens.median)}, noise ${d(a.noise - w.noise)} points` : `  ${a.agent} by ${a.door}: new`;
   })].join("\n");
 }
 

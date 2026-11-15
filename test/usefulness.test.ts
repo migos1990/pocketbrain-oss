@@ -173,3 +173,61 @@ test("a contested fact served as current is a miss, whichever way the conflict i
     expect(scoreUsefulness(root, { file: f, agents: ["claude"], harvest: 0, doors: ["pack"] }).agents[0]!.all.answered).toBe(0);
   } finally { delete process.env.PB_NOW; }
 }, 90_000);
+
+// Q1 of plans/close-three-gaps (G900): each miss says why, by code only, and the headline puts
+// "answered of answerable" beside the strict count, with what is outside the assistant's cut
+// printed, never subtracted silently.
+test("a miss says why: a question whose page is outside the assistant's cut is counted outside its cut (G900)", async () => {
+  const { scoreUsefulness, countsText, MISS_REASONS } = await import("../src/usefulness");
+  try {
+    const root = await demo();
+    const s = scoreUsefulness(root, { file: small(root), agents: ["claude", "gemini"], harvest: 0, doors: ["pack"] });
+    const row = (agent: string, id: string) => s.rows.find((r) => r.agent === agent && r.id === id)!;
+    // gemini reads work only: the money question and the personal one are outside its cut.
+    expect(row("gemini", "kitchen-payment").why).toBe("outside_cut");
+    expect(row("gemini", "jordan").why).toBe("outside_cut");
+    // An answered question has no reason; every miss has exactly one, from the five.
+    expect(row("claude", "who-maya").why).toBeUndefined();
+    for (const r of s.rows) if (!r.answered) expect(MISS_REASONS).toContain(r.why!);
+    const gemini = s.agents.find((a) => a.agent === "gemini")!;
+    expect(gemini.answerable.asked).toBe(gemini.all.asked - gemini.why.outside_cut);
+    // Both numbers side by side: the strict count first, then answered of answerable.
+    const text = countsText(s);
+    expect(text).toMatch(new RegExp(`gemini by context pack: ${gemini.all.answered}/4 answered \\(usefulness ${gemini.all.answered}/4\\); answered ${gemini.answerable.answered} of ${gemini.answerable.asked} answerable \\(${gemini.why.outside_cut} outside its cut\\)`));
+    expect(text).toMatch(/\n    why missed: .*\d+ outside its cut.*; 95% interval for answered of answerable: \d+% to \d+% \(n \d+\)/);
+  } finally { delete process.env.PB_NOW; }
+}, 90_000);
+
+test("why an answerable question missed: only pointed to, the value not shown, several pages, not returned (G900)", async () => {
+  const { answers, missReason } = await import("../src/usefulness");
+  try {
+    const root = await demo();
+    const maya = { id: "m", q: "who is Maya Chen?", set: "usefulness" as const, facts: ["people/maya-chen#role"], says: [], notes: [], oneOf: [] };
+    const whole = answers(root, maya, "# whole\n### Maya Chen `people/maya-chen`\n- **role** [current]: design lead");
+    expect(whole.answered).toBe(true);
+    expect(missReason(answers(root, maya, "Connected: Maya Chen `people/maya-chen`"), whole)).toBe("pointer_only");
+    expect(missReason(answers(root, maya, "# p\n### Maya Chen `people/maya-chen`\n(Its facts only here; read it for more.)"), whole)).toBe("value_not_shown");
+    expect(missReason(answers(root, maya, "# p\n### Someone else `people/daniel-okoro`\n- **role**: other"), whole)).toBe("not_returned");
+    const two = { id: "t", q: "who leads the kitchen, and what is Maya's role?", set: "usefulness" as const, facts: ["people/maya-chen#role"], says: [], notes: ["projects/kitchen-renovation"], oneOf: [] };
+    const both = answers(root, two, "# whole\n### Maya Chen `people/maya-chen`\n- **role**: design lead\n### Kitchen `projects/kitchen-renovation`\nkitchen");
+    expect(both.answered).toBe(true);
+    expect(missReason(answers(root, two, "# p\n### Maya Chen `people/maya-chen`\n- **role**: design lead"), both)).toBe("several");
+    // Nothing the assistant may read answers it: outside its cut, whatever the door gave.
+    expect(missReason(answers(root, maya, "nothing"), answers(root, maya, "nothing"))).toBe("outside_cut");
+  } finally { delete process.env.PB_NOW; }
+}, 90_000);
+
+// The plan's scratch run said 32, 30 and 21: it counted the Atlas next step, contested and served
+// as current, as outside the cut. It is in every cut, shown wrongly, so it is "page came without
+// the value" here, and the totals are 34, 32 and 22.
+test("the demo set's answerable totals per assistant: 34, 32 and 22 (G900)", async () => {
+  const { scoreUsefulness } = await import("../src/usefulness");
+  try {
+    const root = await demo();
+    const s = scoreUsefulness(root, { file: SET, agents: ["claude", "chatgpt", "gemini"], doors: ["pack"] });
+    const by = Object.fromEntries(s.agents.map((a) => [a.agent, [a.all.asked, a.answerable.asked, a.why.outside_cut]]));
+    expect(by).toEqual({ claude: [34, 34, 0], chatgpt: [34, 32, 2], gemini: [35, 22, 13] });
+    // The contested Atlas next step is the brain's serving, never the cut.
+    expect(s.rows.find((r) => r.agent === "claude" && r.id === "atlas-next")!.why).toBe("value_not_shown");
+  } finally { delete process.env.PB_NOW; }
+}, 180_000);

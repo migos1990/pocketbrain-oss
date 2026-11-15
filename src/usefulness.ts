@@ -16,7 +16,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
-import { previewPack, previewSearch, previewRead } from "./core";
+import { previewPack, previewSearch, previewRead, previewAll } from "./core";
 import { PACK_SHAPE, type PackShape } from "./retrieve";
 import { loadBrain, isDisputed, today, type Note } from "./brain";
 import { records } from "./carve";
@@ -38,9 +38,17 @@ export interface UQuestion {
   facts: string[]; says: string[]; notes: string[]; oneOf: string[]; attr?: string;
   as?: string[];
 }
-export interface URow { id: string; agent: string; set: USet; door: UDoor; answered: boolean; pointer: boolean; tokens: number; noise: number; missing: number }
+// Why a question missed, one reason each, by code only (G900; plans/close-three-gaps Q1):
+// outside_cut: nothing the assistant may read answers it either (its whole view, read note by note);
+// pointer_only: what it needs came only as ids named on a line; several: it needs more than one page
+// and only some came; value_not_shown: the page came but the needed value isn't in it (facts only,
+// cut, stale, or a contested value served as current); not_returned: the page is nowhere in it.
+export const MISS_REASONS = ["outside_cut", "not_returned", "pointer_only", "value_not_shown", "several"] as const;
+export type UWhy = typeof MISS_REASONS[number];
+export interface URow { id: string; agent: string; set: USet; door: UDoor; answered: boolean; pointer: boolean; tokens: number; noise: number; missing: number; why?: UWhy }
 export interface UCount { asked: number; answered: number }
-export interface UAgent { agent: string; door: UDoor; sets: Partial<Record<USet, UCount>>; all: UCount; pointers: number; tokens: { median: number; perAnswer: number }; noise: number }
+// answerable: the questions its whole view answers, and how many of those this door answered.
+export interface UAgent { agent: string; door: UDoor; sets: Partial<Record<USet, UCount>>; all: UCount; answerable: UCount; why: Record<UWhy, number>; pointers: number; tokens: { median: number; perAnswer: number }; noise: number }
 export interface UScore { files: string[]; rows: URow[]; agents: UAgent[] }
 
 const list = (v: unknown) => (Array.isArray(v) ? v : typeof v === "string" ? [v] : []).map(String).filter(Boolean);
@@ -114,32 +122,69 @@ const blockId = (b: string) => b.match(/^### .*`([^`]+)`\s*$/m)?.[1];
 // or as its facts); an id named on a link, a Connected line or the also line is a pointer, not an
 // answer: `pointer` says the question would count if pointers did. Noise: the share of tokens in
 // notes that hold nothing the answer needs.
-export function answers(root: string, q: UQuestion, got: string, notes: Notes = new Map(loadBrain(root, { shared: true }).map((x) => [x.fm.id, x]))): { answered: boolean; pointer: boolean; missing: number; noise: number } {
+//
+// One part of what an answer needs, as it fared: the page(s) it lives on (none for words), whether
+// that page came back as a note, whether it was only named, and, for a missed fact, whether its value
+// was there but served as current while contested (the brain's serving, not the cut).
+export interface UPart { ok: boolean; pages: string[]; came: boolean; pointed: boolean; contested: boolean }
+export interface UAnswer { answered: boolean; pointer: boolean; missing: number; noise: number; parts: UPart[] }
+export function answers(root: string, q: UQuestion, got: string, notes: Notes = new Map(loadBrain(root, { shared: true }).map((x) => [x.fm.id, x]))): UAnswer {
   const text = flat(got);
   const blocks = blocksOf(got);
   const came = new Map(blocks.slice(1).map((b) => [blockId(b) ?? "", b] as const));
   const named = (id: string) => got.includes(`\`${id}\``);
   const needles: string[] = [];
-  let missing = 0, pointed = 0;
+  const parts: UPart[] = [];
+  const part = (ok: boolean, pages: string[], contested = false) => parts.push({ ok, pages, came: pages.some((p) => came.has(p)), pointed: !pages.some((p) => came.has(p)) && pages.some(named), contested });
   for (const k of q.facts) {
     const at = k.lastIndexOf("#"), id = k.slice(0, at), attr = k.slice(at + 1);
     const { contested, vals } = liveValues(notes, id, attr);
     needles.push(...vals);
-    const ok = vals.length > 0 && (contested ? vals.some((v) => text.includes(v)) && !new RegExp(`\\*\\*${attr}\\*\\* \\[current\\]`).test(got) : vals.every((v) => text.includes(v)));
-    if (!ok) { missing++; if (named(id)) pointed++; }
+    const there = vals.length > 0 && vals.some((v) => text.includes(v));
+    const servedCurrent = new RegExp(`\\*\\*${attr}\\*\\* \\[current\\]`).test(got);
+    const ok = vals.length > 0 && (contested ? there && !servedCurrent : vals.every((v) => text.includes(v)));
+    part(ok, [id], !ok && contested && there && servedCurrent);
   }
-  for (const w of q.says) { needles.push(flat(w)); if (!text.includes(flat(w))) missing++; }
+  for (const w of q.says) { needles.push(flat(w)); part(text.includes(flat(w)), []); }
   const ids = [...q.notes, ...q.oneOf];
-  for (const id of q.notes) if (!came.has(id)) { missing++; if (named(id)) pointed++; }
+  for (const id of q.notes) part(came.has(id), [id]);
   if (q.oneOf.length) {
     const shown = (id: string) => !q.attr || liveValues(notes, id, q.attr).vals.some((v) => flat(came.get(id) ?? "").includes(v));
-    const hit = q.oneOf.find((id) => came.has(id) && shown(id));
-    if (!hit) { missing++; if (q.oneOf.some(named)) pointed++; }
+    part(q.oneOf.some((id) => came.has(id) && shown(id)), q.oneOf);
     if (q.attr) for (const id of q.oneOf) needles.push(...liveValues(notes, id, q.attr).vals);
   }
+  const failed = parts.filter((p) => !p.ok), missing = failed.length, pointed = failed.filter((p) => p.pointed).length;
   const total = tokensOf(got);
   const useful = blocks.filter((b, i) => i > 0 && (ids.includes(blockId(b) ?? "") || needles.some((n) => flat(b).includes(n)))).reduce((s, b) => s + tokensOf(b), 0);
-  return { answered: missing === 0, pointer: missing > 0 && missing === pointed, missing, noise: total ? Math.round(100 * (1 - useful / total)) / 100 : 0 };
+  return { answered: missing === 0, pointer: missing > 0 && missing === pointed, missing, noise: total ? Math.round(100 * (1 - useful / total)) / 100 : 0, parts };
+}
+
+// Why a door's answer missed, given how the assistant's whole view fared on the same question (G900).
+// A whole view that misses only because a contested value is served as current is not the cut: the
+// value is there, shown wrongly. Pointers come before "several": naming a page is the cheaper fix.
+export function missReason(door: UAnswer, whole: UAnswer): UWhy {
+  if (!whole.answered) return whole.parts.some((p) => !p.ok && !p.contested) ? "outside_cut" : "value_not_shown";
+  if (door.pointer) return "pointer_only";
+  const failed = door.parts.filter((p) => !p.ok);
+  const pages = door.parts.filter((p) => p.pages.length);
+  if (pages.length > 1 && pages.some((p) => p.came) && failed.some((p) => p.pages.length && !p.came)) return "several";
+  if (failed.some((p) => p.came)) return "value_not_shown";
+  return "not_returned";
+}
+
+// The assistant's whole view as one text, each note as read by id under its own heading: what an
+// assistant that read every note it may read would have (previewRead, never logged as its read).
+export function wholeCut(root: string, agent: string): string {
+  let reads: string[] = [];
+  try { reads = previewAll(root, agent).map((r) => `### ${r.title ?? r.id} \`${r.id}\`\n${r.markdown}`); } catch { /* a paused or unknown assistant reads nothing */ }
+  return ["# whole view", ...reads].join("\n");
+}
+
+// Wilson score interval, 95%, as whole percents: honest bounds on a small count.
+export function interval95(k: number, n: number): [number, number] {
+  if (!n) return [0, 0];
+  const z = 1.96, p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+  return [Math.round(100 * (c - h) / d), Math.round(100 * (c + h) / d)];
 }
 
 // Search then read, as an assistant using those tools gets it: the hit list as the server sends
@@ -185,12 +230,19 @@ export function scoreUsefulness(root: string, opts: { file?: string; agents?: st
   const agents = opts.agents ?? assistants(root), doors = opts.doors ?? DOORS;
   const rows: URow[] = [];
   const sync = state(root);
+  // Each assistant's whole view, and how it fares on each question: the same for every door.
+  const cuts = new Map<string, string>(), wholes = new Map<string, UAnswer>();
+  const wholeFor = (agent: string, q: UQuestion) => {
+    const k = `${agent}\0${q.set}\0${q.id}`;
+    if (!wholes.has(k)) { if (!cuts.has(agent)) cuts.set(agent, wholeCut(root, agent)); wholes.set(k, answers(root, q, cuts.get(agent)!, notes)); }
+    return wholes.get(k)!;
+  };
   for (const door of doors) for (const agent of agents) for (const q of [...written, ...used]) {
     // A written question names who it is for; a harvested one is asked of every assistant.
     if (q.as && !q.as.includes(agent)) continue;
     const got = ask(root, agent, door, q.q, sync);
     const a = answers(root, q, got, notes);
-    rows.push({ id: q.id, agent, set: q.set, door, answered: a.answered, pointer: a.pointer, tokens: tokensOf(got), noise: a.noise, missing: a.missing });
+    rows.push({ id: q.id, agent, set: q.set, door, answered: a.answered, pointer: a.pointer, tokens: tokensOf(got), noise: a.noise, missing: a.missing, ...(a.answered ? {} : { why: missReason(a, wholeFor(agent, q)) }) });
   }
   const per = doors.flatMap((door) => agents.map((agent): UAgent => {
     const mine = rows.filter((r) => r.agent === agent && r.door === door);
@@ -198,8 +250,9 @@ export function scoreUsefulness(root: string, opts: { file?: string; agents?: st
     const sets: Partial<Record<USet, UCount>> = {};
     for (const s of new Set(mine.map((r) => r.set))) sets[s] = count(mine.filter((r) => r.set === s));
     const got = mine.filter((r) => r.answered);
+    const why = Object.fromEntries(MISS_REASONS.map((w) => [w, mine.filter((r) => r.why === w).length])) as Record<UWhy, number>;
     return {
-      agent, door, sets, all: count(mine), pointers: mine.filter((r) => r.pointer).length,
+      agent, door, sets, all: count(mine), answerable: count(mine.filter((r) => r.why !== "outside_cut")), why, pointers: mine.filter((r) => r.pointer).length,
       tokens: { median: median(mine.map((r) => r.tokens)), perAnswer: got.length ? Math.round(mine.reduce((s, r) => s + r.tokens, 0) / got.length) : 0 },
       noise: got.length ? Math.round(100 * got.reduce((s, r) => s + r.noise, 0) / got.length) : 0,
     };
@@ -257,16 +310,22 @@ export function shapesText(xs: UShape[]): string {
 }
 
 const DOOR_WORDS: Record<UDoor, string> = { pack: "context pack", search: "search, then read 3", check: "memory_check, then read 3" };
+const WHY_WORDS: Record<UWhy, string> = { outside_cut: "outside its cut", not_returned: "not returned", pointer_only: "only pointed to", value_not_shown: "page came without the value", several: "needed several pages, got some" };
 // One line per assistant and door: counts, tokens and noise only, never a question, a note or a value.
 export function countsText(s: UScore): string {
   if (!s.rows.length) return "Usefulness: no questions (add evals/usefulness.yaml to the brain; docs/prove-the-loop.md#usefulness)";
   return ["Usefulness: questions an assistant can answer from what it gets back, the tokens it reads, and the share of them that is noise",
-    "The number to steer by is the first line per assistant: the door assistants use most (memory_check, then read). Printed only, never a merge block.",
-    ...s.agents.filter((a) => a.all.asked).map((a) => `  ${a.agent} by ${DOOR_WORDS[a.door]}: ${a.all.answered}/${a.all.asked} answered (${Object.entries(a.sets).map(([k, v]) => `${k} ${v!.answered}/${v!.asked}`).join(", ")}), ${a.pointers} more only pointed to; median ${a.tokens.median} tokens, ${a.tokens.perAnswer || "-"} per answer, ${a.noise}% noise`),
+    "The number to steer by is the first line per assistant: the door assistants use most (memory_check, then read), its strict count. Answered of answerable sits beside it; what is outside an assistant's cut is printed, never subtracted silently. Printed only, never a merge block.",
+    ...s.agents.filter((a) => a.all.asked).flatMap((a) => {
+      const [lo, hi] = interval95(a.answerable.answered, a.answerable.asked);
+      const missed = MISS_REASONS.filter((w) => a.why[w]).map((w) => `${a.why[w]} ${WHY_WORDS[w]}`).join(", ") || "none";
+      return [`  ${a.agent} by ${DOOR_WORDS[a.door]}: ${a.all.answered}/${a.all.asked} answered (${Object.entries(a.sets).map(([k, v]) => `${k} ${v!.answered}/${v!.asked}`).join(", ")}); answered ${a.answerable.answered} of ${a.answerable.asked} answerable (${a.why.outside_cut} outside its cut); ${a.pointers} more only pointed to; median ${a.tokens.median} tokens, ${a.tokens.perAnswer || "-"} per answer, ${a.noise}% noise`,
+        `    why missed: ${missed}; 95% interval for answered of answerable: ${lo}% to ${hi}% (n ${a.answerable.asked})`];
+    }),
   ].join("\n");
 }
 
 // The owner's own view adds which question ids missed (ids are the set's own labels).
 export function detailText(s: UScore): string {
-  return [countsText(s), ...s.rows.filter((r) => !r.answered).map((r) => `  missed ${r.agent} ${r.door} ${r.id} (${r.set}): ${r.missing} part${r.missing === 1 ? "" : "s"} not there, ${r.tokens} tokens`)].join("\n");
+  return [countsText(s), ...s.rows.filter((r) => !r.answered).map((r) => `  missed ${r.agent} ${r.door} ${r.id} (${r.set}): ${r.why ? `${WHY_WORDS[r.why]}, ` : ""}${r.missing} part${r.missing === 1 ? "" : "s"} not there, ${r.tokens} tokens`)].join("\n");
 }

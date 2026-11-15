@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G900: {
+    closed: "claude/usefulness-why",
+    title: "The usefulness number could not say why a question missed",
+    severity: "medium",
+    finding: "Plan thread, 2026-11-15 (plans/close-three-gaps Q1): src/usefulness.ts rows held only answered and pointer, so \"gemini 19/35\" on the demo brain hid that most of its misses were questions outside its cut, and the real brain's \"claude 24/77\" mixed the owner's choice of what claude may read with retrieval misses. A page that came back as a note without the needed value also counted as only pointed to.",
+    fix: "Each missed row gets one reason by code (outside_cut from the assistant's whole view via previewAll, pointer_only, several, value_not_shown, not_returned; missReason, wholeCut); a contested value served as current is value_not_shown, never outside the cut; countsText prints answered of answerable with outside its cut beside the strict count, the reasons and a Wilson 95% interval; a pointer is a page named and not brought. test/usefulness.test.ts.",
+  },
   G828: {
     closed: "claude/authority-not-set",
     title: "Mentioned on listed a page whose only link was a guess",

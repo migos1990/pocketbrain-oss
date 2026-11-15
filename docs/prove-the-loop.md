@@ -52,7 +52,17 @@ One number every change has to move (plans/next-level.md, move 1): how many ques
 - **context pack**: one `context_pack` with the question as its topic;
 - **search, then read 3**: the `search` hits, then the top three notes read by id.
 
-A question is **answered** when everything it needs is in what came back: each named fact's live value (a list, every live item; a fact two sources contest, by a dispute on the fact or by a `contested:` key on its live record, must not be served as current), each phrase, and each note as a note (its own `### Title` block, whole or as its facts; a golden `want` note with its `expect` fact in that block). A note only named, on a link, a `Connected:` line or the pack's also line, is a **pointer**: the counts say how many more questions only pointed to what they needed, apart from the answered ones (G768). **Tokens** are characters / 4, as the context budget counts them. **Noise** is the share of those tokens in notes that hold nothing the answer needs (the pack's head counts as noise too).
+A question is **answered** when everything it needs is in what came back: each named fact's live value (a list, every live item; a fact two sources contest, by a dispute on the fact or by a `contested:` key on its live record, must not be served as current), each phrase, and each note as a note (its own `### Title` block, whole or as its facts; a golden `want` note with its `expect` fact in that block). A note only named, on a link, a `Connected:` line or the pack's also line, and not also brought as a note, is a **pointer**: the counts say how many more questions only pointed to what they needed, apart from the answered ones (G768). **Tokens** are characters / 4, as the context budget counts them. **Noise** is the share of those tokens in notes that hold nothing the answer needs (the pack's head counts as noise too).
+
+**Why each miss** (G900): every question a door missed gets one reason, by code only, from five:
+
+- **outside its cut**: the assistant's whole view, every note it may read read by id (`previewAll` in src/core.ts, never logged), can't answer it either. That part is the owner's choice of what the assistant is given, never a retrieval fix; a question the brain itself doesn't hold lands here too;
+- **only pointed to**: what it needs was only named on a line (the pointer above);
+- **needed several pages, got some**: it needs more than one page and only some came back as notes;
+- **page came without the value**: the page came back, but not the needed value (its facts only, cut, or a contested value served as current: that value is in every view, shown wrongly, so it is never counted as outside the cut);
+- **not returned**: the assistant may read it, and nothing it needs came back.
+
+Each assistant's line then reads `a/n answered (by set); answered x of y answerable (z outside its cut)`, followed by `why missed:` with the count per reason and the 95% interval (Wilson) for answered of answerable, with its n. The strict count, answered of all asked, stays first and is the one to steer by; what is outside an assistant's cut is printed beside it, never subtracted silently. On the demo brain's set, by the context pack, the answerable totals are 34 for claude, 32 for chatgpt and 22 for gemini (0, 2 and 13 outside their cuts). The 32, 30 and 21 in plans/close-three-gaps-2026-11-15 came from a scratch run that counted the contested Atlas next step as outside the cut; don't quote them. On a real brain it stays counts only: no question, page, name or value.
 
 The questions come from four places:
 

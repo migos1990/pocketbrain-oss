@@ -368,6 +368,12 @@ export function previewRead(root: string, agent: string, id: string) {
   if (!r.out) throw new CoreError(404, `no note ${id} in your view`);
   return r.out;
 }
+// Every note in one agent's view, each as previewRead gives it, from one snapshot: the usefulness
+// score's whole-view check (src/usefulness.ts, G900). Owner-only like previewRead, never served or logged.
+export function previewAll(root: string, agent: string) {
+  const snap = snapshot(root, agent);
+  return [...snap.res.visible.keys()].sort().flatMap((id) => { const o = noteFrom(snap, agent, id).out; return o ? [o] : []; });
+}
 
 // An empty search says why (backlog 317): search matches any one word, so no hit means none of
 // the words is in a note of the agent's view. Built from the query and the owner's name alone,
@@ -412,7 +418,9 @@ export function askAs(root: string, agent: string, q: string, limit = 5) {
 }
 
 function noteOut(root: string, agent: string, id: string, section?: string) {
-  const { rules, res } = snapshot(root, agent);
+  return noteFrom(snapshot(root, agent), agent, id, section);
+}
+function noteFrom({ rules, res }: { rules: Rules; res: CarveResult }, agent: string, id: string, section?: string) {
   const v = res.visible.get(id.replace(/\.md$/, ""));
   if (!v) return { rules, res };
   const fm = v.note.fm;
