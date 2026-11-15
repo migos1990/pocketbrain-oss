@@ -202,6 +202,75 @@ test("G854: a name that is only one side of a two-name page's title never moves 
   } finally { delete process.env.PB_NOW; }
 }, 90_000);
 
+// G854, from the slice audit of 73d964c: an assistant's two-name page beside the owner's exact page
+// neither blocks nor chooses: the page moves as it does with the owner's page alone.
+test("G854: an assistant's two-name page beside the owner's exact page changes nothing about the move", async () => {
+  try {
+    const root = await brain();
+    writeFileSync(join(root, "orgs", "brightwell.md"), `---\nid: orgs/brightwell\ntype: org\ntitle: Brightwell\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
+    gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "owner: an org"]);
+    write(root, { agent: "chatgpt", type: "org", title: "Northwind / Brightwell", area: "work", attribute: "what_it_is", value: "two firms", as_of: "2026-10-08", sources: ["gmail:f00000000000d854"], verification: "verified-by-source" } as never);
+    expect(loadBrain(root).some((n) => n.fm.title === "Northwind / Brightwell" && n.fm.area === "work")).toBe(true);
+    ownerSay(root, "Maya Chen works at Brightwell");
+    expect(areaOf(root)).toBe("personal");
+    expect(moved(root)).toHaveLength(1);
+    // The owner's page keeps its place; the assistant's page did not become the workplace.
+    expect(areaOf(root, "orgs/brightwell")).toBe("personal");
+    expect(JSON.stringify(loadBrain(root).find((n) => n.fm.id === MAYA)!.fm.facts!.org)).toContain("orgs/brightwell]]");
+  } finally { delete process.env.PB_NOW; }
+}, 90_000);
+
+// The other way round: the exact page is the assistant's, the two-name page the owner's. An
+// assistant's page never decides a move, and one side of the owner's two-name title is no name.
+test("G854: an assistant's exact page beside the owner's two-name page moves nothing", async () => {
+  try {
+    const root = await brain();
+    writeFileSync(join(root, "orgs", "northwind-brightwell.md"), `---\nid: orgs/northwind-brightwell\ntype: org\ntitle: Northwind / Brightwell\narea: teaching\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
+    gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "owner: a two-name org"]);
+    write(root, { agent: "chatgpt", type: "org", title: "Brightwell", area: "work", attribute: "what_it_is", value: "a print shop", as_of: "2026-10-08", sources: ["gmail:f00000000000d855"], verification: "verified-by-source" } as never);
+    expect(loadBrain(root).some((n) => n.fm.type === "org" && n.fm.title === "Brightwell" && n.fm.area === "work")).toBe(true);
+    ownerSay(root, "Hélène Lefebvre works at Brightwell");
+    expect(areaOf(root, "people/helene-lefebvre")).toBe("personal");
+    expect(moved(root)).toHaveLength(0);
+  } finally { delete process.env.PB_NOW; }
+}, 90_000);
+
+// G854, the oracle check from the same audit: a link by name is worked out from the pages the
+// writer is shown, so pages it cannot see, exact or two-name, never change what its write stores.
+test("G854: pages hidden from the writer never change the value its write stores", async () => {
+  const { carve, grantFor } = await import("../src/carve");
+  const stored: string[] = [];
+  const QUIN = "people/quin-vale";
+  const quin = (root: string) => writeFileSync(join(root, `${QUIN}.md`), `---\nid: ${QUIN}\ntype: person\ntitle: Quin Vale\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
+  for (const hidden of [[], ["Northwind / Brightwell"], ["Brightwell"], ["Brightwell", "Northwind / Brightwell"]]) {
+    try {
+      const root = await brain();
+      quin(root);
+      hidden.forEach((title, k) => writeFileSync(join(root, "projects", `hid-${k}.md`), `---\nid: projects/hid-${k}\ntype: project\ntitle: ${title}\narea: household\nsensitivity: private\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`));
+      gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "owner: pages", "--allow-empty"]);
+      const rules = loadRules(root);
+      const seen = carve(loadBrain(root), rules, grantFor(rules, "chatgpt"), { flags: false }).visible;
+      expect(seen.has(QUIN)).toBe(true);
+      hidden.forEach((_t, k) => expect(seen.has(`projects/hid-${k}`)).toBe(false));
+      const r = write(root, { agent: "chatgpt", id: QUIN, attribute: "org", value: "[[Brightwell]]", as_of: "2026-10-08", sources: ["gmail:f00000000000d856"], verification: "verified-by-source" } as never);
+      const maya = loadBrain(root).find((n) => n.fm.id === QUIN)!;
+      stored.push(JSON.stringify([r.outcome, (maya.fm.facts?.org as { value?: unknown } | undefined)?.value]));
+    } finally { delete process.env.PB_NOW; }
+  }
+  expect(new Set(stored).size).toBe(1);
+  expect(stored[0]).toContain("[[Brightwell]]");
+  // Control: the same write with the exact page in the writer's view does link it, so the name
+  // is resolved on this path and the sameness above is not for want of trying.
+  try {
+    const root = await brain();
+    quin(root);
+    writeFileSync(join(root, "projects", "seen.md"), `---\nid: projects/seen\ntype: project\ntitle: Brightwell\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
+    gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "owner: a page"]);
+    write(root, { agent: "chatgpt", id: QUIN, attribute: "org", value: "[[Brightwell]]", as_of: "2026-10-08", sources: ["gmail:f00000000000d856"], verification: "verified-by-source" } as never);
+    expect(JSON.stringify(loadBrain(root).find((n) => n.fm.id === QUIN)!.fm.facts?.org)).toContain("[[projects/seen]]");
+  } finally { delete process.env.PB_NOW; }
+}, 180_000);
+
 test("Undo of a move whose page lost its area line answers changed since and writes nothing, not even to a line in the text", async () => {
   try {
     const root = await brain();

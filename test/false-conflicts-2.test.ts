@@ -252,4 +252,7 @@ test("G854: a name that is one side of a two-name title links nothing", async ()
   expect(pageLink([n("orgs/brightwell", "Brightwell"), n("orgs/brightwell-2", "Brightwell")], "[[Brightwell]]")).toBe("[[Brightwell]]");
   expect(pageLink([n("orgs/brightwell", "Brightwell")], "[[brightwell]]")).toBe("[[orgs/brightwell]]");
   expect(pageLink([n("orgs/bw", "BW Holdings", ["Brightwell"])], "[[Brightwell]]")).toBe("[[orgs/bw]]");
+  // A page that carries the name as an alias, beside two-name pages (slash or pipe): the alias page.
+  expect(pageLink([n("orgs/bw", "BW Holdings", ["Brightwell"]), two], "[[Brightwell]]")).toBe("[[orgs/bw]]");
+  expect(pageLink([n("orgs/brightwell", "Brightwell"), two, n("orgs/nb2", "BW", ["Northwind / Brightwell"])], "[[Brightwell]]")).toBe("[[orgs/brightwell]]");
 });
