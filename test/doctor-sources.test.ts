@@ -26,7 +26,7 @@ function keys(...names: string[]) {
   for (const n of names) writeFileSync(join(dir, "keys", n), "secret-value-not-shown\n", { mode: 0o600 });
 }
 const sources = (root: string, yaml: string) => writeFileSync(join(root, "rules", "sources.yaml"), yaml);
-const MAIL = "sources:\n  mail:\n    kind: gmail\n    account: personal\n    where: [INBOX]\n";
+const MAIL = "sources:\n  mail:\n    kind: gmail\n    account: personal\n    where: [INBOX]\n    area: personal\n";
 async function found(root: string) {
   const f = (await doctor(root, { offline: true })).filter((x) => x.area === "sources");
   return { ids: f.map((x) => x.id ?? x.level), text: f.map((x) => x.text).join("\n") };
@@ -54,7 +54,7 @@ test("a live source with no consent line is named, before any key check", async 
 test("Google steps in order: the client first, then the sign-in for each source, by name", async () => {
   keys();
   const root = makeBrain();
-  sources(root, `consent: 2026-10-01 Gmail and Calendar read-only\n${MAIL}  cal:\n    kind: gcal\n    account: personal\n`);
+  sources(root, `consent: 2026-10-01 Gmail and Calendar read-only\n${MAIL}  cal:\n    kind: gcal\n    account: personal\n    area: personal\n`);
   let r = await found(root);
   expect(r.ids).toEqual(["doctor.google-client-missing"]);
   expect(r.text).toContain("GOOGLE_CLIENT_ID");
@@ -94,4 +94,13 @@ test("a fixture source needs no keys and no consent check fails it", async () =>
   const root = makeBrain();
   sources(root, "sources:\n  demo:\n    kind: gmail\n    fixture: fixtures/mail.json\n");
   expect((await found(root)).ids).toEqual(["doctor.source-never-pulled"]);
+});
+
+test("a pulled source with no area is named: pages it starts are not filed yet until it has one", async () => {
+  keys("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN_PERSONAL");
+  const root = makeBrain();
+  sources(root, `consent: 2026-10-01\n${MAIL.replace("    area: personal\n", "")}`);
+  const r = await found(root);
+  expect(r.ids).toContain("doctor.source-no-area");
+  expect(r.text).toContain("mail has no area");
 });

@@ -22,6 +22,7 @@ export interface WriteRequest {
   title?: string;
   type?: string;
   area?: string;
+  unfiled?: string | boolean; // a new page not filed yet (src/carve.ts isUnfiled): set by the capture path; on a new page only, and it only hides
   attribute?: string;
   value?: unknown;
   as_of?: string;

@@ -12,7 +12,7 @@
 // editor's set-fact in edit.ts) call followArea after their commit, and nothing else does.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseNote, loadBrain, linksIn, today, type Note } from "./brain";
+import { parseNote, loadBrain, linksIn, today, SENSITIVITY_ORDER, type Note, type Sensitivity } from "./brain";
 import { commitPaths, gitRun } from "./git";
 import { appendDiary, diaryRow, readDiary, type DiaryRow } from "./diary";
 import { compareKey } from "./normalize";
@@ -53,6 +53,42 @@ function outsiderWouldGain(notes: Note[], rules: Rules, note: Note, to: string):
     const g = grantFor(rules, k);
     return !carve(notes, rules, g).visible.has(note.fm.id) && carve(after, rules, g).visible.has(note.fm.id);
   });
+}
+
+const DIR: Record<string, string> = { person: "people", org: "orgs", project: "projects", decision: "decisions", money: "money" };
+
+// Whether a page of `type` in area `to` gives every assistant at most what the same page in `from`
+// would: no note it wouldn't see, no attribute or body beyond, at every sensitivity a page can have.
+export function neverWider(rules: Rules, type: string, to: string, from: string, by = "owner"): boolean {
+  const probe = (area: string, sensitivity: Sensitivity): Note => ({ path: `${DIR[type] ?? "notes"}/area-probe.md`, body: "", fm: { id: `${DIR[type] ?? "notes"}/area-probe`, type, title: "area probe", area, sensitivity, status: "active", by, facts: {} } } as unknown as Note);
+  return SENSITIVITY_ORDER.every((s) => givesNoMore(rules, probe(to, s), probe(from, s)));
+}
+
+// Whether moving this page to `to` hands no assistant more, carved as the page really is (its tags,
+// dates, sensitivity and maker), not as a stand-in (slice audit: a slice of an area and a tag, or of
+// an area since a date, rejects a bare probe in both areas).
+export function moveNeverWider(rules: Rules, n: Note, to: string): boolean {
+  return givesNoMore(rules, { ...n, fm: { ...n.fm, area: to } } as Note, n);
+}
+
+// Fact by fact too: a slice that hides one attribute by name (exclude_attributes, exclude
+// <id>#<attr>) or a fact's own level hides it after the page is placed, so a fact hidden before
+// the move must stay hidden after it (security review, 2026-11-15).
+function givesNoMore(rules: Rules, after: Note, before: Note): boolean {
+  for (const agent of Object.keys(rules.policy.agents ?? {})) {
+    const g = grantFor(rules, agent);
+    const ca = carve([after], rules, g, { names: false });
+    const a = ca.visible.values().next().value;
+    if (!a) continue;
+    const cb = carve([before], rules, g, { names: false });
+    const b = cb.visible.values().next().value;
+    if (!b) return false;
+    if (a.body && !b.body) return false;
+    if (b.attributes !== "all" && (a.attributes === "all" || [...a.attributes].some((x) => !(b.attributes as Set<string>).has(x)))) return false;
+    const hiddenAfter = new Set(ca.hiddenFacts.map((h) => h.key));
+    if (cb.hiddenFacts.some((h) => !hiddenAfter.has(h.key))) return false;
+  }
+  return true;
 }
 
 // Who last set a page's area: the newest commit that made the page (its maker, `by:`) or changed
@@ -129,23 +165,33 @@ export function followArea(root: string, rules: Rules, factKey: string | undefin
 
 // The page's text with its front matter's `area:` set, or undefined when the front matter has no
 // `area:` line (a line in the body is never touched).
-function withArea(text: string, area: string): string | undefined {
+// The page's text with its area set; `unfiled` drops the not-filed-yet mark (a string or true puts
+// it back, for an Undo). Undefined when nothing changes.
+function withArea(text: string, area: string, unfiled?: "drop" | string | true): string | undefined {
   const m = text.match(/^---\n([\s\S]*?)\n---/);
   if (!m || !/^area:[^\n]*$/m.test(m[1]!)) return undefined;
-  const fm = m[1]!.replace(/^area:[^\n]*$/m, `area: ${area}`);
+  let fm = m[1]!.replace(/^area:[^\n]*$/m, `area: ${area}`);
+  if (unfiled === "drop") fm = fm.replace(/^unfiled:[^\n]*\n?/m, "");
+  else if (unfiled !== undefined && !/^unfiled:/m.test(fm)) fm = fm.replace(/^(area:[^\n]*)$/m, `$1\nunfiled: ${JSON.stringify(unfiled)}`);
   return fm === m[1] ? undefined : `---\n${fm}\n---${text.slice(m[0].length)}`;
 }
+const markOf = (note: Note): string | true | undefined => note.fm.unfiled === true ? true : typeof note.fm.unfiled === "string" && note.fm.unfiled ? note.fm.unfiled : undefined;
 
-function moveArea(root: string, note: Note, from: string, to: string, follows: string): AreaMove | undefined {
+// `how` names the commit for another mover (the night pass's word-guess moves, src/area-guess.ts):
+// its subject, its Kind trailer and who commits it. The diary row and its Undo are the same.
+// A page the owner moves, or one filed by its source's area, is filed: the not-filed-yet mark goes
+// (src/carve.ts isUnfiled), and the diary row keeps it so the Undo puts it back.
+export function moveArea(root: string, note: Note, from: string, to: string, follows: string, how: { subject: string; kind: string; author: string; file?: boolean } = { subject: "with its workplace", kind: "area-follows", author: OWNER }): AreaMove | undefined {
   const file = join(root, note.path);
   const text = readFileSync(file, "utf8");
-  const moved = withArea(text, to);
+  const mark = (how.author === OWNER || how.file) ? markOf(note) : undefined;
+  const moved = withArea(text, to, mark !== undefined ? "drop" : undefined);
   if (!moved) return undefined;
   writeFileSync(file, moved);
   const at = clock().toISOString(), d = today();
-  const row: DiaryRow = { ...diaryRow({ at, factKey: `${note.fm.id}#`, title: String(note.fm.title ?? note.fm.id), kind: "moved", from, to, incoming: { value: to, as_of: d, sources: [], verification: "confirmed-by-owner", by: OWNER, recorded: d } as never, rank: 5, sensitivity: note.fm.sensitivity ?? "personal" }), follows };
+  const row: DiaryRow = { ...diaryRow({ at, factKey: `${note.fm.id}#`, title: String(note.fm.title ?? note.fm.id), kind: "moved", from, to, incoming: { value: to, as_of: d, sources: [], verification: how.author === OWNER ? "confirmed-by-owner" : "unverified", by: how.author, recorded: d } as never, rank: 5, sensitivity: note.fm.sensitivity ?? "personal" }), follows, ...(mark !== undefined ? { unfiled: mark } : {}) };
   const diary = appendDiary(root, row, d.slice(0, 7));
-  const failed = commitPaths(root, [note.path, diary], `move ${note.fm.id} to ${to}, with its workplace\n\nArea-Follows: ${follows}\nKind: area-follows`, OWNER);
+  const failed = commitPaths(root, [note.path, diary], `move ${note.fm.id} to ${to}, ${how.subject}\n\nArea-Follows: ${follows}\nKind: ${how.kind}`, how.author);
   if (failed) { writeFileSync(file, text); return undefined; }
   return { id: note.fm.id, from, to, commit: gitRun(root, ["rev-parse", "HEAD"]).out.trim() };
 }
@@ -157,7 +203,7 @@ export function undoMove(root: string, row: DiaryRow): "undone" | "changed_since
   const note = loadBrain(root).find((n) => n.fm.id === id);
   if (!note || !existsSync(join(root, note.path)) || String(note.fm.area ?? "") !== String(row.to) || typeof row.from !== "string") return "changed_since";
   const file = join(root, note.path), text = readFileSync(file, "utf8");
-  const back = withArea(text, row.from);
+  const back = withArea(text, row.from, row.unfiled);
   if (!back) return "changed_since";
   writeFileSync(file, back);
   const at = clock().toISOString(), d = today();

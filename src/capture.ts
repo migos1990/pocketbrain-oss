@@ -29,6 +29,7 @@ import type { Note, Sensitivity } from "./brain";
 import { loadBrain, sensitivityRank, today, isList } from "./brain";
 import { loadRules, attributeSpec, captureAgentName, isDeclared, cardOnly, BUILTIN, type Rules } from "./rules";
 import { records } from "./carve";
+import { neverWider } from "./area-follow";
 import { redactSecrets, findInjection } from "./checks";
 import type { WriteRequest } from "./checks";
 import { resolveEntity, personKey, stripCredentials, titleKind, untitledKey, sameTitled, sharingSurname } from "./write";
@@ -531,20 +532,20 @@ export function fromCapture(rules: Rules, doc: { by?: unknown; capture?: unknown
   return typeof doc?.capture === "string" && typeof doc.by === "string" && (doc.by === captureAgent(rules) || isOwnerId(doc.by));
 }
 
-// A new note needs an area. The area most of the related notes are in (by words shared with the
-// capture), else the area the capturing agent owns, else the first area. Louis can change it in
-// the proposal before he accepts.
-function guessArea(text: string, notes: Note[], rules: Rules, agent: string): string | undefined {
-  const q = new Set(terms(text));
-  const count = new Map<string, number>();
-  for (const n of notes) {
-    if (!n.fm.area || !TYPES.includes(n.fm.type)) continue;
-    const s = terms([n.fm.title, ...(n.fm.aliases ?? [])].join(" ")).filter((t) => q.has(t)).length;
-    if (s) count.set(n.fm.area, (count.get(n.fm.area) ?? 0) + s);
-  }
-  const best = [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const areas = Object.entries(rules.policy.areas ?? {});
-  return best ?? areas.find(([, v]) => v.owner === agent)?.[0] ?? areas[0]?.[0];
+// A new page's area (G841). An area decides who reads a page, so it never comes from shared words:
+// a mail that said "Montréal" once went to the area of an org whose name carries the city, and every
+// assistant reading that area read it. Area comes only from the owner, or from the source's own
+// configured account or label (`c.fm.area`, set by the pull, at the call below); anything else is
+// "not filed yet" (plans/wrong-grouping-family, rule 3): personal, else the first area. A shared word
+// or a name in the text never places a page. One exception only tightens: an assistant's own
+// capture stays in the area that assistant owns when personal would hand some assistant more
+// (`neverWider`, slice audit of G841).
+export function newPageArea(rules: Rules, o: { agent?: string; type?: string; pulled?: boolean } = {}): string | undefined {
+  const areas = Object.keys(rules.policy.areas ?? {});
+  const base = areas.includes("personal") ? "personal" : areas[0];
+  const own = !o.pulled && o.agent ? Object.entries(rules.policy.areas ?? {}).find(([, v]) => v?.owner === o.agent)?.[0] : undefined;
+  if (!base || !own || own === base || !o.type) return base;
+  return neverWider(rules, o.type, base, own, o.agent) ? base : own;
 }
 
 // Pending proposals in inbox/ (not decided ones), for dedupe across captures (G44).
@@ -652,7 +653,7 @@ const targetKey = (r: Partial<WriteRequest>) => r.id ? `id:${r.id}` : `${r.type}
 // proposal when it is a capture proposal of the same source type; otherwise it is only skipped.
 // Returns the proposal file, and fresh: whether a new one was written (only those count toward
 // capture.max_proposals). room false: no new proposal may be written (over the cap).
-function proposeItem(root: string, item: CaptureItem, src: { ref: string; source_type: string }, agent: string, captureRel: string, received: string, pending: Pending[], rules: Rules, room: boolean, area?: string, sensitivity?: Sensitivity, hold?: { source: string; held: boolean }): { rel?: string; fresh: boolean } {
+function proposeItem(root: string, item: CaptureItem, src: { ref: string; source_type: string }, agent: string, captureRel: string, received: string, pending: Pending[], rules: Rules, room: boolean, area?: string, sensitivity?: Sensitivity, hold?: { source: string; held: boolean }, unfiled?: string | true): { rel?: string; fresh: boolean } {
   const c = item.candidate;
   const spec = attributeSpec(rules, c.type, c.attribute);
   const want = targetKey(item.target ? { id: item.target } : { title: c.entity, type: c.type });
@@ -673,7 +674,7 @@ function proposeItem(root: string, item: CaptureItem, src: { ref: string; source
   if (!room) return { fresh: false };
   const req: WriteRequest = {
     agent, kind: "fact",
-    ...(item.target ? { id: item.target } : { title: c.entity, type: c.type, ...(area ? { area } : {}) }),
+    ...(item.target ? { id: item.target } : { title: c.entity, type: c.type, ...(area ? { area } : {}), ...(area && unfiled ? { unfiled } : {}) }),
     attribute: c.attribute, value: c.value, as_of: typeof c.as_of === "string" && /^\d{4}(-\d{2}){0,2}$/.test(c.as_of) ? c.as_of : received,
     sources: [src.ref], source_type: src.source_type, confidence: item.unnamed ? "inferred" : "stated", ...(sensitivity ? { sensitivity } : {}),
   };
@@ -779,7 +780,10 @@ function fileItems(root: string, rel: string, c: { fm: Record<string, unknown>; 
     const floor = pulled ? floorFor(higher(c.fm.min_sensitivity as Sensitivity | undefined, it.floor), notes.find((n) => n.fm.id === it.target)?.fm.sensitivity) : undefined;
     // The owner's own page sits in the personal area, never one a mail's words point to (G402).
     const own = it.status === "new-note" && it.candidate.type === "person" && it.candidate.entity === ownerTitle(rules) && rules.policy.areas?.personal ? "personal" : undefined;
-    const area = it.status === "new-note" ? own ?? (pulled && typeof c.fm.area === "string" ? c.fm.area : guessArea(c.text, notes, rules, agent)) : undefined;
+    const area = it.status === "new-note" ? own ?? (pulled && typeof c.fm.area === "string" ? c.fm.area : newPageArea(rules, { agent, type: cand.type, pulled })) : undefined;
+    // Not filed yet: the area came only from the default, so who may read it is unknown (src/carve.ts
+    // isUnfiled); the mark names the pulled source, so the page moves when that source gets an area.
+    const unfiled = it.status === "new-note" && !own && !(pulled && typeof c.fm.area === "string") ? (source ?? true) : undefined;
     if (["changes", "new-fact", "new-note"].includes(it.status)) {
       // A new note from a source: where its other facts went, else filed while today's count allows.
       let hold: { source: string; held: boolean } | undefined;
@@ -790,7 +794,7 @@ function fileItems(root: string, rel: string, c: { fm: Record<string, unknown>; 
         if (it.status === "new-note" && !held) fresh.add(key);
         hold = { source, held };
       }
-      const p = proposeItem(root, it, src, agent, rel, received, pending, rules, made < cap, area, floor, hold);
+      const p = proposeItem(root, it, src, agent, rel, received, pending, rules, made < cap, area, floor, hold, unfiled);
       if (p.fresh && hold?.held) Object.assign(it, { held: true, why: `held: over ${perDay} new notes a day from ${source} (rules/sources.yaml new_notes_per_day); pocketbrain inbox more` });
       if (p.fresh && !hold?.held) made++;
       if (p.rel) it.proposal = p.rel;

@@ -114,6 +114,11 @@ export function generate(seed: number): Generated {
     if (lr.chance(0.5)) n.fm.summary = `${n.fm.title} is tied to ${to.fm.title}.`;
     if (lr.chance(0.5)) n.body = `The partner of ${n.fm.title} is ${to.fm.title}.[^pf-partner]\n\n(Written by the hub from this page's facts.)\n\n[^pf-partner]: Email, ${day} (${ref})`;
   }
+  // Pages not filed yet (`unfiled:`, docs/capture.md): no evidence of who may read them, so only a
+  // grant that reads every area, or a slice that lists the page by id, reads one. From a stream of
+  // its own, like the cards, so a seed's other notes and its policy are the ones it always made.
+  const ur = prng(seed ^ 0x0f11);
+  for (const n of notes) if (ur.chance(0.15)) n.fm.unfiled = ur.chance(0.5) ? true : `feed-${ur.int(1, 9)}`;
   const decisions = notes.filter((n) => n.fm.type === "decision");
   if (decisions.length >= 2 && r.chance(0.7)) {
     const [old, nu] = [decisions[0], decisions[1]];
@@ -152,6 +157,19 @@ export function generate(seed: number): Generated {
     agents[name] = a;
     gen.push({ name, roles: r.chance(0.5) ? ["full", "reader"] : ["full"] });
   }
+  // From the same stream: a slice naming every area but one (never reads an unfiled page), a slice
+  // listing one unfiled page by id, and a slice naming every area (reads them all), each handed to
+  // one agent on top of what it holds.
+  const unfiled = notes.filter((n) => n.fm.unfiled);
+  const extra: [string, Record<string, any>][] = [];
+  if (areas.length >= 2 && ur.chance(0.6)) { const left = ur.pick(areas); extra.push(["u-most", { areas: areas.filter((x) => x !== left) }]); }
+  if (unfiled.length && ur.chance(0.6)) extra.push(["u-byid", { include: [ur.pick(unfiled).fm.id] }]);
+  if (areas.length >= 2 && ur.chance(0.4)) extra.push(["u-every", { areas: [...areas] }]);
+  for (const [name, s] of extra) {
+    slices[name] = s;
+    const a = agents[ur.pick(agentNames)];
+    a.slices = [...new Set([...a.slices, name])];
+  }
   writeFileSync(join(root, "rules", "policy.yaml"), YAML.stringify({ owner: { name: "Robin" }, agents, tiers: { core: { max_sensitivity: "private", writes: "direct" }, trial: { max_sensitivity: "personal", writes: "propose" } }, areas: Object.fromEntries(areas.map((a) => [a, {}])) }));
   writeFileSync(join(root, "rules", "slices.yaml"), YAML.stringify({ slices }));
   const git = (args: string[]) => Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "-c", "commit.gpgsign=false", ...args], { cwd: root });
@@ -188,8 +206,15 @@ export async function evolve(g: Generated, src: { mergeNotes: Function; handOff:
       const dupId = `${orig.fm.id}-dup`;
       const text = readFileSync(join(g.root, `${orig.fm.id}.md`), "utf8").replace(/^id: .*$/m, `id: ${dupId}`);
       writeFileSync(join(g.root, `${dupId}.md`), text);
+      // Same access too: a slice that lists the page by id lists its copy (a page not filed yet is
+      // read by such a slice only, so the copy would otherwise be out where the page is in).
+      const sf = join(g.root, "rules", "slices.yaml");
+      const doc = YAML.parse(readFileSync(sf, "utf8"));
+      let listed = false;
+      for (const s of Object.values(doc.slices ?? {}) as any[]) if (s.include?.includes(orig.fm.id)) { s.include.push(dupId); listed = true; }
+      if (listed) writeFileSync(sf, YAML.stringify(doc));
       const git = (args: string[]) => Bun.spawnSync(["git", "-c", "user.name=louis", "-c", "user.email=l@x", "-c", "commit.gpgsign=false", ...args], { cwd: g.root });
-      git(["add", `${dupId}.md`]); git(["commit", "-q", "-m", `carve-gen duplicate of ${orig.fm.id}`]);
+      git(["add", `${dupId}.md`, ...(listed ? ["rules/slices.yaml"] : [])]); git(["commit", "-q", "-m", `carve-gen duplicate of ${orig.fm.id}`]);
       pairs.push([orig, { fm: { ...orig.fm, id: dupId } }]);
     }
     pairs.push(...[...byType.values()].flatMap((xs) => xs.flatMap((a, i) => xs.slice(i + 1).map((b) => [a, b]))).filter(([a, b]) => !clash(a, b)));

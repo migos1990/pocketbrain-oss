@@ -333,6 +333,8 @@ export function sourceFindings(root: string): Finding[] {
   const runs = pullRuns(root);
   for (const [name, c] of all) {
     if (!c.fixture && isGoogle(c) && !hasKey(tokenKey(c.account, c.kind as "gmail" | "gcal" | "gdoc" | "contacts"))) { out.push(finding("sources", "warn", "doctor.source-not-connected", { name })); continue; }
+    // A source with no area starts pages not filed yet (src/carve.ts isUnfiled): say so on day one.
+    if (!c.fixture && !c.area) out.push(finding("sources", "warn", "doctor.source-no-area", { name }));
     const last = runs.filter((r) => r.source === name).at(-1);
     if (!last) out.push(finding("sources", "warn", "doctor.source-never-pulled", { name }));
     else if (last.refused) out.push(finding("sources", "warn", "doctor.source-refused", { name, at: last.at.slice(0, 16), why: last.refused }));

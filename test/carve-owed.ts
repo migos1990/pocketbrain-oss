@@ -10,7 +10,9 @@
 //   - the agent holds the ready-made slice of the page's area (`area:<area>`) or `all`, neither
 //     redefined in slices.yaml: every fact of such a page, with no attribute filter;
 //   - the leak oracle carves out neither the page nor the fact for this reader (kind, name,
-//     ceiling, share_with, the owner's Show);
+//     ceiling, share_with, the owner's Show, a page not filed yet that the grant doesn't read in
+//     every area or list by id: such a page is owed to a reader holding `all`, or an area slice
+//     for every area, and never through its area slice alone);
 //   - no custom slice the agent also holds takes the fact away (`exclude`, `exclude_attributes`);
 //   - the page is not folded into another (`status: merged`);
 //   - the value is plain text or a number, links no page, and holds nothing the leak oracle

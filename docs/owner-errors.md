@@ -142,6 +142,7 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `doctor.google-client-missing` | {keys} not in the keys folder, so no Google source can sign in. Fix: read docs/sources-pull.md (step 1, the Google client) and put each value in its own key file. |
 | `doctor.source-not-connected` | {name} isn't signed in to Google yet. Fix: run pocketbrain sources connect {name}, on the hub machine. |
 | `doctor.source-never-pulled` | {name} hasn't been pulled yet. Fix: run pocketbrain sources pull {name} --dry-run, to see what it would read, then let the hub's schedule pull it. |
+| `doctor.source-no-area` | {name} has no area, so pages it starts are not filed yet: only an assistant that reads every area can read them. Fix: read docs/sources-pull.md, and add area: <one of your areas> to {name} in rules/sources.yaml; its waiting pages move there on the next night pass. |
 | `doctor.source-refused` | {name}'s last pull ({at}Z) was refused: {why}. Fix: read docs/sources-pull.md, and fix what the reason names; the next scheduled pull tries again. |
 
 ## Installer (install.sh)

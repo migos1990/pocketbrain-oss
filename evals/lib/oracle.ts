@@ -48,7 +48,24 @@ function intentFor(root: string, agent: string, role?: "reader") {
   if (role === "reader" && rank(ceiling) > rank("personal")) ceiling = "personal";
   const excludedTypes: string[] = a.exclude_types ?? [];
   const excludedNotes: string[] = a.exclude ?? [];
-  const noteOut = (n: any) => excludedTypes.some((t) => t === String(n.fm.id).split("/")[0] || t === n.fm.type) || excludedNotes.includes(n.fm.id) || rank(n.fm.sensitivity) > rank(ceiling)
+  // A page not filed yet (`unfiled:` on its frontmatter, docs/capture.md) carries no evidence of
+  // who may read it, so it is out unless the grant would read it in every area: a slice with no
+  // area, kind or tag, slices with no filter whose areas together name every area in policy.yaml,
+  // or a slice that lists the page by id. A type or tag slice never reads it.
+  const sf = join(root, "rules", "slices.yaml");
+  const defined: Record<string, any> = (existsSync(sf) ? YAML.parse(readFileSync(sf, "utf8"))?.slices : undefined) ?? {};
+  const areas = Object.keys(policy.areas ?? {});
+  const sliceOf = (name: string): any => defined[name] ?? (name === "all" ? {} : name.startsWith("area:") && areas.includes(name.slice(5)) ? { areas: [name.slice(5)] } : undefined);
+  const mine: any[] = (a.slices ?? []).map(sliceOf).filter(Boolean);
+  const FILTERS = ["types", "tags", "include", "exclude_tags", "max_sensitivity", "since", "until", "only_attributes", "exclude_attributes"];
+  const whole = mine.filter((s) => FILTERS.every((k) => s[k] === undefined));
+  // A slice with no area, kind or tag reads every area itself (under its own filters, which this
+  // oracle doesn't model: it then calls nothing out, never a false leak).
+  const everyArea = mine.some((s) => !s.areas && !s.types && !s.tags && !(s.include && ["max_sensitivity", "since", "until", "only_attributes", "exclude_attributes"].every((k) => s[k] === undefined)))
+    || whole.some((s) => !s.areas) || areas.every((x) => whole.some((s) => (s.areas ?? []).includes(x)));
+  const byId = new Set<string>(mine.flatMap((s) => s.include ?? []));
+  const unfiledOut = (n: any) => (n.fm.unfiled === true || (typeof n.fm.unfiled === "string" && n.fm.unfiled !== "")) && !everyArea && !byId.has(n.fm.id);
+  const noteOut = (n: any) => unfiledOut(n) || excludedTypes.some((t) => t === String(n.fm.id).split("/")[0] || t === n.fm.type) || excludedNotes.includes(n.fm.id) || rank(n.fm.sensitivity) > rank(ceiling)
     || (n.fm.share && Array.isArray(n.fm.share.deny) && n.fm.share.deny.includes(agent));
   // A value the owner hasn't seen yet (`unseen`: a contact card's email or phone, an assistant's
   // private value) is held from every agent until the owner's Show (docs/sources-pull.md#contacts).

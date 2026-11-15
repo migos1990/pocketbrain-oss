@@ -704,6 +704,10 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       id, type, title: req.title!, area,
       sensitivity: rules.checks.types?.[type]?.sensitivity ?? "personal",
       status: "active", created: d, updated: d, by: req.agent, sources: req.sources,
+      // Not filed yet (src/carve.ts isUnfiled): it only hides the new page, so any writer may ask it;
+      // the source it names (which the night pass may later move the page by) only on a capture
+      // proposal the hub wrote (`pulled`), never from an agent's request, accepted or not.
+      ...(req.unfiled === true || (typeof req.unfiled === "string" && req.unfiled) ? { unfiled: typeof req.unfiled === "string" && opts.pulled ? req.unfiled : true } : {}),
     };
     note = { fm, body: "", path: id + ".md" };
   }

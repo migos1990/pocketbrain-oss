@@ -30,6 +30,7 @@ import { bothDatesPlan, bothDatesOn, closeBothDates } from "./dated";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
 import { setAsideMachineMail } from "./receipt-pages";
+import { unguessAreas, unguessOn, fileUnfiled } from "./area-guess";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
 import { staleMentions } from "./drift";
@@ -175,6 +176,21 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const mm = setAsideMachineMail(root, on);
     if (on && mm.facts) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
     else if (mm.facts) add({ rule: "machine-mail", key: "machine-mail", kind: "review", detail: `${mm.facts} held fact${mm.facts === 1 ? "" : "s"} on ${mm.pages} page${mm.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside, each with Undo` });
+  }
+  //      Pages a word guess put in an area (src/area-guess.ts, G842): back to the default area, a
+  //      `moved` diary line each with Undo; off until `pocketbrain areas unguess on`, a count then.
+  {
+    const on = unguessOn(rules);
+    const ug = unguessAreas(root, on);
+    if (ug.moved.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+    else if (!on && ug.pages.length) add({ rule: "area-guess", key: "area-guess", kind: "review", detail: `${ug.pages.length} page${ug.pages.length === 1 ? " sits" : "s sit"} in an area a word guess chose; \`pocketbrain areas guessed\` lists them, \`pocketbrain areas unguess on\` moves them back, each with Undo` });
+  }
+  //      Pages not filed yet whose source the owner has since given an area (src/area-guess.ts
+  //      fileUnfiled): each moves there and is filed, a `moved` diary line with Undo. It follows the
+  //      owner's own sources.yaml line, so it needs no switch of its own.
+  {
+    const filed = fileUnfiled(root);
+    if (filed.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
   }
   // 1c3. A person with the owner's surname may be family (src/family.ts): one inferred fact linking
   //      the owner's page, a diary line each with Undo; one hub commit with a why.

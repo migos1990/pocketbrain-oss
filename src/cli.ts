@@ -51,6 +51,7 @@ import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { setAsideMachineMail } from "./receipt-pages";
+import { guessedAreas, setAreasUnguess } from "./area-guess";
 import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
@@ -328,6 +329,7 @@ const USAGE = `pocketbrain <command>
                                      record the gardener's Anthropic side in rules/gardener.yaml (owner commit)
   night managed|local                who runs the nightly pass (rules/hub.yaml, or policy.yaml on one machine)
   overlaps                           assistants' routines that may do the same job, by page id (docs/wiki.md)
+  areas guessed | areas unguess on|off   pages a word guess put in an area; on: the night pass moves them back, with Undo (docs/capture.md)
   write-hold | write-hold clear <agent>   who writes proposals only after writing a value it can't see, or let one write again (docs/add-an-agent.md)
   machine-mail | machine-mail on|off   count the held facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
@@ -1939,6 +1941,14 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     console.log(`${o.length} group${o.length === 1 ? "" : "s"} of routines may do the same job.`);
     return 0;
   }
+  // Pages a word guess put in an area (src/area-guess.ts, docs/capture.md, G842): owner only, ids only.
+  if (cmd === "areas" && args[0] === "unguess" && (args[1] === "on" || args[1] === "off")) return ownerSet(() => setAreasUnguess(root, args[1]!));
+  if (cmd === "areas" && args[0] === "guessed") {
+    const g = guessedAreas(root);
+    for (const p of g) console.log(`${p.id}: in ${p.from}, would go to ${p.to}`);
+    console.log(`${g.length} page${g.length === 1 ? "" : "s"} sit${g.length === 1 ? "s" : ""} in an area a word guess chose; \`pocketbrain areas unguess on\` moves them back each night, each with Undo.`);
+    return 0;
+  }
   if (cmd === "fold" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setFoldTwins(root, args[0]!));
   // Facts assistants filed from machine mail (src/receipt-pages.ts, G668): count, or set aside nightly.
   if (cmd === "machine-mail" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setMachineMailAside(root, args[0]!));
@@ -2096,7 +2106,7 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     const file = loadSources(root);
     loadKeys(); // live sources: Google client and tokens from the keys folder
     if (args[0] === "list" || !args[0]) {
-      for (const [n, s] of Object.entries(file.sources ?? {})) console.log(`${n}: ${s.kind}${s.where?.length ? ` ${s.where.join(", ")}` : ""}${s.fixture ? ` (fixture ${s.fixture})` : ""}`);
+      for (const [n, s] of Object.entries(file.sources ?? {})) console.log(`${n}: ${s.kind}${s.where?.length ? ` ${s.where.join(", ")}` : ""}${s.area ? `, area ${s.area}` : ", no area: pages it starts are not filed yet, read only by an assistant that reads every area (add area: to it in rules/sources.yaml)"}${s.fixture ? ` (fixture ${s.fixture})` : ""}`);
       if (!Object.keys(file.sources ?? {}).length) console.log("no sources (rules/sources.yaml)");
       console.log(`consent: ${file.consent ?? "not given (live sources stay off)"}`);
       return 0;

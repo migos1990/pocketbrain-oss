@@ -456,3 +456,36 @@ test("contract carve: a fact with a conflict waiting beside it never renders as 
   expect(md).not.toContain("c-9001");
   expect(JSON.stringify(core.readNote(root, "helper", "projects/course-c"))).not.toContain("c-9001");
 });
+
+test("must never: a page not filed yet reaches an assistant through an area, type or tag slice; only one reading every area, or listing it by id", () => {
+  const root = makeBrain();
+  note(root, "people/new-face", "type: person\narea: personal\nsensitivity: personal\nstatus: active\ntags: [met]\nunfiled: true", `  role: { value: driver, as_of: 2026-10-01, ${SRC} }`);
+  writeFileSync(join(root, "rules", "slices.yaml"), `${readFileSync(join(root, "rules", "slices.yaml"), "utf8")}  by-type: { types: [people] }\n  by-tag: { tags: [met] }\n  by-id: { include: [people/new-face] }\n`);
+  const seen = (slices: string[]) => carveFor(root, "planner", slices).visible.has("people/new-face");
+  expect(seen(["area:personal"])).toBe(false);
+  expect(seen(["by-type"])).toBe(false);
+  expect(seen(["by-tag"])).toBe(false);
+  expect(seen(["area:personal", "by-type"])).toBe(false);
+  expect(seen(["all"])).toBe(true);
+  expect(seen(["area:personal", "area:work"])).toBe(true);
+  expect(seen(["by-id"])).toBe(true);
+});
+
+test("must never: a mark that names its source is weaker than unfiled: true, nor a mark of false or empty a hold", () => {
+  const forms: [string, boolean][] = [["unfiled: true", false], ["unfiled: feed-home", false], ["unfiled: false", true], ['unfiled: ""', true]];
+  for (const [mark, filed] of forms) {
+    const root = makeBrain();
+    note(root, "people/new-face", `type: person\narea: personal\nsensitivity: personal\nstatus: active\n${mark}`, `  role: { value: driver, as_of: 2026-10-01, ${SRC} }`);
+    expect([mark, carveFor(root, "planner", ["area:personal"]).visible.has("people/new-face")]).toEqual([mark, filed]);
+    expect([mark, carveFor(root, "planner", ["all"]).visible.has("people/new-face")]).toEqual([mark, true]);
+  }
+});
+
+test("must never: a slice with only a level or attribute filter lends an area slice a page not filed yet in full", () => {
+  const root = makeBrain();
+  note(root, "people/new-face", "type: person\narea: personal\nsensitivity: personal\nstatus: active\nunfiled: true", `  role: { value: driver, as_of: 2026-10-01, ${SRC} }`);
+  writeFileSync(join(root, "rules", "slices.yaml"), `${readFileSync(join(root, "rules", "slices.yaml"), "utf8")}  pub-only: { max_sensitivity: public }\n  title-only: { only_attributes: [title] }\n`);
+  expect(carveFor(root, "planner", ["area:personal", "pub-only"]).visible.has("people/new-face")).toBe(false);
+  const v = carveFor(root, "planner", ["area:personal", "title-only"]).visible.get("people/new-face");
+  expect(v && v.attributes !== "all" && !v.attributes.has("role")).toBe(true);
+});

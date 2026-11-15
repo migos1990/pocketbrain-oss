@@ -871,3 +871,15 @@ test("contract write: a name that is one side of a slash in a page's title never
   expect(pageLink([two], "[[northwind / brightwell]]")).toBe("[[orgs/northwind-brightwell]]");
   expect(pageLink([n("orgs/bw", "BW Holdings", ["Brightwell"])], "[[Brightwell]]")).toBe("[[orgs/bw]]");
 });
+
+test("must never: an assistant's request names the source a page not filed yet later moves by, directly or through an accepted proposal", () => {
+  for (const [agent, by] of [["planner", undefined], ["helper", "owner"], ["helper", "auto-decide"]] as const) {
+    const root = makeBrain();
+    const r = write(root, { agent, title: "Rita Moreau", type: "person", area: "work", attribute: "role", value: "courier", as_of: "2026-10-02", sources: ["gmail:f000000000000903"], verification: "verified-by-source", unfiled: "mail-home" });
+    if (by) {
+      const file = inbox(root).map((f) => `inbox/${f}`)[0];
+      expect([agent, decideProposal(root, file, "accept", by).outcome]).toEqual([agent, "committed"]);
+    } else expect([agent, r.outcome]).toEqual([agent, "committed"]);
+    expect([agent, by, loadBrain(root).find((n) => n.fm.title === "Rita Moreau")?.fm.unfiled]).toEqual([agent, by, true]);
+  }
+});

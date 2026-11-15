@@ -155,6 +155,7 @@ export const OWNER_ERRORS = {
   "doctor.google-client-missing": { where: "doctor", what: "{keys} not in the keys folder, so no Google source can sign in", fix: { read: "docs/sources-pull.md", then: "(step 1, the Google client) and put each value in its own key file" } },
   "doctor.source-not-connected": { where: "doctor", what: "{name} isn't signed in to Google yet", fix: { run: "pocketbrain sources connect {name}", then: "on the hub machine" } },
   "doctor.source-never-pulled": { where: "doctor", what: "{name} hasn't been pulled yet", fix: { run: "pocketbrain sources pull {name} --dry-run", then: "to see what it would read, then let the hub's schedule pull it" } },
+  "doctor.source-no-area": { where: "doctor", what: "{name} has no area, so pages it starts are not filed yet: only an assistant that reads every area can read them", fix: { read: "docs/sources-pull.md", then: "and add area: <one of your areas> to {name} in rules/sources.yaml; its waiting pages move there on the next night pass" } },
   "doctor.source-refused": { where: "doctor", what: "{name}'s last pull ({at}Z) was refused: {why}", fix: { read: "docs/sources-pull.md", then: "and fix what the reason names; the next scheduled pull tries again" } },
 
   // ---- install.sh (shell, so the test checks its fail lines against these) ----

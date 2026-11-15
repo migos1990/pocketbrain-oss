@@ -82,6 +82,26 @@ export const narrowSlice = (name: string, s: Record<string, unknown> | undefined
   && !!(s.areas || s.types || s.tags || (s.include && !FILTERS.some((k) => s[k] !== undefined)))
   && !(s.areas as string[] | undefined)?.includes(PROBE_AREA);
 
+// A page not filed yet (`unfiled:` on the page, set by the capture path when its area came only from
+// the default, src/capture.ts newPageArea) has no evidence about who may read it: only a slice that
+// would read it in every area selects it (no area, type or tag selector, or every area listed), or
+// one that lists it by id. An area slice for its default area does not (coordinator, 2026-11-15).
+// A slice with no area, type or tag selector reads every area itself and selects the page under its
+// own filters. An area slice selects it only when the grant's slices that read their areas whole,
+// together, leave no area out (`all`, or one area slice for each).
+export const isUnfiled = (note: Note) => note.fm.unfiled === true || (typeof note.fm.unfiled === "string" && note.fm.unfiled !== "");
+// Only a slice that reads its areas whole counts (no kind, tag, list, level, date or attribute
+// filter): a filter-only slice reads the page itself under its filter, never lending an area
+// slice the right to read it in full (security review, 2026-11-15).
+const WHOLE_AREA_FILTERS = ["types", "tags", "include", "exclude_tags", "max_sensitivity", "since", "until", "only_attributes", "exclude_attributes"] as const;
+const readsAreasWhole = (s: Slice) => WHOLE_AREA_FILTERS.every((k) => s[k] === undefined);
+function readsEveryArea(grant: Grant, rules: Rules): boolean {
+  const plain = grant.slices.map((n) => rules.slices[n]).filter((s): s is Slice => !!s && readsAreasWhole(s));
+  if (plain.some((s) => !s.areas)) return true;
+  const covered = new Set(plain.flatMap((s) => s.areas ?? []));
+  return Object.keys(rules.policy.areas ?? {}).every((a) => covered.has(a));
+}
+
 export function folderOf(note: Note): string {
   const id = note.fm.id, i = id.indexOf("/");
   return i < 0 ? id : id.slice(0, i);
@@ -161,7 +181,8 @@ function place(note: Note, rules: Rules, grant: Grant): { excluded?: Excluded; v
   // isn't enough. An area added later under an agent's name (a policy.areas key, a note's area:
   // edited by hand) would otherwise hand that agent every note in it; those go through its
   // slices like any other note. Fails closed: the agent sees less, the brain still loads.
-  const own = note.fm.area === grant.agent && (note.fm.by === grant.agent || id.startsWith(`agents/${grant.agent}/`));
+  const unfiled = isUnfiled(note);
+  const own = !unfiled && note.fm.area === grant.agent && (note.fm.by === grant.agent || id.startsWith(`agents/${grant.agent}/`));
   let attrs: Set<string> | "all" | undefined = own ? "all" : undefined;
   let body = own;
   const by: string[] = own ? ["own"] : [];
@@ -169,7 +190,7 @@ function place(note: Note, rules: Rules, grant: Grant): { excluded?: Excluded; v
   let purposeful = false;
   for (const name of grant.slices) {
     const s = rules.slices[name];
-    const r = sliceRejects(note, s);
+    const r = sliceRejects(note, s) ?? (unfiled && !s.include?.includes(id) && (s.types || s.tags || (s.areas && !readsEveryArea(grant, rules))) ? "not filed yet" : undefined);
     if (r) { reasons.push(`${name}: ${r}`); if (PURPOSEFUL_REJECTS.has(r) || r.endsWith(" above slice limit")) purposeful = true; continue; }
     by.push(name);
     const a = attributesFor(s);

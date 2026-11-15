@@ -19,6 +19,7 @@ import { test, expect } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import YAML from "yaml";
 import { generate, freeze, thaw, type Generated } from "./carve-gen";
 import { check, report, reportMissing, servedIn, brainOf, DOORS } from "./carve-check";
 import { owedFor } from "./carve-owed";
@@ -102,6 +103,11 @@ test("carve property: the generator is deterministic and covers what it claims",
   expect(all.some((g) => g.agents.some((x) => x.roles.includes("reader")))).toBe(true);
   expect(all.some((g) => g.ops.some((o) => o.startsWith("merge") && o.endsWith("ok")))).toBe(true);
   expect(all.some((g) => g.ops.some((o) => o.startsWith("handoff ")))).toBe(true);
+  // Pages not filed yet in both forms of the mark, and the slices that read them or not: every area
+  // but one, one page by id, every area.
+  expect(notes.some((n) => n.fm.unfiled === true) && notes.some((n) => typeof n.fm.unfiled === "string")).toBe(true);
+  const sliceNames = all.flatMap((g) => Object.keys(YAML.parse(readFileSync(join(g.root, "rules", "slices.yaml"), "utf8"))?.slices ?? {}));
+  for (const s of ["u-most", "u-byid", "u-every"]) expect([s, sliceNames.includes(s)]).toEqual([s, true]);
   // A fact that links another note, by id and by name, with the page writer run over it, a summary
   // and an older plain-words sentence naming the linked note (G754, G755).
   expect(all.some((g) => g.ops.some((o) => /^page writer: [1-9]/.test(o)))).toBe(true);

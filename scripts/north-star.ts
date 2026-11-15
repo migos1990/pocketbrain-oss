@@ -283,7 +283,9 @@ export async function replay(o: { fileAll?: boolean } = {}): Promise<NorthStar> 
   const env = { PB_TODAY: process.env.PB_TODAY, PB_NOW: process.env.PB_NOW };
   try {
     initBrain(root, { owner: "Sam Lee", me: [OWNER_ADDR], token: false });
-    writeFileSync(join(root, "rules", "sources.yaml"), `consent: north-star replay\nsources:\n  mail:\n    kind: gmail\n    fixture: week.json\n`);
+    // The week is a work mailbox, configured as one (`area: work`): a page it starts is filed in the
+    // source's own area, never by a word it shares with another page (G841).
+    writeFileSync(join(root, "rules", "sources.yaml"), `consent: north-star replay\nsources:\n  mail:\n    kind: gmail\n    area: work\n    fixture: week.json\n`);
     if (o.fileAll) writeFileSync(join(root, "rules", "escalation.yaml"), "auto_decide:\n  file: all\n");
     // The owner's own setup, committed as the owner does: left uncommitted it raised a "rules/
     // changed outside git" card that counted as one of the asks.

@@ -40,6 +40,7 @@ export interface DiaryRow {
   undoes?: string; // on an `undone` row: the line it undid (src/undo.ts)
   commit?: string; // a caught-up row: the commit that made the change (src/diary-catchup.ts)
   fold?: string; // on a `folded` row: the fold commit its Undo undoes (src/fold.ts, audit v11)
+  unfiled?: string | true; // on a `moved` row: the not-filed-yet mark the move dropped, put back by its Undo (src/carve.ts isUnfiled)
   follows?: string; // on a `moved` row: the owner's org commit the page's area followed (src/area-follow.ts, G664)
   dropped?: string; // on a `folded` row: the page folded away, whose privacy now the line also follows
   settles?: string; // on a `settled` row: the conflict it answered (its Undo opens it again)
