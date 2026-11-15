@@ -49,6 +49,11 @@ export const APP_COPY = {
   waitOne: "thing waits for you",
   waitMany: "things wait for you",
   quiet: "Nothing new on your mind since yesterday.",
+  // A brain's first days, until the owner's own page holds three things (home.ts firstRun).
+  firstRun: "Tell your memory three things about you, like where you work, where you live or how you like your answers. Type them in the box below, one at a time.",
+  // What an assistant said that nobody confirmed (home.ts unconfirmedLines): never an ask, no count.
+  unconfirmedHead: "Not confirmed",
+  unconfirmedHint: "What your assistants said that you haven't confirmed. Each goes away by itself; to keep one, say it in the box.",
   onlyYou: "Only you know this",
   stranger: "From an address your pages don't hold",
   letThem: "Let them have it",
@@ -416,6 +421,8 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
     + group(APP_COPY.keptHead, APP_COPY.keptHint, kept.map((w) => waitingCard(w, csrf)), null)
     + (v.gardener.length ? `<h2 class="group">${esc(APP_COPY.gardenerHead)}</h2><ul class="mind">${v.gardener.map((w) => waitingCard(w, csrf, true)).join("")}</ul>` : "");
   const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
+  const unconfirmed = group(APP_COPY.unconfirmedHead, APP_COPY.unconfirmedHint, (v.unconfirmed ?? []).map((u) => `<li class="card">${u.page ? `<a class="what" href="${href(u.page)}">${esc(u.what)}</a>` : `<span class="what">${esc(u.what)}</span>`}<div class="foot"><small>${esc(u.from)}</small></div></li>`), null);
+  const first = v.first ? `<p class="hint first-run">${esc(APP_COPY.firstRun)}</p>` : "";
   // What was just done: one quiet line, with Undo when the diary can take it back (G631).
   const reply = o.done && o.flash && !o.reply ? `<div class="done" role="status">${DONE}<span>${esc(o.flash)}</span>${o.undo ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: o.undo })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${o.flash}`)}">${HOME_COPY.undo}</button></form>` : ""}</div>` : replyHtml(csrf, o);
   // A late or failing job: one quiet line under the count, linking to Settings' list (G691).
@@ -425,8 +432,8 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
     // While you slept (night.ts): one link while last night has something to say and is unread.
     + (o.night ? `<a class="late night-go" href="/night">${esc(o.night)}</a>` : "");
   return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}${late}
-${reply}
-${asks}${mems.length ? `${asks ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
+${reply}${first}
+${asks}${unconfirmed}${mems.length ? `${asks || unconfirmed ? `<h2 class="group">${APP_COPY.latelyHead}</h2>` : ""}<ul class="mind">${mems.join("")}</ul>` : asks || unconfirmed || first ? "" : `<p class="quiet">${APP_COPY.quiet}</p>`}${more ? `<a class="more" href="/home?all=1">${esc(moreWords(more))}</a>` : ""}
 ${box(csrf, {}, APP_COPY.box)}`, { wrap: "chat" });
 }
 

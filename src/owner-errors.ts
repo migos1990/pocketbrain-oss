@@ -20,7 +20,7 @@ export type Where = "dashboard" | "cli" | "doctor" | "consent" | "install";
 export interface OwnerError { where: Where; status?: number; what: string; fix: Fix }
 
 const RESTART = "pocketbrain menubar restart";
-const SIGN_IN = { run: "pocketbrain menubar open-dashboard" } as const;
+const SIGN_IN = { run: "pocketbrain open" } as const;
 const DOOR = { run: "pocketbrain hub url https://brain.<your domain>", then: "once a named Cloudflare tunnel answers there (docs/hub.md)" } as const;
 const PHONE_LINK = { run: "pocketbrain dashboard phone-link", first: "on the Mac" } as const;
 const TUNNEL = { run: "pocketbrain hub tunnel-config", then: "and put what it prints in that file" } as const;

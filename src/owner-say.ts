@@ -151,6 +151,9 @@ const OWN_VERBS: Record<string, string> = { teach: "teaches", coach: "coaches", 
 // "<name> moved to / works at / joined / is now at <value>", "<name> is (now) <value>".
 export function parseClause(clause: string, d = today()): Told | undefined {
   let m: RegExpMatchArray | null;
+  // "Remember that I live in Lisbon": a new owner tells the box to remember, as they would an
+  // assistant (cold install, 2026-11-15). The ask itself is no part of the fact.
+  clause = clause.replace(/^\s*(?:please\s+)?(?:remember|note)(?:\s+that)?[,:]?\s+(?=\S)/i, "");
   // A reminder keeps its time words ("on 12 Nov", "tomorrow"): they say when, not when it was said.
   if ((m = clean(clause).match(/^(?:please )?remind me (?:to|about) (.+)$/i))) return { name: "", attribute: "next_step", value: clean(m[1]!), remind: true };
   // "I owe Ben the sample by tomorrow", "I need to send Jane the slides": the owner's own to-do, on the
@@ -176,7 +179,8 @@ export function parseClause(clause: string, d = today()): Told | undefined {
   if ((m = c.match(/^(?:I )?(?:met|saw|called|phoned|spoke (?:with|to)|talked (?:with|to)|caught up with|had (?:coffee|lunch|dinner|breakfast|drinks|a call|a meeting|a chat) with) (?:with )?(.+?)(?: (?:about|for|at|in|on|to|over|after|before) .*)?$/i))) return { name: m[1]!, attribute: "last_contact", value: (when ?? { as_of: d }).as_of, when };
   if ((m = c.match(/^(.+?)['’]s ([a-z][a-z ]{1,30}?) is (?:now )?(.+)$/i)) || (m = c.match(/^(his|her|their|its) ([a-z][a-z ]{1,30}?) is (?:now )?(.+)$/i))) return { name: m[1]!, attribute: brainAttr(snake(m[2]!)), value: clean(m[3]!), when, ...(NEGATION.test(m[3]!) ? { negated: true } : {}) };
   if ((m = c.match(/^(.+?) (?:is not|isn['’]t|is no longer|was not|wasn['’]t|is never) (?:an? |the )?(.+)$/i))) return { name: m[1]!, attribute: "role", value: clean(m[2]!), when, negated: true };
-  if ((m = c.match(/^(.+?) (?:has )?(?:moved to|works at|work at|joined|is now at|is at|now works at) (?:the )?(.+)$/i))) return { name: m[1]!, attribute: "org", value: clean(m[2]!), when };
+  // "I work at Northwind" is the owner, never a page called "I" (cold install, 2026-11-15).
+  if ((m = c.match(/^(.+?) (?:has )?(?:moved to|works at|work at|joined|is now at|is at|now works at) (?:the )?(.+)$/i))) return { name: /^i$/i.test(m[1]!.trim()) ? SELF : m[1]!, attribute: "org", value: clean(m[2]!), when };
   // What someone does: "he runs the new lab" is a role in the owner's words.
   // Only with what they run ("the new lab", "a team"): "Jane runs every morning" is no role.
   if ((m = c.match(/^(.+?) (runs|leads|heads|manages|directs|chairs|teaches|coaches|founded|owns) ((?:the|a|an|our|his|her|their|my) .+)$/i)) && !THING.test(m[1]!)) return { name: m[1]!, attribute: "role", value: clean(`${m[2]!.toLowerCase()} ${m[3]!}`), when };

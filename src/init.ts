@@ -531,10 +531,13 @@ export function machineZone(): string | undefined {
   return !tz || tz === DEFAULT_TZ || /^(Etc\/)?(UTC|GMT|UCT|Universal|Zulu)$/i.test(tz) ? undefined : tz;
 }
 
+// The one area init's first agent reads: work if there is one, else the first.
+export const firstArea = (areas: string[]) => areas.includes("work") ? "work" : areas[0];
+
 function policyYaml(owner: string, agent: string, areas: string[]): string {
   // The first agent reads one area, so it owns that one only: an owner that can't read its area
   // would settle writes there blind (eval gap G144).
-  const readable = areas.includes("work") ? "work" : areas[0];
+  const readable = firstArea(areas);
   const tz = machineZone();
   const ownerLine = YAML.stringify({ owner: { name: owner, ...(tz ? { timezone: tz } : {}) } }).trim();
   return `# Who sees what. Only you edit this folder. Every limit here is enforced in code.
@@ -673,6 +676,10 @@ export function initBrain(root: string, o: InitOptions): InitResult {
   for (const { t } of texts) preloadMoneyWords(ctx, t);
   for (const { f, t } of texts) parseSeedText(ctx, t, f.split("/").pop()!);
   const ex = mboxFiles.length || icsFiles.length ? readExports(ctx, mboxFiles, icsFiles) : undefined;
+  // The owner always has a page, so "remember that I prefer short answers" has somewhere to land
+  // on a brain's first day (cold install, 2026-11-15: an empty brain refused it twice). In the area
+  // the first assistant reads, unless a seed already made it elsewhere; by the owner's word, no facts.
+  if (!findDraft(ctx, "person", owner)) draft(ctx, "person", owner, firstArea(areas));
 
   // Drafts become notes: ids from titles, org links resolved, every note cites its sources.
   mkdirSync(root, { recursive: true });
@@ -724,7 +731,7 @@ export function initBrain(root: string, o: InitOptions): InitResult {
     ...(ex ? [`- export: ${ex.messages} messages, ${ex.events} calendar events, ${ex.contacts} people kept (your address: ${[...ctx.me].join(", ") || "unknown"})`] : []),
     ...(!texts.length && !ex ? ["- none: an empty brain with rules only"] : []), "",
     "## Your first agent", "",
-    `- \`${agent}\`: trial tier, slices \`area:${areas.includes("work") ? "work" : areas[0]}\` and \`contacts-basic\`, no money, nothing private; its writes wait in \`inbox/\` for you.`,
+    `- \`${agent}\`: trial tier, slices \`area:${firstArea(areas)}\` and \`contacts-basic\`, no money, nothing private; its writes wait in \`inbox/\` for you.`,
     `- Areas: ${areas.join(", ")}. Money words withheld from it: ${ctx.moneyWords.join(", ")}.`, "",
   ];
   for (const [k, v] of Object.entries(ctx.report)) report.push(`## ${k} (${v.length})`, "", ...v.map((x) => `- ${x}`), "");

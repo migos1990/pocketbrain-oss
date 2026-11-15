@@ -6,11 +6,11 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 
 | Id | What you see |
 |---|---|
-| `dash.host` (421) | This dashboard only answers on this computer's own address (127.0.0.1 or localhost). Fix: run pocketbrain menubar open-dashboard. |
-| `dash.login-key` (403) | That login link is old or cut short: the dashboard makes a new one each time it starts. Fix: run pocketbrain menubar open-dashboard. |
+| `dash.host` (421) | This dashboard only answers on this computer's own address (127.0.0.1 or localhost). Fix: run pocketbrain open. |
+| `dash.login-key` (403) | That login link is old or cut short: the dashboard makes a new one each time it starts. Fix: run pocketbrain open. |
 | `dash.sign-in-again` (403) | This page can show private values, so it opens only within 10 minutes of signing in. Fix: click "Sign in again" on this page in the dashboard, and open the new link. |
 | `dash.phone-link-used` (403) | This sign-in link was already used, or it's more than a day old. Fix: click "Text me a sign-in link" on this page in the dashboard, and open the new link. |
-| `dash.signed-out` (401) | You're not signed in here: a sign-in lasts 30 days, on this browser only. Fix: run pocketbrain menubar open-dashboard. |
+| `dash.signed-out` (401) | You're not signed in here: a sign-in lasts 30 days, on this browser only. Fix: run pocketbrain open. |
 | `dash.link-cap` (429) | Three sign-in links were sent to your phone in the last hour. Fix: use the newest one, or on the Mac, then run pocketbrain dashboard phone-link. |
 | `dash.link-no-channel` (409) | No text channel can send a sign-in link ({reason}). Fix: on the Mac, then run pocketbrain dashboard phone-link. |
 | `dash.link-relayed` (409) | Your text channel goes through an assistant, so a sign-in link never travels on it. Fix: on the Mac, then run pocketbrain dashboard phone-link. |
@@ -21,7 +21,7 @@ Every error page and command-line failure the owner can meet, written by `src/ow
 | `dash.app-nonce` (403) | That Face ID sign-in was old or already used, so nothing was done. Fix: reload the page, and try Face ID again. |
 | `dash.app-phone-cap` (429) | This phone made a sign-in fresh too many times in the last hour, so Face ID waits. Fix: on the Mac, then run pocketbrain dashboard phone-link. |
 | `dash.app-cap` (429) | Too many phone keys this hub didn't know in the last hour, so the app's Face ID sign-in waits an hour. Fix: on the Mac, then run pocketbrain dashboard phone-link. |
-| `dash.cross-origin` (403) | Another site's page tried to press a dashboard button, so nothing was done. Fix: run pocketbrain menubar open-dashboard, and press the button there. |
+| `dash.cross-origin` (403) | Another site's page tried to press a dashboard button, so nothing was done. Fix: run pocketbrain open, and press the button there. |
 | `dash.bad-form` (400) | That wasn't one of the dashboard's own forms, so nothing was done. Fix: reload the page, and press the button again. |
 | `dash.csrf` (403) | This page is from before your latest sign-in, so nothing was done. Fix: reload the page, and press the button again. |
 | `dash.no-button` (404) | That button isn't in this version of the dashboard, so nothing was done. Fix: reload the page. |

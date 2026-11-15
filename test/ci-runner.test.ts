@@ -26,6 +26,10 @@ test("G751: test, e2e and conformance run on the Mac only when PB_RUNNER is set,
 
 test("G751: a fork's review, publishing and the public copy never run on the Mac", () => {
   expect(ci.jobs["outside-pr"]["runs-on"]).toBe("ubuntu-latest");
+  // The cold install starts a hub of its own: never on the Mac that runs the real one, and the private
+  // repo spends no macOS minutes on it (only the public repo's run is on a Mac).
+  expect(ci.jobs["cold-install"]["runs-on"]).toBe("ubuntu-latest");
+  expect(ci.jobs["cold-install-mac"]).toMatchObject({ if: "${{ !github.event.repository.private }}", "runs-on": "macos-latest" });
   for (const f of ["release.yml", "public-sync.yml", "docs-live.yml"]) for (const [name, j] of Object.entries(wf(f).jobs as Record<string, { "runs-on"?: string; uses?: string }>)) {
     if (j.uses) continue; // release.yml calls ci.yml, which keeps its own rule above
     expect(`${f} ${name} ${j["runs-on"]}`).toBe(`${f} ${name} ubuntu-latest`);

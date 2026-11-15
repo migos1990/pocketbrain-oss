@@ -115,13 +115,31 @@ test("E2E: the guided interview, answers piped in, gives a brain and a token", (
   expect(view).not.toContain("Pine Credit Union");
 });
 
-test("E2E: an empty brain (no seeds) still serves its agent", async () => {
+test("E2E: a brain with no seeds starts with the owner's own page, which its first agent reads", async () => {
   const root = fresh();
-  const r = initBrain(root, { owner: "Kim" });
-  expect(r.notes).toBe(0);
-  const ctx = await client(root, r.token!).call("GET", "/v1/context");
+  const r = initBrain(root, { owner: "Kim Ito" });
+  expect(r.notes).toBe(1);
+  const [me] = loadBrain(root);
+  expect(me.fm).toMatchObject({ id: "people/kim-ito", type: "person", title: "Kim Ito", area: "work", sensitivity: "personal", by: "owner" });
+  const c = client(root, r.token!);
+  const ctx = await c.call("GET", "/v1/context");
   expect(ctx.status).toBe(200);
-  expect(ctx.text).toContain("You hold 0 notes");
+  expect(ctx.text).toContain("You hold 1 notes");
+  // The first thing an assistant is told: it lands on that page (a proposal, as a trial agent),
+  // never "new entity needs an area" (cold install, 2026-11-15).
+  const w = await c.call("POST", "/v1/remember", { type: "person", title: "Kim Ito", attribute: "prefers", value: "short answers", as_of: "2026-10-08", sources: ["agent:assistant"] });
+  expect(w.json.message ?? "").not.toContain("needs an area");
+  expect(w.json.outcome).toBe("inbox");
+});
+
+test("init never makes a second owner page when a seed already has one", () => {
+  const root = fresh();
+  const seed = join(mkdtempSync(join(tmpdir(), "pb-seed-")), "me.txt");
+  writeFileSync(seed, "# People (personal)\n- Kim Ito: likes tea\n");
+  initBrain(root, { owner: "Kim Ito", text: [seed], token: false });
+  const mine = loadBrain(root).filter((n) => n.fm.title === "Kim Ito");
+  expect(mine.length).toBe(1);
+  expect(mine[0].fm.area).toBe("personal");
 });
 
 // ---------- boundaries ----------
@@ -166,7 +184,7 @@ test("exports keep people the owner dealt with, not newsletters, rooms or strang
   const r = initBrain(root, { owner: "Alex", mbox: [join(SEED, "mail.mbox")], ics: [join(SEED, "calendar.ics")] });
   expect(r.me).toEqual(["alex.doe@example.com"]);
   const people = loadBrain(root).filter((n) => n.fm.type === "person");
-  expect(people.map((p) => p.fm.title).sort()).toEqual(["Jane Roy", "Omar Haddad", "Priya Natarajan", "Sam Lée"]);
+  expect(people.map((p) => p.fm.title).sort()).toEqual(["Alex", "Jane Roy", "Omar Haddad", "Priya Natarajan", "Sam Lée"]); // Alex: the owner's own page
   const all = JSON.stringify(loadBrain(root));
   for (const no of ["newsletter@", "resource.calendar", "Room 204", "alex.doe@"]) expect(all).not.toContain(no);
   // A future meeting is not a last contact; a past one is, with the calendar event as source.

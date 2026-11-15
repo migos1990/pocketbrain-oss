@@ -5,6 +5,26 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G890: {
+    closed: "claude/cold-install",
+    title: "A new brain's first assistant save was refused twice, then saved where no screen showed it",
+    severity: "high",
+    finding: "Cold install on a clean Linux home, 2026-11-15 (plans/three-gaps-findings F2): after `init --name Sam` with no seed (0 notes), the first assistant's `remember {type: person, title: <owner>, attribute: prefers, value: \"short answers\", sources: [agent:claude-code]}` was refused for no as_of, then, dated, with \"new entity needs an area\" and no fix (src/write.ts), since the brain had no page for the owner. Once a page existed, the trial assistant's save was a proposal the hub leaves to expire (src/filing.ts expiring queue) and no screen showed it.",
+    fix: "init always makes the owner's own page, in the area its first assistant reads, unless a seed made one (src/init.ts). The home lists the expiring saves of an assistant as \"Not confirmed\" (unconfirmedLines in src/dashboard/home.ts): a guess, no ask, no count, nothing filed or tied, nothing private, money-, health- or legal-shaped or tripwire-held. The home and init's last line say to tell the memory three things until the owner's page holds them (firstRun, INIT_LAST). The refusal wording waits on claude/cold-install-wording (agents eval). Tests: test/init.test.ts, test/first-minute.test.ts; the CI job cold-install (scripts/cold-install.ts).",
+  },
+  G891: {
+    closed: "claude/cold-install",
+    title: "\"I work at Northwind\" in the box made a page called \"I\"",
+    severity: "medium",
+    finding: "Cold install, 2026-11-15, the box with no model key (src/owner-say.ts parseClause): the works-at pattern took \"I\" as a person's name and started people/i, \"I works at Northwind\"; \"Remember that I live in Lisbon\", the way a new owner talks to an assistant, didn't parse.",
+    fix: "parseClause: \"I\" in the works-at, joined and moved-to shapes is the owner (SELF, their own page); a leading \"remember (that)\" or \"note (that)\" is dropped before the clause is read. Test: test/box-day-one.test.ts.",
+  },
+  G892: {
+    title: "The owner's workplace, told in the box, reads [[redacted]] to their first assistant",
+    severity: "medium",
+    finding: "Cold install, 2026-11-15 (scripts/cold-install.ts first had it as a told sentence): on a fresh brain (`init --name \"Sam Rivera\" --kind claude-code`, first assistant claude with area:work and contacts-basic; the owner's page people/sam-rivera in work), the owner types \"I work at Northwind\" in the box. It files people/sam-rivera#org = \"[[Northwind]]\" as the owner's word, and no page Northwind is made. claude's context_pack on \"Sam Rivera\" then shows `org [current]: [[redacted]]`. It should show Northwind, the owner's own word on a page claude reads, as a name (or as a link to an org page claude may read).",
+    fix: "Proposed, for the lane that owns links and areas: an org told in the box on a page some reader sees either starts its org page in that page's area (the box's rule for a new name, G474) or stays plain words until such a page exists, so no reader's view of the owner's own word is a redaction. Needs the slice audit (what a reader is shown).",
+  },
   G900: {
     closed: "claude/usefulness-why",
     title: "The usefulness number could not say why a question missed",

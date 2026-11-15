@@ -49,7 +49,7 @@ Use the app's kind as its name: `claude-code`, `cursor`, `vscode`, `codex`, `gem
 sleep 3 && curl -s http://127.0.0.1:8787/health
 ```
 
-`"ok": true` means it's up. It stops when the person logs out or restarts; [hosting.md](hosting.md) says how to keep it running. The log names the dashboard's address and the file that holds its login link: `.git/pb-dashboard-login` in the brain, created readable only by the person, and replaced at every start. The log itself never holds the link. Tell the person where the file is (`cat` it, or the Mac menu bar's Open dashboard reads it); don't open the link yourself, and don't copy the file anywhere.
+`"ok": true` means it's up. It stops when the person logs out or restarts; [hosting.md](hosting.md) says how to keep it running. The log names the dashboard's address and the file that holds its login link: `.git/pb-dashboard-login` in the brain, created readable only by the person, and replaced at every start. The log itself never holds the link. `pocketbrain open` opens it for the person (so does the Mac menu bar's Open dashboard); don't open the link yourself, and don't copy the file anywhere.
 
 ## 5. Connect yourself
 
@@ -67,8 +67,8 @@ After the restart, call the `orientation` tool on the `pocketbrain` server. It w
 
 Then tell the person, in this order:
 
-1. The dashboard link from `.git/pb-dashboard-login` in the brain (the log says where). It works only on this computer.
-2. To try it: *"Remember that I prefer short answers."* While you're on trial, what you save is a proposal: no screen asks them to approve it (they're asked only about conflicts). It lets in with `pocketbrain inbox --accept <file>`, the `inbox/…yaml` file your save went to, and `pocketbrain agent tier <you> core` lets your saves in from now on ([connect.md](connect.md), Try it).
+1. Their memory's home: `pocketbrain open` opens it in their browser, signed in (on this computer only; it reads the link from `.git/pb-dashboard-login` in the brain, so neither of you copies it). Until their own page holds three things, the home asks them to tell it three things about themselves. What they type in the box there is their own word: it files at once, on their own page, which `init` made for them in the area you read.
+2. To try you: *"Remember that I prefer short answers."* As a trial assistant you save it with `remember` on their page (`type: person`, their name as `title`, `as_of` the day they told you, `sources: ["agent:<you>"]`). It shows on their home under **Not confirmed**: what you say they told you stays a guess, never their word, and asks them nothing. It goes away by itself after a while; if it's right, they say it in the box, which makes it theirs. `pocketbrain agent tier <you> core` lets your saves in from now on ([connect.md](connect.md), Try it).
 3. To add their other apps: [connect.md](connect.md). Cloud assistants (Claude on the web, ChatGPT) need more: [connect/claude-web.md](connect/claude-web.md).
 
 ## If something fails

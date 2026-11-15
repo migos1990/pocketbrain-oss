@@ -4,7 +4,7 @@
 
 You use several assistants, each from a different vendor, each with its own memory of you, and none of them agree. pocketBrain is the one memory they all read from and write to: who you are, the people and projects in your life, what you decided, and what changed since. It is a personal wiki of facts, each with the source it came from and the date it was true, kept in plain files you own. Every assistant you connect starts from the same picture of you, and what one learns, the others know next time.
 
-> **Status: early (0.2.1, see [CHANGELOG.md](CHANGELOG.md)), used daily by its author with hosted assistants connected over MCP and OAuth.** It runs end to end on a single owner's brain: import, the write path with sources and conflicts, search (words, and meaning when the local model is on), upkeep and nightly forgetting, the wiki pass, explain, the daily digest, a live MCP and JSON server with per-assistant slices and revocable tokens, an OAuth door, quick capture, agent session logs, hub and replicas, encrypted backups, model spend caps, and an owner dashboard. The agent-to-agent relay runs with its file transport; the live AgentMail path is untested. Install is `git clone` (not on npm or Homebrew). Licensed under [AGPL-3.0](LICENSE).
+> **Status: early (0.2.1, see [CHANGELOG.md](CHANGELOG.md)), used daily by its author with hosted assistants connected over MCP and OAuth.** It runs end to end on a single owner's brain: import, the write path with sources and conflicts, search (words, and meaning when the local model is on), upkeep and nightly forgetting, the wiki pass, explain, the daily digest, a live MCP and JSON server with per-assistant slices and revocable tokens, an OAuth door, quick capture, agent session logs, hub and replicas, encrypted backups, model spend caps, and an owner dashboard. The agent-to-agent relay runs with its file transport; the live AgentMail path is untested. Install is one line, the installer from the public source (not on npm or Homebrew). Licensed under [AGPL-3.0](LICENSE).
 
 ## Why
 
@@ -72,15 +72,18 @@ This repo is the **tool**. Your notes live in a **separate, private** git repo t
 
 ## Quick start
 
-About five minutes on a Mac, Linux, or Windows with WSL. A laptop is fine. You need git and [Bun](https://bun.sh) 1.4; [docs/quickstart.md](docs/quickstart.md) walks through it, including installing those two.
+**A laptop is enough: no server, no tunnel, no account.** On a Mac, Linux, or Windows with WSL, with the assistants that run on it (Claude Code, Cursor, VS Code, Codex CLI, Gemini CLI, Claude Desktop, any MCP app), it takes about ten minutes. A machine that stays on, a public address and a sign-in service are only for cloud assistants (Claude on the web) and the phone app.
 
 ```sh
-git clone <this repository's address> pocketbrain && cd pocketbrain && bun install && bun link
-pocketbrain init               # a few questions; your brain goes in ~/my-brain
+curl -fsSL https://pocketbrain.dev/install.sh | sh   # Bun if it's missing, then the newest release
+pocketbrain init               # a few questions; your brain goes in ~/my-brain, your first app is connected
 pocketbrain start              # leave it running
+pocketbrain open               # your memory's home: tell it three things about you
 ```
 
-Then connect your assistant. [docs/connect.md](docs/connect.md) has a page for each:
+Then ask your assistant about you: it answers from your brain. Tested from cold on every change: CI's `cold-install` job ([scripts/cold-install.ts](scripts/cold-install.ts)) installs on a clean Linux machine, connects two apps, tells the memory two things, and checks that each assistant answers with what it is given and nothing more, and that an assistant's first save shows on your home as "Not confirmed". On 2026-11-15: clean machine to a second assistant answering in about 8 seconds of machine time.
+
+Connect more assistants; [docs/connect.md](docs/connect.md) has a page for each:
 
 | Runs on your computer, about 2 minutes | Runs in the cloud |
 |---|---|
@@ -90,7 +93,7 @@ Then connect your assistant. [docs/connect.md](docs/connect.md) has a page for e
 
 Where the brain runs (a laptop, a home server, a VPS, a container) is up to you; [docs/hosting.md](docs/hosting.md) says what the hub needs from a host.
 
-`bun link` puts the `pocketbrain` command in `~/.bun/bin`; `git pull && bun install` updates it. `install.sh` (Bun if missing, then the newest release tag into `~/.pocketbrain/app`, nothing without a release, the tag's signature checked once a release key is pinned) is meant to be served as `curl -fsSL https://pocketbrain.dev/install.sh | sh`, but the site doesn't serve it yet ([docs/release.md](docs/release.md#the-public-repo-and-the-site)).
+The installer says what it will do, puts the newest release tag in `~/.pocketbrain/app` and the `pocketbrain` command in `~/.bun/bin`, and installs nothing when there is no release; run it again to update. From a clone instead: `git clone <this repository's address> pocketbrain && cd pocketbrain && bun install && bun link`, and `git pull && bun install` to update ([docs/quickstart.md](docs/quickstart.md) walks through both).
 
 Working on the code (you need [Bun](https://bun.sh) 1.4 and git):
 

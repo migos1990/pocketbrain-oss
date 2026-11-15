@@ -46,9 +46,13 @@ test("the dashboard link is the one the hub kept for this run, only for this mac
   expect((await menuState(root, { home: h, fetch: down })).dashboard).toBe(false);
   // Opening hands the link to the system's opener and prints nothing of it.
   const calls: string[][] = [];
-  const said = openDashboard({ home: h, root, run: (cmd) => { calls.push(cmd); return { code: 0, out: "" }; } });
+  const said = openDashboard({ home: h, root, platform: "darwin", run: (cmd) => { calls.push(cmd); return { code: 0, out: "" }; } });
   expect(calls).toEqual([["open", "http://127.0.0.1:8788/login?key=new_2-x"]]);
   expect(said).not.toContain("key=");
+  // On Linux the opener is xdg-open (cold install, 2026-11-15: `open` is a Mac command).
+  const linux: string[][] = [];
+  openDashboard({ home: h, root, platform: "linux", run: (cmd) => { linux.push(cmd); return { code: 0, out: "" }; } });
+  expect(linux).toEqual([["xdg-open", "http://127.0.0.1:8788/login?key=new_2-x"]]);
   // Only a link to this machine is ever opened.
   keepLoginLinks(root, { local: "http://evil.example:8788/login?key=abc" });
   expect(readLoginLink(root)).toBeNull();

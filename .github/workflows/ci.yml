@@ -165,6 +165,35 @@ jobs:
       - name: every door, end to end
         timeout-minutes: 10
         run: bun scripts/e2e.ts
+  # The first ten minutes from cold (scripts/cold-install.ts, docs/install-with-an-agent.md): a clean
+  # home folder, the installer against this checkout, init, start, two apps on this computer, the
+  # owner's box, both assistants' answers and the first save, timed. Always on GitHub's runners, never
+  # the Mac's (PB_RUNNER): that machine holds the real brain and its hub.
+  cold-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: clean machine to a second assistant answering
+        timeout-minutes: 5
+        run: bun scripts/cold-install.ts | tee -a "$GITHUB_STEP_SUMMARY"; exit "${PIPESTATUS[0]}"
+  # The same on a Mac, in the public repo only, where GitHub's macOS minutes are free; the private
+  # repo never spends them.
+  cold-install-mac:
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: clean Mac to a second assistant answering
+        timeout-minutes: 5
+        run: bun scripts/cold-install.ts | tee -a "$GITHUB_STEP_SUMMARY"; exit "${PIPESTATUS[0]}"
   # The open spec's conformance suite over real HTTP, against the reference server and a pocketBrain
   # hub on a throwaway sample brain (docs/spec/memory-passport.md, scripts/conformance.ts).
   conformance:

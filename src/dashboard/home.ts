@@ -20,7 +20,7 @@ import { ownerLocal } from "../clock";
 import { ownerConflicts, type SettleCase } from "../core";
 import { unseenFacts, keptFacts, type Unseen } from "../seen";
 import { inboxConflicts } from "../settle-inbox";
-import { comms } from "./data";
+import { comms, proposals, type Proposal } from "./data";
 import { agentLabel, agentTitle, cap } from "./labels";
 import { loadRules } from "../rules";
 import { readEntriesSince, type ReadEntry } from "../readlog";
@@ -31,6 +31,8 @@ import type { Mark } from "./marks";
 import { yourToDo } from "../wiki";
 import { lateJobs, lateLine } from "../heartbeat";
 import { quietAssistants, quietLine, quietWords } from "../quiet";
+import { resolveEntity, personKey } from "../write";
+import { ownerOf, ownerTitle } from "../capture";
 // Settings, where what the home doesn't list itself waits (the dashboard's overview).
 export const SETTINGS_HREF = "/overview#needs";
 
@@ -54,7 +56,8 @@ export interface HomeLine {
 export interface Waiting { what: string; verb: string; href: string; n?: number; teach?: string; link?: string; choices?: { label: string; answer: string }[]; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // teach: a teaching question's key, for its three taps (teachKey); seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
-export interface HomeView { all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string }
+// unconfirmed: what an assistant said and nobody confirmed (unconfirmedLines); first: the owner's page holds under three things yet (firstRun).
+export interface HomeView { unconfirmed?: Unconfirmed[]; first?: boolean; all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string }
 
 export const SINCE_CAP = 7;
 // The face of On your mind (canvas "final direction", Louis 2026-10-31: the home was a log): six
@@ -164,6 +167,7 @@ export const LINE_COPY = {
   confirmed: "Another {source} confirms {title}'s {attr}",
   saidAgain: "{title}'s {attr} was said again; nothing new",
   pageNew: "{title} {value}",
+  notConfirmed: "Not confirmed · {a} said so",
   itsNew: "Its {attr} is {value}",
   proseNew: "{title} has a longer {attr} note on its page",
   prosePart: "has a longer {attr} note on its page",
@@ -730,6 +734,45 @@ export function assistantReads(root: string, rules: Rules, now: Date, notes: Not
 export const dayWords = (now: Date) => longDay(dayOf(now.toISOString()));
 export const firstName = (rules: Rules) => (rules.policy.owner?.name ?? ownerName(rules)).split(/\s+/)[0]!;
 
+// What an assistant said about the owner's pages that nobody confirmed (cold install, 2026-11-15: a
+// new owner's first "remember that I prefer short answers" was saved where no screen showed it).
+// Only the open saves the hub leaves to expire (src/filing.ts, its expiring queue): a guess, shown as
+// "Not confirmed" under the standing rule for guesses. Never an ask, never counted, nothing filed or
+// tied by it; it goes when it expires, and the owner keeps one by saying it in the box. Nothing that
+// is private now, looks like money, health or legal, or carried a value the assistant can't see.
+export interface Unconfirmed { page?: string; what: string; from: string }
+export function unconfirmedLines(root: string, rules: Rules, notes: Map<string, Note>, asks: OwnerAsks, cards: Proposal[] = proposals(root)): Unconfirmed[] {
+  const all = [...notes.values()], out: Unconfirmed[] = [];
+  for (const p of cards) {
+    if (!asks.queues.expiring.has(p.file) || p.capture || p.pulledFrom || isOwnerId(p.by) || /^It carried a value/.test(p.reason)) continue;
+    const r = p.request as { id?: unknown; title?: unknown; type?: unknown; attribute?: unknown; value?: unknown; text?: unknown; kind?: unknown; retract?: unknown };
+    if ((r.kind ?? "fact") !== "fact" || r.retract || typeof r.attribute !== "string" || r.value === undefined) continue;
+    const id = typeof r.id === "string" ? r.id : typeof r.title === "string" && typeof r.type === "string" ? resolveEntity(all, r.type, r.title).id : undefined;
+    const n = id ? notes.get(id) : undefined;
+    const title = n?.fm.title ?? r.title;
+    if (typeof title !== "string" || (n && (privateNow(n, r.attribute) || sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")))) continue;
+    if (sensitiveShape(rules, id, title, r.attribute, r.value, typeof r.text === "string" ? r.text : undefined)) continue;
+    out.push({ ...(n ? { page: n.fm.id } : {}), what: factSentence(n?.fm.id ?? "", title, r.attribute, r.value, notes), from: lineWords("notConfirmed", { a: agentTitle(rules, p.by) }) });
+  }
+  return out;
+}
+
+// The owner's own page: the one their full name finds (src/capture.ts ownerOf), else the person page
+// titled with the name init was given, as a one-word name never resolves there.
+export function ownerPageOf(rules: Rules, notes: Note[]): Note | undefined {
+  const id = ownerOf(rules, notes, ownerTitle(rules) ?? "")?.page;
+  const name = rules.policy.owner?.name;
+  return id ? notes.find((n) => n.fm.id === id) : typeof name === "string" ? notes.find((n) => n.fm.type === "person" && personKey(String(n.fm.title)) === personKey(name)) : undefined;
+}
+// A brain's first days (cold install, 2026-11-15): until the owner's page holds three live facts, the
+// home says what to tell it.
+export const FIRST_THINGS = 3;
+export function firstRun(rules: Rules, notes: Note[]): boolean {
+  const me = ownerPageOf(rules, notes);
+  const live = me ? Object.values(me.fm.facts ?? {}).flatMap((f) => records(f as never)).filter((x) => !x.valid_to && !x.retired).length : 0;
+  return live < FIRST_THINGS;
+}
+
 export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o: { all?: boolean; fresh?: boolean } = {}): HomeView {
   const rows = readDiary(root);
   const undone = new Set(rows.filter((r) => r.undoes).map((r) => r.undoes!));
@@ -755,7 +798,10 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
     name: firstName(rules),
     date: longDay(today),
     reads: assistantReads(root, rules, now, notes, o.fresh ?? true),
-    ...conflicts(root, now, o.all, undefined, o.fresh ?? false),
+    ...((): Pick<HomeView, "waiting" | "gardener" | "unconfirmed" | "first"> => {
+      const asks = ownerAsks(root, now), un = unconfirmedLines(root, rules, byId, asks);
+      return { ...conflicts(root, now, o.all, asks, o.fresh ?? false), ...(un.length ? { unconfirmed: un } : {}), ...(firstRun(rules, notes) ? { first: true } : {}) };
+    })(),
     since: recent.slice(0, cap).map(([r, l]) => (justSaid(r) ? { ...l, just: true } : l)),
     folded: Math.max(0, recent.length - cap),
     earlier: [...older].slice(0, o.all ? undefined : EARLIER_DAYS).map(([day, lines]) => ({ day: longDay(day), lines: o.all ? lines : lines.slice(0, EARLIER_PER_DAY) })),

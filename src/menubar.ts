@@ -59,11 +59,12 @@ const latestDashboardLink = (home: string, root?: string) => {
 
 // Opens the dashboard signed in, by handing the login link straight to the system's opener; the
 // link (it holds the owner's login key) is never printed, so no other program reads it from us.
-export function openDashboard(o: { home: string; run: Run; root?: string }): string {
+// The system's opener: open on a Mac, xdg-open on Linux (and in WSL, where it is installed).
+export function openDashboard(o: { home: string; run: Run; root?: string; platform?: string }): string {
   const link = latestDashboardLink(o.home, o.root);
-  if (!link) throw new Error("no dashboard link kept yet: is the hub running? (Restart hub makes a new one)");
-  const r = o.run(["open", link]);
-  if (r.code !== 0) throw new Error("couldn't open the browser");
+  if (!link) throw new Error("no dashboard link kept yet: is the hub running? Start it with pocketbrain start");
+  const r = o.run([(o.platform ?? process.platform) === "darwin" ? "open" : "xdg-open", link]);
+  if (r.code !== 0) throw new Error(`couldn't open a browser here. Open http://127.0.0.1:8788/ yourself and sign in with the link in ${o.root ? `${o.root}/.git/pb-dashboard-login` : "your brain's .git/pb-dashboard-login"}`);
   return "dashboard opened";
 }
 

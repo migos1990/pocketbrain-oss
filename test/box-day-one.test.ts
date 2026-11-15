@@ -88,3 +88,20 @@ test("with a model, a sentence about the owner is still read by the patterns, ne
   expect(fact(ME, "city")).toContain("Ottawa");
   expect(calls).toHaveLength(0);
 });
+
+// A stranger's first three sentences on a fresh brain (cold install, 2026-11-15): "I work at
+// Northwind" made a page called "I", and "Remember that I live in Lisbon" bounced.
+test("a fresh brain's first sentences about the owner land on the owner's page, never a page called I", () => {
+  const fresh = join(mkdtempSync(join(tmpdir(), "pb-dayone-")), "brain");
+  initBrain(fresh, { owner: "Sam Rivera", token: false });
+  for (const said of ["I work at Northwind", "Remember that I live in Lisbon", "Please remember I prefer short answers", "I joined Northwind last year", "i work at Contoso"]) {
+    const r = ownerSay(fresh, said, { fresh: true });
+    expect([said, r.kind, r.page]).toEqual([said, "say.noted", "people/sam-rivera"]);
+  }
+  const notes = loadBrain(fresh);
+  expect(notes.map((n) => n.fm.title)).not.toContain("I");
+  expect(notes.map((n) => n.fm.title)).not.toContain("i");
+  const me = notes.find((n) => n.fm.id === "people/sam-rivera")!;
+  expect(JSON.stringify(me.fm.facts?.city)).toContain("Lisbon");
+  expect(JSON.stringify(me.fm.facts?.prefers)).toContain("short answers");
+});

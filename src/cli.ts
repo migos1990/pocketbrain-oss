@@ -288,6 +288,7 @@ const USAGE = `pocketbrain <command>
   agent pause|read-only|revoke <agent>   tighten one agent's switch, as the dashboard's buttons do; resuming is
                                      the dashboard's alone, behind your login
   menubar open-dashboard             open the dashboard signed in, without printing its login link
+  open                               the same, from any terminal: your memory's home in the browser, signed in
   watchdog [--url <hub>]            one look at the hub from outside: two missed /health answers restart it (launchd) and alert
   uninstall [--yes] [--remove-brain] what leaving takes: stop and remove the launchd jobs, logs, the tunnel config
                                      pocketBrain wrote, the menu-bar app and the keys folder; the brain and its
@@ -484,6 +485,9 @@ export function brainRoot(args: string[]): string {
   return rememberedBrain() ?? process.cwd();
 }
 
+// init's last line, on every path that made a brain (cold install, 2026-11-15): where the memory
+// is and the first thing to do with it. The empty home says the same (APP_COPY.firstRun).
+export const INIT_LAST = "Last, with it running: pocketbrain open shows your memory (http://127.0.0.1:8788/). Tell it three things about you, like where you work, where you live or how you like your answers, then ask your assistant about you.";
 function runInit(args: string[]): number {
   const dir = args[0] && !args[0].startsWith("--") ? args[0] : arg(args, "--brain") ?? process.env.PB_BRAIN ?? join(homedir(), "my-brain");
   const opts: InitOptions = {
@@ -538,12 +542,13 @@ function runInit(args: string[]): number {
       const k = isLocalApp(kind) ? kind : "claude-code";
       console.log(`2. ${isLocalApp(k) ? APP_LABEL[k] : "Claude Code"}, connected now:\n`);
       // init's first agent is narrow (one area and contacts-basic, trial), so the G184 gate lets it through.
-      try { return connectKind(r.root, r.agent, k, "http://127.0.0.1:8787", undefined, undefined, args.includes("--write")); } catch (e) { console.error(`init: ${(e as Error).message}`); return 1; }
+      try { const code = connectKind(r.root, r.agent, k, "http://127.0.0.1:8787", undefined, undefined, args.includes("--write")); if (code === 0) console.log(`\n${INIT_LAST}`); return code; } catch (e) { console.error(`init: ${(e as Error).message}`); return 1; }
     }
     if (inCloud) {
       // In the cloud: the brain needs a public address first (quickstart, "Connect an assistant in the cloud").
       console.log(`2. ${kind === "browser" ? "Your browsing assistant" : kind === "town" ? "Town" : "Claude on the web"} reaches your brain at a public address, not this machine. Once you have one (the quickstart's "Connect an assistant in the cloud"), connect it with one command:\n\n     pocketbrain connect ${r.agent} --kind ${kind} --url https://<your brain's address>\n`);
       console.log(`It prints what to paste where, and the instruction that makes ${r.agent} check the brain without being asked.`);
+      console.log(`\n${INIT_LAST}`);
       return 0;
     }
     if (r.token) {
@@ -555,6 +560,7 @@ function runInit(args: string[]): number {
       console.log(`The token is shown once. Save it in your password manager; pocketbrain connect ${r.agent} makes a new one.`);
       console.log(`\n3. So ${r.agent} checks the brain without being asked, paste this once into its own custom instructions (Claude Code: ~/.claude/CLAUDE.md):\n\n${standingInstruction(loadRules(r.root), "mcp", "http://127.0.0.1:8787")}`);
     }
+    console.log(`\n${INIT_LAST}`);
     return 0;
   } catch (e) {
     if (e instanceof InitError) { console.error(`init: ${e.message}`); return 2; }
@@ -757,7 +763,7 @@ function connectBrowser(root: string, agent: string, url: string, keyOnly: boole
 }
 
 // Commands that run before a brain exists, or beside one (the menu bar, a pilot's door, the edge).
-const NO_BRAIN = new Set(["init", "uninstall", "search", "restore", "menubar", "door", "pilot", "edge", "import-notion", "import"]);
+const NO_BRAIN = new Set(["init", "uninstall", "search", "restore", "menubar", "open", "door", "pilot", "edge", "import-notion", "import"]);
 const KNOWN_COMMANDS = new Set([...USAGE.matchAll(/^\s{2}([a-z][a-z-]*)\b/gm)].map((m) => m[1]));
 
 export function main(argv: string[]): number {
@@ -1288,6 +1294,8 @@ ${p.text}`);
     return 2;
   }
   if (cmd === "menubar") return menubarCli(args, root);
+  // The dashboard, signed in, from any terminal: what init's last line says to run.
+  if (cmd === "open") return menubarCli(["open-dashboard", ...args], root);
   if (cmd === "agent" && args[0] === "tier") {
     try { const r = setAgentTier(root, args[1] ?? "", args[2] ?? "", { dryRun: args.includes("--dry-run") }); console.log(r); return 0; }
     catch (e) { console.error((e as Error).message); return e instanceof OwnerSetError && !/on the hub|couldn't commit|by hand/.test((e as Error).message) ? 2 : 1; }
