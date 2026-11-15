@@ -463,3 +463,27 @@ test("search setup keeps the child's teardown panic off the owner's terminal onc
   await expect(sem.setupInChild(() => {}, { cmd: child(`writeSync(2, "model file is corrupt\\n"); process.exit(1);`), stderr: (s) => shown.push(s) })).rejects.toThrow();
   expect(shown.join("")).toContain("model file is corrupt");
 }, 30_000);
+
+test("the model's worker loads from the model dir this thread chose, not the one the process started with (G910)", () => {
+  // A worker thread sees the environment the process started with, not what the hub (or a test,
+  // or a script) set since: on a machine with the model installed, a garbage model dir set here was
+  // ignored and the real model loaded in the worker.
+  const started = join(mkdtempSync(join(tmpdir(), "pb-models-")), "nowhere");
+  const code = `
+    import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+    import { tmpdir } from "node:os";
+    import { join } from "node:path";
+    import * as sem from "./src/semantic";
+    const dir = mkdtempSync(join(tmpdir(), "pb-models-"));
+    for (const f of sem.MODEL_FILES) { const p = join(dir, sem.MODEL_ID, f); mkdirSync(join(p, ".."), { recursive: true }); writeFileSync(p, "not a model"); }
+    process.env.PB_MODEL_DIR = dir;
+    console.error = () => {};
+    const v = await sem.embedQuery("course", { waitMs: 30000 });
+    console.log(JSON.stringify({ v: v ? v.length : null, why: sem.semanticState().why }));
+    process.exit(0);`;
+  const r = Bun.spawnSync(["bun", "-e", code], { cwd: join(import.meta.dir, ".."), env: { ...process.env, PB_MODEL_DIR: started } });
+  const out = JSON.parse(r.stdout.toString().trim().split("\n").at(-1) ?? "{}");
+  expect(out.v).toBeNull();
+  expect(out.why).toContain("didn't load");
+  expect(out.why).not.toContain(started);
+}, 60_000);

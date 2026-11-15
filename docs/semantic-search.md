@@ -17,7 +17,7 @@ On the synthetic French and English question set (`evals/fixtures/retrieval`), r
 
 ## What runs where
 
-Everything runs on this machine, in the hub's process (the model in a worker thread of it, so a model call never holds up the hub's other requests):
+Everything runs on this machine, in the hub's process (the model in a worker thread of it, so a model call never holds up the hub's other requests; the hub tells the worker which model folder it checked, since a worker only sees the environment the process started with):
 
 - the model, [bge-m3](https://huggingface.co/BAAI/bge-m3) by BAAI, in its 8-bit ONNX conversion `Xenova/bge-m3` (MIT licence), through `@huggingface/transformers` (Apache-2.0) and ONNX Runtime (MIT);
 - the vectors of the notes, computed from the notes on this machine and kept on this machine;

@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G910: {
+    closed: "claude/semantic-worker-env",
+    title: "The model's worker read the model dir from the environment the process started with",
+    severity: "low",
+    finding: "LongMemEval thread, 2026-11-15 (src/semantic.ts workerEmbedder, src/embed-worker.ts): a Bun worker sees the environment the process started with, not PB_MODEL_DIR or HOME as set since, so the thread that decided semantic search was on checked one model dir and the worker loaded from another. On any machine with the model installed, test/semantic.test.ts \"a model that won't load\" failed because the real model loaded in the worker.",
+    fix: "workerEmbedder tells the worker the model dir this thread checked as its first message; loadLocalEmbedder takes a dir. Ranking unchanged. test/semantic.test.ts (G910).",
+  },
   G883: {
     closed: "claude/private-guess-no-ask",
     title: "A stranger's private guess counted as an ask on the home",

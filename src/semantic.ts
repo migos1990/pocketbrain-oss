@@ -91,9 +91,9 @@ const importTransformers = (): Promise<Transformers> => import("@huggingface/tra
 
 // The model, loaded once, from the model dir only. allowRemoteModels stays false unless `download`
 // (the setup command), and local_files_only says the same to the loader, so a search never fetches.
-export async function loadLocalEmbedder(opts: { download?: boolean; load?: () => Promise<Transformers>; progress?: (p: { status: string; file?: string; progress?: number }) => void } = {}): Promise<Embedder> {
+export async function loadLocalEmbedder(opts: { download?: boolean; dir?: string; load?: () => Promise<Transformers>; progress?: (p: { status: string; file?: string; progress?: number }) => void } = {}): Promise<Embedder> {
   const t = await (opts.load ?? importTransformers)();
-  const dir = modelDir();
+  const dir = opts.dir ?? modelDir();
   t.env.allowLocalModels = true;
   t.env.localModelPath = dir;
   t.env.cacheDir = dir;
@@ -161,6 +161,9 @@ export function setupInChild(got: (file: string) => void = () => {}, o: { cmd?: 
 // work is waiting, so a script that embeds still exits when it is done.
 function workerEmbedder(): Embedder {
   const w = new Worker(new URL("./embed-worker.ts", import.meta.url).href) as Worker & { ref(): void; unref(): void };
+  // The worker sees the environment the process started with, not PB_MODEL_DIR or HOME as set since,
+  // so it is told the model dir this thread checked (G910).
+  w.postMessage({ dir: modelDir() });
   const waiting = new Map<number, { done: (v: Float32Array[]) => void; fail: (e: Error) => void }>();
   let n = 0;
   const idle = () => { if (!waiting.size) w.unref(); };
