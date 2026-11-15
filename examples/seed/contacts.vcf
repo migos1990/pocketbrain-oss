@@ -1,0 +1,58 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Alex Doe
+N:Doe;Alex;;;
+EMAIL;type=INTERNET;type=HOME:alex.doe@example.com
+TEL;type=CELL:+1 514 555 0199
+item1.X-ABRELATEDNAMES:Morgan Doe
+item1.X-ABLabel:_$!<Spouse>!$_
+UID:card-alex
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Omar Haddad
+N:Haddad;Omar;;;
+NICKNAME:Om
+ORG:Northfield College;
+TITLE:Lab instructor
+EMAIL;type=INTERNET:omar.haddad@northfield.example
+TEL;type=CELL:+1 514 555 0111
+UID:card-omar
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Priya Natarajan
+ORG:Bigco;
+TITLE:Engineering lead
+EMAIL;type=INTERNET:priya@bigco.example
+UID:card-priya
+REV:2026-05-02T10:00:00Z
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Kim Park
+NICKNAME:Lea Martin
+ORG:Northfield College;
+EMAIL;type=INTERNET:x9@studio-kite.example
+UID:card-kim
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Lea Martin
+TEL;type=HOME:+1 514 555 0122
+UID:card-lea
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Dana Lane
+TITLE:Dentist
+TEL;type=WORK:+1 514 555 0133
+UID:card-dana
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Northfield Front Desk
+X-ABShowAs:COMPANY
+TEL:+1 514 555 0100
+UID:card-desk
+END:VCARD

@@ -151,11 +151,11 @@ const SHORT_USAGE = `pocketbrain <command>
 const USAGE = `pocketbrain <command>
 
   init <dir> --name "Your name" [--kind claude-code|cursor|vscode|codex|gemini|claude-desktop|mcp|claude-ai|town|browser] [--write] [--agent <name>] [--areas work,personal]
-       [--from-text notes.txt|dir]… [--from-mbox mail.mbox]… [--from-ics calendar.ics]… [--me you@example.com]…
+       [--from-text notes.txt|dir]… [--from-mbox mail.mbox]… [--from-ics calendar.ics]… [--from-contacts contacts.vcf|dir|mac]… [--me you@example.com]…
        [--export-area personal] [--no-token]
   init <dir> --interview             a new brain from nothing: rules/, one trial agent and its token,
                                      named after the assistant kind (--kind); Claude Code is connected right away;
-                                     notes seeded from plain text, a Gmail/calendar export or a guided interview
+                                     notes seeded from plain text, a Gmail/calendar export, your contacts or a guided interview
   import-notion                      raw Notion snapshot (import/raw) -> brain files + import/REPORT.md
   carve <agent> --preview            what <agent> would see, from rules/policy.yaml
   consent <agent> "<one sentence>" [--rules-only]   propose a slice from what the agent is for: a model picks
@@ -497,6 +497,7 @@ function runInit(args: string[]): number {
     text: args_(args, "--from-text"),
     mbox: args_(args, "--from-mbox"),
     ics: args_(args, "--from-ics"),
+    contacts: args_(args, "--from-contacts"),
     me: args_(args, "--me"),
     exportArea: arg(args, "--export-area"),
     token: !args.includes("--no-token"),
@@ -508,7 +509,7 @@ function runInit(args: string[]): number {
   if (kind !== undefined && !(AGENT_KINDS as readonly string[]).includes(kind)) { console.error(`init: --kind is one of ${AGENT_KINDS.join(", ")}`); return 2; }
   try {
     // With nothing to go on and a person at the keyboard, ask: plain `pocketbrain init` just works.
-    const nothingGiven = !opts.owner && !opts.text!.length && !opts.mbox!.length && !opts.ics!.length;
+    const nothingGiven = !opts.owner && !opts.text!.length && !opts.mbox!.length && !opts.ics!.length && !opts.contacts!.length;
     if (args.includes("--interview") || (nothingGiven && process.stdin.isTTY)) {
       const iv = interview((q) => prompt(q), (s) => console.log(`\n${s}`), { claudeCode: hasClaude });
       opts.owner = opts.owner || iv.owner;
@@ -516,6 +517,7 @@ function runInit(args: string[]): number {
       kind ??= iv.kind;
       opts.mbox = [...opts.mbox!, ...iv.mbox];
       opts.ics = [...opts.ics!, ...iv.ics];
+      opts.contacts = [...opts.contacts!, ...iv.contacts];
       seedText = iv.text;
     } else if (nothingGiven) {
       // Piped, CI or some IDE terminals: no one to ask (backlog 389). Say so, and both ways on.

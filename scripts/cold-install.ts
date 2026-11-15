@@ -6,7 +6,10 @@
 //   1. the owner tells the box two things (POST /say, signed in as `pocketbrain open` would be);
 //   2. assistant A asks and answers from them; assistant B asks and gets only its own cut;
 //   3. A sends the `remember` a real model sends first (no as_of, no area): refused with its fix,
-//      then saved, and the owner's home shows it as "Not confirmed" while no assistant reads it.
+//      then saved, and the owner's home shows it as "Not confirmed" while no assistant reads it;
+//   4. a second person starts their memory from their own files instead (a contacts .vcf and a
+//      calendar .ics, examples/seed): the people they meet get names and job titles from their cards,
+//      family from their own card, and a card for no one they meet starts nothing (G921).
 // It prints one timed line: clean machine to a second assistant answering. Exit 1 at the first
 // step that fails, naming it. Never the real brain, never this machine's Claude Code: everything
 // lives in a temp folder, `claude` is a fake that logs its arguments, and the hub listens on its
@@ -60,7 +63,7 @@ export async function coldInstall(o: { repo?: string; ref?: string; keep?: boole
     const total = Math.round((performance.now() - t0) / 100) / 10;
     const line = failed
       ? `cold install FAILED at ${failed} (${commit}): ${why}`
-      : `cold install (${commit}, ${new Date().toISOString().slice(0, 10)}): clean machine to a second assistant answering in ${seconds.second_answer} s; first save shown as Not confirmed; ${total} s in all`;
+      : `cold install (${commit}, ${new Date().toISOString().slice(0, 10)}): clean machine to a second assistant answering in ${seconds.second_answer} s; first save shown as Not confirmed; a memory from contacts and calendar files in ${seconds.from_files} s; ${total} s in all`;
     return { ok: !failed, ...(failed ? { failed, why } : {}), commit, seconds, ...(failed ? {} : { total }), line };
   };
   const step = async <T>(name: string, f: () => T | Promise<T>): Promise<T> => {
@@ -153,6 +156,23 @@ export async function coldInstall(o: { repo?: string; ref?: string; keep?: boole
         for (const c of [a, b]) must("first_save", !/Lisbon/.test(await ask(c)), "an unconfirmed save reached an assistant");
       });
     } finally { a.close(); b.close(); }
+
+    // ---------- another person starts from their own files ----------
+    await step("from_files", () => {
+      const seed = join(repo, "examples", "seed"), files = join(home, "files-brain");
+      const r = run(["pocketbrain", "init", files, "--name", "Alex Doe", "--agent", "assistant", "--no-token", "--from-contacts", join(seed, "contacts.vcf"), "--from-ics", join(seed, "calendar.ics")]);
+      must("from_files", r.code === 0, r.out.trim().split("\n").slice(-3).join(" / "));
+      const note = (id: string) => (existsSync(join(files, `${id}.md`)) ? readFileSync(join(files, `${id}.md`), "utf8") : "");
+      // Met in the calendar, named and titled by their card, citing it.
+      must("from_files", /Lab instructor/.test(note("people/omar-haddad")) && /contacts:vcard\/card-omar@/.test(note("people/omar-haddad")), "a person the calendar met didn't get the job title their card states");
+      must("from_files", /Engineering lead/.test(note("people/priya-natarajan")), "a second person the calendar met didn't get their card's job title");
+      // Family from the owner's own card; nobody else from a card alone.
+      must("from_files", /Alex's spouse/.test(note("people/morgan-doe")), "the owner's own card didn't start their family's page");
+      must("from_files", !note("people/dana-lane"), "a card for someone the owner never met started a page");
+      // Phones stay private: never the first assistant's to read.
+      const view = existsSync(join(files, "views", "assistant.md")) ? readFileSync(join(files, "views", "assistant.md"), "utf8") : "";
+      must("from_files", !/555 ?0111|5550111/.test(view), "a phone from a card reached the first assistant's view");
+    });
     return result();
   } catch (e) {
     if (e instanceof Fail) return result(e.at, e.message);

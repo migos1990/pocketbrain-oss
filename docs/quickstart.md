@@ -105,6 +105,14 @@ These are the rules for the file:
 
 You can also start from a Google Takeout export. Add `--from-mbox "All mail.mbox"` or `--from-ics calendar.ics` to the same command. Only people you wrote to or met with are kept. No workplace is filed from an email address: the import report (init prints its path) lists who has an address at which company domain under "Guesses to check", free mail and people whose workplace you stated left out. Until you or a source says where someone works, your first assistant sees an export-only person by name alone (G855).
 
+Add your contacts too: `--from-contacts contacts.vcf` (a vCard export from Google Contacts or iCloud, or a folder of them), or `--from-contacts mac` to read this Mac's Contacts app, which asks once for access. The mail and calendar say who you're in touch with; a card says who they are. A card is read by code, never a model, and cited as `contacts:<card id>@<version>`, the same ref a [contacts source](sources-pull.md#contacts) uses later. What a card gives here:
+
+- its name, for an address your mail or calendar met with no name (instead of a name guessed from the address);
+- on a person your notes, mail or calendar named: nicknames, a job title when you gave none (yours is never replaced), the company when that company has a page, and emails and phones, both private (your first assistant reads up to personal, so it never gets them; since you handed init the file yourself, they are your own word and don't wait behind Show the way a contacts source's do);
+- the family your own card names (found by your name, or one of your addresses): their pages start with the relationship, like "Alex's spouse". That is the only page a card starts.
+
+A card for someone you neither wrote to nor met starts no page; the report counts them. A card's words pass the same checks as your notes: instruction-shaped text is held back, and someone else's health, school, legal or money details make their page private (G921).
+
 ## Day to day
 
 - `pocketbrain doctor` checks that everything is healthy.

@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G921: {
+    closed: "claude/init-from-files",
+    title: "A new memory couldn't start from the owner's contacts",
+    severity: "medium",
+    finding: "Instant-value plan, 2026-11-15 (plans/instant-value F3; the owner: a new person \"should automatically see the value\" from \"all different sources\"): init took a mail and a calendar export but no address book. Someone the calendar met only by address got a name guessed from it (\"Guesses to check\") or was skipped for having none, and nothing said who anyone was, though a contacts reader by code already existed (src/contacts.ts) for a live source a stranger never sets up on day one.",
+    fix: "src/init.ts: `init --from-contacts <file.vcf|folder|mac>` (and an interview question). Cards are read by code with src/contacts.ts's parser (`mac` asks this Mac's Contacts app through osascript, one system prompt) and cited contacts:<card id>@<version>, the live source's ref. A card names an address the mail or calendar met; on a person the notes, mail or calendar named it adds nicknames (never another person's name), a job title when none was said, the company only when an org page by that name exists, and emails and phones, private. The owner's own card (their name, or one of their addresses) starts family pages with the relationship, the only page a card starts. A card alone, or its company, starts nothing. A card's words pass clean() (secrets, instructions) and personItem's gates (someone else's health, school, legal or money details make the page private; a money word tags finance). Test: test/init-contacts.test.ts; the cold-install rig's files act.",
+  },
   G910: {
     closed: "claude/semantic-worker-env",
     title: "The model's worker read the model dir from the environment the process started with",

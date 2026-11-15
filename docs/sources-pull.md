@@ -263,6 +263,8 @@ What a card files:
 
 **A card ref is the hub's.** No assistant reads the owner's address book, so a `contacts:` ref counts as the card's only on what the hub pulled itself; on an assistant's write it is that assistant's own word, even when it names a card the hub has read and even in a brain whose resolver is that assistant: it never outranks the owner's word or what the card filed, and a different value is a conflict, never an update (`readFor` in src/write.ts, G564; test/contacts-forged-ref.test.ts). The record is stored as that word (self-reported), not only ranked as it, and an address vouched for by card refs alone counts toward a known sender only when the hub filed it (`trusted` in src/sameperson.ts, G581), so an assistant can't make an address it planted a trusted sender. A made-up card ref changes nothing until checked. The carve property (test/carve-property.test.ts) seeds card emails and phones, held and seen, and its leak oracle counts a value still held until Show as carved out for every agent (G563).
 
+**At init.** `pocketbrain init --from-contacts <file.vcf|folder|mac>` reads the same cards once, as the owner's own import, with the same rules but one difference: the people a card may land on are the ones the owner's notes, mail or calendar named, plus family from the owner's own card (docs/quickstart.md, G921). The refs are the same `contacts:<card id>@<version>`, so a vCard source on the same export later corroborates them.
+
 `verify_source` reads one card by its id from either, and checks a claim against it without its email and phone lines: those are held until Show, so no quote or match gives them away (G549). Upkeep's recheck reads the whole card and answers with fact keys only.
 
 ## Is the brain filling?

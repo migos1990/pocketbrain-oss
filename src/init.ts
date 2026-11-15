@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // `pocketbrain init`: a new brain from nothing, for someone who has no Notion to import.
 // Seeds come from plain text (a light, forgiving format), a Gmail .mbox or calendar .ics
-// export, or a guided interview that writes the same plain text. Everything is plain code:
+// export, the owner's contacts (a .vcf export or this Mac's Contacts), or a guided interview that
+// writes the same plain text. Everything is plain code:
 // no model is called, so the result is the same on every run.
 //
 // What it writes: rules/ (policy.yaml with one trial agent, slices.yaml, checks.yaml,
@@ -27,6 +28,7 @@ import { DEFAULT_TZ, clock } from "./clock";
 import { appendDiary } from "./diary";
 import { firstRows } from "./diary-catchup";
 import { OWNER, OWNER_CONFIRMED, ownerRef as ownerRefOf } from "./owner";
+import { parseVcards, readCard, type Card } from "./contacts";
 
 export const DEFAULT_AGENT = "assistant";
 // The assistant kinds init can set up (row 388), each with the name its first agent gets; the doors
@@ -55,6 +57,7 @@ export interface InitOptions {
   seedText?: { name: string; text: string }[]; // text already in hand (the interview)
   mbox?: string[]; // Gmail export (Google Takeout)
   ics?: string[]; // calendar export
+  contacts?: string[]; // .vcf exports (a file or a folder of them), or "mac" for this Mac's Contacts
   me?: string[]; // the owner's own addresses; guessed from the exports when absent
   exportArea?: string; // area for people found only in exports (default personal)
   token?: boolean; // issue the agent's token (default true)
@@ -100,6 +103,7 @@ interface Ctx {
   moneyWords: string[];
   me: Set<string>;
   exportArea: string;
+  cardNames?: Map<string, string>; // an address -> the name its contact card gives
 }
 
 function flag(ctx: Ctx, section: string, line: string) {
@@ -136,12 +140,13 @@ function addSource(d: Draft, ref: SourceRef) {
   if (!d.sources.some((s) => JSON.stringify(s) === JSON.stringify(ref))) d.sources.push(ref);
 }
 
-function addListItem(d: Draft, attr: string, rec: FactRecord, norm: "email" | "e164") {
+function addListItem(d: Draft, attr: string, rec: FactRecord, norm: "email" | "e164" | "text") {
   const v = normalizeValue(rec.value, { normalize: norm });
   const f = (d.facts[attr] ??= { items: [] }) as ListFact;
   const have = f.items.find((i) => i.value === v);
-  if (!have) f.items.push({ ...rec, value: v });
-  else for (const s of rec.sources) if (!have.sources.includes(s)) have.sources.push(s);
+  if (!have) f.items.push({ ...rec, value: v, sources: [...rec.sources] });
+  // A new array: records of one seed share theirs, so a push would cite this source on all of them.
+  else have.sources = [...have.sources, ...rec.sources.filter((s) => !have.sources.includes(s))];
 }
 
 function setMax(d: Draft, attr: string, rec: FactRecord) {
@@ -492,13 +497,15 @@ function readExports(ctx: Ctx, mboxFiles: string[], icsFiles: string[]) {
   const atDomain: Record<string, Set<string>> = {};
   for (const c of contacts.values()) {
     const where = `export: ${c.email}`;
-    const raw = c.name ?? nameFromEmail(c.email);
+    // The owner's own card for this address names them; else the invite or mail; else a guess.
+    const carded = ctx.cardNames?.get(c.email);
+    const raw = carded ?? c.name ?? nameFromEmail(c.email);
     if (!raw) { skippedNoName++; continue; }
     const title = clean(ctx, where, raw);
     if (!title) continue;
     kept++;
     const d = findDraft(ctx, "person", title, c.email) ?? draft(ctx, "person", title, ctx.exportArea);
-    if (!c.name) flag(ctx, "Guesses to check", `${d.title}: name guessed from ${c.email}`);
+    if (!c.name && !carded) flag(ctx, "Guesses to check", `${d.title}: name guessed from ${c.email}`);
     const refs = [...c.refs].sort().slice(0, 3);
     for (const r of refs) addSource(d, r);
     const rec = (value: unknown): FactRecord => ({ value, as_of: c.last ?? ctx.date, sources: refs, verification: "verified-by-source", by: "owner", recorded: ctx.date });
@@ -518,6 +525,110 @@ function readExports(ctx: Ctx, mboxFiles: string[], icsFiles: string[]) {
   }
   if (skippedNoName) flag(ctx, "Skipped", `${skippedNoName} addresses with no name to go on (add them by hand if they matter)`);
   return { messages: messages.length, events: events.length, contacts: kept };
+}
+
+// ---------- contacts: a .vcf export, or this Mac's Contacts ----------
+//
+// The owner's address book, read by code as the contacts source reads it (src/contacts.ts) and
+// cited the same way (contacts:<card id>@<version>), so a contacts source set up later finds the
+// same cards. The mail and calendar say who the owner is in touch with; a card says who they are.
+// What a card may do here, and nothing more:
+//   - give its name to an address the mail or calendar met (in place of a name guessed from it);
+//   - on a page the notes, mail or calendar made: nicknames, a job title when none was said, the
+//     company when that company has a page, emails and phones (both private, as the source files them);
+//   - the owner's own card (their name, or one of their addresses) names family: that starts the
+//     related person's page with the relationship, the only page a card starts.
+// A card's company starts no page and names no workplace (cards go stale for years); a card
+// naming nobody the owner writes to or meets is only counted. A nickname is never matched on.
+
+export const MAC_CONTACTS = "mac";
+// One system prompt (Contacts access for the terminal), then every card as vCard text.
+const MAC_SCRIPT = 'tell application "Contacts"\nset out to ""\nrepeat with p in every person\nset out to out & (vcard of p) & linefeed\nend repeat\nreturn out\nend tell';
+
+interface CardIn { card: Card; ref: string }
+
+function contactsTexts(srcs: string[]): string[] {
+  return srcs.flatMap((src) => {
+    if (src === MAC_CONTACTS) {
+      const osa = Bun.which("osascript", { PATH: process.env.PATH ?? "" });
+      if (!osa) throw new InitError("--from-contacts mac reads this Mac's Contacts, so it works only on a Mac. Anywhere else, export your contacts as a .vcf file (Google Contacts: Export, vCard; iPhone: from iCloud.com Contacts) and pass its path");
+      const r = Bun.spawnSync([osa, "-e", MAC_SCRIPT], { stdout: "pipe", stderr: "pipe" });
+      if (r.exitCode !== 0) throw new InitError("this Mac's Contacts couldn't be read. Allow your terminal in System Settings > Privacy & Security > Contacts and run init again, or export them from the Contacts app (File > Export > Export vCard) and pass the .vcf file's path");
+      return [r.stdout.toString()];
+    }
+    if (!existsSync(src)) throw new InitError(`${src} doesn't exist`);
+    const files = statSync(src).isDirectory() ? readdirSync(src).filter((f) => /\.vcf$/i.test(f)).sort().map((f) => join(src, f)) : [src];
+    return files.map((f) => readFileSync(f, "utf8"));
+  });
+}
+
+function readCards(srcs: string[]): CardIn[] {
+  const seen = new Set<string>();
+  return contactsTexts(srcs).flatMap((t) => parseVcards(t)).flatMap((r) => {
+    const card = readCard(r);
+    const ref = `contacts:${r.resourceName}@${r.etag}`;
+    if (!card || seen.has(ref)) return [];
+    seen.add(ref);
+    return [{ card: { ...card, emails: card.emails.map((e) => e.toLowerCase()) }, ref }];
+  });
+}
+
+const isOwnerCard = (ctx: Ctx, owner: string, c: Card) => compareKey(c.name) === compareKey(owner) || c.emails.some((e) => ctx.me.has(e));
+
+function fileCard(ctx: Ctx, d: Draft, { card: c, ref }: CardIn, own: boolean) {
+  const where = `contacts: ${c.name}`;
+  const day = c.updated && /^\d{4}-\d{2}-\d{2}/.test(c.updated) ? c.updated.slice(0, 10) : ctx.date;
+  const rec = (value: unknown, priv = false): FactRecord => ({ value, as_of: day, sources: [ref], verification: "verified-by-source", by: OWNER, recorded: ctx.date, ...(priv ? { sensitivity: "private" as Sensitivity } : {}) });
+  addSource(d, ref);
+  for (const e of c.emails) { if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) continue; addListItem(d, "emails", rec(e, true), "email"); d.emails.add(e); }
+  for (const p of c.phones) { const v = clean(ctx, where, p); if (v) addListItem(d, "phones", rec(v, true), "e164"); }
+  for (const nick of c.nicknames) {
+    const v = clean(ctx, where, nick);
+    // A nickname that is another person's name would mix the two in search: never filed.
+    if (!v || compareKey(v) === compareKey(d.title) || ctx.drafts.some((x) => x !== d && x.kind === "person" && compareKey(x.title) === compareKey(v))) continue;
+    addListItem(d, "aliases", rec(v), "text");
+  }
+  // A job title fills an empty one; what the owner wrote, or an older card, is never replaced.
+  const title = c.title ? clean(ctx, where, c.title) : undefined;
+  if (title && !d.facts.role) d.facts.role = rec(title);
+  const org = c.company ? clean(ctx, where, c.company) : undefined;
+  const orgPage = org ? findDraft(ctx, "org", org) : undefined;
+  if (orgPage && !d.facts.org) d.facts.org = rec(`[[${idPlaceholder(orgPage)}]]`);
+  if (own) return;
+  // The same gates as a person the owner typed (personItem): someone else's health, school, legal
+  // or money details make the page private; a money word keeps it out of contacts-basic.
+  const said = [title, org].filter(Boolean).join(" ");
+  const why = said ? thirdPartySensitive({ agent: "owner", type: "person", value: said }) : undefined;
+  if (why) { d.sensitivity = "private"; flag(ctx, "Kept private (someone else's health, school, legal or money details)", `${where}: mentions "${why}"`); }
+  if (said && ctx.moneyWords.some((w) => wordsRe(escapeRe(w.normalize("NFC"))).test(said.normalize("NFC"))) && !d.tags.includes("finance")) {
+    d.tags.push("finance");
+    flag(ctx, "Tagged finance (kept out of contacts-basic)", `${where}: ${d.title}`);
+  }
+}
+
+function applyCards(ctx: Ctx, owner: string, cards: CardIn[]) {
+  const mine = cards.find((x) => isOwnerCard(ctx, owner, x.card));
+  const me = findDraft(ctx, "person", owner);
+  const first = owner.split(/\s+/)[0];
+  // Family the owner's own card names: the only pages a card starts.
+  let family = 0;
+  for (const rel of mine?.card.relations ?? []) {
+    const name = clean(ctx, `contacts: ${mine!.card.name}`, rel.name);
+    if (!name || compareKey(name) === compareKey(owner)) continue;
+    const d = findDraft(ctx, "person", name) ?? draft(ctx, "person", name, ctx.exportArea);
+    addSource(d, mine!.ref);
+    if (!d.facts.relationship) d.facts.relationship = { value: `${first}'s ${rel.kind}`, as_of: ctx.date, sources: [mine!.ref], verification: "verified-by-source", by: OWNER, recorded: ctx.date };
+    family++;
+  }
+  let named = 0, noPage = 0;
+  for (const ci of cards) {
+    if (ci === mine) { if (me) fileCard(ctx, me, ci, true); continue; }
+    const d = ci.card.emails.map((e) => ctx.drafts.find((x) => x.kind === "person" && x.emails.has(e))).find(Boolean) ?? findDraft(ctx, "person", ci.card.name);
+    if (!d || d === me) { noPage++; continue; }
+    fileCard(ctx, d, ci, false);
+    if (!(mine?.card.relations ?? []).some((r) => compareKey(r.name) === compareKey(d.title))) named++;
+  }
+  return { cards: cards.length, named, family, noPage };
 }
 
 // ---------- rules ----------
@@ -675,11 +786,17 @@ export function initBrain(root: string, o: InitOptions): InitResult {
   const texts = [...textFiles.map((f) => ({ f, t: readFileSync(f, "utf8") })), ...(o.seedText ?? []).map((x) => ({ f: x.name, t: x.text }))];
   for (const { t } of texts) preloadMoneyWords(ctx, t);
   for (const { f, t } of texts) parseSeedText(ctx, t, f.split("/").pop()!);
+  // Cards first, so an address the mail or calendar met takes its card's name; the owner's own card
+  // (by their name) gives their addresses when none were passed, in place of a guess from the exports.
+  const cards = o.contacts?.length ? readCards(o.contacts) : [];
+  if (!ctx.me.size) for (const x of cards) if (compareKey(x.card.name) === compareKey(owner)) for (const e of x.card.emails) ctx.me.add(e);
+  ctx.cardNames = new Map(cards.flatMap((x) => x.card.emails.map((e) => [e, x.card.name] as [string, string])).reverse());
   const ex = mboxFiles.length || icsFiles.length ? readExports(ctx, mboxFiles, icsFiles) : undefined;
   // The owner always has a page, so "remember that I prefer short answers" has somewhere to land
   // on a brain's first day (cold install, 2026-11-15: an empty brain refused it twice). In the area
   // the first assistant reads, unless a seed already made it elsewhere; by the owner's word, no facts.
   if (!findDraft(ctx, "person", owner)) draft(ctx, "person", owner, firstArea(areas));
+  const cardsIn = cards.length ? applyCards(ctx, owner, cards) : undefined;
 
   // Drafts become notes: ids from titles, org links resolved, every note cites its sources.
   mkdirSync(root, { recursive: true });
@@ -729,7 +846,8 @@ export function initBrain(root: string, o: InitOptions): InitResult {
     "## Seeds", "",
     ...texts.map(({ f }) => `- text: ${f.split("/").pop()}`),
     ...(ex ? [`- export: ${ex.messages} messages, ${ex.events} calendar events, ${ex.contacts} people kept (your address: ${[...ctx.me].join(", ") || "unknown"})`] : []),
-    ...(!texts.length && !ex ? ["- none: an empty brain with rules only"] : []), "",
+    ...(cardsIn ? [`- contacts: ${cardsIn.cards} cards; ${cardsIn.named} people your notes, mail or calendar name; ${cardsIn.family} family from your own card; ${cardsIn.noPage} started no page (a card alone starts none: someone you write to or meet does)`] : []),
+    ...(!texts.length && !ex && !cardsIn ? ["- none: an empty brain with rules only"] : []), "",
     "## Your first agent", "",
     `- \`${agent}\`: trial tier, slices \`area:${firstArea(areas)}\` and \`contacts-basic\`, no money, nothing private; its writes wait in \`inbox/\` for you.`,
     `- Areas: ${areas.join(", ")}. Money words withheld from it: ${ctx.moneyWords.join(", ")}.`, "",
@@ -761,7 +879,7 @@ export function initBrain(root: string, o: InitOptions): InitResult {
 // Questions one at a time; an empty answer skips or ends a list. The answers become the same
 // plain text a user could have written, so the interview and --from-text share one parser.
 
-export interface Interview { owner: string; kind: AgentKind; agent: string; text: string; mbox: string[]; ics: string[] }
+export interface Interview { owner: string; kind: AgentKind; agent: string; text: string; mbox: string[]; ics: string[]; contacts: string[] }
 
 // `claudeCode`: Claude Code is on this machine, so it is the default first assistant.
 export function interview(ask: (q: string) => string | null | undefined, say: (s: string) => void = () => {}, o: { claudeCode?: boolean } = {}): Interview {
@@ -803,6 +921,7 @@ export function interview(ask: (q: string) => string | null | undefined, say: (s
   const words = a("Other words that point at your money (names of banks, employers' pay system…), comma-separated:");
   const mbox = a("Path to a Gmail export (.mbox from Google Takeout), or Enter to skip:");
   const ics = a("Path to a calendar export (.ics), or Enter to skip:");
+  const contacts = a(`Path to your contacts (.vcf)${process.platform === "darwin" ? `, or ${MAC_CONTACTS} to read this Mac's Contacts` : ""}, or Enter to skip:`);
 
   const sec = (h: string, items: string[]) => (items.length ? [`# ${h}`, ...items.map((x) => `- ${x}`), ""] : []);
   const text = [
@@ -815,5 +934,5 @@ export function interview(ask: (q: string) => string | null | undefined, say: (s
     ...sec("Money", money),
     ...(words ? ["# Money words", words, ""] : []),
   ].join("\n");
-  return { owner, kind, agent, text, mbox: mbox ? [mbox] : [], ics: ics ? [ics] : [] };
+  return { owner, kind, agent, text, mbox: mbox ? [mbox] : [], ics: ics ? [ics] : [], contacts: contacts ? [contacts] : [] };
 }

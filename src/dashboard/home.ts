@@ -806,7 +806,9 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
   // What the owner said in the last hour leads, newest first, and the cap never cuts it: they can
   // see and undo what they just typed (use-it check, 2026-10-27). Then least certain first: a
   // guess, then by the source's rank, newest first within a rank.
-  const justSaid = (r: DiaryRow) => isOwnerId(r.by) && r.kind !== "kept" && now.getTime() - Date.parse(r.at) < JUST_SAID_MS;
+  // Only the owner's own word: what init read from their contacts, mail or calendar files is by the
+  // owner too, but the file said it, and a big file must not lift the cap (G921).
+  const justSaid = (r: DiaryRow) => isOwnerId(r.by) && r.source_word === "you" && r.kind !== "kept" && now.getTime() - Date.parse(r.at) < JUST_SAID_MS;
   recent.sort(([a], [b]) => Number(justSaid(b)) - Number(justSaid(a)) || (justSaid(a) ? b.at.localeCompare(a.at) : 0) || (a.confidence === "inferred" ? 0 : 1) - (b.confidence === "inferred" ? 0 : 1) || a.rank - b.rank || b.at.localeCompare(a.at));
   const cap = o.all ? recent.length : SINCE_CAP + recent.filter(([r]) => justSaid(r)).length;
   return {

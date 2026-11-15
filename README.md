@@ -109,7 +109,7 @@ Other ways in and around:
 
 ```sh
 pocketbrain init ~/my-brain --name "Your name" --agent claude --from-text notes.txt
-#   add --from-mbox / --from-ics for a Gmail or calendar export
+#   add --from-mbox / --from-ics for a Gmail or calendar export, --from-contacts for your contacts (.vcf, or mac)
 #   no terminal (CI, a pipe, some IDEs)? these flags, or the answers piped in one per line with --interview
 pocketbrain carve claude --preview   # what an agent would get, and what the preview flags
 pocketbrain connect claude           # a new token for the agent and what to paste into its connector
