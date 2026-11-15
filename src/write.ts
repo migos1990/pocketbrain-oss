@@ -1256,9 +1256,10 @@ export function pageLink(notes: Note[], v: unknown): unknown {
   if (notes.some((n) => n.fm.id === name)) return v;
   const k = compareKey(name);
   if (!k) return v;
-  // A page with two names in its title ("Northwind / Brightwell", an import's) carries each: a name
-  // two pages carry stays a name (area-follow's "never picks one", G653).
-  const hits = notes.filter((n) => [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => typeof t === "string" && [t, ...t.split(/\s*[/|]\s*/)].some((x) => compareKey(x) === k)));
+  // A link is to the one page whose whole title or alias the name is (G854). One side of a slash
+  // in a title ("Northwind / Brightwell", "TCP/IP") is not a name of that page: such a page neither
+  // takes the link nor stands in the way of the page titled exactly that.
+  const hits = notes.filter((n) => [n.fm.title, ...(n.fm.aliases ?? [])].some((t) => typeof t === "string" && compareKey(t) === k));
   return hits.length === 1 ? `[[${hits[0].fm.id}]]` : v;
 }
 

@@ -5,6 +5,107 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G850: {
+    title: "A word list on a project's title decides what the page is",
+    severity: "high",
+    finding: "Family sweep, 2026-11-14: src/page-kind.ts:28-45 reads a title for travel, event and provider-mail words. \"Hotel Lumen rebrand\", \"Reservation system migration\" and \"Checkout flow rewrite\" read as travel; \"Survey of coastal erosion (thesis)\" and \"Invoice automation rollout\" as a provider's mail; \"Northwind vs Brightwell merger analysis\" as a one-off event. Capture then starts no page for it (src/capture.ts:401) and the owner's page drops it.",
+    fix: "Proposed: kind from structure (the source item's type, dates inside a trip's dates from the same account) or the owner's word; a model's kind is a guess. The word lists go; test/word-lists.ts holds them as `decides` until then.",
+  },
+  G851: {
+    title: "Memory lists group pages by the first word of their titles",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/dashboard/html-app.ts:556-567: three or more pages that lead with one word sit under that word. \"New York move\", \"New roof quote\" and \"New hire onboarding\" show as one group \"New\".",
+    fix: "Proposed: lists group by a page's own parent and area only.",
+  },
+  G852: {
+    title: "Memory lists put a page under another whose title it starts with",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/dashboard/html-app.ts:535-538: org \"Delta - Dental of Ohio\" shows under org \"Delta\".",
+    fix: "Proposed: under a page only by its own parent link.",
+  },
+  G853: {
+    closed: "42907565",
+    title: "A source check passes on substrings, with no subject and no negation",
+    severity: "high",
+    finding: "Family sweep, 2026-11-14: src/pull.ts:817-818 checkClaim: a value matches when 60% of its words are anywhere in the text as substrings. \"art dan\" matches \"Our partner Dana started the cart migration\"; \"director of Brightwell\" matches \"Sam is not the director of Brightwell; Ana is\". A match re-confirms the fact.",
+    fix: "src/pull.ts checkClaim: whole words (a plural aside), and a word within four words after a negation counts only where the item also says it plainly. The subject stays the callers' check (namedSentence). test/pull.test.ts.",
+  },
+  G854: {
+    closed: "eef277c4",
+    title: "A name links to a page when it equals one side of a slash in that page's title",
+    severity: "high",
+    finding: "Family sweep, 2026-11-14: src/write.ts:1260-1262 pageLink and src/area-follow.ts:41 orgPage: a fact \"org: Brightwell\" links to an import's page \"Northwind / Brightwell\".",
+    fix: "src/write.ts pageLink and src/area-follow.ts orgPage: a link needs the whole title or alias; one side of a slash never links and never blocks the page titled exactly that. test/false-conflicts-2.test.ts, test/area-follows-org.test.ts, test/contracts/write.contract.test.ts. Links made before this are left for the placements step.",
+  },
+  G855: {
+    closed: "649df435",
+    title: "init files an employer and an org page from an email address's domain",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/init.ts:507-514: one address at a domain gives the person an org fact and starts an org page named after the domain. Filed inferred, but the page says \"works at\". A contractor on a client's domain gets the client as employer.",
+    fix: "src/init.ts readExports files no org fact and starts no org page from a domain; the report's Guesses to check names who has an address at which domain, once per domain, free mail left out. test/init.test.ts.",
+  },
+  G856: {
+    title: "The kind of a new page is one model answer, checked by nothing",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/capture.ts:397 and :418: person, org, project, decision or money is whatever the model said; resolveEntity (src/write.ts:119) matches within one type, so the same name read as another kind gets a second page.",
+    fix: "Proposed: kind from the source's structure or the owner; a model's kind is a guess until a second independent source agrees.",
+  },
+  G857: {
+    title: "The Notion import ties a related project by title prefix or scattered words",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/import/notion.ts:278-284 findProjectByTitle: \"Atlas\" ties to \"Atlas Tower lease\"; the person then takes that project's area (:308).",
+    fix: "Proposed: exact title or alias only; else unresolved, flagged.",
+  },
+  G858: {
+    title: "The Notion import takes a page's area from hint words in titles and role text",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/import/notion.ts:128, :215, :250, :308, :348 areaFromText: first hint that matches wins, and area sets who reads the page.",
+    fix: "Proposed: area from the import's own structure (the row's Area or Entity field, a resolved parent); else not filed yet.",
+  },
+  G859: {
+    title: "The Notion import reads \"at X\" in a body as naming an org",
+    severity: "low",
+    finding: "Family sweep, 2026-11-14: src/import/notion.ts:327-328 upgradeFromBody: \"Met at Riverside park\" counts as org evidence.",
+    fix: "Proposed: dropped; body text is not evidence for an org fact.",
+  },
+  G860: {
+    title: "A page started from the owner's box takes the area of any other page the sentence names",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/owner-say.ts:505-511 defaultArea: \"Mia is my dentist, Sam recommended her\" files Mia in Sam's work area, where work assistants read her.",
+    fix: "Proposed: personal unless the owner names the area or is on a page; the reply still says where, with Undo.",
+  },
+  G861: {
+    title: "A calendar event is tied to a page by a substring of its text",
+    severity: "low",
+    finding: "Family sweep, 2026-11-14: src/upcoming.ts:154 and src/week.ts:151: an event whose text holds a page's name as a substring is tied to that page; week.ts takes the first that fits.",
+    fix: "Proposed: by a guest's trusted address or the whole name as whole words; else no page.",
+  },
+  G862: {
+    closed: "e87f7eb1",
+    title: "A money page is a receipt page when its title has one of eight words",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: src/receipt-pages.ts:25, :33: \"Billing dispute with landlord\" is set aside as a receipt.",
+    fix: "The always-on receipt step is removed (receiptPages, setAsideReceipts, scripts/receipt-pages.ts): without the title words its rule is the machine-mail rule, so the owner's switch governs every set-aside (setAsideMachineMail, src/receipt-pages.ts; `pocketbrain machine-mail on`). Old why \"receipt\" diary lines still undo. test/receipt-pages.test.ts.",
+  },
+  G867: {
+    closed: "135e584",
+    title: "A machine-mail fact the owner brought back with Undo was set aside again the next night",
+    severity: "medium",
+    finding: "Family sweep, 2026-11-14: setAsideMachineMail (src/receipt-pages.ts) kept no memory of what it set aside, so with the switch on an undone fact, back held as it was, qualified again on the next upkeep. G537 fixed this for the receipt step only.",
+    fix: "setAsideBefore (src/receipt-pages.ts) reads the diary: a fact with a why \"machine\" line, or a page with a why \"receipt\" line, is never set aside again. test/receipt-pages.test.ts.",
+  },
+  G863: {
+    title: "One capitalised word that equals a page's name becomes a link",
+    severity: "low",
+    finding: "Family sweep, 2026-11-14: src/mentions.ts:37-38 (off until the owner turns links on): \"Apple pie for Sunday\" links the org page Apple.",
+    fix: "Proposed: a one-word name links only where the text is a link or the page is linked from the same source item.",
+  },
+  G864: {
+    title: "The names offered to the extraction model are picked by shared title words",
+    severity: "low",
+    finding: "Family sweep, 2026-11-14: src/capture.ts:275-279: a mail about one festival is offered every page sharing a city word, and a right page sharing none is not offered.",
+    fix: "Proposed: offer pages by the source's own structure (thread, sender's page, linked pages) first.",
+  },
   G827: {
     title: "An address borrowed onto another page can pre-tick that page on the students card",
     severity: "low",

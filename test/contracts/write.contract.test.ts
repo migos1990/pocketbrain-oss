@@ -6,7 +6,7 @@ import { test, expect } from "bun:test";
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain } from "../fixture";
-import { write, decideProposal, proposalSeen, type WriteOutcome } from "../../src/write";
+import { write, decideProposal, proposalSeen, pageLink, type WriteOutcome } from "../../src/write";
 import { remember } from "../../src/core";
 import { loadBrain, type FactRecord, type Sensitivity } from "../../src/brain";
 import type { WriteRequest } from "../../src/checks";
@@ -856,4 +856,18 @@ test("contract write: dates that end on their day (G799): another read item's da
   expect(() => contextPack(root, "planner", "Course A")).not.toThrow();
   expect(() => search(root, "planner", "Course A")).not.toThrow();
   expect(() => whatsNew(root, "planner")).not.toThrow();
+});
+
+// G854: must never. A link written by name resolves only through a page's whole title or alias.
+test("contract write: a name that is one side of a slash in a page's title never becomes a link to it (G854)", () => {
+  const n = (id: string, title: string, aliases?: string[]) => ({ fm: { id, type: "org", title, ...(aliases ? { aliases } : {}) }, body: "", path: "" }) as never;
+  const two = n("orgs/northwind-brightwell", "Northwind / Brightwell");
+  for (const name of ["Brightwell", "Northwind", "brightwell", "NORTHWIND"]) expect(pageLink([two], `[[${name}]]`)).toBe(`[[${name}]]`);
+  for (const sep of [" | ", "/", " / "]) expect(pageLink([n("orgs/x", `Northwind${sep}Brightwell`)], "[[Brightwell]]")).toBe("[[Brightwell]]");
+  // Nor does it stand in the way of the page titled exactly that; two exact pages still pick none.
+  expect(pageLink([two, n("orgs/brightwell", "Brightwell")], "[[Brightwell]]")).toBe("[[orgs/brightwell]]");
+  expect(pageLink([n("orgs/brightwell", "Brightwell"), n("orgs/brightwell-2", "Brightwell")], "[[Brightwell]]")).toBe("[[Brightwell]]");
+  // The whole title, or an alias, still links.
+  expect(pageLink([two], "[[northwind / brightwell]]")).toBe("[[orgs/northwind-brightwell]]");
+  expect(pageLink([n("orgs/bw", "BW Holdings", ["Brightwell"])], "[[Brightwell]]")).toBe("[[orgs/bw]]");
 });

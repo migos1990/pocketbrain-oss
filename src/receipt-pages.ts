@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Receipts that became held pages (the owner's phone, 2026-10-29: Apple order and Apple Services
-// payment rows filled Waiting on you). Since G506 a no-reply sender's mail is never read; the pages
-// it made before stay held for the owner's Show. The owner left them to us ("i trust u"): upkeep
-// sets each such page's held facts aside, once, as a take-back with a diary line and Undo
-// (src/undo.ts restores the record, held as it was). Only a page whose title reads like a receipt
-// and whose every live fact is still held from an unknown sender; nothing else is touched.
-// A receipt is a money page whose every live fact came from mail, never a person's page, whatever
-// its name ("Bill Harper"), and a page set aside once is never set aside again: its Undo holds
-// (audit v6, 2026-10-30; G537).
+// Held facts that came only from machine mail (receipts, no-reply and bulk senders), set aside on the
+// owner's switch. There was a second, always-on step here for "receipt pages" (the owner's phone,
+// 2026-10-29; G511): first a word in the page's title decided, which set aside a landlord's own mail
+// titled "Billing dispute" (G862). What a page is called decides nothing, and what is left of that
+// rule without the title is this file's one rule, so the step is gone and the owner's switch
+// (`pocketbrain machine-mail on`) governs every set-aside. Its old diary lines (why "receipt") still
+// undo, and a page or fact whose set-aside the owner undid is never set aside again (G537, G867).
 import { loadBrain, saveNote, today, isList, isDisputed, type Note, type FactRecord } from "./brain";
-import { records } from "./carve";
 import { refString } from "./sources";
-import { appendDiary, diaryRow, readDiary, shownValue } from "./diary";
+import { appendDiary, diaryRow, readDiary, shownValue, type DiaryRow } from "./diary";
 import { commitPaths } from "./git";
 import { clock, ownerDay } from "./clock";
 import { loadRules } from "./rules";
@@ -22,45 +19,17 @@ import { isOwnerId, isOwnerConfirmed } from "./owner";
 import { isExactLouisRef } from "./sources";
 import { noOwnWords } from "./undo";
 
-const RECEIPT = /\b(?:order|payment|invoice|receipt|billing|bill|subscription|purchase)\b/i;
 const live = (r: FactRecord) => !r.valid_to && !r.retired;
 
-const fromMail = (r: FactRecord) => (r.sources ?? []).length > 0 && (r.sources ?? []).every((x) => /^(?:gmail|mail):/.test(refString(x)));
-
-// `done`: pages upkeep already set aside once (their diary lines), left alone from then on.
-export function receiptPages(notes: Note[], done: ReadonlySet<string> = new Set()): string[] {
-  return notes.filter((n) => {
-    if (n.fm.type !== "money" || done.has(n.fm.id) || !RECEIPT.test(String(n.fm.title ?? "")) || n.fm.status === "archived") return false;
-    const recs = Object.values(n.fm.facts ?? {}).flatMap((f) => (isDisputed(f) ? [] : records(f))).filter(live);
-    return recs.length > 0 && recs.every((r) => r.unseen && r.sender === "unknown" && fromMail(r));
-  }).map((n) => n.fm.id);
-}
-
-// Sets them aside; returns the pages. One hub commit with a why.
-export function setAsideReceipts(root: string): string[] {
-  const notes = loadBrain(root);
-  const done = new Set(readDiary(root).filter((r) => r.why === "receipt").map((r) => r.fact_key.slice(0, r.fact_key.lastIndexOf("#"))));
-  const ids = new Set(receiptPages(notes, done));
-  if (!ids.size) return [];
-  const rules = loadRules(root), at = clock().toISOString(), d = today();
-  const paths: string[] = [];
-  let rel = "";
-  for (const n of notes.filter((x) => ids.has(x.fm.id))) {
-    const facts = n.fm.facts ?? {}, hist = (n.fm.history ??= {});
-    for (const [attr, f] of Object.entries(facts)) {
-      if (isDisputed(f) || isList(f)) continue;
-      const rec = f as FactRecord;
-      if (!live(rec)) continue;
-      (hist[attr] ??= []).push({ ...rec, valid_to: d, ended_by: { step: 0, at: d, by: "hub" } });
-      delete facts[attr];
-      rel = appendDiary(root, { ...diaryRow({ at, factKey: `${n.fm.id}#${attr}`, title: String(n.fm.title ?? n.fm.id), kind: "retracted", from: shownValue(rec), to: undefined, incoming: rec, acceptedBy: "hub", rank: 9, sensitivity: rec.sensitivity ?? n.fm.sensitivity }), why: "receipt" }, ownerDay(rules, clock()).slice(0, 7));
-    }
-    n.fm.updated = d;
-    saveNote(root, n);
-    paths.push(n.path);
+// What was set aside once, from the diary: a fact by its key (why "machine"), a whole page by its id
+// (why "receipt", the old step). Either is left alone from then on, so the owner's Undo holds.
+export function setAsideBefore(rows: DiaryRow[]): Set<string> {
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (r.why === "machine") out.add(r.fact_key);
+    else if (r.why === "receipt") out.add(r.fact_key.slice(0, r.fact_key.lastIndexOf("#")));
   }
-  commitPaths(root, [...paths, rel], `hub: set aside ${ids.size} receipt page${ids.size === 1 ? "" : "s"}\n\nWhy: these pages were started from receipts sent by a no-reply address and were still held for the owner, never seen; receipts are not facts (G506). Each has a diary line with Undo.\nKind: receipts`, "hub");
-  return [...ids];
+  return out;
 }
 
 // Facts an assistant filed from machine mail (owner's phone, 2026-11-03: a ride receipt became an
@@ -72,18 +41,18 @@ export function setAsideReceipts(root: string): string[] {
 // it back held as it was. A page left with nothing live, no one's words but the hub's and no page
 // naming it goes too, in the same commit; Undo brings it back from that commit.
 // Off until the owner says (`pocketbrain machine-mail on`, policy.yaml machine_mail.set_aside): then
-// upkeep only counts them.
+// upkeep only counts them. `done` (setAsideBefore) is what was set aside once: never again.
 export interface MachineFact { id: string; attr: string }
-export function machineFacts(notes: Note[], machine: ReadonlySet<string>): MachineFact[] {
+export function machineFacts(notes: Note[], machine: ReadonlySet<string>, done: ReadonlySet<string> = new Set()): MachineFact[] {
   if (!machine.size) return [];
   const out: MachineFact[] = [];
   for (const n of notes) {
-    if (n.fm.type === "dispute" || ["archived", "merged", "superseded"].includes(String(n.fm.status ?? ""))) continue;
+    if (done.has(n.fm.id) || n.fm.type === "dispute" || ["archived", "merged", "superseded"].includes(String(n.fm.status ?? ""))) continue;
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
       if (isDisputed(f) || isList(f)) continue;
       const r = f as FactRecord;
       const keys = (r.sources ?? []).map((x) => mailKey(refString(x)));
-      if (live(r) && r.unseen && !isOwnerId(r.by) && !isOwnerConfirmed(r.verification) && !(r.sources ?? []).some((x) => isExactLouisRef(refString(x)))
+      if (!done.has(`${n.fm.id}#${attr}`) && live(r) && r.unseen && !isOwnerId(r.by) && !isOwnerConfirmed(r.verification) && !(r.sources ?? []).some((x) => isExactLouisRef(refString(x)))
         && keys.length > 0 && keys.every((k) => !!k && machine.has(k))) out.push({ id: n.fm.id, attr });
     }
   }
@@ -92,7 +61,7 @@ export function machineFacts(notes: Note[], machine: ReadonlySet<string>): Machi
 
 export function setAsideMachineMail(root: string, apply: boolean): { facts: number; pages: number; removed: string[] } {
   const notes = loadBrain(root);
-  const found = machineFacts(notes, machineMail(root));
+  const found = machineFacts(notes, machineMail(root), setAsideBefore(readDiary(root)));
   const ids = new Set(found.map((f) => f.id));
   if (!apply || !found.length) return { facts: found.length, pages: ids.size, removed: [] };
   const rules = loadRules(root), at = clock().toISOString(), d = today(), month = ownerDay(rules, clock()).slice(0, 7);

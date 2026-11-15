@@ -103,7 +103,7 @@ These are the rules for the file:
 - Any other heading becomes a note.
 - Passwords and card numbers are removed, and `my-brain/import/INIT-REPORT.md` tells you where.
 
-You can also start from a Google Takeout export. Add `--from-mbox "All mail.mbox"` or `--from-ics calendar.ics` to the same command. Only people you wrote to or met with are kept.
+You can also start from a Google Takeout export. Add `--from-mbox "All mail.mbox"` or `--from-ics calendar.ics` to the same command. Only people you wrote to or met with are kept. No workplace is filed from an email address: the import report (init prints its path) lists who has an address at which company domain under "Guesses to check", free mail and people whose workplace you stated left out. Until you or a source says where someone works, your first assistant sees an export-only person by name alone (G855).
 
 ## Day to day
 

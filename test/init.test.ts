@@ -174,9 +174,33 @@ test("exports keep people the owner dealt with, not newsletters, rooms or strang
   expect(priya.fm.facts?.last_contact).toBeUndefined();
   const omar = people.find((p) => p.fm.title === "Omar Haddad")!;
   expect((omar.fm.facts!.last_contact as FactRecord).sources).toEqual(["gcal:evt-0001@example.com"]);
-  // An org guessed from an email domain says so.
+  // An address's domain is no employer (G855): a contractor writes from a client's domain. No org
+  // fact, no org page; the report says the guess once per domain, as a guess, for the owner to act on.
   const sam = people.find((p) => p.fm.title === "Sam Lée")!;
-  expect((sam.fm.facts!.org as FactRecord)).toMatchObject({ value: "[[orgs/studio-kite]]", confidence: "inferred", verification: "self-reported" });
+  expect(sam.fm.facts!.org).toBeUndefined();
+  expect(loadBrain(root).filter((n) => n.fm.type === "org")).toEqual([]);
+  const report = readFileSync(r.report, "utf8");
+  expect(report).toContain("Sam Lée has an address at studio-kite.example. No workplace was filed from an address");
+});
+
+// G855, the report line: once per domain with everyone at it, never a free-mail domain, never a
+// person whose workplace the owner stated, and a display name's brackets never make a link in it.
+test("the report names who has an address at which domain, once per domain", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pb-mbox-"));
+  // A free-mail host, put together here: tracked files hold only reserved example domains (test/public-ready.test.ts).
+  const FREE_MAIL_HOST = ["gmail", "com"].join(".");
+  const to = ['"Ana Vale" <ana@harbor-works.example>', '"Ben Ito" <ben@harbor-works.example>', `"Cy Park" <cy.park@${FREE_MAIL_HOST}>`, '"Jane Roy" <jane.roy@northfield.example>', '"Di [x](http://evil.example)" <di@quay.example>'];
+  writeFileSync(join(dir, "m.mbox"), `From 1@xxx Mon Sep 01 10:00:00 +0000 2026\nX-GM-THRID: 1\nX-Gmail-Labels: Sent\nFrom: Alex Doe <alex.doe@example.com>\nTo: ${to.join(", ")}\nDate: Mon, 01 Sep 2026 10:00:00 +0000\nSubject: Hello\n\nHi all.\n`);
+  writeFileSync(join(dir, "notes.txt"), "# People (work)\n- Jane Roy: course coordinator at Northfield School, jane.roy@northfield.example\n");
+  const root = fresh();
+  const r = initBrain(root, { owner: "Alex", text: [join(dir, "notes.txt")], mbox: [join(dir, "m.mbox")], me: ["alex.doe@example.com"] } as never);
+  const report = readFileSync(r.report, "utf8");
+  expect(report).toContain("Ana Vale, Ben Ito have addresses at harbor-works.example. No workplace was filed from an address");
+  expect(report).not.toContain("gmail.com");
+  expect(report).not.toContain("northfield.example"); // the owner said where Jane works
+  expect(report).toContain("has an address at quay.example");
+  expect(report).not.toMatch(/\]\(http/);
+  expect(loadBrain(root).filter((n) => n.fm.type === "org").map((n) => n.fm.title)).toEqual(["Northfield School"]);
 });
 
 test("someone else's school detail is private, a finance contact is out of contacts-basic, money is never shared", () => {

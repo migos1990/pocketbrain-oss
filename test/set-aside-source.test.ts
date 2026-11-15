@@ -3,8 +3,6 @@
 // hub set aside from a no-reply mail read "From today's email" under it, though no email came that
 // day; the hub did it. A line the hub set aside (machine mail, a receipt) says so instead.
 import { test, expect } from "bun:test";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { makeBrain } from "./fixture";
 import { write } from "../src/write";
 import { loadBrain } from "../src/brain";
@@ -13,7 +11,8 @@ import { recordMachineMail } from "../src/louis";
 import { setMachineMailAside } from "../src/ownerset";
 import { upkeep } from "../src/upkeep";
 import { homeView, SAID_COPY, fromWords } from "../src/dashboard/home";
-import { clock } from "../src/clock";
+import { clock, ownerDay } from "../src/clock";
+import { appendDiary, diaryRow } from "../src/diary";
 
 const said = (root: string, words: RegExp) => {
   const view = homeView(root, loadRules(root), loadBrain(root), clock(), { all: true, fresh: true }) as unknown as Record<string, unknown>;
@@ -37,12 +36,12 @@ test("a fact the hub set aside from machine mail says the brain set it aside, no
   expect(fromWords({ source_word: "email", by: "hub", why: "machine" } as never, loadRules(root))).toBe("set aside by your brain");
 });
 
-test("a receipt the hub set aside says the same", () => {
+// The always-on receipt step is gone (G862); the lines it left on a brain's diary still read this way.
+test("a receipt the old step set aside still says the same", () => {
   const root = makeBrain();
-  writeFileSync(join(root, "money", "apple-order-x1.md"), `---\nid: money/apple-order-x1\ntype: money\ntitle: Apple order X1\narea: personal\nsensitivity: private\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  amount: { value: "12.99", as_of: 2026-10-28, sources: ["gmail:f000000000000031"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true, sender: unknown }\n---\n`);
-  Bun.spawnSync(["git", "add", "-A"], { cwd: root });
-  Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: held"], { cwd: root });
-  upkeep(root, { run: "reflect-said-r" });
+  const rec = { value: "12.99", as_of: "2026-10-28", sources: ["gmail:f000000000000031"], verification: "verified-by-source", by: "steward", recorded: "2026-10-28", unseen: true, sender: "unknown" };
+  const at = clock().toISOString();
+  appendDiary(root, { ...diaryRow({ at, factKey: "money/apple-order-x1#amount", title: "Apple order X1", kind: "retracted", from: "12.99", to: undefined, incoming: rec as never, acceptedBy: "hub", rank: 9, sensitivity: "private" }), why: "receipt" }, ownerDay(loadRules(root), clock()).slice(0, 7));
   const s = said(root, /receipt/i);
   expect(s.length).toBeGreaterThan(0);
   for (const x of s) expect(x).toBe(SAID_COPY.setAside.replace("{when}", "today"));

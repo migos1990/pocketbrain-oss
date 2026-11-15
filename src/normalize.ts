@@ -112,7 +112,7 @@ export const sameValue = (a: unknown, b: unknown) => valueKey(a) === valueKey(b)
 // and "wish" count only beside "you" or "we" ("for each client you want to retain").
 const FILLER = new Set(["you", "your", "we", "our", "want", "wish", "please", "kindly", "vous", "nous", "votre", "notre", "veuillez", "vouloir", "voulez", "souhaitez"]);
 const WHO = new Set(["you", "your", "we", "our", "vous", "nous", "votre", "notre"]);
-const NEGATION = new Set(["not", "no", "never", "none", "nor", "without", "ne", "pas", "jamais", "aucun", "aucune", "sans", "non"]);
+export const NEGATION = new Set(["not", "no", "never", "none", "nor", "without", "ne", "pas", "jamais", "aucun", "aucune", "sans", "non"]);
 const stems = (v: string) => compareKey(v).split(" ").filter((w) => w && !GRAMMAR.has(w)).map(stem);
 function lcs(a: string[], b: string[]): number {
   const row = new Array(b.length + 1).fill(0);

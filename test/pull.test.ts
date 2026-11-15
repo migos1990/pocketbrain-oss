@@ -221,6 +221,32 @@ test("an agent's proposal that only cites an email is checked before the owner s
   expect(d).toContain("source_mismatch");
 });
 
+// G853: a value is in a source when its words are there as whole words, and the sentence that
+// holds them doesn't deny it. Before, any substring counted and "is not the director" matched.
+test("G853: checkClaim matches whole words only, a plural aside", () => {
+  expect(checkClaim("Our partner Dana started the cart migration.", "art dan").result).toBe("no-match");
+  expect(checkClaim("The directors met on Friday.", "director met Friday").result).toBe("match");
+});
+test("G853: the item's plural says the claim's singular, never the other way", () => {
+  expect(checkClaim("The directors met on Friday.", "director").result).toBe("match");
+  expect(checkClaim("Our partner called.", "partners").result).toBe("no-match");
+  expect(checkClaim("One invoice was sent.", "invoices sent").result).toBe("no-match");
+});
+// What the denial check does not catch (a limit, said in docs/sources-pull.md): a "not" more than
+// four words before the word.
+test("G853 limit: a denial more than four words before the word still matches", () => {
+  expect(checkClaim("He did not, in the end, become director.", "director").result).toBe("match");
+});
+test("G853: a sentence that denies the value is no match", () => {
+  expect(checkClaim("Sam is not the director of Brightwell; Ana is.", "director of Brightwell").result).toBe("no-match");
+  expect(checkClaim("Sam isn't the director of Brightwell.", "director of Brightwell").result).toBe("no-match");
+  expect(checkClaim("Sam n'est pas directeur de Brightwell.", "directeur de Brightwell").result).toBe("no-match");
+  // Another sentence says it plainly: that one counts.
+  expect(checkClaim("Ana is not here today. Sam is the director of Brightwell.", "director of Brightwell").result).toBe("match");
+  // A value that itself says not is matched as it is.
+  expect(checkClaim("Sam is not available on Fridays.", "not available on Fridays").result).toBe("match");
+});
+
 test("checkClaim ignores accents and case and needs every number", () => {
   expect(checkClaim("Réviser l'examen intra le 9 octobre.", "reviser examen intra 9 octobre").result).toBe("match");
   expect(checkClaim("Réviser l'examen intra le 9 octobre.", "reviser examen intra 19 octobre").result).toBe("no-match");

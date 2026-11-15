@@ -28,7 +28,7 @@ import { fetchGmail, fetchGmailMessage, fetchCalendar, fetchCalendarEvent, fetch
 import { cardItem, readCard, cardCandidates, cardAdjust, ownerRelations, fetchVcards, withoutDetails } from "./contacts";
 import { fetchDiscord, fetchDiscordMessage, fetchTexts, fetchText, fetchGranola, fetchGranolaNote } from "./feeds";
 import { findInjection, redactSecrets } from "./checks";
-import { compareKey } from "./normalize";
+import { NEGATION, compareKey } from "./normalize";
 import { logWrite } from "./write";
 import { recordCheckedRefs, recordMachineMail, checkedRefs } from "./louis";
 import { senderHash } from "./sameperson";
@@ -805,6 +805,7 @@ const claimWords = (claim: string) => flat(claim).split(/[^\p{L}\p{N}]+/u).filte
 // read), so it is redacted, checked for injection whole (before it is cut, so a cut can't hide
 // the instruction), and capped. One that reads as instructions is withheld (G90).
 export const QUOTE_MAX = 200;
+const DENY_REACH = 4;
 // G194: redacted whole before it is cut into lines. A key's body line alone reads as any base64
 // run, so redacting the chosen line only let it through. Every BEGIN/END block (a key, a PGP block,
 // a certificate; to the end of the text when it never ends) goes first, then the secret shapes.
@@ -814,8 +815,24 @@ export function checkClaim(raw: string, claim: string): { result: "match" | "no-
   const t = flat(text);
   const words = claimWords(claim);
   const nums = words.filter((w) => /\d/.test(w));
-  const found = words.filter((w) => t.includes(w));
-  const ok = words.length > 0 && nums.every((n) => t.includes(n)) && found.length / words.length >= 0.6;
+  // Whole words (G853): "art" isn't in "partner", "9" isn't in "19". A word within DENY_REACH words
+  // after a "not" (NEGATION in normalize.ts, or "n't") is denied there and counts only where the
+  // text also says it plainly: "is not the director" doesn't say "director". A denial further away
+  // ("did not, in the end, become director") is not caught. A claim that itself says not is matched
+  // as it is. Every change from the substring match it replaces can only turn a match into no-match.
+  const toks = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const neg = (i: number) => NEGATION.has(toks[i]!) || (toks[i] === "t" && !!toks[i - 1]?.endsWith("n"));
+  const checkDenied = !flat(claim).split(/[^\p{L}\p{N}]+/u).some((w) => NEGATION.has(w));
+  const said = new Set<string>();
+  for (let i = 0, last = -Infinity; i < toks.length; i++) {
+    if (neg(i)) { last = i; continue; }
+    if (!checkDenied || i - last > DENY_REACH) said.add(toks[i]!);
+  }
+  // The item's plural says the claim's singular ("directors" for "director"), never the other way:
+  // an item that says one invoice doesn't say "invoices".
+  const has = (w: string) => said.has(w) || (w.length >= 4 && (said.has(`${w}s`) || said.has(`${w}es`)));
+  const found = words.filter(has);
+  const ok = words.length > 0 && nums.every((n) => said.has(n)) && found.length / words.length >= 0.6;
   const sentences = text.split(/(?<=[.!?])\s+|\n+/).filter(Boolean);
   const best = sentences.map((s) => ({ s, n: words.filter((w) => flat(s).includes(w)).length })).sort((a, b) => b.n - a.n)[0]?.s ?? "";
   const result = ok ? "match" : "no-match";

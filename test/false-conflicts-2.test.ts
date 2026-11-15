@@ -235,3 +235,21 @@ test("G678: the owner's own near-same correction is a change, never folded into 
   expect(String((note(root, "projects/course-a").fm.facts!.next_step as FactRecord).value)).toStartWith("the final exam room booking");
 });
 
+
+// G854: a link by name is to the page whose whole title or alias that name is. One side of a slash
+// in a title ("Northwind / Brightwell") is not a name of that page, so the value stays a name, and
+// such a page never stands in the way of the page titled exactly that.
+test("G854: a name that is one side of a two-name title links nothing", async () => {
+  const { pageLink } = await import("../src/write");
+  const n = (id: string, title: string, aliases?: string[]) => ({ fm: { id, type: "org", title, ...(aliases ? { aliases } : {}) }, body: "", path: "" }) as never;
+  const two = n("orgs/northwind-brightwell", "Northwind / Brightwell");
+  expect(pageLink([two], "[[Brightwell]]")).toBe("[[Brightwell]]");
+  expect(pageLink([two], "[[Northwind / Brightwell]]")).toBe("[[orgs/northwind-brightwell]]");
+  // The page titled exactly that is the page; the two-name page doesn't stand in its way.
+  expect(pageLink([two, n("orgs/brightwell", "Brightwell")], "[[Brightwell]]")).toBe("[[orgs/brightwell]]");
+  expect(pageLink([n("projects/tcp-ip", "TCP/IP"), n("projects/ip", "IP")], "[[IP]]")).toBe("[[projects/ip]]");
+  // Two pages titled exactly that: none is picked.
+  expect(pageLink([n("orgs/brightwell", "Brightwell"), n("orgs/brightwell-2", "Brightwell")], "[[Brightwell]]")).toBe("[[Brightwell]]");
+  expect(pageLink([n("orgs/brightwell", "Brightwell")], "[[brightwell]]")).toBe("[[orgs/brightwell]]");
+  expect(pageLink([n("orgs/bw", "BW Holdings", ["Brightwell"])], "[[Brightwell]]")).toBe("[[orgs/bw]]");
+});

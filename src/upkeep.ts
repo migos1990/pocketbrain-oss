@@ -29,7 +29,7 @@ import { tripPlan, tripsOn } from "./page-kind";
 import { bothDatesPlan, bothDatesOn, closeBothDates } from "./dated";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
-import { setAsideReceipts, setAsideMachineMail } from "./receipt-pages";
+import { setAsideMachineMail } from "./receipt-pages";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
 import { staleMentions } from "./drift";
@@ -167,11 +167,9 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     }
   }
 
-  // 1c2. Receipts held as pages before no-reply mail stopped being read (src/receipt-pages.ts):
-  //      set aside once, a diary line each with Undo; one hub commit with a why.
-  if (setAsideReceipts(root).length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
-  //      Held facts an assistant filed from machine mail (G668): set aside once, a diary line each
-  //      with Undo, an emptied page with them; off until `pocketbrain machine-mail on`, a count then.
+  // 1c2. Held facts an assistant filed from machine mail (src/receipt-pages.ts, G668): set aside once,
+  //      a diary line each with Undo, an emptied page with them; off until `pocketbrain machine-mail
+  //      on`, a count then. The always-on receipt-page step that ran here is gone (G862).
   {
     const on = (rules.policy as { machine_mail?: { set_aside?: boolean } }).machine_mail?.set_aside === true;
     const mm = setAsideMachineMail(root, on);

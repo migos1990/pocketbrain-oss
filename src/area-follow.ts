@@ -28,9 +28,10 @@ const orgValue = (n: Note | undefined): string | undefined => {
   return f && typeof f.value === "string" ? f.value : undefined;
 };
 
-// The org page a value names: a [[link]] by id, else the one org page carrying that name, in its
-// title, one of its names ("Northwind / Brightwell" carries both) or an alias. Two pages carrying it
-// name none: the page never picks one (an import's two-name page, until its split leaves one).
+// The org page a value names: a [[link]] by id, else the one org page whose whole title or alias
+// that name is; two such pages name none, the page never picks one. One side of a slash in a title
+// ("Northwind / Brightwell") is not a name of that page: it neither is the answer nor stands in the
+// way of the page titled exactly that (G854).
 // A folded twin is gone, so it never counts.
 function orgPage(notes: Note[], value: string | undefined): Note | undefined {
   if (!value) return undefined;
@@ -38,7 +39,7 @@ function orgPage(notes: Note[], value: string | undefined): Note | undefined {
   const byId = notes.find((x) => x.fm.id === name);
   if (byId) return byId.fm.type === "org" ? byId : undefined;
   const key = compareKey(name);
-  const names = (n: Note) => [String(n.fm.title ?? ""), ...((n.fm.aliases ?? []) as unknown[]).map(String)].flatMap((t) => [t, ...t.split(/\s*\/\s*/)]).map(compareKey);
+  const names = (n: Note) => [String(n.fm.title ?? ""), ...((n.fm.aliases ?? []) as unknown[]).map(String)].map(compareKey);
   const fits = notes.filter((n) => n.fm.type === "org" && names(n).includes(key));
   return fits.length === 1 ? fits[0] : undefined;
 }

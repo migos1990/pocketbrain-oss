@@ -489,6 +489,7 @@ function readExports(ctx: Ctx, mboxFiles: string[], icsFiles: string[]) {
     for (const a of people) touch(a, e.day, `gcal:${e.uid}`, "ics");
   }
   let skippedNoName = 0, kept = 0;
+  const atDomain: Record<string, Set<string>> = {};
   for (const c of contacts.values()) {
     const where = `export: ${c.email}`;
     const raw = c.name ?? nameFromEmail(c.email);
@@ -504,15 +505,16 @@ function readExports(ctx: Ctx, mboxFiles: string[], icsFiles: string[]) {
     addListItem(d, "emails", rec(c.email), "email");
     d.emails.add(c.email);
     if (c.last) setMax(d, "last_contact", rec(c.last));
+    // An address's domain is no employer (G855): a contractor writes from a client's domain. Nothing
+    // is filed from it, no fact and no org page; the report says it once per domain, as a guess.
     const domain = c.email.split("@")[1];
-    if (!d.facts.org && !FREE_MAIL.test(domain) && domain.split(".").length >= 2) {
-      const parts = domain.split(".");
-      const sld = parts.length > 2 && /^(co|com|ac|gov|org|edu|net)$/.test(parts[parts.length - 2]) ? parts[parts.length - 3] : parts[parts.length - 2];
-      const o = draft(ctx, "org", sld.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "), d.area);
-      addSource(o, refs[0]);
-      if (!o.body.length) o.body.push(`Created by pocketbrain init from the email domain ${domain}.`);
-      d.facts.org = { ...rec(`[[${idPlaceholder(o)}]]`), verification: "self-reported", confidence: "inferred", note: `guessed from ${domain}` };
-    }
+    // A domain that is not plain letters, digits, dots and hyphens is not named in the report.
+    if (!d.facts.org && !FREE_MAIL.test(domain) && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) (atDomain[domain] ??= new Set()).add(d.title.replace(/[\[\]()<>`]/g, "").trim());
+  }
+  for (const [domain, who] of Object.entries(atDomain).sort(([a], [b]) => a.localeCompare(b))) {
+    const names = [...who].filter(Boolean).sort();
+    if (!names.length) continue;
+    flag(ctx, "Guesses to check", `${names.join(", ")} ${names.length === 1 ? "has an address" : "have addresses"} at ${domain}. No workplace was filed from an address; say where they work if it matters.`);
   }
   if (skippedNoName) flag(ctx, "Skipped", `${skippedNoName} addresses with no name to go on (add them by hand if they matter)`);
   return { messages: messages.length, events: events.length, contacts: kept };

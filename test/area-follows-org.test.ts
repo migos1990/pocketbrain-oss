@@ -157,21 +157,48 @@ test("after the move each assistant reads the page as its slices allow for the n
   } finally { delete process.env.PB_NOW; }
 }, 90_000);
 
-test("two org pages that both carry the workplace's name: the page never picks one, and follows once only one is left", async () => {
+test("two org pages named exactly the workplace's name: the page never picks one, and follows once only one is left", async () => {
   try {
     const root = await brain();
-    // An import's two-name org page and the real one both say "Brightwell".
+    const org = (slug: string, title: string, area: string, extra = "") => writeFileSync(join(root, "orgs", `${slug}.md`), `---\nid: orgs/${slug}\ntype: org\ntitle: ${title}\n${extra}area: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
+    org("brightwell", "Brightwell", "personal");
+    org("bw-holdings", "BW Holdings", "teaching", "aliases: [Brightwell]\n");
+    gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "import: two orgs"]);
+    ownerSay(root, "Maya Chen works at Brightwell");
+    expect(areaOf(root)).toBe("work");
+    expect(moved(root)).toHaveLength(0);
+    gitRun(root, ["rm", "-q", "orgs/bw-holdings.md"]); gitRun(root, ["commit", "-qm", "import: split"]);
+    setFact(root, MAYA, "org", "[[Brightwell]]");
+    expect(areaOf(root)).toBe("personal");
+  } finally { delete process.env.PB_NOW; }
+}, 90_000);
+
+// G854: a page that has the name only as one side of a slash in its title ("Northwind /
+// Brightwell", an import's) is not in the way of the page titled exactly that.
+test("G854: a two-name page beside the page titled exactly the workplace's name: the exact page is the workplace", async () => {
+  try {
+    const root = await brain();
     const org = (slug: string, title: string, area: string) => writeFileSync(join(root, "orgs", `${slug}.md`), `---\nid: orgs/${slug}\ntype: org\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
     org("brightwell", "Brightwell", "personal");
     org("northwind-brightwell", "Northwind / Brightwell", "teaching");
     gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "import: two orgs"]);
     ownerSay(root, "Maya Chen works at Brightwell");
-    expect(areaOf(root)).toBe("work");
-    expect(moved(root)).toHaveLength(0);
-    // The import split leaves one page with the name: the owner's word then moves the page.
-    gitRun(root, ["rm", "-q", "orgs/northwind-brightwell.md"]); gitRun(root, ["commit", "-qm", "import: split"]);
-    setFact(root, MAYA, "org", "[[Brightwell]]");
     expect(areaOf(root)).toBe("personal");
+    expect(moved(root)).toHaveLength(1);
+  } finally { delete process.env.PB_NOW; }
+}, 90_000);
+
+// G854: one side of a slash in a page's title is not that page's name. An import's "Northwind /
+// Brightwell" is one page about two things; a workplace named "Brightwell" is not it.
+test("G854: a name that is only one side of a two-name page's title never moves the page there", async () => {
+  try {
+    const root = await brain();
+    writeFileSync(join(root, "orgs", "northwind-brightwell.md"), `---\nid: orgs/northwind-brightwell\ntype: org\ntitle: Northwind / Brightwell\narea: teaching\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n`);
+    gitRun(root, ["add", "-A"]); gitRun(root, ["commit", "-qm", "import: a two-name org"]);
+    const before = areaOf(root);
+    ownerSay(root, "Maya Chen works at Brightwell");
+    expect(areaOf(root)).toBe(before);
+    expect(moved(root)).toHaveLength(0);
   } finally { delete process.env.PB_NOW; }
 }, 90_000);
 
