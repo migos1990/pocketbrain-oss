@@ -11,7 +11,7 @@ import type { Note, Fact, FactRecord, SourceRef } from "./brain";
 import { neighbours, neighbourLines, connectedLine, NEIGHBOURS_SHOWN } from "./links";
 import { loadBrain, reloadNotes, parseNote, saveNote, today, isList, isDisputed, sensitivityRank, linksIn } from "./brain";
 import { loadRules, attributeSpec, ownerName, isOwnerWord, type Rules } from "./rules";
-import { carve, grantFor, records, shownUpdated, visibleFacts, PROBE_AREA, CONTESTED, type CarveResult, type Visible } from "./carve";
+import { carve, grantFor, records, secretShaped, shownUpdated, visibleFacts, PROBE_AREA, CONTESTED, type CarveResult, type Visible } from "./carve";
 import { sensitiveShape } from "./shape";
 import { cappedView, renderNote, scrubLeaves, agentFact, pageSummary, scrubPage, summaryShown, namesOut, withholdNames, nameMasked, factScrub } from "./view";
 import { contextBudget, tokensOf, fitBlocks, cutLine } from "./context";
@@ -647,7 +647,9 @@ function packetView(p: Packet, agent: string, rules: Rules) {
     escalated: fm.escalated, suggestion: fm.suggestion ? { ...(fm.suggestion as object), why: "[withheld]", sources: maskedRefs((fm.suggestion as { sources?: unknown }).sources) } : undefined, resolution: fm.resolution, answer: fm.answer, body: p.note.body,
   };
   const away = sharedAway(p, agent);
-  if (!isPrivate(p) && !away && !twinPacket(p)) return view;
+  // A side that holds a secret shape is served to nobody (G962): its packet reads like a private one.
+  const secret = everySide(p).some((c) => secretShaped(c));
+  if (!isPrivate(p) && !away && !twinPacket(p) && !secret) return view;
   const hide = <T>(o: T) => (o && typeof o === "object" && "value" in o ? { ...o, value: "[withheld]" } : o);
   const esc = fm.escalated as { suggested?: unknown } | undefined;
   return {
@@ -655,7 +657,7 @@ function packetView(p: Packet, agent: string, rules: Rules) {
     candidates: ((fm.candidates ?? []) as FactRecord[]).map((c) => ({ ...hide(c), ...(c.note ? { note: "[withheld]" } : {}) })),
     escalated: esc && typeof esc.suggested === "string" ? { ...esc, suggested: "[withheld]" } : esc,
     resolution: hide(fm.resolution), answer: hide(fm.answer),
-    body: `Conflict on \`${fm.fact_key}\` (${twinPacket(p) ? "two notes for the same entity" : away ? `shared only with ${away}` : levelOf(p)}): the values are withheld. The owner picks a side by its number.\n`,
+    body: `Conflict on \`${fm.fact_key}\` (${twinPacket(p) ? "two notes for the same entity" : secret && !isPrivate(p) && !away ? "a value that looks like a secret" : away ? `shared only with ${away}` : levelOf(p)}): the values are withheld. The owner picks a side by its number.\n`,
   };
 }
 
@@ -1034,7 +1036,10 @@ function gardenerPackets(root: string, agent: string, res: CarveResult, settled 
   const max = sensitivityRank(res.grant.ceiling);
   return readdirSync(dir).filter((f) => /^c-\d+\.md$/.test(f)).sort()
     .map((f) => { try { return loadPacket(root, f.replace(/\.md$/, "")); } catch { return undefined; } })
-    .filter((p): p is Packet => !!p && (settled || ["open", "escalated"].includes(String(p.note.fm.status))) && sees(p.target.fm.id, p.attr) && !sharedAway(p, agent) && sensitivityRank(levelOf(p)) <= max);
+    .filter((p): p is Packet => !!p && (settled || ["open", "escalated"].includes(String(p.note.fm.status))) && sees(p.target.fm.id, p.attr) && !sharedAway(p, agent) && sensitivityRank(levelOf(p)) <= max
+      // A side that holds a secret shape is served to nobody, the Gardener included (G962): the fact
+      // itself may be clean while the packet's waiting side is not.
+      && !everySide(p).some((c) => secretShaped(c)));
 }
 
 export function gardenerDisputes(root: string, agent: string) {

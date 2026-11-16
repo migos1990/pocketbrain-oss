@@ -10,6 +10,8 @@ import type { Note } from "../brain";
 import type { HeldMessage } from "./data";
 import { agentLabel, cap, factName, withNames, refusalWords } from "./labels";
 import { fromWords, plain, differ } from "./home";
+import { SOURCE_WORDS } from "./browse";
+import { SCHEMES } from "../sources";
 import { displayName } from "../diary";
 import { esc, hidden, signInAgain } from "./html-home";
 import { appPage, composer } from "./html-app";
@@ -83,11 +85,22 @@ export const question = (c: SettleCase) => {
 // The Gardener's side first, then the rest in their own order.
 export const ordered = (c: SettleCase): SettleSide[] => [...c.sides.filter((s) => s.lean), ...c.sides.filter((s) => !s.lean)];
 
+// The Gardener's reason as the owner reads it (G963): a source ref it cited is machine text, so a
+// bracketed one is dropped and a bare one is said in words ("an email", "your calendar"). Only a
+// known scheme with its id counts as a ref, so "10:30" and "note: …" stay. The stored reason is unchanged.
+const REF = String.raw`[a-z][a-z-]*:[^\s,;()\]]+`;
+const known = (ref: string) => Object.hasOwn(SCHEMES, ref.split(":")[0] ?? "");
+export function leanWords(why: string): string {
+  return why
+    .replace(new RegExp(String.raw`\s*\(\s*((?:${REF})(?:\s*[,;]\s*(?:${REF}))*)\s*\)`, "g"), (m, inner: string) => inner.split(/\s*[,;]\s*/).every(known) ? "" : m)
+    .replace(new RegExp(String.raw`\b${REF}`, "g"), (m) => { const end = /[.!?:]+$/.exec(m)?.[0] ?? ""; return known(m) ? (Object.hasOwn(SOURCE_WORDS, m.split(":")[0]!) ? SOURCE_WORDS[m.split(":")[0]!]! : "a source") + end : m; });
+}
+
 // A side shows big only the part that differs from the others ("15 October"), its whole value under
 // it when that is more, then where it came from.
 function row(c: SettleCase, s: SettleSide, csrf: string, rules: Rules, first = false, said?: string): string {
   const from = cap([fromWords(s, rules), day(s.as_of)].filter(Boolean).join(", ") + (s.sources > 1 ? ` · ${fill(SETTLE_COPY.count, { n: s.sources })}` : ""));
-  const lean = s.lean ? `<small class="lean">${esc(fill(SETTLE_COPY.lean, { why: s.lean }))}</small>` : "";
+  const lean = s.lean ? `<small class="lean">${esc(fill(SETTLE_COPY.lean, { why: leanWords(s.lean) }))}</small>` : "";
   const d = differ(c.sides.map((x) => plain(x.value)));
   const whole = plain(s.value), big = d.rest[c.sides.indexOf(s)] ?? whole;
   return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(big)}</b>${said ? `<q class="said">${esc(said)}</q>` : big !== whole ? `<span class="whole">${esc(whole)}</span>` : ""}<small>${esc(from)}</small>${lean}</button></form>`;

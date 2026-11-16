@@ -16,7 +16,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, re
 import { tmpdir, homedir } from "node:os";
 import { sha256 } from "./util";
 import { hardSecretIn } from "./checks";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import YAML from "yaml";
 import { loadBrain, today, isList } from "./brain";
 import { loadRules } from "./rules";
@@ -28,6 +28,7 @@ import * as hub from "./hub";
 import { doctor, finding, type Finding } from "./doctor";
 import type { OwnerErrorId, Vars } from "./owner-errors";
 import { beat } from "./heartbeat";
+import { copyBrain } from "./brain-copy";
 
 export class BackupError extends Error {}
 
@@ -533,7 +534,7 @@ export async function drill(root: string, o: { identity?: string; key?: string; 
   const work = mkdtempSync(join(tmpdir(), "pb-drill-"));
   const copy = join(work, "brain"), dest = join(work, "backups");
   try {
-    cpSync(root, copy, { recursive: true, verbatimSymlinks: true, filter: drillCopyFilter(root) });
+    copyBrain(root, copy, { skip: DRILL_SKIP });
     const signingKey = o.key ?? (g(copy, "config", "--get", "user.signingkey").out || undefined);
     let identity: Identity, keys: string[] | undefined;
     if (o.identity) identity = { text: readIdentity(o.identity) };
@@ -598,11 +599,8 @@ export function renderDrill(d: DrillResult): string {
 // What the drill copies of a live brain: everything but the hub's rebuildable caches, and no git
 // lock file. A lock only marks a git command running now (or one that died); one can vanish
 // between the copy listing it and reading it, which threw ENOENT mid-drill (G931).
-export function drillCopyFilter(root: string): (src: string) => boolean {
-  const skip = [join(root, "views"), join(root, ".cells"), join(root, "node_modules")];
-  const git = join(root, ".git") + sep;
-  return (src) => !skip.includes(src) && !(src.startsWith(git) && src.endsWith(".lock"));
-}
+// The hub's rebuildable caches stay out of the drill's copy; git locks stay out of every copy.
+export const DRILL_SKIP = ["views", ".cells", "node_modules"];
 
 // The sample brain as a git repo at `root`, for the demo drill. Its commit starts no background
 // gc or maintenance, as src/git.ts does for every hub commit: a detached `git maintenance run`

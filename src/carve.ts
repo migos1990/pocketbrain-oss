@@ -10,7 +10,7 @@ import { factFreshness } from "./freshness";
 import { confirmSlices } from "./fga";
 import { refString } from "./sources";
 import { squash, distinctive, needleFor, findCarried, withholdIn, type Needle } from "./match";
-import { categoryWords } from "./checks";
+import { categoryWords, findSecret, secretsIn } from "./checks";
 import { escapeRe, hasWord, tokenIndex, wordSet, dateWordForms } from "./util";
 import { capForRole } from "./tokenrole";
 
@@ -352,7 +352,37 @@ export function factHiddenReason(v: Visible, attr: string, f: Fact, grant: Grant
   // The only serving hold (phone UI spec §7): a live value the owner hasn't seen yet goes to no agent.
   // Last, so a fact hidden for any other reason keeps that reason (write.ts reads it).
   if (recs.some((r) => r.unseen && !r.valid_to && !r.retired)) return HELD_REASON;
+  // A stored value that holds a secret shape (a card number, a password, a redeemable code: filed
+  // before the write check knew the shape, or put in by hand) is served to nobody (G962). After
+  // every other reason, so a fact hidden for one keeps it.
+  if (recs.some((r) => !r.valid_to && !r.retired && secretShaped(r))) return SECRET_REASON;
   return undefined;
+}
+export const SECRET_REASON = "holds a secret-shaped value";
+// The secret inside a secret-shaped value, as a withheld needle of its own. A match made only of
+// parts that carry a digit (a code, a card number) is the needle whole; one led by ordinary words
+// ("password is …", "booking code …") gives only its parts with a digit, four characters or more,
+// so a common phrase is never blanked across other pages (second slice audit of G962).
+function secretNeedles(f: Fact): string[] {
+  const out: string[] = [];
+  for (const s of valueStrings(f)) for (const m of secretsIn(s)) {
+    const parts = m.split(/\s+/).filter(Boolean);
+    if (parts.every((x) => /\d/.test(x))) out.push(m);
+    else out.push(...parts.map((x) => x.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")).filter((x) => /\d/.test(x) && x.length >= 4));
+  }
+  return out;
+}
+// Kept per record: shared notes are frozen, so a record is read once however many carves see it.
+const secretSeen = new WeakMap<FactRecord, boolean>();
+export function secretShaped(r: FactRecord): boolean {
+  let hit = secretSeen.get(r);
+  if (hit === undefined) {
+    const v = r.value;
+    // A number too: a card number typed into a page by hand is a YAML number.
+    hit = v !== undefined && v !== null && typeof v !== "boolean" && !!findSecret(typeof v === "string" ? v : typeof v === "number" ? String(v) : JSON.stringify(v));
+    secretSeen.set(r, hit);
+  }
+  return hit;
 }
 
 // The hidden attributes by note, rebuilt only when the list grows: visibleFacts runs once per
@@ -489,7 +519,13 @@ function noteCarve(note: Note, rules: Rules, grant: Grant): NoteCarve {
     if (reason) hidden.push({ key: `${id}#${attr}`, reason });
   }
   const carvedHid: [string, string][] = [];
-  for (const h of hidden) { const f = note.fm.facts?.[h.key.split("#")[1]]; if (f) for (const s of valueStrings(f)) carvedHid.push([s, h.key]); }
+  for (const h of hidden) {
+    const f = note.fm.facts?.[h.key.split("#")[1]];
+    if (!f) continue;
+    for (const s of valueStrings(f)) carvedHid.push([s, h.key]);
+    // The same needles leakFlags adds (G966): cells and snapshots are built through here.
+    if (h.reason === SECRET_REASON) for (const m of secretNeedles(f)) carvedHid.push([m, h.key]);
+  }
   const gone = new Set(hidden.map((h) => h.key.slice(h.key.indexOf("#") + 1)));
   const shown: string[] = [];
   for (const [attr, f] of facts) if (!gone.has(attr)) for (const s of valueStrings(f)) shown.push(s.toLowerCase());
@@ -632,6 +668,9 @@ function leakFlags(notes: Note[], rules: Rules, res: CarveResult, scan = true): 
     const [id, attr] = h.key.split("#");
     const f = byId.get(id)?.fm.facts?.[attr];
     if (f) for (const s of valueStrings(f)) carved.set(s, h.key);
+    // The secret itself, not only the sentence that holds it: the same code said alone in a page's
+    // text, title or alias is withheld too (slice audit of G962).
+    if (f && h.reason === SECRET_REASON) for (const m of secretNeedles(f)) carved.set(m, h.key);
   }
   // A value the agent is also given elsewhere isn't carved out.
   const shown = new Set<string>();

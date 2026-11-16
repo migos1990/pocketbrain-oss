@@ -123,6 +123,11 @@ const SECRET_SHAPES: { what: string; re: RegExp; test?: (m: string, text: string
   { what: "a door or alarm code", re: new RegExp(String.raw`\b(?:(?:door|alarm|gate|safe|lock|garage|lockbox|keypad)\s+code|code\s+(?:d['’]accès|(?:de\s+la\s+|de\s+l['’]\s*|du\s+|de\s+|d['’])?(?:porte|alarme|portail|garage|immeuble|coffre(?:-fort)?|cadenas|entrée)))\s*(?:(?::|=|\bis\b|\best\b)\s*${DIGITS}|(?:[-–—]\s*)?${NOYEAR}${DIGITS})`, "gi") },
   { what: "an account number", re: /\b(account|acct|compte|transit|routing)\s*(no\.?|number|#|numéro)?\s*:?\s*\d[\d -]{5,}\d\b/gi },
   { what: "a booking code", re: /\b([Bb]ooking|[Cc]onfirmation|[Rr]eservation|PNR)\s*([Cc]ode|[Rr]ef(erence)?|#|[Nn]umber)?\s*:?\s*[A-Z0-9]{6}\b/g },
+  // A gift, promo or licence code (G961: a promo mail's code was saved as a next step and shown
+  // whole on the owner's home): three or more groups of 4 to 6 capitals or digits joined by dashes,
+  // with a letter and a digit in it, and not a piece of a longer dashed run (an upper-case UUID).
+  // By shape alone; no word beside it decides. Limits and over-holds are rows in test/ceilings.test.ts.
+  { what: "a redeemable code or product key", re: /(?<![A-Za-z0-9-])[A-Z0-9]{4,6}(?:-[A-Z0-9]{4,6}){2,}(?![A-Za-z0-9-])/g, test: (m) => /[A-Z]/.test(m) && /\d/.test(m) },
 ];
 
 // Returns a description of the first secret-shaped string, or undefined.
@@ -130,6 +135,14 @@ export function findSecret(text: string): string | undefined {
   for (const s of SECRET_SHAPES)
     for (const m of text.matchAll(s.re)) if (!s.test || s.test(m[0], text)) return s.what;
   return undefined;
+}
+
+// Every secret-shaped string in a text, as matched (carve.ts makes each a withheld needle, G962).
+export function secretsIn(text: string): string[] {
+  const out: string[] = [];
+  for (const s of SECRET_SHAPES)
+    for (const m of text.matchAll(s.re)) if (!s.test || s.test(m[0], text)) out.push(m[0]);
+  return out;
 }
 
 // The backup's scan (src/backup.ts secretIn) as one function, so a record built from several

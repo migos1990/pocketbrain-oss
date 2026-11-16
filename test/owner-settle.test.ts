@@ -14,7 +14,7 @@ import { ownerConflicts, ownerConflict, ownerDecide, ownerKeepBoth } from "../sr
 import { readDiary } from "../src/diary";
 import { undoFact } from "../src/undo";
 import { homeView } from "../src/dashboard/home";
-import { settlePage, question, ordered, SETTLE_COPY } from "../src/dashboard/html-settle";
+import { settlePage, question, ordered, leanWords, SETTLE_COPY } from "../src/dashboard/html-settle";
 import { loadRules } from "../src/rules";
 import { dashboardHandler } from "../src/dashboard/server";
 
@@ -239,4 +239,18 @@ test("a conflict card too long to say its values still says where they came from
   const w = homeView(root, loadRules(root), loadBrain(root), new Date()).waiting;
   expect(w[0]!.what).toBe("Two sources disagree on Course C's room.");
   expect(w[0]!.meta).toBe("Two sources disagree");
+});
+
+// G963: the Gardener's reason is its own line and may cite a source by its ref; the owner's card
+// says it in words. The stored reason is unchanged.
+test("the Gardener's line says a source in words, never its ref", () => {
+  expect(leanWords("The registrar's note (gmail:primary/f00000000000000a) gives the later room; the other side could not be checked."))
+    .toBe("The registrar's note gives the later room; the other side could not be checked.");
+  expect(leanWords("gcal:evt9@3 is the newer one, and gmail:f00000000000000b only repeats it")).toBe("your calendar is the newer one, and an email only repeats it");
+  expect(leanWords("Backed by both (gmail:f00000000000000a, gcal:evt9@3).")).toBe("Backed by both.");
+  expect(leanWords("It matches gmail:f00000000000000a.")).toBe("It matches an email.");
+  // A word every object has is no scheme (code review of PR 221).
+  expect(leanWords("See constructor:x and (toString:y) there")).toBe("See constructor:x and (toString:y) there");
+  // Ordinary colons stay: a time, a label, a ratio.
+  expect(leanWords("Starts at 10:30, note: the room moved, odds 3:1")).toBe("Starts at 10:30, note: the room moved, odds 3:1");
 });

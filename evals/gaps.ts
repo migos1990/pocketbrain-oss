@@ -5,6 +5,59 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G968: {
+    closed: "claude/copy-brain-race",
+    title: "Migrate's dry run failed when git took and dropped a lock while the brain was copied",
+    severity: "high",
+    finding: "Main's CI on fa72ad11 (2026-11-16) failed in test/brain-format.test.ts: migrate (src/format.ts) copied the brain with a plain cpSync for its dry run, and the copy threw ENOENT on .git/objects/maintenance.lock, which a background `git maintenance run --auto` (started by the fixture's own commit) took and dropped mid-walk. G931 had fixed the same race for the restore drill's copy only. A real owner's migrate copies a live brain while their own git, an editor's git or the hub's night gc runs, so `start` could stop on a failed dry run for no reason. A plain skip of vanished files would instead hand back a copy missing a real object.",
+    fix: "One walk for every copy of a live brain folder, src/brain-copy.ts copyBrain, used by migrate's dry run and the drill: a git lock file is never copied; any other entry that vanishes between its folder's listing and its read throws the copy away and starts again (three passes), then refuses with one sentence and leaves no half copy, so a copy never quietly lacks a file. Backups read .git through `git bundle`, not a walk. At the source too: test/fixture.ts commits with gc.auto=0 and maintenance.auto=false, as src/git.ts does. Test: test/brain-copy-race.test.ts (a child process making and dropping locks during migrate, seen failing with the CI's ENOENT; a file gone mid-walk; a brain that keeps changing).",
+  },
+  G966: {
+    closed: "claude/ask-makes-sense",
+    title: "The secret-shaped hold missed a packet-only side, the code said alone, and a number",
+    severity: "medium",
+    finding: "Slice audit of 58983c3 (G962), 2026-11-16, not clear. (1) gardenerDisputes (src/core.ts) filtered on the live fact only, so a side that holds a secret shape in the packet while the fact is clean was served to the Gardener. (2) Only the whole value was a withheld needle (src/carve.ts leakFlags), so the code said alone in a page's text, a title or an alias was still served. (3) secretShaped skipped numbers, so a card number typed in by hand as a YAML number was served. (4) Over-holds of the new shape beyond the one row listed: an order or document number of three such groups; one such item hides its whole list fact.",
+    fix: "src/core.ts gardenerPackets drops a packet with a secret-shaped side; src/carve.ts makes each matched secret (src/checks.ts secretsIn) a withheld needle of its own and reads a number as its digits; the over-holds are rows in test/ceilings.test.ts and test/contracts/carve.contract.test.ts. Second pass, not clear: the new needles were added in leakFlags only, so cells and snapshots (noteCarve) still served the code said alone; and a match led by ordinary words (a stored \"password is on ...\") blanked that phrase on other pages. noteCarve carries the same needles, and a needle is the secret's own parts (those with a digit), never the words around it.",
+  },
+  G967: {
+    title: "The carve property test and the nightly slice check never plant a secret-shaped value",
+    severity: "low",
+    finding: "Slice audit of 58983c3, 2026-11-16: test/carve-gen.ts generates no value the secret shapes match, so the property test, the leak oracle (evals/lib/oracle.ts) and the nightly slice check never exercise the secret-shaped hold through the three doors; nor does a case show the relay holding a message that carries such a hidden value (src/needles.ts, read only).",
+    fix: "Proposed, not built: carve-gen plants a secret-shaped value on some generated pages (built at run time), the oracle counts it carved out for every reader and the owed-facts direction never owes it; one relay case in test/contracts/relay.contract.test.ts.",
+  },
+  G961: {
+    closed: "claude/ask-makes-sense",
+    title: "A redeemable code was saved as a fact and shown whole on the owner's home",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-16 (shapes and counts from the Mac, no values): one side of a Home ask held a redeemable code in full. src/checks.ts SECRET_SHAPES knew cards, passwords, door codes, account numbers and a six-character booking code after its keyword, but no gift, promo or licence code, so the write passed and so did suggest_answer's reason check.",
+    fix: "src/checks.ts: a new always-on shape, \"a redeemable code or product key\": three or more groups of 4 to 6 capitals or digits joined by dashes, with a letter and a digit, not a piece of a longer dashed run. Shape only; no word beside it decides. Refused at write, blanked in captures and logs. Limits and over-holds are rows in test/ceilings.test.ts; test/contracts/checks.contract.test.ts.",
+  },
+  G962: {
+    closed: "claude/ask-makes-sense",
+    title: "A secret-shaped value already stored was served to every assistant whose slice held its page",
+    severity: "high",
+    finding: "Same ask as G961: the value was a live fact on a personal page, in 2 assistants' slices (carve run per grant on the Mac, counts only). The secret shapes are checked at write only; nothing looked at a stored value when a carve was built, so a value filed before a shape was known, or put in by hand, was served.",
+    fix: "src/carve.ts factHiddenReason: a live record whose value holds a secret shape (findSecret, kept per record) is hidden from every carve, reason \"holds a secret-shaped value\", after every other reason and after the serving hold. Tightens only; no brain change, nothing asked. test/contracts/carve.contract.test.ts.",
+  },
+  G963: {
+    closed: "claude/ask-makes-sense",
+    title: "The Gardener's line on the settle card showed a raw source ref",
+    severity: "low",
+    finding: "Same ask as G961: the card's \"The Gardener leans this way\" line printed the reason as stored, with a source's ref and id in brackets (src/core.ts ownerConflicts passes suggestion.why to src/dashboard/html-settle.ts row). Machine text on the owner's screen.",
+    fix: "src/dashboard/html-settle.ts leanWords: a bracketed ref is dropped and a bare one is said in words (\"an email\", \"your calendar\"); only a known scheme with an id counts, so a time or a label keeps its colon. The stored reason is unchanged. Code review of PR 221: the scheme lookup took inherited keys, so \"constructor:x\" read as a ref; it is an own-key lookup now. test/owner-settle.test.ts.",
+  },
+  G964: {
+    title: "The machine-mail cleanup leaves a fact assistants already have, and one that is a side in a question",
+    severity: "medium",
+    finding: "Same ask as G961 (Mac, counts and yes or no): the fact's only source is in log/machine-mail.jsonl, yet `pocketbrain machine-mail` counted 0. src/receipt-pages.ts machineFacts takes a record only when it is live, still held (unseen) and not contested; a fact filed before write() refused machine mail (G668) that was served, or that later became a side of a conflict, stays and can ask the owner to pick it.",
+    fix: "Proposed, not built; waits for the owner's typed word since it takes facts assistants already had and removes an ask: machineFacts also takes a served record and a conflict side whose every source is logged machine mail, each to history with a diary line and Undo; a conflict left with one side closes as that side.",
+  },
+  G965: {
+    title: "The Gardener said the two sides do not conflict and the question still stood",
+    severity: "medium",
+    finding: "Same ask as G961: the Gardener's reason said the other side was about something else, and the card still asked the owner to pick one. suggest_answer (src/core.ts gardenerSuggest) can only name a side, and no model settles a conflict (invariant 6), so its reading changes nothing.",
+    fix: "Proposed, not built: the structural side-by-side rule for next steps (plans/next-steps-both-hold-2026-11-16.md, fault A) puts a different next step from a different source item beside the one held instead of asking. Waits for the owner's typed word. No model decides it.",
+  },
   G958: {
     closed: "claude/pin-runners",
     title: "CI ran on a floating Linux image, so a new image stopped every test",

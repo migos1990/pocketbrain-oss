@@ -5,10 +5,11 @@ import { test, expect } from "bun:test";
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { makeBrain } from "../fixture";
-import { loadBrain } from "../../src/brain";
+import { loadBrain, saveNote } from "../../src/brain";
 import { loadRules } from "../../src/rules";
 import { carve, grantFor } from "../../src/carve";
 import * as core from "../../src/core";
+import { write } from "../../src/write";
 import * as semantic from "../../src/semantic";
 import { withTokenRole } from "../../src/tokenrole";
 import { moreThanToday } from "../../src/consent";
@@ -488,4 +489,117 @@ test("must never: a slice with only a level or attribute filter lends an area sl
   expect(carveFor(root, "planner", ["area:personal", "pub-only"]).visible.has("people/new-face")).toBe(false);
   const v = carveFor(root, "planner", ["area:personal", "title-only"]).visible.get("people/new-face");
   expect(v && v.attributes !== "all" && !v.attributes.has("role")).toBe(true);
+});
+
+// G962: a stored value that holds a secret shape (filed before the write check knew the shape) is
+// served to nobody. Built at run time so gitleaks never sees a code whole.
+test("contract carve: a live value holding a secret shape is hidden from every carve, with its own reason", async () => {
+  const root = makeBrain();
+  const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
+  const p = join(root, "projects", "course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "Hand ${code} to the registrar"`));
+  Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "-c", "user.name=owner", "-c", "user.email=o@x", "commit", "-qm", "owner: by hand"], { cwd: root });
+  for (const agent of ["planner", "steward", "helper"]) {
+    const res = carveFor(root, agent);
+    const h = res.hiddenFacts.find((x) => x.key === "projects/course-a#next_step");
+    if (res.visible.has("projects/course-a")) expect([agent, h?.reason]).toEqual([agent, "holds a secret-shaped value"]);
+    expect(JSON.stringify(res.hiddenFacts)).not.toContain(code);
+  }
+  const read = core.readNote(root, "planner", "projects/course-a");
+  expect(JSON.stringify(read)).not.toContain(code);
+  expect(JSON.stringify(core.search(root, "planner", "registrar"))).not.toContain(code);
+  // A fact hidden for another reason keeps that reason.
+  writeFileSync(p, readFileSync(p, "utf8").replace("verification: verified-by-source, by: planner", "verification: verified-by-source, unseen: true, by: planner"));
+  expect(carveFor(root, "planner").hiddenFacts.find((x) => x.key === "projects/course-a#next_step")?.reason).toBe("waiting for the owner to see it");
+});
+
+// G962, the dispute door: a conflict whose side holds a secret shape shows the resolver no values.
+// The conflict is older than the rule: its files are edited by hand to hold the code.
+test("contract carve: a conflict side holding a secret shape is withheld in its packet", () => {
+  const root = makeBrain();
+  const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
+  const r = write(root, { agent: "planner", id: "projects/course-a", attribute: "next_step", value: "Post the reading list", as_of: "2026-10-07", sources: ["gcal:e1@e1"], verification: "self-reported" } as never, { acceptedBy: "auto-decide", contest: true });
+  expect(r.outcome).toBe("disputed");
+  const packet = loadBrain(root).find((n) => n.fm.type === "dispute")!;
+  delete packet.fm.gardener_first; saveNote(root, packet); // past the Gardener's first look, the resolver reads it
+  const shown = (agent: string) => { try { return JSON.stringify(core.getDispute(root, agent, String(packet.fm.id).split("/")[1]!)); } catch (e) { return `refused: ${(e as Error).message}`; } };
+  expect(shown("steward")).toContain("Grade the midterm");
+  for (const f of [join(root, "projects", "course-a.md"), join(root, `${packet.fm.id}.md`)]) writeFileSync(f, readFileSync(f, "utf8").replaceAll("Grade the midterm", `Hand ${code} to the registrar`));
+  for (const agent of ["steward"]) { expect([agent, shown(agent).includes(code)]).toEqual([agent, false]); expect(shown(agent)).not.toContain("registrar"); }
+});
+
+// Slice audit of G962, 2026-11-16: four rows.
+// (1) The Gardener's door served a side held only in the packet while the fact itself was clean.
+test("contract carve: a secret-shaped side held only in the packet reaches neither the Gardener nor the resolver", () => {
+  const root = makeBrain();
+  const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
+  expect(write(root, { agent: "planner", id: "projects/course-a", attribute: "next_step", value: "Post the reading list", as_of: "2026-10-07", sources: ["gcal:e1@e1"], verification: "self-reported" } as never, { acceptedBy: "auto-decide", contest: true }).outcome).toBe("disputed");
+  const packet = loadBrain(root).find((n) => n.fm.type === "dispute")!;
+  delete packet.fm.gardener_first; saveNote(root, packet);
+  expect(JSON.stringify(core.gardenerDisputes(root, "gardener"))).toContain("Post the reading list");
+  const f = join(root, `${packet.fm.id}.md`);
+  writeFileSync(f, readFileSync(f, "utf8").replaceAll("Post the reading list", `Hand ${code} to the registrar`));
+  expect(JSON.stringify(core.gardenerDisputes(root, "gardener"))).not.toContain(code);
+  expect(JSON.stringify(core.getDispute(root, "steward", String(packet.fm.id).split("/")[1]!))).not.toContain(code);
+});
+
+// (2) The code said alone in a page's text, a title or an alias was still served: only the whole
+// sentence that held it was a withheld value.
+test("contract carve: the secret itself is withheld wherever it is said, not only the sentence that holds it", () => {
+  const root = makeBrain();
+  const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
+  const p = join(root, "projects", "course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "Hand ${code} to the registrar"`).replace("Course logistics.", `Course logistics. The registrar wants ${code} by Friday.`));
+  note(root, "projects/course-z", `type: project\narea: work\nsensitivity: personal\nstatus: active\naliases: ["${code}"]`, "", `See ${code} for the hall.`, "planner");
+  for (const agent of ["planner", "steward", "helper"]) {
+    const got = [JSON.stringify(core.readNote(root, agent, "projects/course-a")), JSON.stringify(core.search(root, agent, "registrar")), JSON.stringify(core.search(root, agent, "hall")), JSON.stringify(core.contextPack(root, agent, "course"))].join("\n");
+    expect([agent, got.includes(code)]).toEqual([agent, false]);
+  }
+});
+
+// (3) A card number typed into a page by hand is a YAML number, and numbers were skipped.
+test("contract carve: a secret-shaped number is hidden like a secret-shaped string", () => {
+  const root = makeBrain();
+  const card = ["4111", "1111", "1111", "1111"].join("");
+  const p = join(root, "projects", "course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: ${card}`));
+  expect(carveFor(root, "planner").hiddenFacts.find((x) => x.key === "projects/course-a#next_step")?.reason).toBe("holds a secret-shaped value");
+  expect(JSON.stringify(core.readNote(root, "planner", "projects/course-a"))).not.toContain(card);
+});
+
+// (4) Known over-hold, kept as a row: one secret-shaped item hides its whole list fact.
+test("contract carve: one secret-shaped item in a list hides the whole list fact", () => {
+  const root = makeBrain();
+  const code = ["K2MP", "7XQD", "R9TB"].join("-");
+  note(root, "projects/course-y", "type: project\narea: work\nsensitivity: personal\nstatus: active", `  rooms:\n    items:\n      - { value: "B-201", as_of: 2026-10-01, ${SRC} }\n      - { value: "use ${code}", as_of: 2026-10-01, ${SRC} }`, "", "planner");
+  const res = carveFor(root, "planner");
+  if (res.visible.has("projects/course-y")) expect(res.hiddenFacts.find((x) => x.key === "projects/course-y#rooms")?.reason).toBe("holds a secret-shaped value");
+});
+
+// Second slice audit of G962: the needle is the secret, never the ordinary words around it. A
+// stored "password is on …" value (an over-hold of the write check) must not blank that phrase on
+// other pages; a password with a digit is withheld alone.
+test("contract carve: a secret-shaped value's ordinary words are not withheld on other pages", () => {
+  const root = makeBrain();
+  const pw = "hunter" + "42";
+  const p = join(root, "projects", "course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "the password is on the fridge and the wifi password is ${pw}"`));
+  note(root, "projects/course-z", "type: project\narea: work\nsensitivity: personal\nstatus: active", "", `The door password is on the label. Someone wrote ${pw} on the board.`, "planner");
+  const got = JSON.stringify(core.readNote(root, "planner", "projects/course-z"));
+  expect(got).toContain("password is on the label");
+  expect(got).not.toContain(pw);
+});
+
+// Third slice audit of G962, clear, with two limits kept as rows so a change that moves one shows.
+test("contract carve: limits of the secret needle (ceiling and over-hold)", () => {
+  const root = makeBrain();
+  const p = join(root, "projects", "course-a.md");
+  writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "Booking ZQXWVK, and pin: 7.4.1"`));
+  note(root, "projects/course-z", "type: project\narea: work\nsensitivity: personal\nstatus: active", "", "Ask for ZQXWVK at the desk. The tool moved to release 7.4.1 last week.", "planner");
+  expect(carveFor(root, "planner").hiddenFacts.find((x) => x.key === "projects/course-a#next_step")?.reason).toBe("holds a secret-shaped value");
+  const got = JSON.stringify(core.readNote(root, "planner", "projects/course-z"));
+  // Ceiling: a code of letters only, said alone on another page, is still served (no part with a digit).
+  expect(got).toContain("ZQXWVK");
+  // Over-hold: a dotted number inside a hidden pin-shaped value is withheld where it is said again.
+  expect(got).not.toContain("7.4.1");
 });

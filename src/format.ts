@@ -10,13 +10,14 @@
 //     there and the copy still loads, in place, as one owner commit (Kind: migrate) that git can
 //     revert. `pocketbrain migrate` shows the dry run; `--apply` runs it; `start` and `serve`
 //     apply it by themselves, so an update that needs one doesn't wait for the owner's hands.
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { git, gitRun } from "./git";
 import { loadRules } from "./rules";
 import { loadBrain } from "./brain";
 import { OWNER } from "./owner";
+import { copyBrain } from "./brain-copy";
 
 export const FORMAT = 1;
 export const FORMAT_FILE = "FORMAT";
@@ -77,7 +78,8 @@ export function migrate(root: string, o: { apply?: boolean; migrations?: Migrati
   const copy = mkdtempSync(join(tmpdir(), "pb-migrate-"));
   let dry: MigrateResult["steps"];
   try {
-    cpSync(root, copy, { recursive: true });
+    // A lock git takes and drops while the copy walks .git never fails the dry run (G968).
+    copyBrain(root, copy);
     try { dry = runSteps(copy, steps); } catch (e) { throw new FormatError(`dry run failed, the brain is unchanged at format ${from}: ${(e as Error).message}`); }
   } finally { rmSync(copy, { recursive: true, force: true }); }
   if (!o.apply) return { from, to: code, steps: dry, applied: false };

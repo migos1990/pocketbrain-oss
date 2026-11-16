@@ -143,7 +143,7 @@ export function sinceDate(date: string | undefined): string {
   return `${Math.round(d / 365)} years ago`;
 }
 
-const SOURCE_WORDS: Record<string, string> = { gmail: "an email", mail: "an email", calendar: "your calendar", gcal: "your calendar", notion: "Notion", url: "a web page", web: "a web page", drive: "a document", doc: "a document", owner: "you", louis: "you", approved: "you approved", "instinct-mem": "Instinct's memory", "town-wiki": "Town's wiki", "town-routine": "a Town routine", agent: "an assistant", "agent-relay": "an assistant's message", "agent-log": "an assistant's log" };
+export const SOURCE_WORDS: Record<string, string> = { gmail: "an email", mail: "an email", calendar: "your calendar", gcal: "your calendar", notion: "Notion", url: "a web page", web: "a web page", drive: "a document", doc: "a document", owner: "you", louis: "you", approved: "you approved", "instinct-mem": "Instinct's memory", "town-wiki": "Town's wiki", "town-routine": "a Town routine", agent: "an assistant", "agent-relay": "an assistant's message", "agent-log": "an assistant's log" };
 
 // Where a fact came from, in words: "an email", "your calendar and an email".
 export function sourceWords(sources: SourceRef[] | undefined): string {

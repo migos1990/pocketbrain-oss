@@ -22,8 +22,17 @@ const k = (prefix: string, n: number, ch = "a") => prefix + ch.repeat(n);
 // Password-looking words are built at run time so gitleaks doesn't flag this file (CLAUDE.md Shipping).
 const PW1 = "hunter" + "2", PW2 = ["Tr0ub", "4dor&3"].join("");
 
+// A redeemable code or product key, built at run time (CLAUDE.md Shipping): groups of capitals
+// and digits joined by dashes.
+const CODE5 = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-"), CODE3 = ["K2MP", "7XQD", "R9TB"].join("-");
+
 // Write path (checks.ts no_secret_shapes, always on): input -> what it reports.
 const SECRET_CATCH: [string, string][] = [
+  // G961: a gift, promo or licence code. Three or more groups of 4 to 6 capitals or digits joined
+  // by dashes, with a letter and a digit somewhere in it.
+  [`Give ${CODE5} to a friend`, "a redeemable code or product key"],
+  [`licence ${CODE3}.`, "a redeemable code or product key"],
+  [`(${CODE5})`, "a redeemable code or product key"],
   ["my password is hunter2", "a password or PIN"],
   ["Password: hunter2", "a password or PIN"],
   ["PIN: 1234", "a password or PIN"],
@@ -74,6 +83,12 @@ const SECRET_CATCH: [string, string][] = [
 
 // Known ceiling of the write path: shapes too close to ordinary text to refuse.
 const SECRET_CEILING: string[] = [
+  // G961 limits: a code of letters only or digits only, two groups, lower case, spaces for dashes.
+  "use WXYZ-ABCD-EFGH-JKLM at checkout",
+  "serial 1234-5678-9012",
+  "voucher AB12C-DE34F",
+  "key q7rt2-mx4kd-9plhb",
+  "code Q7RT2 MX4KD 9PLHB",
   "pw: hunter2", // only the spelled-out words password, passcode, pin, cvv… count
   "four one one one one one one one", // numbers spelled out
   "4111 1111 1111 1112", // fails Luhn: not a card
@@ -150,6 +165,9 @@ const SECRET_CEILING: string[] = [
 // write path (and blank at capture), because no matcher tells it from "PIN 4821". Fixing one
 // moves it to SECRET_CEILING.
 const SECRET_OVERHOLD: [string, string][] = [
+  ["part number AB12-CD34-EF56 is back in stock", "a redeemable code or product key"], // a dashed part or serial number reads as a code (G961)
+  ["ticket ORDER-2026-0001A is closed", "a redeemable code or product key"], // an order or ticket number of three such groups (slice audit of G962)
+  ["see HTTP-2024-RFC1 for the draft", "a redeemable code or product key"], // a dashed document name with a year
   ["the password is on the fridge", "a password or PIN"], // anything after "password is", ":" or "=" (as before G47)
   ["pin: 1.2.3", "a password or PIN"], // same: anything after "pin:" (as before G47)
   ["password abc123 example", "a password or PIN"], // a letters-and-digits word after "password" reads as one

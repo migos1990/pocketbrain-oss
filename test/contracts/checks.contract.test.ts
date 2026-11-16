@@ -203,3 +203,16 @@ test("contract checks: a card number in a source ref is refused everywhere but a
   ];
   for (const [ref, refused] of rows) expect([ref, runChecks({ ...base, sources: [ref] }, new Set(["no_secret_shapes"])).some((f) => f.check === "no_secret_shapes")]).toEqual([ref, refused]);
 });
+
+// G961: a promo mail's redeemable code was saved as a next step and shown whole on the owner's home.
+test("contract checks: a redeemable code or product key is refused, and ordinary dashed text is not", () => {
+  const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
+  expect(findSecret(`Send ${code} to a friend`)).toBe("a redeemable code or product key");
+  const root = makeBrain();
+  const before = head(root);
+  const r = write(root, { ...base, value: `Send ${code} to a friend` });
+  expect(r.outcome).toBe("refused");
+  expect(r.fails?.[0]?.check).toBe("no_secret_shapes");
+  expect(head(root)).toBe(before);
+  for (const ok of ["due 2026-10-15", "call 514-555-0199", "id 3F2504E0-4F89-41D3-9A0C-0305E82C3301", "the HTTP-JSON-REST-APIS talk", "flight AC-1234", "room B-201", "order 2026-1015-0001"]) expect([ok, findSecret(ok)]).toEqual([ok, undefined]);
+});

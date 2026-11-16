@@ -28,7 +28,7 @@ export function makeBrain(opts: { git?: boolean } = {}): string {
   mkdirSync(join(root, "log"), { recursive: true });
   writeFileSync(join(root, "log", "refs-checked.jsonl"), FIXTURE_MAIL.map((ref) => JSON.stringify({ ref, ok: true })).join("\n") + "\n");
   if (opts.git !== false) {
-    const run = (args: string[]) => Bun.spawnSync(["git", ...args], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
+    const run = (args: string[]) => Bun.spawnSync(["git", "-c", "gc.auto=0", "-c", "maintenance.auto=false", ...args], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
     run(["init", "-q", "-b", "main"]);
     run(["add", "-A"]);
     run(["commit", "-q", "-m", "fixture"]);

@@ -10,6 +10,9 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A gift, promo or licence code (groups of capitals and digits joined by dashes) is now refused like a password or a card number: no assistant can save one, and one in a capture is blanked (G961).
+- A value already in your memory that looks like a secret (a card number, a password, a code) is no longer given to any assistant, whoever's slice holds its page. Nothing in your memory changes and you are not asked anything (G962).
+- On a question, the Gardener's line no longer shows a source's machine reference: it says "an email" or "your calendar" (G963).
 - A private fact an assistant files no longer counts as something waiting on you. It stays held from every assistant exactly as before, and the home says one quiet line ("3 private things are held from your assistants.") that opens the full list, where each one has Read it, then Let them have it or Keep it private. The big number now counts only real questions (G907).
 - A question you already answered no longer comes back. When you settle a conflict, the value you did not keep stays ended: the same assistant or source saying it again from a mail or event of that day or before is kept as history, and the hub drops a waiting proposal of it as "kept your word", with Undo. A source dated after your answer still asks (G951). On the settle screen, "Not sure, keep both" now says "You won't be asked again" beside it.
 - A next step is one thing to do. An assistant that writes several to-dos as one next step gets it handed back with the fix, so a page no longer holds two unrelated tasks as one value from that door. Your own words are never handed back (G952).
@@ -22,6 +25,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- A brain migration's dry run no longer fails when git takes and drops a lock while the brain is copied, and a file git moves away mid-copy starts the copy again instead of failing or being left out. The restore drill copies the same way (G968).
 - CI's Linux jobs run on `ubuntu-24.04` by name, never `ubuntu-latest`, after that label moved to an image the pinned Playwright won't install on and stopped every test run (G958).
 - `bun scripts/deploy.ts go` ends with the brain-quotes report for the code it just deployed: one line with the count and the file:line that are new since the last deploy, never the words; it never blocks a deploy (G956).
 
