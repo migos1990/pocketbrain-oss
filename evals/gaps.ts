@@ -20,7 +20,7 @@ export const GAPS: Record<string, Gap> = {
     fix: "workerEmbedder tells the worker the model dir this thread checked as its first message; loadLocalEmbedder takes a dir. Ranking unchanged. test/semantic.test.ts (G910).",
   },
   G931: {
-    closed: "claude/drill-lock-race",
+    closed: "15357755",
     title: "The restore drill failed when a git lock vanished mid-copy",
     severity: "medium",
     finding: "CI on PR 202, 2026-11-15: `bun src/cli.ts drill --demo` threw ENOENT on .git/objects/maintenance.lock in cpSync (src/backup.ts drill). The demo brain's own `git commit` ran without maintenance.auto=false, so it started a detached `git maintenance run --auto` that took and dropped that lock while the drill copied .git; the copy listed the lock, then could not read it. A required check went red on a docs-only change.",
@@ -5203,7 +5203,7 @@ export const GAPS: Record<string, Gap> = {
     closed: "bae4c40f",
     title: "The owner's own page glued unrelated mail into one paragraph",
     severity: "medium",
-    finding: "Louis, 2026-11-01 (his page on the phone): \"How you know Louis Migault: customer of Best Buy Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
+    finding: "Louis, 2026-11-01 (his page on the phone): \"How you know <the owner>: customer of <a store>. Louis also comes up in the sources of <a physio appointment>, <a phone company>, … See also <a flight>, <a developer agreement>, …\". Every mail names the owner, so his page listed whatever mail came in; two pages drawn from one receipt or newsletter were tied though it named neither; up to eight pages ran together in one sentence. \"The data on the screens needs to make sense, otherwise people won't trust the brain.\"",
     fix: "pageLead (src/wiki.ts): the owner's own page says only its facts, one sentence each, with no relationship (how you know) sentence, no sources line and no See also; the writer no longer lists the owner's unlinked decision and money pages there, and no other page names the owner's page from its sources. Two pages citing one item tie only when that item's name keys name the page. A page names at most TIES (3) pages its sources tie it to, each in its own sentence. Tests: test/page-ties.test.ts, test/page-writer.test.ts. Eval: wiki-owner-page-no-glued-sources.",
   },
   G648: {
