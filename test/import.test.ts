@@ -17,20 +17,20 @@ function rawBrain(): string {
   };
   put("projects", [{
     Name: "Northfield Course X", Entity: "Northfield", Status: "Active", "Next step": "Teach session 6 on Oct 11",
-    "Source type": "an email", Source: "Gmail ref m1.ZjAwMDAwMDAwMDAwMDAwNQ (2026-09-28)",
+    Source: "Gmail ref m1.ZjAwMDAwMDAwMDAwMDAwNQ (2026-09-28)", "Source type": "an email",
     Verification: "Verified by source", Confidence: "Stated", Sensitive: "__NO__", "Author agent": "Vamprose",
     Fingerprint: "Vamprose \\| created \\| 2026-10-04<br>Instinct \\| modified \\| 2026-10-06", "Fact key": "project:northfield-course-x",
     "date:Date:start": "2026-10-04", url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1: "Mondays.\nVamprose \\| modified \\| 2026-10-06\n" });
   put("people", [{
     Name: "Ana Lopez", Role: "Coordinator", Org: "Acme (Acme Labs)", "Related project": "Northfield Course X",
-    "Source type": "a text received from Louis", Source: "Instinct memory note entities/people/ana",
+    Source: "Instinct memory note contacts/ana-lopez", "Source type": "a text received from Louis",
     Verification: "Confirmed by Louis", Confidence: "Stated", Sensitive: "__NO__", "Author agent": "Instinct",
     Fingerprint: "Instinct \\| created \\| 2026-10-04", "date:Date:start": "2026-10-04", "date:Last contact:start": "2026-09-30",
     url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2: "Vamprose sources:\n- Role Coordinator at Acme: an email, Gmail f000000000000001 (2026-09-18).\n" });
   put("money", [{
-    Name: "2026-09-29 Savings", Type: "Account", Amount: "1000", Currency: "CAD", "Source type": "a text received from Louis",
+    Name: "2026-09-29 Rainy day jar", Currency: "EUR", Amount: "740", Type: "Account", "Source type": "a text received from Louis",
     Source: "Louis's messages 2026-09-29", Verification: "Unverified", Confidence: "Stated", Sensitive: "__YES__", "Author agent": "Instinct",
     Fingerprint: "Instinct \\| created \\| 2026-10-04", "date:Date:start": "2026-09-29", url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3: "Account number 12345678 at the branch.\n" });
@@ -71,7 +71,7 @@ test("import maps rows to the memory-shape format", () => {
   expect((ana.fm.facts!.role as FactRecord).sources).toEqual(["gmail:f000000000000001"]); // pass 2 upgrade
   expect(notes.filter((n) => n.fm.type === "org")).toEqual([]);
 
-  const money = notes.find((n) => n.fm.id === "money/savings")!;
+  const money = notes.find((n) => n.fm.id === "money/rainy-day-jar")!;
   expect(money.fm.sensitivity).toBe("private");
   expect(money.body).toContain("[removed: secret-shaped]");
 

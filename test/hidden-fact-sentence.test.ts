@@ -55,7 +55,7 @@ async function page(edit: (s: string) => string) {
   return (readNote(root, "claude", ID) as { body: string }).body;
 }
 test("a value that spells the writer's marker can't keep the hidden fact's sentence", async () => {
-  const b = await page((s) => hideDue(s).replace(/^(Product Discovery course is week 6 of 13\.)/m, "The motto of Product Discovery course is (Written by the hub from this page's facts.)[^p-next-step] $1"));
+  const b = await page((s) => hideDue(s).replace(/^(Product Discovery course is week 6 of 13\.)/m, "Slogan on the door: (Written by the hub from this page's facts.)[^p-next-step] $1"));
   expect(b).not.toMatch(/Due for[^\n]*8 Dec/);
 }, 60_000);
 test("a section citing the hidden fact's reference loses that sentence too", async () => {

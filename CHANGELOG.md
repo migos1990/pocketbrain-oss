@@ -27,6 +27,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 - A brain migration's dry run no longer fails when git takes and drops a lock while the brain is copied, and a file git moves away mid-copy starts the copy again instead of failing or being left out. The restore drill copies the same way (G968).
 - CI's Linux jobs run on `ubuntu-24.04` by name, never `ubuntu-latest`, after that label moved to an image the pinned Playwright won't install on and stopped every test run (G958).
+- The brain-quotes report no longer counts the paragraph the hub writes on a page from its facts, or a sentence the code builds from short strings passed side by side, as a quote of the brain; the owner's own words beside them still count, and deploy go prints its line at 0 too (G971).
 - `bun scripts/deploy.ts go` ends with the brain-quotes report for the code it just deployed: one line with the count and the file:line that are new since the last deploy, never the words; it never blocks a deploy (G956).
 
 - The personal-term check (`scripts/check-public.sh`) takes a line `<term> @<path>,<path>` that excuses a term in those files only, and the public export now runs that same check over what it publishes (G936, G937).

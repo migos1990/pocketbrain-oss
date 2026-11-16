@@ -60,11 +60,29 @@ function pages(brain: string): string[] {
 // frontmatter on its own, so keys, dates, refs and agent names never join into a run that every
 // page shares ("sensitivity personal status active created ..."). Frontmatter that doesn't parse
 // is read whole.
+// A page's body less the paragraph the hub writes from its facts (G971): the paragraph right above
+// the hub's mark, "(Written by the hub from this page's facts.)" (MADE in src/wiki.ts), and the hub's
+// own references to it, footnotes labelled p- or pf-. That paragraph is the code's sentences with the
+// page's facts filled in, two or more words at a time, and the facts are read from the frontmatter
+// already; anything a person wrote on the page, outside it, is still read.
+const MADE = "(Written by the hub from this page's facts.)";
+function hubless(body: string): string {
+  return body.split(/^(?=#{1,6} )/m).map((sec) => {
+    const at = sec.indexOf(MADE);
+    if (at < 0) return sec;
+    // Only the one paragraph right above the mark (pageLead joins its sentences into one); a
+    // paragraph a person wrote above it in the same section is still read.
+    const before = sec.slice(0, at).trimEnd(), head = /^#{1,6} [^\n]*\n/.exec(before)?.[0].length ?? 0;
+    const cut = Math.max(before.lastIndexOf("\n\n"), head);
+    return before.slice(0, cut) + "\n\n" + sec.slice(at + MADE.length);
+  }).join("").replace(/^\[\^pf?-[^\]\s]+\]:[^\n]*$/gm, "").replace(/\[\^pf?-[^\]\s]+\]/g, " ");
+}
+
 export function pageTexts(text: string): string[] {
   const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!m) return [text];
+  if (!m) return [hubless(text)];
   let front: unknown;
-  try { front = YAML.parse(m[1]); } catch { return [text]; }
+  try { front = YAML.parse(m[1]); } catch { return [hubless(text)]; }
   const leaves: string[] = [];
   const walk = (v: unknown) => {
     if (typeof v === "string") leaves.push(v);
@@ -72,7 +90,7 @@ export function pageTexts(text: string): string[] {
     else if (v && typeof v === "object") Object.values(v).forEach(walk);
   };
   walk(front);
-  return [...leaves, text.slice(m[0].length)];
+  return [...leaves, hubless(text.slice(m[0].length))];
 }
 
 const runsOf = (brain: string) => new Set(pages(brain).flatMap((p) => pageTexts(readFileSync(p, "utf8")).flatMap(shingles)));
@@ -99,8 +117,26 @@ function ownRuns(text: string, code: Set<string>): { own: string[]; code: number
 // `+` read as one. A scanner, not a parser: a regex literal is told from division by the token before it,
 // so one that opens a statement right after a block's } is read as division (a rare miss that only
 // changes which runs count as the code's own).
-export function literals(src: string): string[] {
+// With `chains`, plain strings that follow one another separated only by commas (a call's
+// arguments, an array's items) are also read as one more fragment, joined by spaces: the code
+// prints them side by side, as `add("missing-hub", "notes/overview", "pages use…")` or a list of
+// report lines, so the words of short literals around them are the code's too (G971).
+export function literals(src: string, o: { chains?: boolean } = {}): string[] {
   const out: string[] = [];
+  const chains: string[] = [], parts: number[] = [];
+  let chainNext = false; // the last string was followed by a comma and another string
+  const tplChain = new Map<number, boolean>(); // a template's fragment index: did it follow a comma?
+  let pendingChain = false;
+  const chainOn = (s: string, cont: boolean) => {
+    if (!o.chains) return;
+    if (cont && chains.length) { chains[chains.length - 1] += " " + s; parts[parts.length - 1]++; } else { chains.push(s); parts.push(1); }
+  };
+  const lookComma = () => {
+    let j = i; while (j < n && /\s/.test(src[j])) j++;
+    if (src[j] !== ",") return false;
+    let k = j + 1; while (k < n && /\s/.test(src[k])) k++;
+    return src[k] === "'" || src[k] === '"' || src[k] === "`";
+  };
   const n = src.length;
   let i = 0;
   let prev = ""; // last significant token: "" (start), "id", "num", or the punctuation itself
@@ -119,11 +155,11 @@ export function literals(src: string): string[] {
   // Reads a template from just after its backtick (or a closing } of ${) to its end or next ${.
   const template = (at = -1) => {
     let s = at >= 0 ? out[at] + " 0 " : "";
-    const done = () => { if (at >= 0) out[at] = s; else { out.push(s); at = out.length - 1; } };
+    const done = () => { if (at >= 0) out[at] = s; else { out.push(s); at = out.length - 1; tplChain.set(at, pendingChain); } };
     while (i < n) {
       const c = src[i];
       if (c === "\\") { s += esc(src[i + 1] ?? ""); i += 2; continue; }
-      if (c === "`") { i++; done(); joinNext = false; prev = "str"; return; }
+      if (c === "`") { i++; done(); joinNext = false; prev = "str"; chainOn(s, tplChain.get(at) ?? false); chainNext = lookComma(); return; }
       if (c === "$" && src[i + 1] === "{") { i += 2; done(); joinNext = false; stack.push({ depth, at }); depth++; prev = "("; return; }
       s += c; i++;
     }
@@ -139,12 +175,15 @@ export function literals(src: string): string[] {
       while (i < n && src[i] !== c && src[i] !== "\n") { if (src[i] === "\\") { s += esc(src[i + 1] ?? ""); i += 2; } else s += src[i++]; }
       i++;
       push(s, true); prev = "str";
+      chainOn(s, chainNext);
+      chainNext = false;
       // A `+` and another plain string after it read as one sentence.
       let j = i; while (j < n && /\s/.test(src[j])) j++;
       if (src[j] === "+") { let k = j + 1; while (k < n && /\s/.test(src[k])) k++; if (src[k] === "'" || src[k] === '"') { joinNext = true; i = k; } }
+      else chainNext = lookComma();
       continue;
     }
-    if (c === "`") { i++; template(); continue; }
+    if (c === "`") { i++; pendingChain = chainNext; chainNext = false; template(); continue; }
     if (c === "/" && regexOK()) {
       i++; let cls = false;
       while (i < n && src[i] !== "\n") { const d = src[i]; if (d === "\\") { i += 2; continue; } if (d === "[") cls = true; else if (d === "]") cls = false; else if (d === "/" && !cls) break; i++; }
@@ -161,7 +200,7 @@ export function literals(src: string): string[] {
     }
     prev = c; i++;
   }
-  return out.filter((s) => s.trim());
+  return [...out, ...chains.filter((_, k) => parts[k] > 1)].filter((s) => s.trim());
 }
 
 // Every run inside a string literal of the code that writes brains: src/'s .ts files as they are now
@@ -173,7 +212,7 @@ export function literals(src: string): string[] {
 export const GRAM = 4;
 export function codeRuns(repo: string, tracked: string[], history = true): Set<string> {
   const lits = new Set<string>();
-  const add = (src: string) => { for (const l of literals(src)) lits.add(l); };
+  const add = (src: string) => { for (const l of literals(src, { chains: true })) lits.add(l); };
   const isCode = (f: string) => f.startsWith("src/") && f.endsWith(".ts");
   for (const f of tracked) if (isCode(f) && existsSync(join(repo, f))) add(readFileSync(join(repo, f), "utf8"));
   if (!history) return gramsOf([...lits]);

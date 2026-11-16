@@ -212,3 +212,15 @@ test("go reports brain quotes for the code it deployed, new lines named by file:
   expect(s3.brain_quotes).toEqual(quotes[1]);
   expect(JSON.parse(readFileSync(r.state, "utf8")).brain_quotes).toEqual(quotes[1]);
 });
+
+// G971: a report-only step that printed nothing at 0 could not be told apart from one that never
+// ran, so go prints its count at 0 too, first time and after a deploy that had lines.
+test("go prints the brain-quotes line at 0, so a clean report is seen to have run", async () => {
+  const r = rig();
+  const f = (q: { lines: number; hits: string[] }) => ({ ...r.fx(), brainQuotes: async () => q });
+  await r.go(r.commit("0.2.0"), f({ lines: 0, hits: [] }));
+  expect(logs(r.calls)).toContain("brain quotes: 0 line(s) in tracked files repeat 8 words of a brain page (report only, words never printed); first count");
+  await r.go(r.commit("0.3.0"), f({ lines: 1, hits: ["docs/b.md:9"] }));
+  await r.go(r.commit("0.4.0"), f({ lines: 0, hits: [] }));
+  expect(logs(r.calls)).toContain("brain quotes: 0 line(s) in tracked files repeat 8 words of a brain page (report only, words never printed); none new since the last deploy");
+});

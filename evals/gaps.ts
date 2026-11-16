@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G971: {
+    closed: "claude/brain-quotes-zero",
+    title: "Brain quotes counted the hub's own paragraph and side-by-side literals as quotes, and real-shaped text stayed in tests and history docs",
+    severity: "medium",
+    finding: "The Mac's brain-quotes run on c2df8907 (2026-11-16) listed 19 lines. Six UI snapshot lines (test/ui/door-changes.aria.yml) and the fixtures beside them shared runs with the paragraph the hub writes on each page from its facts (a name's fact is a value, (Written by the hub from this page's facts.), and its [^pf-...] references): the code's sentence with two or more words filled in, which the one-filled-word rule could not see. Three code lines (src/import/notion.ts, src/wiki.ts) built a sentence from short literals passed side by side, which have no group of four of their own. The rest were real-shaped text: Notion row counts and quoted entries in two history docs, and test fixtures in the source-type, person, footnote and money shapes the real brain uses.",
+    fix: "scripts/brain-quotes.ts reads a page less the hub's paragraph (the one paragraph right above the hub's mark) and its p-/pf- references, whose facts it reads from the frontmatter already; and strings the code passes side by side (call arguments, list items, a template after them) read as one sentence of the code. The history docs say the same in general words, and the fixtures use invented names, refs and values in another order. deploy go's line is pinned at 0 too, so a clean report is seen to have run. Tests: test/brain-quotes.test.ts (both rules, each seen failing; the owner's own words around them still count), test/deploy-go.test.ts.",
+  },
   G968: {
     closed: "claude/copy-brain-race",
     title: "Migrate's dry run failed when git took and dropped a lock while the brain was copied",

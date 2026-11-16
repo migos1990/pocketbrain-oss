@@ -28,7 +28,7 @@ function brain() {
   writeFileSync(join(root, "orgs", "northwind-brightwell.md"), `${head("orgs/northwind-brightwell", "org", "Northwind / Brightwell")}---\n`);
   writeFileSync(join(root, "orgs", "harbourline.md"), `${head("orgs/harbourline", "org", "Harbourline")}---\n`);
   // A guess: only an assistant's memory says it.
-  writeFileSync(join(root, "people", "oli-stone.md"), `${head("people/oli-stone", "person", "Oli Stone")}facts:\n  org: ${rec("[[orgs/northwind-brightwell]]", "instinct-mem:entities/people/oli")}\n---\n`);
+  writeFileSync(join(root, "people", "tove-ek.md"), `${head("people/tove-ek", "person", "Tove Ek")}facts:\n  org: ${rec("[[orgs/northwind-brightwell]]", "instinct-mem:notes/tove-e")}\n---\n`);
   // Sourced: a mail states it.
   writeFileSync(join(root, "people", "maya-chen.md"), `${head("people/maya-chen", "person", "Maya Chen")}facts:\n  org: ${rec("[[orgs/harbourline]]", "gmail:f0000000000000a1", "verified-by-source")}\n---\n`);
   sh(root, "planner", "add", "-A"); sh(root, "planner", "commit", "-qm", "planner: people");
@@ -39,7 +39,7 @@ function brain() {
 test("each line's state: the owner's word, a source that states it, or a guess", () => {
   expect(lineState({ value: "x", sources: ["owner:2026-10-01/box"], verification: "confirmed-by-owner" } as never)).toBe("yours");
   expect(lineState({ value: "x", sources: ["gmail:f0000000000000a1"], verification: "verified-by-source" } as never)).toBe("sourced");
-  expect(lineState({ value: "x", sources: ["instinct-mem:entities/people/oli"], verification: "unverified" } as never)).toBe("guess");
+  expect(lineState({ value: "x", sources: ["instinct-mem:notes/tove-e"], verification: "unverified" } as never)).toBe("guess");
   expect(lineState({ value: "x", sources: ["notion:abc"], verification: "verified-by-source" } as never)).toBe("guess");
   expect(lineState({ value: "x", sources: ["agent:planner/chat"], verification: "self-reported" } as never)).toBe("guess");
   expect(lineState({ value: "x", sources: ["gmail:f0000000000000a1"], verification: "verified-by-source", confidence: "inferred" } as never)).toBe("guess");
@@ -47,9 +47,9 @@ test("each line's state: the owner's word, a source that states it, or a guess",
 
 test("a guess is said as a guess and links no page; a sourced line reads plainly", () => {
   const root = brain();
-  const oli = body(root, "people/oli-stone");
-  expect(oli).toContain("Not confirmed: Oli Stone works at Northwind / Brightwell.");
-  expect(oli).not.toContain("[[orgs/northwind-brightwell");
+  const tove = body(root, "people/tove-ek");
+  expect(tove).toContain("Not confirmed: Tove Ek works at Northwind / Brightwell.");
+  expect(tove).not.toContain("[[orgs/northwind-brightwell");
   const maya = body(root, "people/maya-chen");
   expect(maya).toContain("Maya Chen works at [[orgs/harbourline|Harbourline]].");
   expect(maya).not.toContain("Not confirmed");
@@ -57,7 +57,7 @@ test("a guess is said as a guess and links no page; a sourced line reads plainly
 
 test("a guess feeds no other page: the org it names doesn't list the person", () => {
   const root = brain();
-  expect(body(root, "orgs/northwind-brightwell")).not.toContain("people/oli-stone");
+  expect(body(root, "orgs/northwind-brightwell")).not.toContain("people/tove-ek");
   expect(body(root, "orgs/harbourline")).toContain("people/maya-chen");
 });
 
@@ -65,18 +65,18 @@ test("a page written before stating a guess plainly is healed on the next pass, 
   const root = makeBrain();
   roots.push(root);
   mkdirSync(join(root, "orgs"), { recursive: true });
-  const org = join(root, "orgs", "northwind-brightwell.md"), oli = join(root, "people", "oli-stone.md");
+  const org = join(root, "orgs", "northwind-brightwell.md"), tove = join(root, "people", "tove-ek.md");
   writeFileSync(org, `${head("orgs/northwind-brightwell", "org", "Northwind / Brightwell")}---\n`);
-  writeFileSync(oli, `${head("people/oli-stone", "person", "Oli Stone")}facts:\n  org: ${rec("[[orgs/northwind-brightwell]]", "instinct-mem:entities/people/oli")}\n---\n`);
+  writeFileSync(tove, `${head("people/tove-ek", "person", "Tove Ek")}facts:\n  org: ${rec("[[orgs/northwind-brightwell]]", "instinct-mem:notes/tove-e")}\n---\n`);
   sh(root, "planner", "add", "-A"); sh(root, "planner", "commit", "-qm", "planner: the pages");
   // The page writer's text from before G844, committed as the writer.
-  writeFileSync(org, readFileSync(org, "utf8") + "\n[[people/oli-stone|Oli Stone]] works at Northwind / Brightwell.[^p-at-oli-stone]\n\n(Written by the hub from this page's facts.)\n\n[^p-at-oli-stone]: An assistant's memory, 2026-09-15 (instinct-mem:entities/people/oli)\n");
-  writeFileSync(oli, readFileSync(oli, "utf8") + "\nOli Stone works at [[orgs/northwind-brightwell|Northwind / Brightwell]].[^pf-org]\n\n(Written by the hub from this page's facts.)\n\n[^pf-org]: An assistant's memory, 2026-09-15 (instinct-mem:entities/people/oli)\n");
+  writeFileSync(org, readFileSync(org, "utf8") + "\n[[people/tove-ek|Tove Ek]] works at Northwind / Brightwell.[^p-at-tove-ek]\n\n(Written by the hub from this page's facts.)\n\n[^p-at-tove-ek]: An assistant's memory, 2026-08-03 (instinct-mem:notes/tove-e)\n");
+  writeFileSync(tove, readFileSync(tove, "utf8") + "\nTove Ek works at [[orgs/northwind-brightwell|Northwind / Brightwell]].[^pf-org]\n\n(Written by the hub from this page's facts.)\n\n[^pf-org]: An assistant's memory, 2026-08-03 (instinct-mem:notes/tove-e)\n");
   sh(root, "hub", "commit", "-qam", "hub: pages written");
   // Nothing changed since now: only the healing brings these pages in.
   renderTouchedPages(root, "2099-01-01T00:00:00Z");
-  expect(body(root, "people/oli-stone")).toContain("Not confirmed: Oli Stone works at Northwind / Brightwell.");
-  expect(body(root, "orgs/northwind-brightwell")).not.toContain("people/oli-stone");
+  expect(body(root, "people/tove-ek")).toContain("Not confirmed: Tove Ek works at Northwind / Brightwell.");
+  expect(body(root, "orgs/northwind-brightwell")).not.toContain("people/tove-ek");
 });
 
 // The live hub, 2026-11-14 (shape only): an assistant filed how the owner knows someone from a mail

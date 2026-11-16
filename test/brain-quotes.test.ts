@@ -208,6 +208,44 @@ test("two words of the owner's own inside the hub's sentence still make it a quo
   expect(brainQuotes({ brain, repo, examples: [], history: false }).hits).toContainEqual({ file: "docs/x.md", line: 2 });
 });
 
+test("short literals the code passes side by side (a call's arguments, a list of report lines) are the hub's sentence (G971)", () => {
+  // Third run on c2df8907: an upkeep finding written as add("<kind>", "<page>", "<sentence>") and
+  // an import report built as ["# Heading", "", `Imported ${date} ...`] were counted as quotes,
+  // because a one- or two-word literal has no group of four of its own.
+  const t = secret(16).split(" ");
+  const kind = `${t[0]}-${t[1]}`, page = `${t[2]}/${t[3]}`, head = `# ${t[4]} ${t[5]}`;
+  const brain = brainWith(`${kind} ${page}: ${t.slice(6, 12).join(" ")}\n\n${head}\n\n${t.slice(12, 16).join(" ")} 4 Nov 2026.`);
+  const repo = repoWith({
+    "src/lint.ts": `add("${kind}", "${page}", "${t.slice(6, 12).join(" ")}");\nconst out = ["${head}", "", \`${t.slice(12, 16).join(" ")} \${day}.\`];\n`,
+    "docs/x.md": `${kind} ${page}: ${t.slice(6, 12).join(" ")}\n${head}\n${t.slice(12, 16).join(" ")} 1 Dec 2026.\n`,
+  });
+  expect(brainQuotes({ brain, repo, examples: [], history: false }).hits).toEqual([]);
+  // A name of the owner's own between two of the code's strings still counts.
+  const own = secret(3);
+  const b2 = brainWith(`${kind} ${own} ${page}: ${t.slice(6, 12).join(" ")}`);
+  const r2 = repoWith({ "src/lint.ts": `add("${kind}", "${page}", "${t.slice(6, 12).join(" ")}");\n`, "docs/y.md": `${kind} ${own} ${page}: ${t.slice(6, 12).join(" ")}\n` });
+  expect(brainQuotes({ brain: b2, repo: r2, examples: [], history: false }).hits).toEqual([{ file: "docs/y.md", line: 1 }]);
+});
+
+test("the paragraph the hub writes from a page's facts, and its references, are the hub's, never a quote (G971)", () => {
+  // Third run on c2df8907: the UI snapshots of the demo brain's pages and two test fixtures shared
+  // runs with the hub's own paragraph on the owner's pages ("<name>'s <fact> is <value>. ... (Written
+  // by the hub from this page's facts.)" and its [^pf-...] references), two filled-in words apart.
+  // The values in it are the page's facts, read on their own from its frontmatter.
+  const [a, b, c, d] = secret(4).split(" ");
+  const made = "(Written by the hub from this page's facts.)";
+  const brain = brainWith(`${a}'s ${b} is ${c}. You were last in touch with ${a} on 2 Mar.[^pf-last-contact]\n\n${made}\n\n[^pf-last-contact]: Email, 2026-03-02 (gmail:${d})\n`);
+  const repo = repoWith({ "test/ui/x.aria.yml": `- text: "#### From its facts Ida's ${b} is ${c}. You were last in touch with Ida on 9 Apr.[^pf-last-contact] ${made} [^pf-last-contact]: Email, 2026-04-09 (gmail:f00d)"\n` });
+  expect(brainQuotes({ brain, repo, examples: [], history: false }).hits).toEqual([]);
+  // The owner's own text on the same page, outside that paragraph, still counts.
+  const own = secret(9);
+  const b2 = brainWith(`${own}\n\n## From its facts\n\n${a}'s ${b} is ${c}.\n\n${made}\n`);
+  expect(brainQuotes({ brain: b2, repo: repoWith({ "docs/y.md": `${own}\n` }), examples: [], history: false }).hits).toEqual([{ file: "docs/y.md", line: 1 }]);
+  // So does a paragraph of the owner's in the same section, right above the hub's (code review, PR 223).
+  const b3 = brainWith(`## From its facts\n\n${own}\n\n${a}'s ${b} is ${c}.\n\n${made}\n`);
+  expect(brainQuotes({ brain: b3, repo: repoWith({ "docs/y.md": `${own}\n` }), examples: [], history: false }).hits).toEqual([{ file: "docs/y.md", line: 1 }]);
+});
+
 test("--json prints one object for the deploy log: counts and file:line, never the words", () => {
   const words = secret();
   const brain = brainWith(words);

@@ -18,7 +18,7 @@ import { overview } from "../src/dashboard/html";
 const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").replace(/\s+/g, " ");
 const BUILDS = [["0.17.0 (24)", "2026-10-07"], ["0.18.0 (25)", "2026-10-07"], ["0.19.0 (26)", "2026-10-07"], ["0.20.0 (27)", "2026-10-07"], ["0.20.1 (28)", "2026-10-07"], ["0.21.0 (29)", "2026-10-07"]];
 
-function brain(values = BUILDS.map(([v]) => `${v} is ready to test on iOS and watchOS`)) {
+function brain(values = BUILDS.map(([v]) => `beta channel now carries ${v} for tablets`)) {
   const root = makeBrain();
   const w = { agent: "planner", id: "projects/course-a", attribute: "status", as_of: "2026-10-07", verification: "verified-by-source" as const };
   write(root, { ...w, value: values[0], sources: ["gmail:f000000000000006"] } as never);

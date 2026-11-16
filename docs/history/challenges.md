@@ -8,7 +8,7 @@ Written 2026-10-08 to argue with [README.md](README.md) and [architecture.md](ar
 
 ## The one number that reframes everything
 
-The Notion brain today (the Notion mapping (private, not published)) holds **about 67 content rows** (7 decisions, 19 projects, 24 people, 13 notes, 4 money, 0 receipts) plus ~30 agent-capability rows.
+The first brain, imported from Notion, was small: **under a hundred content rows** in all, people and projects the largest groups, a few decisions, notes and money rows, and a few dozen rows describing what each assistant can do (counts kept in the private mapping, not published).
 
 That is roughly 20 to 40k tokens. It fits, whole, in the context window of every assistant you use. The architecture proposes, for that corpus: an OAuth 2.1 authorization server, Cedar policy compiled from YAML, hybrid FTS5 + vector search with RRF, a hash-chained audit log with OpenTelemetry, a tokenization vault with per-agent HMAC keys, an LLM auditor with per-agent baselines, a reflect loop, agent mail with leases, A2A guest endpoints and a passkey control panel. Nine-plus milestones.
 
