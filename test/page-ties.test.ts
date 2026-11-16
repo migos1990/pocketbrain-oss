@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Owner, 2026-11-01 (his own page on the phone): "How you know Louis Migault: customer of Best Buy
-// Canada. Louis also comes up in the sources of <a physio appointment>, Bell, … See also <a flight>,
+// Owner, 2026-11-01 (his own page on the phone): "How you know <the owner>: customer of <a store>.
+// Louis also comes up in the sources of <a physio appointment>, <a phone company>, … See also <a flight>,
 // <a developer agreement>, …": unrelated mail glued into a page about a person. The owner's own page
 // says only its facts, one sentence each; any other page names a page its sources tie it to only when
 // that source names the page, at most three, each its own sentence (G624).

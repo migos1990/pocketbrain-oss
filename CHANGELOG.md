@@ -4,10 +4,19 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Before you update
+
+- The personal-term check can now excuse a term in named files. Add your surname to the `PB_DENYLIST` repo secret as `<surname> @CLA.md`, so it is refused in every tracked file but CLA.md (G936).
+
 ### What you see
 
 - A new sign-in is no longer one tap from an assistant you already have. The waiting card picks no assistant for you; choosing one opens a page that says what that assistant reads and which connection your yes replaces, and only that page connects it (G905).
 - An assistant's page calls its hourly budget count "saves and asks", since an ask to see spends from it too, and no longer "writes" beside a line saying it wrote nothing (G903). An assistant whose sign-in you just approved reads "Signed in today; it has read nothing yet", not "Hasn't connected yet" (G904).
+
+### What the hub does
+
+- The personal-term check (`scripts/check-public.sh`) takes a line `<term> @<path>,<path>` that excuses a term in those files only, and the public export now runs that same check over what it publishes (G936, G937).
+- `bun scripts/brain-quotes.ts --brain <path>`, run on the Mac, lists each tracked file and line that repeats 8 words in a row from a page of your brain, never the words, report only (G938).
 
 ## [0.3.0] - 2026-11-15
 

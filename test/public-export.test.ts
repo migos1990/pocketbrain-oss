@@ -50,3 +50,19 @@ test("public-export.sh writes HEAD minus the excluded paths and refuses a denyli
   const bad = Bun.spawnSync(["sh", join(ROOT, "scripts", "public-export.sh"), join(dir, "out2"), list]);
   expect(bad.exitCode).toBe(1);
 });
+
+// G937: the export read the denylist with its own grep, so an excused line ("<term> @CLA.md") was one
+// literal term that matched nothing, and the term went unchecked everywhere. It now runs the same
+// check as scripts/check-public.sh over the export folder.
+test("public-export.sh honours an excused term: clean in its files, refused anywhere else", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pb-export-"));
+  const list = join(dir, "deny.txt");
+  const term = ["Contributor", "License"].join(" "); // only CLA.md holds it
+  writeFileSync(list, `${term} @CLA.md\r\n`);
+  const ok = Bun.spawnSync(["sh", join(ROOT, "scripts", "public-export.sh"), join(dir, "out"), list]);
+  expect(ok.exitCode).toBe(0);
+  writeFileSync(list, `${term} @README.md\n`);
+  const bad = Bun.spawnSync(["sh", join(ROOT, "scripts", "public-export.sh"), join(dir, "out2"), list]);
+  expect(bad.exitCode).toBe(1);
+  expect(bad.stdout.toString()).toContain("CLA.md");
+});

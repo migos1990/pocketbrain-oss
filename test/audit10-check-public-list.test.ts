@@ -40,3 +40,50 @@ test("a term keeps the spaces around it, so a word padded with spaces never matc
   expect(run(`${word}\r\n`).code).toBe(1);
   expect(run(` ${word} \r\n`).code).toBe(0);
 });
+
+// G936 (2026-11-15): the owner's surname could not go on the denylist, because CLA.md must name the
+// maintainer, so a quote of his own page carrying his full name reached the public repo. A line
+// "<term> @<file>,<file>" now excuses the term in those tracked files only; every other file still fails.
+test("a term can be excused in named files, and still fails in every other file", () => {
+  // Built here, so this file never holds it; today only CLA.md does.
+  const term = ["Contributor", "License"].join(" ");
+  expect(run(`${term}\n`).code).toBe(1);
+  expect(run(`${term} @CLA.md\n`)).toMatchObject({ code: 0 });
+  const elsewhere = run(`${term} @README.md,LICENSE\n`);
+  expect(elsewhere.code).toBe(1);
+  expect(elsewhere.out).toContain("CLA.md");
+  // An excused term never hides a plain term on the next line.
+  expect(run(`${term} @CLA.md\nSPDX-License-Identifier\n`).code).toBe(1);
+});
+
+test("an excuse names whole paths, never a part of one", () => {
+  const term = ["Contributor", "License"].join(" ");
+  expect(run(`${term} @CLA\n`).code).toBe(1);
+  expect(run(`${term} @LA.md\n`).code).toBe(1);
+});
+
+// Slice audit on G936 (2026-11-15): an excuse line with a space in its paths, or a trailing space,
+// was read as one plain term that matched nothing, so the term was checked nowhere. Such a line now
+// refuses the list.
+test("an excuse line with a space in its paths is refused, never read as a term that matches nothing", () => {
+  const term = ["Contributor", "License"].join(" ");
+  expect(run(`${term} @CLA.md,my file.md\n`).code).toBe(2);
+  expect(run(`${term} @CLA.md \n`).code).toBe(2);
+});
+
+// Slice audit (2026-11-15): with enough files, xargs splits the grep into batches and answers 123
+// when one batch finds nothing, which `if` read as clean. The check now goes by what grep printed.
+test("a term in one file of a tree big enough to split xargs is still found", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pb-deny-big-"));
+  const long = "d".repeat(60);
+  for (let i = 0; i < 3000; i++) writeFileSync(join(dir, `${long}-${i}.txt`), "plain\n");
+  const word = `zq${crypto.randomUUID().replace(/-/g, "")}`;
+  writeFileSync(join(dir, `${long}-1500.txt`), `${word}\n`);
+  const f = join(dir, "..", `deny-${crypto.randomUUID()}.txt`);
+  writeFileSync(f, `${word}\n`);
+  const plain = Bun.spawnSync(["sh", join(ROOT, "scripts", "check-public.sh"), f, dir], { stdout: "pipe", stderr: "pipe" });
+  expect(plain.exitCode).toBe(1);
+  writeFileSync(f, `${word} @CLA.md\n`);
+  const excused = Bun.spawnSync(["sh", join(ROOT, "scripts", "check-public.sh"), f, dir], { stdout: "pipe", stderr: "pipe" });
+  expect(excused.exitCode).toBe(1);
+});

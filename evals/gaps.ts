@@ -5,6 +5,27 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G938: {
+    closed: "claude/real-data-guard",
+    title: "Nothing read the code against the real brain for copied lines",
+    severity: "medium",
+    finding: "Same review, 2026-11-15: the quote that reached the public repo was a line of the owner's own page pasted into a test comment and a gap's text. A denylist only catches the terms someone thought to list, and CI never sees the brain, so a copied sentence with no listed term passes every check.",
+    fix: "scripts/brain-quotes.ts, run on the Mac: every 8-word run of the brain's .md files (never rules/, log/, a dot folder or a symlink), hashed and kept in memory, against the same runs in the repo's tracked text files; runs the example brains share are dropped as the hub's own templates. It prints file:line only, never the words, writes nothing, sends nothing, and exits 0 (report-only); a repo that isn't a git checkout is an error, never a clean report. Test: test/brain-quotes.test.ts (G938).",
+  },
+  G936: {
+    closed: "claude/real-data-guard",
+    title: "The owner's surname could not go on the denylist, so a quote naming him reached the public repo",
+    severity: "high",
+    finding: "Release 0.3.0 public check, 2026-11-15: two places (gap G624's finding and the top comment of test/page-ties.test.ts) quoted the owner's own page with his full name beside a store and a phone company. CI's personal-term check (scripts/check-public.sh against the PB_DENYLIST secret) never saw it: his surname can't be a term, since CLA.md must name the maintainer, and a term matched in every tracked file or none.",
+    fix: "scripts/check-public.sh: a denylist line `<term> @<path>,<path>` excuses the term in those whole paths only (no spaces; a line whose paths hold one is refused); every other file still fails, a plain term on another line is unaffected, and a match counts by what grep printed, since xargs answers 123 when one of its batches finds nothing (slice audit). The owner adds `<surname> @CLA.md` to the PB_DENYLIST secret (docs/release.md). Both quotes now say <the owner>, <a store>, <a phone company>. Test: test/audit10-check-public-list.test.ts (G936).",
+  },
+  G937: {
+    closed: "claude/real-data-guard",
+    title: "The public export read the denylist with a grep of its own",
+    severity: "medium",
+    finding: "Same review, 2026-11-15: scripts/public-export.sh ran `grep -rniIFf` on the list itself, so it skipped check-public.sh's rules (no Windows line endings, no blank lines, an empty list refused) and would read an excused line as one literal term that matches nothing, leaving that term unchecked in the export public-sync pushes.",
+    fix: "public-export.sh runs scripts/check-public.sh over the export folder (its new optional folder argument), so both read the list one way. Test: test/public-export.test.ts (G937).",
+  },
   G921: {
     closed: "claude/init-from-files",
     title: "A new memory couldn't start from the owner's contacts",
