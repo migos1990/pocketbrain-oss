@@ -54,7 +54,7 @@ test("the agent's page shows its live counts against its budget, and marks one c
   spend(root, "planner", "write", now);
   const t = plain(await page(root, "/agent/planner"));
   expect(t).toContain("9 of 10 requests in the last minute");
-  expect(t).toContain("1 of 300 writes in the last hour");
+  expect(t).toContain("1 of 300 saves and asks in the last hour");
   expect(await page(root, "/agent/planner")).toMatch(/class="[^"]*hot[^"]*"[^>]*>9 of 10 requests/);
   const h = plain(await page(root, "/agent/helper"));
   expect(h).toContain("0 of 120 requests in the last minute");

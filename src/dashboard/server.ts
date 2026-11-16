@@ -36,7 +36,7 @@ import { layout, overview, agentsPage, agentPage, activityPage, upkeepPage, dige
 import { runAction } from "./actions";
 import { proposeEdit, defaultModelFor, type ModelFor, type EditProposal } from "./edit-chat";
 import { editableNote, noteText, saveNoteText, editorCommits } from "./edit";
-import { brainPage, brainResults, notePage, whyPage, proposalPage, editorCard, oauthCard, newAgentPage } from "./html-brain";
+import { brainPage, brainResults, notePage, whyPage, proposalPage, editorCard, oauthCard, newAgentPage, bindPage } from "./html-brain";
 import { previewNewAgent } from "../addagent";
 import { cap, agentLabel, agentTitle, refusalWords } from "./labels";
 import { audience, kindCounts, kindLabel, folderOf, browsable, searchNotes, byTitle } from "./browse";
@@ -954,6 +954,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       // The review page it came from is for a sign-in that waits; once approved that address answers
       // "isn't waiting any more". So a yes lands on the new assistant's own page, and a no on the
       // list, each with its message (G884).
+      // The same for a sign-in connected as an assistant the owner already has (G905).
+      if (action === "oauth-bind") {
+        try { const ok = runAction({ root, transport: opts.transport }, action, form); return go(`/agent/${encodeURIComponent((form.agent ?? "").trim())}`, { ok }); }
+        catch (e) { return go("/agents", { err: fail(e) }); }
+      }
       if (action === "oauth-new-agent") {
         try { const ok = runAction({ root, transport: opts.transport }, action, form); return go(`/agent/${encodeURIComponent((form.agent ?? "").trim())}`, { ok }); }
         catch (e) { return go("/agents", { err: fail(e) }); }
@@ -1026,6 +1031,14 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     if (p === "/memory") return memory(url.searchParams, freshSignIn(root, sid, now()));
     const editor = s.rules.policy.owner_editor;
     if (p === "/agents") return withFlash(agentsPage(s, csrf, oauthCard(s, csrf, loadOAuth(root), listPending(root)) + editorCard(s, csrf, editor, editor ? editorCommits(root, editor) : [])));
+    if (p === "/agents/bind") {
+      const clientId = url.searchParams.get("client_id") ?? "";
+      if (!listPending(root).some((x) => x.client_id === clientId)) return page("dash.connection-gone", "agents");
+      const name = (url.searchParams.get("agent") ?? "").trim();
+      if (!name) return new Response(null, { status: 303, headers: { location: "/agents" } }); // nobody chosen: back to the card
+      const pg = bindPage(s, csrf, clientId, name, loadOAuth(root));
+      return pg ? html(pg) : page("dash.no-agent", "agents", { name });
+    }
     if (p === "/agents/new") {
       const q = url.searchParams;
       const clientId = q.get("client_id") ?? "";

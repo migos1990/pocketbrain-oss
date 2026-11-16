@@ -419,9 +419,13 @@ export function editorCard(s: State, csrf: string, editor: string | undefined, c
 // user agent come from whoever registered, so they are only ever shown escaped.
 export function oauthCard(s: State, csrf: string, c: OAuthConfig | undefined, pending: Pending[]): string {
   if (!c) return "";
-  const agents = s.agents.map((a) => a.name);
+  // Another person's assistant never takes the owner's sign-in (bindClient refuses), so it isn't offered.
+  const theirs = new Set(Object.values(c.coworkers ?? {}).map((x) => x.agent));
+  const agents = s.agents.map((a) => a.name).filter((a) => !theirs.has(a));
   const rows = pending.map((p) => {
-    const approve = form(csrf, "/action/oauth-bind", `<input type="hidden" name="client_id" value="${esc(p.client_id)}"><select name="agent" aria-label="agent for ${esc(p.client_id)}">${agents.map((a) => `<option>${esc(a)}</option>`).join("")}</select> <input type="text" name="name" placeholder="label (optional)" aria-label="label for ${esc(p.client_id)}" style="width:130px"> <button class="go">Approve</button>`, `class="inline" data-confirm="Let this connection read and write as the chosen agent? It replaces any connection that agent already has. Only approve a sign-in you just made yourself."`);
+    // No assistant is picked for the owner, and nothing on the card binds: choosing one opens the
+    // review page (bindPage), which says what that assistant reads and has the only button (G905).
+    const approve = `<form method="get" action="/agents/bind" class="inline"><input type="hidden" name="client_id" value="${esc(p.client_id)}"><select name="agent" required aria-label="agent for ${esc(p.client_id)}"><option value="" selected disabled>Choose an assistant</option>${agents.map((a) => `<option>${esc(a)}</option>`).join("")}</select> <button>Review and connect</button></form>`;
     const slices = Object.keys(s.rules.slices).filter((x) => x !== "all").sort();
     // An access request the assistant filed itself (request_access): untrusted text, shown escaped,
     // and only a suggestion; the owner reviews the same preview and can narrow before Approve.
@@ -451,6 +455,34 @@ const requestable = (rules: Rules, x: string) => x !== "all" && !!rules.slices[x
 
 // What a new agent for a waiting sign-in would get, before the owner says yes: the same carve the
 // server will apply. Approve creates it as trial and lets that one connection in.
+// Before a waiting sign-in becomes an assistant the owner already has: what that assistant reads
+// today, from its own carve, and what the yes cuts off. The only place with the button (G905).
+export function bindPage(s: State, csrf: string, clientId: string, agent: string, c: OAuthConfig | undefined): Page | undefined {
+  const a = s.agents.find((x) => x.name === agent);
+  const res = s.carves.get(agent);
+  if (!a || !res) return undefined;
+  const vis = [...res.visible.values()].map((v) => v.note);
+  const kinds = new Map<string, number>();
+  for (const n of vis) { const k = folderOf(n.fm.id); kinds.set(k, (kinds.get(k) ?? 0) + 1); }
+  const kindWords = [...kinds.entries()].sort((x, y) => y[1] - x[1]).map(([k, n]) => `${esc(k)} ${n}`).join(", ");
+  const money = vis.some((n) => n.fm.id.startsWith("money/") || n.fm.type === "money");
+  const priv = sensitivityRank(res.grant.ceiling) >= sensitivityRank("private");
+  const old = Object.values(c?.clients ?? {}).filter((v) => v.agent === agent).length;
+  const who = esc(a.label);
+  const cw = Object.values(c?.coworkers ?? {}).find((x) => x.agent === agent);
+  if (cw) return { title: `Connect as ${a.label}`, tab: "agents", body: `<h1>Connect this sign-in as ${who}?</h1><div class="card"><p>${who} is ${esc(cw.name)}'s assistant. Connect your own sign-ins to an assistant of yours.</p><a href="/agents">Back</a></div>` };
+  const facts = [
+    `<li>It will read everything <b>${who}</b> reads: ${vis.length} of ${browsable(s).length} notes${kindWords ? ` (${kindWords})` : ""}, and it writes as ${who} does (${term(a.tier)}).</li>`,
+    `<li>Slices: ${esc(a.slices.join(", ") || "none")}.</li>`,
+    `<li>${money ? "<b>Includes money notes.</b>" : "No money notes."} ${priv ? "<b>Includes private notes.</b>" : "No private notes."}</li>`,
+    a.status !== "active" ? `<li><b>${who} is ${esc(a.status)} now, so this sign-in ${a.status === "paused" ? "gets nothing" : "can't write"} until you resume it.</b></li>` : "",
+    old ? `<li><b>It replaces ${who}'s ${old} current sign-in${old === 1 ? "" : "s"}, which stop${old === 1 ? "s" : ""} working at once.</b></li>` : "",
+    a.tokens ? `<li>${who}'s ${a.tokens} key${a.tokens === 1 ? "" : "s"} keep${a.tokens === 1 ? "s" : ""} working.</li>` : "",
+  ].join("");
+  const approve = form(csrf, "/action/oauth-bind", `<input type="hidden" name="client_id" value="${esc(clientId)}"><input type="hidden" name="agent" value="${esc(agent)}"><input type="text" name="name" placeholder="label (optional)" aria-label="label for ${esc(clientId)}" style="width:130px"> <button class="go">Connect as ${who}</button>`, `data-confirm="Let this connection read and write as ${who}? It replaces any connection ${who} already has. Only approve a sign-in you just made yourself."`);
+  return { title: `Connect as ${a.label}`, tab: "agents", body: `<h1>Connect this sign-in as ${who}?</h1><div class="card"><div class="sub">For the sign-in <span class="mono">${esc(clientId)}</span></div><ul>${facts}</ul><p class="sub">If this is an assistant you have not used before, go back and add it as a new assistant: it then starts on trial with only the slices you tick.</p>${approve} <a href="/agents">Back</a></div>` };
+}
+
 export function newAgentPage(csrf: string, clientId: string, req: { agent: string; name?: string; slices: string[] }, p: NewAgentPreview): Page {
   const kinds = Object.entries(p.kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(k)} ${n}`).join(", ");
   const facts = [

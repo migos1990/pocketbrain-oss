@@ -53,6 +53,7 @@ export interface DisputeRow { id: string; fact_key: string; status: string; crea
 export interface UpkeepRun { run: string; escalate: string[]; autoFix: string[]; review: string[]; undone: boolean }
 export interface AgentRow {
   name: string; label: string; tier: string; transport: string; status: string; tokens: number; issued?: string;
+  signedIn?: string; // the day its newest sign-in was approved (rules/oauth.yaml `bound`), while one holds
   signins: number; // connections through the sign-in service (Auth0) bound to this agent; Revoke cuts them too
   notes: number; facts: number; flags: number; reads24: number; writes24: number; lastSeen?: string;
   resolver: boolean; slices: string[];
@@ -240,6 +241,7 @@ export function loadState(root: string, now = process.env.PB_NOW ? new Date(proc
     const row = {
       name, label: a.label ?? name, tier: a.tier, transport: a.transport ?? "paste", status: a.status ?? "active",
       tokens: tokens[name]?.length ?? 0, issued: tokens[name]?.map((t) => t.issued).sort().at(-1), signins: signins(name),
+      signedIn: Object.values(oauth?.clients ?? {}).filter((v) => v.agent === name).map((v) => v.bound).sort().at(-1),
       reads24: mine(reads).filter((r) => String(r.at) >= since).length,
       writes24: mine(writes).filter((r) => String(r.at) >= since).length,
       lastSeen: last, resolver: rules.policy.resolver === name, slices: grantFor(rules, name).slices,

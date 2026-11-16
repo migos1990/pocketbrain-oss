@@ -107,6 +107,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "dashboard/html-brain.ts#connectionsSection": { class: "not-reviewed" },
   "dashboard/html-brain.ts#whoCanSee": { class: "not-reviewed" },
   "dashboard/html-brain.ts#notePage": { class: "not-reviewed" },
+  "dashboard/html-brain.ts#bindPage": { class: "machine-words", why: "HTML attribute values on one form line (hidden, text, go); not a list that picks anything" },
   "dashboard/html-brain.ts#oauthCard": { class: "not-reviewed" },
   "dashboard/html-brain.ts#newAgentPage": { class: "not-reviewed" },
   "dashboard/html-brain.ts#whyPage": { class: "not-reviewed" },

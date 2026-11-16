@@ -145,7 +145,7 @@ For Claude Code on this computer, `pocketbrain connect <agent> --kind claude-cod
 
 1. In the assistant's connector settings, add `https://brain.<your domain>/mcp/oauth`. Sign in with your own account at the sign-in service and approve.
 2. Ask it anything once. The first answer says the connection waits for the owner.
-3. Approve it: on the dashboard's **Assistants** page, under *Sign-in connections*, pick the agent and press Approve. Or `pocketbrain oauth status`, then `pocketbrain oauth bind <client-id> --agent newbot --name Newbot`. Only approve a sign-in you just made yourself.
+3. Approve it: on the dashboard's **Assistants** page, under *Sign-in connections*, choose the assistant (none is picked for you) and press *Review and connect*. The next page says what that assistant reads and which connection your yes replaces; its button connects the sign-in. Or `pocketbrain oauth status`, then `pocketbrain oauth bind <client-id> --agent newbot --name Newbot`. Only approve a sign-in you just made yourself.
 
 Some assistants register a new connection every time you reconnect them (Muse does). Approve the new one each time.
 

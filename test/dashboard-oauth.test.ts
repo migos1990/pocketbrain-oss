@@ -45,8 +45,11 @@ run("OAuth: the owner approves a waiting connection as Helper, and declines anot
     expect(await page.evaluate("window.pwned")).toBeUndefined();
 
     await page.getByLabel(`agent for ${helper.client_id}`).selectOption("helper");
+    // Choosing an assistant opens the review page; only it has the button (G905).
+    await page.locator("tr", { hasText: helper.client_id }).getByRole("button", { name: "Review and connect" }).click();
+    await page.waitForLoadState("load");
     await page.getByLabel(`label for ${helper.client_id}`).fill("Helper");
-    await page.locator("tr", { hasText: helper.client_id }).getByRole("button", { name: "Approve" }).click();
+    await page.getByRole("button", { name: "Connect as helper" }).click();
     await page.waitForLoadState("load");
     expect((await page.locator(".flash").textContent()).trim()).toBe("connection approved: it now connects as helper");
     expect(loadOAuth(root)!.clients![helper.client_id]).toMatchObject({ agent: "helper", name: "Helper" });
@@ -57,6 +60,7 @@ run("OAuth: the owner approves a waiting connection as Helper, and declines anot
     expect(ctx).toContain("Course A");
     expect(ctx).not.toContain("Maple Trust");
 
+    await page.goto(new URL("/agents", page.url()).href);
     await page.locator("tr", { hasText: other.client_id }).getByRole("button", { name: "Decline" }).click();
     await page.waitForLoadState("load");
     expect((await page.locator(".flash").textContent()).trim()).toBe("connection declined");

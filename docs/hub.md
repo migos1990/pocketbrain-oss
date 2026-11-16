@@ -77,7 +77,7 @@ agents:
 
 A value that isn't a positive number keeps the default. Values are held between 100 and 200000. `bun scripts/context-size.ts` prints the sizes for a synthetic brain.
 
-Each assistant's page on the dashboard shows its budget live: requests in the last minute and writes in the last hour against its caps, one line per token role (the resolver key with its tenfold room), in red from 80% of a cap. A loop shows there before it hits the 429. The counts are the hub's: with `pocketbrain start` the dashboard runs in the same process and sees them; a dashboard started on its own (`pocketbrain dashboard`) says "counted by the hub" instead of showing zeros.
+Each assistant's page on the dashboard shows its budget live: requests in the last minute, and saves and asks in the last hour (every call that spends from `writes_per_hour`: a save, a capture, a hand-off, an ask to see), against its caps, one line per token role (the resolver key with its tenfold room), in red from 80% of a cap. A loop shows there before it hits the 429. The counts are the hub's: with `pocketbrain start` the dashboard runs in the same process and sees them; a dashboard started on its own (`pocketbrain dashboard`) says "counted by the hub" instead of showing zeros.
 
 ## The MCP door
 

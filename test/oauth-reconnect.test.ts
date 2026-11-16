@@ -216,7 +216,8 @@ test("the dashboard's Approve says it replaces the agent's connection (audit F3)
   const d = dashboardHandler(root, { port: 8795, loginKey: "k".repeat(32) });
   const r0 = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = r0.headers.get("set-cookie")!.split(";")[0];
-  const page = await (await d.handle(new Request(`http://${H}/agents`, { headers: { host: H, cookie } }))).text();
+  // The warning is on the review page, the only place with the button (G905).
+  const page = await (await d.handle(new Request(`http://${H}/agents/bind?client_id=${encodeURIComponent(m.client_id)}&agent=helper`, { headers: { host: H, cookie } }))).text();
   expect(page).toContain("/action/oauth-bind");
   expect(page).toMatch(/data-confirm="[^"]*replaces/);
 });

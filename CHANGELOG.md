@@ -4,6 +4,11 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### What you see
+
+- A new sign-in is no longer one tap from an assistant you already have. The waiting card picks no assistant for you; choosing one opens a page that says what that assistant reads and which connection your yes replaces, and only that page connects it (G905).
+- An assistant's page calls its hourly budget count "saves and asks", since an ask to see spends from it too, and no longer "writes" beside a line saying it wrote nothing (G903). An assistant whose sign-in you just approved reads "Signed in today; it has read nothing yet", not "Hasn't connected yet" (G904).
+
 ## [0.3.0] - 2026-11-15
 
 0.3.0 is the release a stranger can install. On a laptop it needs no server, tunnel or account: one line installs it, `pocketbrain init` starts your memory with your own page (or from your contacts file), `pocketbrain open` signs you in, and CI now proves the whole first ten minutes from a clean machine on every change. What an assistant only guessed is shown as "Not confirmed" and links, places and decides nothing until you say it; areas come from a source's own setting, never a word that matches. Every night the hub checks 300 made-up memories through three doors for anything an assistant shouldn't get and anything it should. The owner app gains While you slept, See as, Ask's chats and a phone app, and the hub speaks the newer MCP protocol beside the older ones. Read **Before you update** first: it lists the night-pass changes that are on from the first night and the switches that turn them off.

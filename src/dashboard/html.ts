@@ -807,9 +807,12 @@ export function agentPage(s: State, csrf: string, name: string, q = new URLSearc
   const writes = s.writes.filter((r) => r.agent === name);
   const top = new Map<string, number>();
   for (const r of reads) for (const id of (r.ids as string[]) ?? []) if (id !== "*") top.set(id, (top.get(id) ?? 0) + 1);
+  // An approved sign-in is a connection, also before its first read: the calls it made while it
+  // waited had no name to be logged under (G904).
+  const signed = a.signedIn ? (a.signedIn === s.now.toISOString().slice(0, 10) ? "today" : `on ${esc(shortDate(a.signedIn))}`) : "";
   const body = `<h1${a.label !== name ? ` title="${esc(name)}"` : ""}>${esc(a.label)} ${agentPill(a)}</h1>
-<p class="lede">Sees <b>${a.notes} of ${memoryPages(s.notes).length}</b> notes and ${a.facts} fact${a.facts === 1 ? "" : "s"}${res.hiddenFacts.length ? `, with <b>${res.hiddenFacts.length} fact${res.hiddenFacts.length === 1 ? "" : "s"} held back</b>` : ""}. ${reads.length || writes.length ? `${reads.length} read${reads.length === 1 ? "" : "s"} and ${writes.length} write${writes.length === 1 ? "" : "s"} so far.` : "Hasn't connected yet."}${a.flags ? ` <a href="#check" class="hot">${a.flags} thing${a.flags === 1 ? "" : "s"} to check</a>` : ""}</p>
-${cutOff(a) ? '<p class="lede">It has no key and no sign-in, so it gets nothing from your memory until you connect it.</p>' : ""}<dl class="props"><dt>Trust</dt><dd>${term(a.tier)}</dd><dt>Connects as</dt><dd>${term(a.transport)}</dd><dt><span title="slices">Sees</span></dt><dd>${esc(a.slices.map(plain).join(", ") || "nothing")} <span class="sub" title="ceiling">· up to ${esc(res.grant.ceiling)} notes</span></dd>${res.grant.exclude_types.length ? `<dt>Not shared</dt><dd>${esc(res.grant.exclude_types.map(plain).join(", "))}</dd>` : ""}<dt>Last seen</dt><dd>${ago(a.lastSeen, s.now)}</dd><dt>Budget</dt><dd>${budgetLine(s, name)}</dd><dt>Writes</dt><dd>${qualityLine(s, name, a.label)}</dd></dl>
+<p class="lede">Sees <b>${a.notes} of ${memoryPages(s.notes).length}</b> notes and ${a.facts} fact${a.facts === 1 ? "" : "s"}${res.hiddenFacts.length ? `, with <b>${res.hiddenFacts.length} fact${res.hiddenFacts.length === 1 ? "" : "s"} held back</b>` : ""}. ${reads.length || writes.length ? `${reads.length} read${reads.length === 1 ? "" : "s"} and ${writes.length} write${writes.length === 1 ? "" : "s"} so far.` : signed ? `Signed in ${signed}; it has read nothing yet.` : "Hasn't connected yet."}${a.flags ? ` <a href="#check" class="hot">${a.flags} thing${a.flags === 1 ? "" : "s"} to check</a>` : ""}</p>
+${cutOff(a) ? '<p class="lede">It has no key and no sign-in, so it gets nothing from your memory until you connect it.</p>' : ""}<dl class="props"><dt>Trust</dt><dd>${term(a.tier)}</dd><dt>Connects as</dt><dd>${term(a.transport)}</dd><dt><span title="slices">Sees</span></dt><dd>${esc(a.slices.map(plain).join(", ") || "nothing")} <span class="sub" title="ceiling">· up to ${esc(res.grant.ceiling)} notes</span></dd>${res.grant.exclude_types.length ? `<dt>Not shared</dt><dd>${esc(res.grant.exclude_types.map(plain).join(", "))}</dd>` : ""}<dt>Last seen</dt><dd>${!a.lastSeen && signed ? `signed in ${signed}, no read yet` : ago(a.lastSeen, s.now)}</dd><dt>Budget</dt><dd>${budgetLine(s, name)}</dd><dt>Writes</dt><dd>${qualityLine(s, name, a.label)}</dd></dl>
 ${killSwitches(csrf, a)}${terminalKeyCard(s, csrf, name)}<div style="height:28px"></div>
 ${s.rules.policy.agents[name]?.inside_wall || s.rules.policy.agents[name]?.role === "gardener" ? "" : consentCard(csrf, name, a.label)}
 
@@ -843,11 +846,13 @@ function sliceOf(res: CarveResult, notes?: State["notes"]) {
 
 // Its live request budget (backlog 267, src/budget.ts): close to a cap shows before the 429 does.
 // The counts are the hub's, in its memory: a dashboard run on its own can't see them.
+// The hourly count takes every call that saves or asks (a capture, a hand-off, an ask to see), so
+// it is not called "writes", this page's word for facts written to the memory (G903).
 function budgetLine(s: State, name: string) {
   if (!servesHere(s.root)) return `<span class="sub">counted by the hub (pocketbrain start), not by this dashboard on its own</span>`;
   const near = (n: number, cap: number) => cap === 0 ? n > 0 : n >= cap * 0.8;
   const part = (n: number, cap: number, what: string) => `<span${near(n, cap) ? ' class="hot"' : ""}>${n} of ${cap} ${what}</span>`;
-  return budgetUse(s.root, name).map((u) => `${u.role ? `${esc(u.role)} key: ` : ""}${part(u.requests, u.requests_per_minute, "requests in the last minute")}, ${part(u.writes, u.writes_per_hour, "writes in the last hour")}`).join("<br>");
+  return budgetUse(s.root, name).map((u) => `${u.role ? `${esc(u.role)} key: ` : ""}${part(u.requests, u.requests_per_minute, "requests in the last minute")}, ${part(u.writes, u.writes_per_hour, "saves and asks in the last hour")}`).join("<br>");
 }
 
 // What the owner made of its writes over 30 days (backlog 298, src/writequality.ts); under the
