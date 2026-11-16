@@ -26,7 +26,7 @@ test("what the home counts and what the north star counts as asks are the same l
   const root = makeBrain();
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   git(root, ["add", "rules/escalation.yaml"]); git(root, ["commit", "-q", "-m", "owner: file all"]);
-  // A held value: an assistant's private value, saved unseen until the owner taps Show it.
+  // Held values: an assistant's private values, saved unseen. Held, never asks (G907).
   expect(write(root, { agent: "planner", kind: "fact", id: "people/jane-roy", attribute: "office", value: "Room 9", sensitivity: "private", as_of: "2026-10-05", sources: ["gmail:f000000000000004"] } as never).outcome).toBe("committed");
   expect(write(root, { agent: "planner", kind: "fact", id: "people/jane-roy", attribute: "phone", value: "514 555 0199", sensitivity: "private", as_of: "2026-10-05", sources: ["gmail:f000000000000005"] } as never).outcome).toBe("committed");
   expect(unseenFacts(root)).toHaveLength(2);
@@ -36,7 +36,7 @@ test("what the home counts and what the north star counts as asks are the same l
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
   expect(m.home_asks).toBe(waitingCount(root, new Date(now.getTime() + 36 * 3_600_000)));
   expect({ home: m.home_asks, asks: m.asks }).toEqual({ home: m.asks, asks: m.asks });
-  expect(m.asks_by_kind.held_by_serving).toBe(2);
+  expect({ asks: m.asks, by: m.asks_by_kind, held: m.private_held }).toEqual({ asks: 1, by: { held_by_ambiguity: 1 }, held: 2 });
   // The home names what waits on Settings in the owner's words, with one way there.
   const html = homePage(homeView(root, loadRules(root), loadBrain(root), new Date()), "c");
   expect(html).toContain("1 name that fits two pages.");
@@ -62,5 +62,5 @@ test("a by-name proposal that is a conflict on the home is not also on the Setti
   const { ownerAsks } = await import("../src/waiting");
   const a = ownerAsks(root, now);
   expect(a.settings).toBe(0);
-  expect(Object.keys(a.by).filter((k) => k.startsWith("held_by_") && k !== "held_by_serving")).toEqual([]);
+  expect(Object.keys(a.by).filter((k) => k.startsWith("held_by_"))).toEqual([]);
 }, 60_000);

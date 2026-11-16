@@ -23,10 +23,13 @@ test("the rig's home is a full day: conflicts and a private value waiting, a wee
     expect(html).toContain("Thu 8 Oct");
     expect(html).toContain(`<h1>${APP_COPY.mind}</h1>`);
     expect(html).not.toContain(APP_COPY.quiet);
-    // Waiting on you: the week's three planted conflicts and Hélène's private value, held for a Show.
+    // Waiting on you: the week's three planted conflicts. Hélène's private value is held and is no
+    // ask: one quiet line on the face, its card on the full list (G907).
     expect(r.conflicts.length).toBe(3);
     for (const id of r.conflicts) expect(html).toContain(`/settle/${id}`);
-    expect(html).toContain("Something new about Hélène Lefebvre");
+    expect(html).not.toContain("Something new about Hélène Lefebvre");
+    expect(html).toContain("1 private thing is held from your assistants.");
+    expect(await homeOf(r, "/home?all=1")).toContain("Something new about Hélène Lefebvre");
     // Who knows: each read today, ChatGPT still remembers Isabelle Roy's old role.
     const who = await homeOf(r, "/who");
     expect(who).toContain("<b>Claude</b>");

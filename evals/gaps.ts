@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G907: {
+    closed: "claude/held-never-asks",
+    title: "Every private fact an assistant filed was an ask on the home",
+    severity: "medium",
+    finding: "Plan plans/home-asks-not-conflicts-2026-11-15.md, shape 2 (read on main 4e4a7301): src/write.ts saves an assistant's private, money-, health- or legal-shaped value unseen, and src/waiting.ts counted each one as an ask (held_by_serving, G626), a locked card on the home beside real conflicts, until the owner tapped. A privacy gate, not a question; the home asks only on a conflict. The owner's typed yes, 2026-11-16 01:23Z: \"an assistant's private fact stays held without becoming a Home ask\".",
+    fix: "src/waiting.ts ownerAsks no longer counts a held value (serving is a number for screens, in no total). src/dashboard/home.ts: no held card on the home's face; one quiet line (HomeView.held) counts them and opens the full list, where each is named with Read it, n 0, under its heading with no number; the card that counted the rest (HELD_EACH) is gone with the face cards. scripts/north-star.ts prints them on their own line (private_held), not in asks. The hold itself (write.ts unseen, carve.ts) is unchanged: no assistant gets the value until Let them have it. test/held-never-asks.test.ts, and the tests that pinned the old count.",
+  },
   G938: {
     closed: "claude/real-data-guard",
     title: "Nothing read the code against the real brain for copied lines",
@@ -171,6 +178,13 @@ export const GAPS: Record<string, Gap> = {
     severity: "high",
     finding: "Re-recording the identity demo on main 8308826, 2026-11-15: the waiting sign-in card had a primary Approve beside a menu whose first option, the first outside assistant in rules/policy.yaml, was already chosen (src/dashboard/html-brain.ts oauthCard). One tap posted oauth-bind: the stranger's sign-in became that assistant, with its whole slice and its tier, and replaced its connection. The only guard was a browser confirm that named no assistant. Adding it as a new trial assistant sat below, folded.",
     fix: "The card picks nobody (an empty, disabled first option on a required menu) and holds no form that binds. Choosing an assistant opens /agents/bind (bindPage): what that assistant reads from its own carve (notes of the memory's pages, kinds, slices, money, private), its tier, which sign-ins the yes replaces and that its keys keep working; only that page has the button, and it lands on the assistant's page. It answers only for a waiting sign-in and a real outside assistant, and looking binds nothing. bindClient and the oauth-bind action are unchanged. test/sign-in-no-preset.test.ts, test/dashboard-oauth.test.ts, test/oauth-reconnect.test.ts.",
+  },
+  G955: {
+    closed: "claude/agent-writes-one-count",
+    title: "An assistant's page counted writes its Writes line said were never written",
+    severity: "low",
+    finding: "Read on the live dashboard, 2026-11-16: one assistant's page said \"6 writes so far\" and listed them under Recent writes, while its Writes line said \"nothing written in 30 days\". The lede counts every line of the write log for that assistant (src/dashboard/html.ts agentPage); the Writes line counted only writes saved as a fact and decided proposals (src/writequality.ts), so an assistant whose writes all wait or were turned down read both ways at once. The Settings row said \"wrote N today\" for a count of the last 24 hours (src/dashboard/data.ts writes24).",
+    fix: "writeQuality counts what the assistant sent in the window (sent) beside what was saved. qualityText says \"N writes sent in 30 days, none saved yet\" when none was saved or decided, \"M of N writes saved in 30 days: ...\" when some were not, and \"nothing written\" only when nothing was sent. The Settings row names its window: \"in the last 24 hours\". test/agent-page-counts.test.ts.",
   },
   G906: {
     closed: "claude/sign-in-no-preset",

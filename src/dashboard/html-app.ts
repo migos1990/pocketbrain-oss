@@ -438,7 +438,8 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const settle = v.waiting.filter((w) => !held(w) && !isKept(w) && !isGuess(w) && !onSettings(w) && !isQuestion(w)), questions = v.waiting.filter(isQuestion), hold = v.waiting.filter(held), elsewhere = v.waiting.filter(onSettings), kept = v.waiting.filter(isKept), guessed = v.waiting.filter(isGuess);
   const asks = group(APP_COPY.settleHead, APP_COPY.settleHint, settle.map((w) => waitingCard(w, csrf)), waitingTotal(settle))
     + group(APP_COPY.answerHead, APP_COPY.answerHint, questions.map((w) => waitingCard(w, csrf)), waitingTotal(questions))
-    + group(APP_COPY.heldHead, APP_COPY.heldHint, hold.map((w) => waitingCard(w, csrf)), waitingTotal(hold))
+    // Held values, on the full list only: nothing waits, so no count (G907).
+    + group(APP_COPY.heldHead, APP_COPY.heldHint, hold.map((w) => waitingCard(w, csrf)), null)
     + group(APP_COPY.settingsHead, APP_COPY.settingsHint, elsewhere.map((w) => waitingCard(w, csrf)), waitingTotal(elsewhere))
     // What the owner kept private, on the full list only: nothing waits, so no count (G630).
     + group(APP_COPY.keptHead, APP_COPY.keptHint, kept.map((w) => waitingCard(w, csrf)), null)
@@ -454,6 +455,9 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
   const late = (v.late ? `<a class="late" role="status" href="/overview#jobs">${esc(v.late)}</a>` : "")
     // An assistant gone quiet by its own habit: the same quiet shape, to Who knows (G697).
     + (v.quiet ? `<a class="late" role="status" href="/who">${esc(v.quiet)}</a>` : "")
+    // Values held from the assistants until the owner reads them (G907): the same quiet shape, to
+    // the full list. Not on the full list itself, which names each one.
+    + (v.held && !v.all ? `<a class="late" role="status" href="/home?all=1">${esc(v.held)}</a>` : "")
     // While you slept (night.ts): one link while last night has something to say and is unread.
     + (o.night ? `<a class="late night-go" href="/night">${esc(o.night)}</a>` : "");
   return appPage(APP_COPY.mind, "mind", `${header(v.date, APP_COPY.mind, v.name)}${count(waitingTotal(v.waiting))}${late}

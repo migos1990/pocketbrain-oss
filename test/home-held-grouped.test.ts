@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The owner's phone, 2026-10-29: "Waiting on you" opened on a wall of rows like "Apple Services
 // payment: something new · from an address your pages don't hold · only you can see it yet",
-// none of them a conflict. Since the owner app brief (2026-10-30) each held value is its own locked
-// card naming only its page, with Read it, but at most HELD_EACH of them: the rest are one line, a
-// tap away. Conflicts stay one row each.
+// none of them a conflict. Since the owner's typed yes of 2026-11-16 (G907) a held value is no
+// card on the home's face at all: one quiet line says how many there are, and the full list names
+// each, uncounted, with its own Read it. Conflicts stay one row each.
 import { test, expect } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeBrain, makeDemoBrain } from "./fixture";
 import { DEMO_NOW } from "../scripts/demo-brain";
-import { homeView, HELD_EACH } from "../src/dashboard/home";
+import { homeView } from "../src/dashboard/home";
 import { loadRules } from "../src/rules";
 import { loadBrain } from "../src/brain";
 import { memoryCard, APP_COPY } from "../src/dashboard/html-app";
@@ -33,48 +33,33 @@ function named(n: number) {
   return root;
 }
 
-test("held values are a locked card each, a few of them, the rest one card that counts them (Mac, 2026-10-31)", () => {
+test("held values are no card on the home's face; one quiet line counts them and the full list names each (G907)", () => {
   const root = named(5);
   const v = homeView(root, loadRules(root), loadBrain(root), NOW);
-  const held = v.waiting.filter((w) => /only you can see/.test(w.verb));
-  expect(HELD_EACH).toBe(3);
-  expect(held).toHaveLength(HELD_EACH);
-  for (const w of held.slice(0, -1)) expect(w.what).toMatch(/^Something new about Person \d\.$/);
-  const last = held.at(-1)!;
-  expect(last.what).toBe("3 more held from your assistants.");
-  // It counts and links to the full list, and releases nothing (PR #6 review): no Read it.
-  expect(last.seen).toBeUndefined();
-  expect(last.href).toBe("/home?all=1");
+  expect(v.waiting).toEqual([]);
+  expect(v.held).toBe("5 private things are held from your assistants.");
   const all = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
-  expect(all.waiting.filter((w) => w.seen)).toHaveLength(5);
-  // Exactly HELD_EACH: no card that counts.
-  const three = named(3);
-  expect(homeView(three, loadRules(three), loadBrain(three), NOW).waiting.map((w) => w.what)).toEqual(["Person 1", "Person 2", "Person 3"].map((t) => `Something new about ${t}.`));
+  const held = all.waiting.filter((w) => /only you can see/.test(w.verb));
+  expect(held.map((w) => [w.what, w.n])).toEqual([1, 2, 3, 4, 5].map((i) => [`Something new about Person ${i}.`, 0]));
+  expect(held.map((w) => w.seen)).toEqual([1, 2, 3, 4, 5].map((i) => `people/held-${i}#prefers`));
 });
 
-test("a stranger's held values and named ones never make two counts: the card that counts takes the rest (Mac, 2026-10-31)", () => {
+test("a stranger's held values are never in the quiet line's count: they are guesses under their own heading", () => {
   const root = named(4);
   for (let i = 1; i <= 3; i++) writeFileSync(join(root, "money", `apple-payment-${i}.md`), `---\nid: money/apple-payment-${i}\ntype: money\ntitle: Apple Services payment\narea: personal\nsensitivity: private\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  amount: { value: "4.99", as_of: 2026-10-28, sources: ["gmail:f00000000000002${i}"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true, sender: unknown }\n---\n`);
   Bun.spawnSync(["git", "add", "-A"], { cwd: root });
   Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: receipts"], { cwd: root });
   const v = homeView(root, loadRules(root), loadBrain(root), NOW);
-  const held = v.waiting.filter((w) => /only you can see/.test(w.verb));
-  expect(held).toHaveLength(HELD_EACH);
-  const counted = held.filter((w) => /^\d+ /.test(w.what));
-  expect(counted).toHaveLength(1);
-  expect(held.at(-1)).toBe(counted[0]);
-  const n = (w: { what: string }) => /^(\d+) /.exec(w.what) ? Number(/^(\d+) /.exec(w.what)![1]) : 1;
-  // The stranger's three are guesses (G883): held, on the full list, never in this count.
-  expect(held.reduce((a, w) => a + n(w), 0)).toBe(4);
-  const guessed = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true }).waiting.filter((w) => w.verb === "not confirmed");
-  expect(guessed.map((w) => [w.what, w.n, w.seen!.split("\n").length])).toEqual([["Not confirmed: 3 things only you can see.", 0, 3]]);
-  // The two named cards release one value each; the card that counts releases nothing.
-  expect(held.slice(0, -1).reduce((a, w) => a + w.seen!.split("\n").length, 0)).toBe(2);
-  expect(held.at(-1)!.seen).toBeUndefined();
-  expect(held.map((w) => w.what).join(" ")).not.toContain("more new private things");
+  expect(v.waiting).toEqual([]);
+  expect(v.held).toBe("4 private things are held from your assistants.");
+  const all = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true }).waiting;
+  // The stranger's three are guesses (G883): one uncounted card of their own.
+  expect(all.filter((w) => w.verb === "not confirmed").map((w) => [w.what, w.n, w.seen!.split("\n").length])).toEqual([["Not confirmed: 3 things only you can see.", 0, 3]]);
+  // Each named row releases one value.
+  expect(all.filter((w) => /only you can see/.test(w.verb)).map((w) => w.seen!.split("\n").length)).toEqual([1, 1, 1, 1]);
 });
 
-test("the card that counts the rest links to them and has no Read it: one tap never lets out values from other pages (PR #6 review)", async () => {
+test("the home's face releases nothing: its line only links to the full list, where each value has its own Read it (PR #6 review)", async () => {
   const root = named(5);
   process.env.PB_NOW = NOW.toISOString();
   try {
@@ -82,14 +67,14 @@ test("the card that counts the rest links to them and has no Read it: one tap ne
     const d = dashboardHandler(root, { port: 8798, loginKey: "k".repeat(32) });
     const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
     const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+    const keysOf = (html: string) => [...html.matchAll(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="[^"]*"><input type="hidden" name="key" value="([^"]+)"/g)].map((m) => m[1]!);
     const html = await (await d.handle(new Request(`http://${H}/home`, { headers: { host: H, cookie } }))).text();
-    const keys = [...html.matchAll(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="[^"]*"><input type="hidden" name="key" value="([^"]+)"/g)].map((m) => m[1]!);
-    expect(keys).toHaveLength(HELD_EACH - 1);
+    expect(keysOf(html)).toEqual([]);
+    expect(html).toContain('<a class="late" role="status" href="/home?all=1">5 private things are held from your assistants.</a>');
+    const all = await (await d.handle(new Request(`http://${H}/home?all=1`, { headers: { host: H, cookie } }))).text();
+    const keys = keysOf(all);
+    expect(keys).toHaveLength(5);
     for (const k of keys) expect(k.split("\n")).toHaveLength(1);
-    const at = html.indexOf("3 more held from your assistants");
-    const counting = html.slice(at, html.indexOf("</li>", at));
-    expect(counting).toContain('href="/home?all=1"');
-    expect(counting).not.toContain("diary-seen");
   } finally { delete process.env.PB_NOW; }
 }, 60_000);
 
@@ -110,7 +95,7 @@ test("one held value keeps its own row and Show", () => {
   expect(v.waiting[0]!.what).toBe("Not confirmed: something only you can see.");
 });
 
-test("each held value has one Read it on the home: its card, never its memory too (Mac, 2026-10-31, G550)", async () => {
+test("each held value has one Read it on the full list: its card, never its memory too (Mac, 2026-10-31, G550)", async () => {
   process.env.PB_NOW = DEMO_NOW;
   try {
     const { root } = await makeDemoBrain();
@@ -118,10 +103,11 @@ test("each held value has one Read it on the home: its card, never its memory to
     const d = dashboardHandler(root, { port: 8797, loginKey: "k".repeat(32) });
     const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
     const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
-    const html = await (await d.handle(new Request(`http://${H}/home`, { headers: { host: H, cookie } }))).text();
-    const keys = [...html.matchAll(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="[^"]*"><input type="hidden" name="key" value="([^"]+)"/g)].map((m) => m[1]);
+    const keysOf = (html: string) => [...html.matchAll(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="[^"]*"><input type="hidden" name="key" value="([^"]+)"/g)].map((m) => m[1]);
+    // None on the face (G907); on the full list, one each.
+    expect(keysOf(await (await d.handle(new Request(`http://${H}/home`, { headers: { host: H, cookie } }))).text())).toEqual([]);
+    const keys = keysOf(await (await d.handle(new Request(`http://${H}/home?all=1`, { headers: { host: H, cookie } }))).text());
     expect(keys.length).toBeGreaterThan(0);
-    expect(keys.length).toBeLessThanOrEqual(HELD_EACH);
     expect(new Set(keys).size).toBe(keys.length);
     // Its memory further down keeps the lock, naming only its page.
     const v = homeView(root, loadRules(root), loadBrain(root), new Date(DEMO_NOW), { all: true });

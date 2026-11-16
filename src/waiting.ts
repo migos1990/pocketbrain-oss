@@ -32,7 +32,7 @@ export interface OwnerAsks {
   waiting: Item[]; // the decisions (disputes, proposals, held answers) that ask
   other: Item[]; // the other cards that ask
   stuck: number; // captures held past their day
-  serving: number; // values the serving hold keeps for Show it
+  serving: number; // values the serving hold keeps until the owner reads them: held, not an ask, in no count (G907)
   guesses: number; // held values that are only a stranger's guess: not an ask, in no count (G883)
   teach: number; // questions about a class the owner may teach, answered on the home
   link: number; // questions about a fact linking a page the brain doesn't have, answered on the home (G749)
@@ -65,13 +65,14 @@ export function ownerAsks(root: string, now = new Date(), later = now): OwnerAsk
   for (const i of other) by[i.kind] = (by[i.kind] ?? 0) + 1;
   const stuck = heldCount(root, { stuck: true });
   if (stuck) by.held = stuck;
+  // A held value waits for nothing (the owner's typed yes, 2026-11-16, G907): the hold is a
+  // privacy gate, not a question. Counted here only so a screen can say how many there are.
   const serving = unseenFacts(root).length;
-  if (serving) by.held_by_serving = serving;
   const teach = waitingTeachAsks(root).length;
   if (teach) by.teach = teach;
   const link = waitingLinkAsks(root).length;
   if (link) by.link = link;
   const total = Object.values(by).reduce((a, b) => a + b, 0);
-  const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + serving + teach + link;
+  const onHome = [...waiting, ...other].filter((i) => ON_HOME.has(i.kind) || (i.kind === "proposal" && homeConflicts.has(i.ref))).length + teach + link;
   return { by, waiting, other, stuck, serving, guesses: heldGuesses(root).length, teach, link, total, settings: total - onHome, queues, homeConflicts, byAccess };
 }

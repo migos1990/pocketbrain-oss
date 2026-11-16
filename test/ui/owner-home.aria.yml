@@ -4,7 +4,8 @@
     - link "Robin":
       - /url: /who
   - heading "On your mind" [level=1]
-  - paragraph: 4 things wait for you
+  - paragraph: 3 things wait for you
+  - status: 1 private thing is held from your assistants.
   - heading "To settle 3" [level=2]
   - paragraph: Two sources disagree. Pick the one that's right.
   - list:
@@ -35,16 +36,6 @@
       - 'link "Settle: Next for Kitchen renovation: take the tile delivery on 12 October. Or 19 October?"':
         - /url: /settle/c-0003
         - text: Settle
-  - heading "Private, held from your assistants 1" [level=2]
-  - paragraph: An assistant saved these. Only you can see them. Read each one, then let your assistants have it or keep it private.
-  - list:
-    - listitem:
-      - text: Something new about Hélène Lefebvre.
-      - list:
-        - listitem: Hélène Lefebvre prefers visits in the morning until the hip surgery on 20 November.
-      - text: Only you know this
-      - 'button "Keep it private: Something new about Hélène Lefebvre."': Keep it private
-      - 'button "Let them have it: Something new about Hélène Lefebvre."': Let them have it
   - heading "Lately" [level=2]
   - list:
     - listitem:
@@ -55,6 +46,13 @@
       - text: Known by ChatGPT, Claude and Gemini
     - listitem:
       - 'link "Next for Guest lectures: send Zoe the slides for 17 November."':
+        - /url: /p/projects/guest-lecture-series
+      - text: From yesterday's email Known by ChatGPT and Claude; Gemini doesn't get it
+      - link "Let Gemini know this?":
+        - /url: /let?key=projects%2Fguest-lecture-series%23next_step&agent=gemini
+        - text: G
+    - listitem:
+      - 'link "Next for Guest lectures: confirm the projector for 17 November."':
         - /url: /p/projects/guest-lecture-series
       - text: From yesterday's email Known by ChatGPT and Claude; Gemini doesn't get it
       - link "Let Gemini know this?":

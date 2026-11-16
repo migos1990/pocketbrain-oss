@@ -7,7 +7,9 @@ import { test, expect, afterAll } from "bun:test";
 import { makeBrain } from "./fixture";
 import { handle } from "../src/server";
 import { loadState } from "../src/dashboard/data";
-import { agentPage } from "../src/dashboard/html";
+import { agentPage, overview } from "../src/dashboard/html";
+import { write } from "../src/write";
+import { writeQuality, qualityText } from "../src/writequality";
 import { setupOAuth, bindClient, clearJwksCache } from "../src/oauth";
 import { addAgent } from "../src/addagent";
 import { markServing, spend } from "../src/budget";
@@ -43,4 +45,38 @@ test("an approved sign-in has connected: the page says when, and that it has rea
   expect(t).not.toContain("Hasn't connected yet");
   expect(t).toContain("Signed in today; it has read nothing yet.");
   expect(agentPage(s, "c", "notebook")!.body).toContain("<dt>Last seen</dt><dd>signed in today, no read yet</dd>");
+});
+
+// G955: the page's "N writes so far" counts every write the assistant sent, and the Writes line
+// counted only those saved as a fact. An assistant whose writes all wait or were turned down read
+// "1 write so far" beside "nothing written in 30 days".
+test("writes that were sent and none saved: the Writes line says so, never 'nothing written'", () => {
+  const root = makeBrain();
+  // A trial assistant proposes: its write is in the log and waits in the inbox.
+  const r = write(root, { agent: "helper", id: "projects/course-a", attribute: "room", value: "B-201", as_of: "2026-10-08", sources: ["gmail:f000000000000006"] } as never);
+  expect(r.outcome).toBe("inbox");
+  const q = writeQuality(root, "helper");
+  expect(q).toMatchObject({ sent: 1, writes: 0, judged: 0 });
+  expect(qualityText(q)).toBe("1 write sent in 30 days, none saved yet");
+  const t = plain(agentPage(loadState(root), "c", "helper")!.body);
+  expect(t).toContain("1 write so far");
+  expect(t).not.toContain("nothing written");
+});
+
+test("some saved, some not: the Writes line gives both numbers", () => {
+  const root = makeBrain();
+  const w = (attribute: string, value: string, sources: string[]) => write(root, { agent: "planner", id: "projects/course-a", attribute, value, as_of: "2026-10-08", sources, verification: "verified-by-source" } as never);
+  expect(w("room", "B-201", ["gmail:f000000000000006"]).outcome).toBe("committed");
+  expect(w("hall", "Main", []).outcome).not.toBe("committed"); // no source: turned down
+  const q = writeQuality(root, "planner");
+  expect(q).toMatchObject({ sent: 2, writes: 1 });
+  expect(qualityText(q)).toStartWith("1 of 2 writes saved in 30 days: 1 kept, 0 corrected, 0 reverted");
+});
+
+test("the Settings row names its window: the last 24 hours, never 'today'", async () => {
+  const root = makeBrain();
+  write(root, { agent: "planner", id: "projects/course-a", attribute: "room", value: "B-201", as_of: "2026-10-08", sources: ["gmail:f000000000000006"], verification: "verified-by-source" } as never);
+  const t = plain(overview(loadState(root), "c").body);
+  expect(t).toContain("wrote 1 in the last 24 hours");
+  expect(t).not.toMatch(/wrote \d+ today|nothing today/);
 });

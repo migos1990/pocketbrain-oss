@@ -57,15 +57,13 @@ export interface Waiting { what: string; verb: string; href: string; n?: number;
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
 // unconfirmed: what an assistant said and nobody confirmed (unconfirmedLines); first: the owner's page holds under three things yet (firstRun).
-export interface HomeView { unconfirmed?: Unconfirmed[]; first?: boolean; all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string }
+export interface HomeView { unconfirmed?: Unconfirmed[]; first?: boolean; all?: boolean; name: string; date: string; reads: { agent: string; name: string; today: number; quiet?: string; asked?: AskLine[]; askedMore?: number; wrong?: WrongLine[]; more?: number; sees?: number; of?: number; seeHref?: string }[]; waiting: Waiting[]; gardener: Waiting[]; since: HomeLine[]; folded: number; earlier: { day: string; lines: HomeLine[] }[]; earlierFolded: number; late?: string; quiet?: string; held?: string }
 
 export const SINCE_CAP = 7;
 // The face of On your mind (canvas "final direction", Louis 2026-10-31: the home was a log): six
 // cards at most, what waits first, then the memories worth acting on; the rest a tap away.
 export const MIND_CAP = 6;
 const MIND_MIN_MEMORIES = 2;
-// Held values shown one by one on the home before the rest fold into one line.
-export const HELD_EACH = 3;
 const JUST_SAID_MS = 60 * 60_000;
 // Earlier days on one phone screen: the last few days, a few lines each; the rest behind Show more.
 export const EARLIER_DAYS = 3;
@@ -175,7 +173,8 @@ export const LINE_COPY = {
   somethingUnnamed: "Something new only you can see",
   manyUnnamed: "{value} new things only you can see",
   manyUnnamedPages: "{value} new things on {a} pages only you can see",
-  moreHeld: "{value} more held from your assistants",
+  heldOne: "{value} private thing is held from your assistants.",
+  heldMany: "{value} private things are held from your assistants.",
   keptPrivate: "Kept private: something about {title}",
   keptUnnamed: "Kept private: something only you can see",
   guessHeld: "Not confirmed: something about {title}",
@@ -548,22 +547,15 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   }
   // Named cards first, then the one that counts what it can't name.
   const ordered = [...groups].sort(([a], [b]) => Number(a === "") - Number(b === ""));
-  // Each held value is its own locked card with Read it (owner app brief, 2026-10-30), but only a
-  // few (owner's phone, 2026-10-29: a wall of receipts was the first thing on the home). Past
-  // HELD_EACH, the last card counts every value left, named or not, so the home never says two
-  // counts for the same kind of thing (Mac, 2026-10-31: "5 new things only you can see", two
-  // cards, then "3 more new private things").
-  // That last card only counts and links to the full list: it releases nothing, so each held value
-  // still needs its own Read it (PR #6 review: one tap let every value left out across pages).
-  const overflow = !expand && ordered.length > HELD_EACH;
-  const cards = overflow ? [...ordered.slice(0, HELD_EACH - 1), ["", ordered.slice(HELD_EACH - 1).flatMap(([, us]) => us)] as [string, Unseen[]]] : ordered;
-  const shown = cards.map(([name, us], i) => {
-    if (overflow && i === cards.length - 1) return { n: us.length, what: lineWords("moreHeld", { value: String(us.length) }), verb: `${us.some((u) => u.unknownSender) ? "from an address your pages don't hold · " : ""}only you can see them yet`, href: "/home?all=1", ...(us.some((u) => u.unknownSender) ? { stranger: true } : {}) };
+  // A held value waits for nothing (G907): no card on the home's face, and on the full list each
+  // is named with its Read it, counted nowhere (n: 0), like a kept one or a stranger's guess.
+  // Values that would read the same are one row; its Read it shows each (the keys, one per line).
+  const shown = (expand ? ordered : []).map(([name, us]) => {
     const one = us.length === 1, page = us[0]!.page, stranger = us.some((u) => u.unknownSender);
     const what = name ? (one ? lineWords("somethingNew", { title: name }) : lineWords("manyNew", { title: name, value: String(us.length) })) : one ? lineWords("somethingUnnamed", {}) : ((pages) => pages > 1 && pages < us.length ? lineWords("manyUnnamedPages", { value: String(us.length), a: String(pages) }) : lineWords("manyUnnamed", { value: String(us.length) }))(new Set(us.map((u) => u.page)).size);
     // The values themselves only on a fresh sign-in (G630): read first, then let out or kept.
     const look = fresh ? pageSentences(us.map((u) => ({ page: u.page, title: notes.get(u.page)?.fm.title ?? u.title, attr: u.attr, value: u.value })), notes) : undefined;
-    return { n: us.length, what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(look ? { look } : {}), ...(stranger ? { stranger: true } : {}) };
+    return { n: 0, what, verb: `${stranger ? "from an address your pages don't hold · " : ""}only you can see ${one ? "it" : "them"} yet`, href: one || us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(look ? { look } : {}), ...(stranger ? { stranger: true } : {}) };
   });
   // The full list also shows what the owner kept private, counted nowhere (n: 0), each with Let
   // them have it, so Keep it private is never final (review of #60, G630).
@@ -832,6 +824,9 @@ export function homeView(root: string, rules: Rules, notes: Note[], now: Date, o
     ...((): { late?: string } => { const l = lateLine(lateJobs(root, now), now); return l ? { late: l } : {}; })(),
     // One line when a connected assistant has gone quiet by its own habit (src/quiet.ts, G697, G698):
     // not an ask, nothing added to the count, gone once it reads again.
+    // One line when values are held from the assistants until the owner reads them (G907): not an
+    // ask, nothing added to the count; it leads to the full list, where each can be read and let out.
+    ...((): { held?: string } => { const n = unseenFacts(root).length; return n ? { held: lineWords(n === 1 ? "heldOne" : "heldMany", { value: String(n) }) } : {}; })(),
     ...((): { quiet?: string } => { const l = quietLine(quietAssistants(root, rules, now), (a) => agentTitle(rules, a)); return l ? { quiet: l } : {}; })(),
   };
 }

@@ -22,24 +22,24 @@ function named(n: number) {
 }
 const big = (html: string) => Number(/<p class="count"><b>(\d+)<\/b>/.exec(html)?.[1] ?? 0);
 
-test("the big number counts every thing that waits, the same number waitingCount gives", () => {
+test("the big number counts only what waits: held values are in neither it nor waitingCount (G907)", () => {
   const root = named(7);
   const v = homeView(root, loadRules(root), loadBrain(root), NOW);
   const html = homePage(v, "c");
-  expect(waitingCount(root, NOW)).toBe(7);
-  expect(big(html)).toBe(7);
+  expect(waitingCount(root, NOW)).toBe(0);
+  expect(big(html)).toBe(0);
+  expect(html).toContain("7 private things are held from your assistants.");
 });
 
-test("held values sit under a heading that says what they are and what to do; an older sign-in offers Read it (G630)", () => {
+test("on the full list held values sit under a heading that says what they are and what to do, with no number; an older sign-in offers Read it (G630, G907)", () => {
   const root = named(5);
-  const html = homePage(homeView(root, loadRules(root), loadBrain(root), NOW), "c");
-  expect(html).toContain(`<h2 class="group">${APP_COPY.heldHead} <b>5</b></h2>`);
+  const face = homePage(homeView(root, loadRules(root), loadBrain(root), NOW), "c");
+  expect(face).not.toContain(APP_COPY.heldHead);
+  const html = homePage(homeView(root, loadRules(root), loadBrain(root), NOW, { all: true }), "c");
+  expect(html).toContain(`<h2 class="group">${APP_COPY.heldHead}</h2>`);
   expect(html).toContain(APP_COPY.heldHint);
-  expect(html).toContain(`>${APP_COPY.readIt}</button>`);
+  expect(html.split(`>${APP_COPY.readIt}</button>`).length - 1).toBe(5);
   expect(html).not.toContain(`>${APP_COPY.letThem}<`);
-  // The card that counts the rest says they are more of the same.
-  expect(html).toContain("3 more held from your assistants.");
-  expect(html).not.toContain("only you can see.");
 });
 
 test("what was just done reads as done, not as a card that asks", () => {

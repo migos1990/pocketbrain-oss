@@ -7,12 +7,12 @@
 //                  hub files on its own, src/filing.ts autoSaves). One counted list (audit v10,
 //                  2026-11-01): an item held by a rule (held_by_access, held_by_capture,
 //                  held_by_ambiguity below) still waits for the owner, so it is an ask; those lines
-//                  only say why. Each value the serving hold keeps until the owner taps Show it
-//                  is an ask too (held_by_serving; G626, the owner's "i trust u" of 2026-11-02
-//                  00:18Z and the coordinator's pick, as G618), except a value that is only a
-//                  stranger's guess (guess_held, G883: the owner's pick on the decision card of
-//                  2026-11-15 13:11Z, "Stop asking, keep as guess", and his typed yes in the UI
-//                  thread at 13:56Z): held the same, not an ask. The list is src/waiting.ts
+//                  only say why. A value the serving hold keeps until the owner reads it is
+//                  not an ask (private_held, G907: the owner's typed yes of 2026-11-16 01:23Z to
+//                  "an assistant's private fact stays held without becoming a Home ask"; it was
+//                  one from G626 until then), and neither is one that is only a stranger's guess
+//                  (guess_held, G883: the owner's pick on the decision card of 2026-11-15 13:11Z
+//                  and his typed yes in the UI thread at 13:56Z). The list is src/waiting.ts
 //                  ownerAsks, the one the home counts. An assistant's proposal held until a day (assistant_held) or left to
 //                  expire (assistant_expiring) leaves on its own, so it is not.
 // What it counts is the owner's to change: a change to what this file counts as an ask, as a
@@ -85,7 +85,7 @@ import { ownerOf, ownerTitle } from "../src/capture";
 import { sensitivityRank } from "../src/brain";
 
 export interface WhyCounts { commits: number; with_why: number; gardener: number; gardener_why: number }
-export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; held_by_ambiguity: number; guess_held: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean; detectors?: Detectors }
+export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; held_by_capture: number; held_by_ambiguity: number; guess_held: number; private_held: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean; detectors?: Detectors }
 export const BAR = { share: 0.8 };
 
 // ---------- the two numbers, from any brain ----------
@@ -204,8 +204,8 @@ export function measure(root: string, since: string, now: Date, planted = 0, unt
   const okPages = linkedProse.filter((n) => proseBeyondHub(n) || quotesSource(state!, n));
   const ok = okPages.length;
   // Every item that waits on the owner, one counted list with the home (src/waiting.ts, G626): open
-  // decisions the hub won't file on its own, the other cards that ask, captures held past their day,
-  // and each value the serving hold keeps for Show it (held_by_serving).
+  // decisions the hub won't file on its own, the other cards that ask, and captures held past their
+  // day. A value the serving hold keeps is counted on its own line, never as an ask (G907).
   const later = new Date(now.getTime() + 36 * 3_600_000);
   const own = ownerAsks(root, now, later);
   const { by, waiting, queues, homeConflicts } = own;
@@ -225,7 +225,7 @@ export function measure(root: string, since: string, now: Date, planted = 0, unt
   const home_asks = waitingCount(root, later, own);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
-  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, guess_held: own.guesses, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why, detectors: detectors(root, notes, now.toISOString().slice(0, 10)) };
+  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, guess_held: own.guesses, private_held: own.serving, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why, detectors: detectors(root, notes, now.toISOString().slice(0, 10)) };
 }
 
 // ---------- the fixed week ----------
@@ -368,7 +368,7 @@ export async function replay(o: { fileAll?: boolean } = {}): Promise<NorthStar> 
   }
 }
 
-export const counts = (m: NorthStar) => ({ pass: m.pass, asks: m.asks, asks_by_kind: m.asks_by_kind, not_conflict: m.not_conflict, assistant_held: m.assistant_held, assistant_expiring: m.assistant_expiring, held_by_access: m.held_by_access, held_by_capture: m.held_by_capture, held_by_ambiguity: m.held_by_ambiguity, guess_held: m.guess_held, home_asks: m.home_asks, pages: m.pages, pages_ok: m.pages_ok, share: Math.round(m.share * 100) / 100, pages_beyond_hub: m.pages_beyond_hub, pages_quoted: m.pages_quoted });
+export const counts = (m: NorthStar) => ({ pass: m.pass, asks: m.asks, asks_by_kind: m.asks_by_kind, not_conflict: m.not_conflict, assistant_held: m.assistant_held, assistant_expiring: m.assistant_expiring, held_by_access: m.held_by_access, held_by_capture: m.held_by_capture, held_by_ambiguity: m.held_by_ambiguity, guess_held: m.guess_held, private_held: m.private_held, home_asks: m.home_asks, pages: m.pages, pages_ok: m.pages_ok, share: Math.round(m.share * 100) / 100, pages_beyond_hub: m.pages_beyond_hub, pages_quoted: m.pages_quoted });
 
 export function report(m: NorthStar, label: string): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -381,6 +381,7 @@ export function report(m: NorthStar, label: string): string {
     `  held by access: ${m.held_by_access} assistant proposal(s) on a page that assistant can't fully see, contradicting nothing; they wait on Settings (counted in asks)`,
     `  held by capture: ${m.held_by_capture} assistant capture(s) about a person, citing a source, that wait for you by rule; they wait on Settings (counted in asks)`,
     `  held by ambiguity: ${m.held_by_ambiguity} proposal(s) by a name that fits a page you have as well as a new one; the hub never guesses, so they wait on Settings (counted in asks)`,
+    `  held until you read them: ${m.private_held} private value(s) an assistant filed; held from every assistant, on the home's full list (not asks)`,
     `  held as a guess: ${m.guess_held} private value(s) from a sender no page holds; held from every assistant, on the home's full list (not asks)`,
     `  pages touched: ${m.pages}; with cited prose, an inbound link and more than the hub's own text: ${m.pages_ok} (${pct(m.share)}, want >= ${pct(BAR.share)}); cited prose ${m.prose}, inbound link ${m.inbound}`,
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,

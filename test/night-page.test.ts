@@ -104,12 +104,12 @@ test("a fact taken back overnight is under Tidied; the tiles count what the page
     process.env.PB_NOW = DEMO_NOW;
     const s = loadState(root), v = nightView(root, s.rules, s.notes, new Date(DEMO_NOW));
     expect(v.groups.map((g) => [g.key, g.lines.length])).toEqual([["learned", 1], ["tidied", 1]]);
-    expect(v.counts).toEqual({ learned: 1, tidied: 1, waiting: 4 });
+    expect(v.counts).toEqual({ learned: 1, tidied: 1, waiting: 3 }); // the held private value is no ask (G907)
     expect(v.ran).toBeUndefined(); // no night pass on record: the page says nothing about one
     const html = nightPage(v, "tok");
     expect(html).toContain(`<h2>${NIGHT_COPY.tidied}</h2>`);
     expect(html).not.toContain('class="night-ran"');
     expect(html.match(/href="\/settle\//g)?.length).toBe(3);
-    expect(html).toContain(NIGHT_COPY.elsewhereOne);
+    expect(html).not.toContain(NIGHT_COPY.elsewhereOne); // the three conflicts are all that waits (G907)
   } finally { delete process.env.PB_NOW; }
 }, 60_000);

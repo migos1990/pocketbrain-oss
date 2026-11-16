@@ -71,16 +71,16 @@ test("Keep it private moves it to the kept list, still held", () => {
   expect(sees(root, "Rimouski-Est")).toBe(false);
 });
 
-test("a held value from a sender a page holds still asks, alone or beside a stranger's", () => {
+test("a held value from a sender a page holds is held the same and asks nothing either (G907); it is not a guess", () => {
   const root = makeBrain();
   file(root, "home_town", "Rimouski-Est", true);
   file(root, "office", "Room 9", false);
   expect(unseenFacts(root).map((u) => u.fact_key)).toEqual(["people/jane-roy#office"]);
-  expect(ownerAsks(root).by.held_by_serving).toBe(1);
-  expect(waitingCount(root)).toBe(1);
-  const waiting = view(root).waiting;
-  expect(waiting.map((w) => w.seen)).toEqual(["people/jane-roy#office"]);
-  expect(waiting[0]!.verb).toBe("only you can see it yet");
+  expect(ownerAsks(root).by).toEqual({});
+  expect(waitingCount(root)).toBe(0);
+  expect(view(root).waiting).toEqual([]);
+  const all = view(root, { all: true }).waiting;
+  expect(all.map((w) => [w.seen, w.verb, w.n])).toEqual([["people/jane-roy#office", "only you can see it yet", 0], [KEY, "not confirmed", 0]]);
 });
 
 test("the north star and the home still count one list", async () => {
@@ -90,7 +90,7 @@ test("the north star and the home still count one list", async () => {
   file(root, "office", "Room 9", false);
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
-  expect({ asks: m.asks, home: m.home_asks, serving: m.asks_by_kind.held_by_serving, guesses: m.guess_held }).toEqual({ asks: 1, home: 1, serving: 1, guesses: 1 });
+  expect({ asks: m.asks, home: m.home_asks, held: m.private_held, guesses: m.guess_held }).toEqual({ asks: 0, home: 0, held: 1, guesses: 1 });
 }, 60_000);
 
 // Review of #200: a guess card whose group spans pages links to the full list, which the held

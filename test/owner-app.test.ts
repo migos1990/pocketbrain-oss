@@ -69,9 +69,13 @@ test("On your mind: the box, memories with their marks, held values locked; the 
     expect(home).toContain('class="mark not"');
     // Hélène's private value waits for the owner: a lock and no marks; on this fresh sign-in its
     // value with Keep it private and Let them have it (G630).
-    expect(home).toContain(APP_COPY.onlyYou);
-    expect(home).toContain(`>${APP_COPY.letThem}</button>`);
-    expect(home).toContain(`>${APP_COPY.keepPrivate}</button>`);
+    // It is no ask: one line on the face, its card on the full list (G907).
+    expect(home).not.toContain(APP_COPY.onlyYou);
+    expect(home).toContain("1 private thing is held from your assistants.");
+    const all = (await req("GET", "/home?all=1")).text;
+    expect(all).toContain(APP_COPY.onlyYou);
+    expect(all).toContain(`>${APP_COPY.letThem}</button>`);
+    expect(all).toContain(`>${APP_COPY.keepPrivate}</button>`);
     expect(home).not.toContain(APP_COPY.assistants);
     const who = (await req("GET", "/who")).text;
     expect(who).toContain(APP_COPY.assistants);

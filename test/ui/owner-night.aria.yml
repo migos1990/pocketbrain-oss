@@ -17,9 +17,6 @@
     - listitem:
       - 'link "Next for Kitchen renovation: take the tile delivery on 12 October. Or 19 October? Settle"':
         - /url: /settle/c-0003
-  - paragraph:
-    - link "1 more thing waits on On your mind":
-      - /url: /home
 - navigation "Tabs":
   - link "On your mind":
     - /url: /home

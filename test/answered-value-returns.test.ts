@@ -13,7 +13,9 @@ import { makeBrain } from "./fixture";
 import { loadBrain, type FactRecord } from "../src/brain";
 import { makeModel, type ModelRequest } from "../src/model";
 import { pullSource } from "../src/pull";
-import { runAuto } from "../src/filing";
+import { runAuto, autoDecisions, undoAuto } from "../src/filing";
+import { loadState } from "../src/dashboard/data";
+import { overview } from "../src/dashboard/html";
 import { ownerConflicts, ownerDecide } from "../src/core";
 import { inboxConflicts } from "../src/settle-inbox";
 import { ownerAsks } from "../src/waiting";
@@ -134,4 +136,23 @@ test("the owner's own later word for the value they ended, relayed by the same a
   expect(r.outcome).toBe("inbox");
   runAuto(root, NOW);
   expect(inboxFiles(root)).toHaveLength(1);
+});
+
+// Read on the live hub, 2026-11-16: the drop showed on no owner-app screen, so where it shows and
+// that its Undo works is pinned here. It is one of the hub's own decisions: Settings lists it under
+// "Filed for you this week" with Undo, and Undo puts the question back for good.
+test("the drop is listed on Settings with its reason and Undo, and Undo brings the question back", async () => {
+  const root = await answered();
+  await pull(root, [event("e1", "Course B (project) next_step: Grade the essays", "2026-10-07T00:00:00Z"), event("e2", "Again, as agreed.\nCourse B (project) next_step: Grade the essays", "2026-10-07T06:00:00Z")]);
+  runAuto(root, NOW);
+  const row = autoDecisions(root, 7, NOW).find((r) => r.picked === "kept your word")!;
+  expect(row.why).toContain("you already answered this one");
+  const body = overview(loadState(root), "c").body;
+  expect(body).toContain("Filed for you this week");
+  expect(body).toContain("you already answered this one");
+  expect(body).toContain(`name="key" value="${row.key}"`);
+  expect(undoAuto(root, row.key)).toBe("Undone. It waits for you now.");
+  runAuto(root, NOW); // the hub never decides it again
+  expect(inboxConflicts(root)).toHaveLength(1);
+  expect(ownerAsks(root, NOW).total).toBe(1);
 });

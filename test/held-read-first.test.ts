@@ -37,7 +37,9 @@ test("on a fresh sign-in the held card says the value, with Let them have it and
   const root = makeBrain();
   W(root, "fee", "1200 dollars a year");
   const { req } = await dash(root, 8851);
-  const c = card((await req("GET", "/home")).text);
+  // On the full list (G907): the home's face has no held card.
+  expect(card((await req("GET", "/home")).text)).toBe("");
+  const c = card((await req("GET", "/home?all=1")).text);
   expect(c).toContain("<li>Jane Roy&#39;s fee is 1200 dollars a year.</li>");
   expect(c).toContain(APP_COPY.letThem);
   expect(c).toContain(APP_COPY.keepPrivate);
@@ -67,7 +69,7 @@ test("on an older sign-in the card says no value and offers Read it, never Show 
   W(root, "fee", "1200 dollars a year");
   const { req, later } = await dash(root, 8852);
   later(30);
-  const html = (await req("GET", "/home")).text;
+  const html = (await req("GET", "/home?all=1")).text;
   const c = card(html);
   expect(html).not.toContain("1200");
   expect(c).toContain(APP_COPY.readIt);

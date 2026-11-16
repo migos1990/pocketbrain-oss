@@ -19,6 +19,7 @@ const SAME_WRITE_MS = 120_000;
 
 export interface WriteQuality {
   agent: string; days: number;
+  sent: number; // every write-log line of the agent in the window, saved or not
   writes: number; kept: number; corrected: number; reverted: number;
   accepted: number; rejected: number;
   judged: number; keepRate?: number; suggestTrial: boolean;
@@ -35,6 +36,8 @@ export function writeQuality(root: string, agent: string, o: { now?: Date; days?
   const now = o.now ?? new Date();
   const since = new Date(now.getTime() - days * 86_400_000).toISOString();
   const log = o.log ?? readJsonl<LogEntry>(join(root, "log", "writes.jsonl"));
+  // Every write it sent in the window, whatever came of it: the number the page's lede counts (G955).
+  const sent = log.filter((w) => w.agent === agent && String(w.at) >= since).length;
   const mine = log.filter((w) => w.agent === agent && w.outcome === "committed" && (w.kind ?? "fact") === "fact" && w.key && String(w.at) >= since);
   const ownerEdits = log.filter((e) => e.kind === "owner-edit" && (e.op === "set" || e.op === "never-right") && e.key);
 
@@ -72,15 +75,17 @@ export function writeQuality(root: string, agent: string, o: { now?: Date; days?
   const keepRate = judged ? (kept + accepted) / judged : undefined;
   const a = (o.rules ?? loadRules(root)).policy.agents[agent];
   const suggestTrial = !!a && a.tier !== "trial" && !a.inside_wall && a.role !== "gardener" && judged >= MIN_JUDGED && (keepRate ?? 1) < KEEP_FLOOR;
-  return { agent, days, writes: mine.length, kept, corrected, reverted, accepted, rejected, judged, ...(keepRate === undefined ? {} : { keepRate }), suggestTrial };
+  return { agent, days, sent, writes: mine.length, kept, corrected, reverted, accepted, rejected, judged, ...(keepRate === undefined ? {} : { keepRate }), suggestTrial };
 }
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 // One line, for the agent's dashboard page and the week report.
 export function qualityText(q: WriteQuality): string {
-  if (!q.judged) return `nothing written in ${q.days} days`;
-  return `${plural(q.writes, "write")} in ${q.days} days: ${q.kept} kept, ${q.corrected} corrected, ${q.reverted} reverted; ${plural(q.accepted + q.rejected, "proposal")}: ${q.accepted} accepted, ${q.rejected} rejected (${Math.round((q.keepRate ?? 0) * 100)}% kept)`;
+  // "Nothing written" only when nothing was sent: writes that wait or were turned down are counted
+  // on the same page as writes, so this line says none was saved (G955).
+  if (!q.judged) return q.sent ? `${plural(q.sent, "write")} sent in ${q.days} days, none saved yet` : `nothing written in ${q.days} days`;
+  return `${q.sent > q.writes ? `${q.writes} of ${plural(q.sent, "write")} saved` : plural(q.writes, "write")} in ${q.days} days: ${q.kept} kept, ${q.corrected} corrected, ${q.reverted} reverted; ${plural(q.accepted + q.rejected, "proposal")}: ${q.accepted} accepted, ${q.rejected} rejected (${Math.round((q.keepRate ?? 0) * 100)}% kept)`;
 }
 
 export function trialText(q: WriteQuality, label = q.agent): string {

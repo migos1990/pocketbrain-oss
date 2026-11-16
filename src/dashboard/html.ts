@@ -661,9 +661,10 @@ function needsYou(s: State, csrf: string) {
   return { ask, more, n, saving: s.proposals.length - asked.length, held: { n: heldAt.length, at: heldAt[0] } };
 }
 
-// One line per assistant in the owner's words: what it did today, what it sees, its off switches.
+// One line per assistant in the owner's words: what it did in the last 24 hours (the count's own
+// window, named: G955), what it sees, its off switches.
 function assistantItem(s: State, csrf: string, a: AgentRow) {
-  const did = a.reads24 || a.writes24 ? `read ${a.reads24} time${a.reads24 === 1 ? "" : "s"}, wrote ${a.writes24} today` : "nothing today";
+  const did = a.reads24 || a.writes24 ? `read ${a.reads24} time${a.reads24 === 1 ? "" : "s"}, wrote ${a.writes24} in the last 24 hours` : "nothing in the last 24 hours";
   return `<div class="item${a.status === "paused" ? " paused" : ""}"><div class="what"><a href="/agent/${encodeURIComponent(a.name)}"${a.label !== a.name ? ` title="${esc(a.name)}"` : ""}><b>${esc(a.label)}</b></a>${a.status !== "active" || cutOff(a) ? ` ${agentPill(a)}` : ""}
 <div class="sub">${did} · sees ${a.notes} of ${memoryPages(s.notes).length} note${memoryPages(s.notes).length === 1 ? "" : "s"} · last seen ${ago(a.lastSeen, s.now)}</div></div>${killSwitches(csrf, a)}</div>`;
 }

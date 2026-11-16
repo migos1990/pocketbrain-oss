@@ -67,6 +67,6 @@ test("a held value on a page with a plain name from a known sender still names i
   page(root, "people/jane-roy-2", "person", "Jane Roy", "personal", { prefers: fact("f000000000000031", "known") });
   Bun.spawnSync(["git", "add", "-A"], { cwd: root });
   Bun.spawnSync(["git", "-c", "user.name=steward", "-c", "user.email=s@x", "commit", "-qm", "steward: held"], { cwd: root });
-  const v = homeView(root, loadRules(root), loadBrain(root), NOW);
+  const v = homeView(root, loadRules(root), loadBrain(root), NOW, { all: true });
   expect(v.waiting.filter((w) => w.seen).map((w) => w.what)).toEqual(["Something new about Jane Roy."]);
 });

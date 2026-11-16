@@ -59,7 +59,11 @@ test("home lists what waits for the owner's eyes, and Show releases it", async (
     const r = await d.handle(new Request(`http://${H}${path}`, { method, body, headers: { host: H, cookie, origin: `http://${H}`, referer: `http://${H}/home`, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) } }));
     return { status: r.status, text: await r.text(), loc: r.headers.get("location") ?? "" };
   };
-  const home = await req("GET", "/home");
+  // The face says only that something is held (G907); the full list names it.
+  const face = await req("GET", "/home");
+  expect(face.text).toContain("1 private thing is held from your assistants.");
+  expect(face.text).not.toContain("1200");
+  const home = await req("GET", "/home?all=1");
   expect(home.text).toContain("Something new about Jane Roy");
   expect(home.text).toContain(APP_COPY.onlyYou);
   // A fresh sign-in reads the value before letting it out (G630); no assistant has it yet.

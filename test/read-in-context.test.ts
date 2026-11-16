@@ -36,7 +36,7 @@ test("a thing's held values read as one sentence, the amount first and its statu
   W(root, "status", "will renew");
   W(root, "due", "9 Nov 2026");
   W(root, "amount", "CAD 6.20");
-  const { html } = await home(root, 8861);
+  const { html } = await home(root, 8861, "/home?all=1"); // held values sit on the full list, never the face (G907)
   const l = looks(html);
   expect(l).toEqual(["Jane Roy comes to CAD 6.20, is due 9 Nov 2026 and will renew."]);
   expect(html).not.toContain("status is will renew");
@@ -57,7 +57,7 @@ test("a review paragraph is a note on its page, never read out on the home", asy
   const review = "This note holds the full pay breakdown (base, bonus, share vesting, total around CAD 430K) and is filed under area personal. Pay details like these usually belong in the private tier.";
   W(root, "sensitivity_review", review);
   W(root, "amount", "CAD 125.00");
-  const { html } = await home(root, 8862);
+  const { html } = await home(root, 8862, "/home?all=1"); // held values sit on the full list, never the face (G907)
   expect(html).not.toContain("430K");
   expect(html).not.toContain("pay breakdown");
   expect(looks(html)).toEqual(["Jane Roy comes to CAD 125.00 and has a longer sensitivity review note on its page."]);
@@ -79,7 +79,7 @@ test("three held values on one page read as one line on its card", async () => {
   W(root, "amount", "CAD 6.20");
   W(root, "status", "paid");
   write(root, { agent: "planner", id: "people/jane-roy", attribute: "fee", value: "12 dollars", as_of: "2026-10-05", sources: ["gmail:f000000000000002"], verification: "verified-by-source", sensitivity: "private" } as never);
-  const { html } = await home(root, 8864);
+  const { html } = await home(root, 8864, "/home?all=1"); // held values sit on the full list, never the face (G907)
   // One page here: the card names it, and its line holds all three.
   expect(looks(html)).toHaveLength(1);
 });

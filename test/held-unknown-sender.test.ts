@@ -28,6 +28,6 @@ test("a held value from an unknown sender says so on the home's full list, and S
 test("a held value from a known sender keeps the short row", () => {
   const root = makeBrain();
   write(root, { agent: "planner", id: "people/jane-roy", attribute: "home_town", value: "Rimouski-Est", as_of: "2026-10-05", sources: ["gmail:f000000000000002"], verification: "verified-by-source", sensitivity: "private" } as never);
-  const row = homeView(root, loadRules(root), loadBrain(root), new Date()).waiting.find((w) => w.seen === "people/jane-roy#home_town")!;
+  const row = homeView(root, loadRules(root), loadBrain(root), new Date(), { all: true }).waiting.find((w) => w.seen === "people/jane-roy#home_town")!;
   expect(row.verb).toBe("only you can see it yet");
 });
