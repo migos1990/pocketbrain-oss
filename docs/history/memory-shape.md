@@ -331,7 +331,7 @@ Nine rows were read on 2026-10-08 with the Notion MCP page fetch. (SQL and row q
 
 ### 8.1 People: Sam Okafor (written by Town)
 
-Notion: `Fact key: person:sam-okafor`, `Role: Professional networking contact`, `Org:` empty, `Relationship: Discussed an agent harness for business operations; met 2026-07-17`, `Last contact: 2026-07-17`, `Related project: Agent Harness for Business Operations (Sam Okafor)` (text), `Date: 2026-10-04`, `Valid from:` empty.
+Notion: `Fact key: person:sam-okafor`, `Role: Professional networking contact`, `Org:` empty, `Relationship: Talked about a shared reading list; met 2026-07-17`, `Last contact: 2026-07-17`, `Related project: Shared Reading List (Sam Okafor)` (text), `Date: 2026-10-04`, `Valid from:` empty.
 
 ```markdown
 ---
@@ -362,7 +362,7 @@ facts:
     by: town
     recorded: 2026-10-04
 ---
-Met on 2026-07-17 (10:00 to 10:45 EDT) to discuss an agent harness for business operations; Sam sent the invitation.[^g1] See [[projects/agent-harness-for-business-operations]].
+Met on 2026-07-17 (10:00 to 10:45 EDT) to talk about a shared reading list; Sam sent the invitation.[^g1] See [[projects/shared-reading-list]].
 
 [^g1]: gmail:0000aaaa1111bb02 (Google Calendar notification)
 ```
@@ -417,10 +417,10 @@ facts:
     by: instinct
     recorded: 2026-10-04
 ---
-Hybrid synchronous course, Mondays 18:45 to 21:45, 2026-08-24 to 2026-11-30.[^g1] Course logistics only; no student information is stored here.
+Weekly evening class on Mondays, from late August to the end of November.[^g1] Only how the class runs is kept here; nothing about students.
 
 - CoursePortal still listed 2026-10-05 as "Cours" on the morning of 2026-10-05, although the session had moved.[^g2] Open, see [[disputes/c-0007]] if it isn't just a stale table.
-- The course content repo is teacher-only; student answers come from the course MCP.[^u]
+- Only the teacher opens the class materials; students get their answers through a separate tool.[^u]
 - Publishing the Zoom link in CoursePortal only works locally in Louis's signed-in browser.[^u]
 
 [^g1]: gmail:0000aaaa1111bb04 (Morgan Tessier, 2026-06-25)
@@ -564,13 +564,13 @@ verification: unverified            # note-level, from Notion Confidence: Unveri
 legacy: { notion: 00000000aaaa0000bbbb0000cccc0007, fact_key: "note:louis-communication-style" }
 ---
 ## Language
-Matches the recipient: French with Northfield and local French-speaking contacts, English with English-speaking contacts.
+Writes in the language of whoever is addressed, French or English.
 
-## Length and tone
-Most replies are one line ... (prose kept as is)
+## Tone
+Short, usually a line or two ... (prose kept as is)
 
 ## Sign-offs
-"Cheers, L." most common.[^g1]
+"Best, L." most common.[^g1]
 
 Rules for agents writing as Louis moved to [[rules/RULES#rule:no-em-dashes]] and [[rules/RULES#rule:linkedin-tone]].
 

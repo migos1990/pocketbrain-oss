@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The owner's phone, 2026-11-07, a person page: the role already named its org, so the page read
-// "Organisateur … d'Option Voisins at Option Voisins" (G729), and "X also comes up in
+// "Coordonnatrice … d'Option Voisins at Option Voisins" (G729), and "X also comes up in
 // the sources of Y" tied the person to a page the page's own text already linked, which read as
 // filler (G730). Made-up names; the shapes are the real page's.
 import { test, expect } from "bun:test";
@@ -26,12 +26,12 @@ function org(root: string) { page(root, "orgs/option-voisins", "org", "Option Vo
 test("G729 a role that already names its org is said once, the org's name in it linking its page", () => {
   const root = makeBrain();
   org(root);
-  page(root, "people/chris-dorval", "person", "Chris Dorval", fact("role", "Organisateur de la réunion du conseil d'administration d'Option Voisins", "gmail:f000000000000021") + fact("org", "[[orgs/option-voisins]]", "gmail:f000000000000021"));
+  page(root, "people/chris-dorval", "person", "Chris Dorval", fact("role", "Coordonnatrice des bénévoles d'Option Voisins", "gmail:f000000000000021") + fact("org", "[[orgs/option-voisins]]", "gmail:f000000000000021"));
   page(root, "people/dana-pike", "person", "Dana Pike", fact("role", "organiser of the option voisins board meeting", "gmail:f000000000000022") + fact("org", "[[orgs/option-voisins]]", "gmail:f000000000000022"));
   commit(root);
   renderTouchedPages(root, SINCE);
   const c = body(root, "people/chris-dorval");
-  expect(c).toContain("d'administration d'[[orgs/option-voisins|Option Voisins]].[^pf-role][^pf-org]");
+  expect(c).toContain("des bénévoles d'[[orgs/option-voisins|Option Voisins]].[^pf-role][^pf-org]");
   expect(c).not.toMatch(/Option Voisins(?:\]\])? at /);
   expect(c).not.toContain("works at [[orgs/option-voisins");
   // Case and accents aside, the org's name as written in the role links.
@@ -73,12 +73,12 @@ async function phone(extraPolicy: string) {
   writeFileSync(pol, readFileSync(pol, "utf8").replace("areas:\n", `areas:\n${extraPolicy}`));
   page(root, "orgs/option-voisins", "org", "Option Voisins", fact("kind", "consumer group", "gmail:000000000000e1f7"));
   for (const [f, area] of [["orgs/option-voisins.md", "ov"]] as const) writeFileSync(join(root, f), readFileSync(join(root, f), "utf8").replace("area: work", `area: ${area}`));
-  page(root, "people/chris-dorval", "person", "Chris Dorval", fact("role", "Organisateur de la réunion du conseil d'administration d'Option Voisins", "gmail:000000000000e1f7") + fact("org", "[[orgs/option-voisins]]", "gmail:000000000000e1f7"));
+  page(root, "people/chris-dorval", "person", "Chris Dorval", fact("role", "Coordonnatrice des bénévoles d'Option Voisins", "gmail:000000000000e1f7") + fact("org", "[[orgs/option-voisins]]", "gmail:000000000000e1f7"));
   writeFileSync(join(root, "people/chris-dorval.md"), readFileSync(join(root, "people/chris-dorval.md"), "utf8").replace("area: work", "area: ov"));
   page(root, "projects/voisins-fair", "project", "Voisins fair", fact("next_step", "book the hall", "gmail:000000000000e1f7"));
   writeFileSync(join(root, "projects/voisins-fair.md"), readFileSync(join(root, "projects/voisins-fair.md"), "utf8").replace("area: work", "area: ov"));
   // The org said in plain words, and a role alone that names it (use-it on the Mac, 2026-11-08; G736).
-  page(root, "people/eve-roy", "person", "Eve Roy", fact("role", "Organisateur de la réunion du conseil d'administration d'Option Voisins", "gmail:000000000000e1f7") + fact("org", "Option Voisins", "gmail:000000000000e1f7"));
+  page(root, "people/eve-roy", "person", "Eve Roy", fact("role", "Coordonnatrice des bénévoles d'Option Voisins", "gmail:000000000000e1f7") + fact("org", "Option Voisins", "gmail:000000000000e1f7"));
   page(root, "people/fay-lin", "person", "Fay Lin", fact("role", "Secrétaire du conseil d'Option Voisins", "gmail:000000000000e1f7"));
   for (const f of ["people/eve-roy.md", "people/fay-lin.md"]) writeFileSync(join(root, f), readFileSync(join(root, f), "utf8").replace("area: work", "area: ov"));
   sh(root, "owner", "add", "-A"); sh(root, "owner", "commit", "-qm", "owner: setup");
@@ -94,7 +94,7 @@ async function phone(extraPolicy: string) {
 
 test("G731 the line under a person's name says a role that names its org once", async () => {
   const { chris } = await phone("  ov: { owner: claude }\n");
-  expect(chris).toMatch(/<p class="kind">Organisateur de la réunion du conseil d(?:'|&#39;)administration d(?:'|&#39;)Option Voisins<\/p>/);
+  expect(chris).toMatch(/<p class="kind">Coordonnatrice des bénévoles d(?:'|&#39;)Option Voisins<\/p>/);
   expect(chris).not.toMatch(/Option Voisins at Option Voisins/);
 }, 60_000);
 

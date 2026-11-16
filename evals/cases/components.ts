@@ -1184,7 +1184,7 @@ const pullCases: Case[] = [
   } },
   { id: "value-key-keeps-names-and-signs", dimension: "conflicts", gap: "G759", title: "values that differ in a name, tense, number, sign or currency are never one value; a reworded sentence still is", source: "audit v13, trust defect 4", run: async () => {
     const differ: [string, string][] = [["Send the signed lease to Robert on Friday", "Send the signed lease to Roberts on Friday"], ["The team moves to France in the spring", "The team moves to Frances in the spring"], ["The permit expires at the end of March", "The permit expired at the end of March"], ["The tenant agreed to the new lease terms", "The tenants agree to the new lease terms"], ["The lease is being signed by both parties", "The lease is signed by both parties"], ["-740", "740"], ["$740", "\u20ac740"]];
-    const same: [string, string][] = [["Use each sign-in client to retain in a partner sign-in flow", "use each sign-in client to be retained in a partner sign-in flow"], ["Ship the beta to the testers on Friday.", "ship beta to testers on friday"], ["2026-10-05", "2026 10 05"]];
+    const same: [string, string][] = [["Use each library card to renew at a branch lending desk", "use each library card to be renewed at a branch lending desk"], ["Ship the beta to the testers on Friday.", "ship beta to testers on friday"], ["2026-10-05", "2026 10 05"]];
     const { sameValue } = await import(join(SRC_DIR, "normalize.ts"));
     const folded = differ.filter(([a, b]) => sameValue(a, b)), split = same.filter(([a, b]) => !sameValue(a, b));
     const root = sandbox("synthetic");

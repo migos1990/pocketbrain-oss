@@ -54,12 +54,12 @@ test("one held status or amount says itself, never \"status is will renew\"", ()
 
 test("a review paragraph is a note on its page, never read out on the home", async () => {
   const root = makeBrain();
-  const review = "This note holds the full pay breakdown (base, bonus, share vesting, total around CAD 430K) and is filed under area personal. Pay details like these usually belong in the private tier.";
+  const review = "This note holds the full rent ledger (deposit, monthly rent, parking, total around CAD 61K) and is filed under area personal. Money details like these usually belong in the private tier.";
   W(root, "sensitivity_review", review);
   W(root, "amount", "CAD 125.00");
   const { html } = await home(root, 8862, "/home?all=1"); // held values sit on the full list, never the face (G907)
-  expect(html).not.toContain("430K");
-  expect(html).not.toContain("pay breakdown");
+  expect(html).not.toContain("61K");
+  expect(html).not.toContain("rent ledger");
   expect(looks(html)).toEqual(["Jane Roy comes to CAD 125.00 and has a longer sensitivity review note on its page."]);
   expect(factSentence("people/jane-roy", "Jane Roy", "sensitivity_review", review, new Map())).toBe("Jane Roy has a longer sensitivity review note on its page.");
 });

@@ -49,7 +49,7 @@ const DIFFER: [string, string][] = [
 ];
 const SAME: [string, string][] = [
   // The rewording G662 was filed for.
-  ["Use each sign-in client to retain in a partner sign-in flow or to exchange a refresh token for an access token", "use each sign-in client to be retained in a partner sign-in flow or to exchange a refresh token for an access token"],
+  ["Use each library card to renew at a branch lending desk or to trade a damaged card for a replacement card", "use each library card to be renewed at a branch lending desk or to trade a damaged card for a replacement card"],
   ["The form is to be checked for the new intake", "the form is to check for the new intake"],
   // Case, accents, punctuation, articles, "is".
   ["Ship the beta to the testers on Friday.", "ship beta to testers on friday"],

@@ -20,7 +20,7 @@ const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 // The Gardener's own words, as it writes them on the owner's brain: reasoning first, the ask last
 // and not as a question.
 const GARDENER = [
-  "The Oct 12 arrival has passed, but this item is still active, with no note of how it went. Robin to confirm check-in happened so it can close.",
+  "The Oct 12 workshop date is behind us, yet this page still reads as open and says nothing on the result. Robin to confirm the workshop ran so it can close.",
   "The exam room was booked for Oct 20 and that date is gone; the booking note still reads as upcoming. Robin to say whether it moved.",
   "Two notes give different TA names for the same course, and neither cites a newer source.",
 ];
@@ -73,7 +73,7 @@ test("Settings lists what is open without a count, and says what files itself", 
 }, 120_000);
 
 test("a Gardener question's title is the question; its reasoning stays folded", () => {
-  expect(questionWords(GARDENER[0])).toBe("Confirm check-in happened so it can close?");
+  expect(questionWords(GARDENER[0])).toBe("Confirm the workshop ran so it can close?");
   expect(questionWords(GARDENER[1])).toBe("It moved?");
   expect(questionWords("Robin to say which holds.")).toBe("Which holds?");
   expect(questionWords("Did the Oct 12 check-in happen? The booking note says so.")).toBe("Did the Oct 12 check-in happen?");
@@ -83,8 +83,8 @@ test("a Gardener question's title is the question; its reasoning stays folded", 
   const html = overview(loadState(root), "x").body;
   const words = text(html);
   // Never a Gardener sentence as a title, anywhere on the page.
-  expect(html).not.toMatch(/class="ct">The Oct 12 arrival has passed/);
-  expect(words).toContain("Confirm check-in happened so it can close?");
+  expect(html).not.toMatch(/class="ct">The Oct 12 workshop date is behind us/);
+  expect(words).toContain("Confirm the workshop ran so it can close?");
   // "Why it asks" is folded.
   expect(html).not.toMatch(/<details open><summary>Why it asks/);
 }, 120_000);

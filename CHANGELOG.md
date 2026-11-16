@@ -22,7 +22,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 ### What the hub does
 
 - The personal-term check (`scripts/check-public.sh`) takes a line `<term> @<path>,<path>` that excuses a term in those files only, and the public export now runs that same check over what it publishes (G936, G937).
-- `bun scripts/brain-quotes.ts --brain <path>`, run on the Mac, lists each tracked file and line that repeats 8 words in a row from a page of your brain, never the words, report only (G938).
+- `bun scripts/brain-quotes.ts --brain <path>`, run on the Mac, lists each tracked file and line that repeats 8 words in a row from a page of your brain, never the words, report only (G938). It leaves out the hub's own sentences: those in the code's text, today's or any earlier commit's, and those a brain made from nothing holds, and it reads a page's frontmatter values one by one and any number as a number, so a page's shape and the counts and dates the code fills in no longer count (G939, G940).
 - A fact you approved no longer tells your other assistants which assistant proposed it: the approval's reference named the proposal's file, which carries that assistant's name. Assistants now get the day you approved it and nothing more (G944).
 
 ## [0.3.0] - 2026-11-15

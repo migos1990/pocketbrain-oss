@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G940: {
+    closed: "claude/brain-quotes-templates",
+    title: "The brain-quotes report still counted a page's shape and the code's filled-in numbers",
+    severity: "low",
+    finding: "Second run on the real brain, 2026-11-16, after G939: 282 lines remained. The ones read in the repo were frontmatter shapes (a design doc's example pages and test fixtures whose keys, dates and agent names lined up with real pages: sensitivity, status, created and updated on the same day), and the hub's report lines with a count or date filled in (the real-use bar, filling and review lines), which a literal cut at each interpolation could not match.",
+    fix: "scripts/brain-quotes.ts reads a page as its body and each frontmatter string value on its own (frontmatter that doesn't parse is read whole), so keys and short values never join into a run; every number is one token and numbers in a row (a date, a time) are one, and a template's interpolation reads as a number, so a sentence the code fills a count or date into matches its literal. A long value is still the owner's words and still counts. Then the code's words are counted by groups of four: a brain word is the code's when a group of four around it is in a src string literal, and a run with at most one word of its own that isn't a number is the code's sentence with a name or value filled in (list items, a joined array, \"X also comes up in the sources of Y\", a date before \"(Written by the hub from this page's facts.)\"); two words of its own still make a quote. digest/ is not read either: the hub's daily report puts its sentences together from pages and counts at run time. The third run's leftovers that were modelled on real pages (a contact's meeting topic, a class's schedule, a note on how the owner writes, a source line and a role) now use invented words in docs/history/memory-shape.md, docs/history/write-quality.md, a gap's finding and test/person-page-polish.test.ts; the fourth run's (a Gardener question about a trip, one about board files, a product sentence, two guests' names, a pay review) in eight test files and an eval case. Test: test/brain-quotes.test.ts (G940).",
+  },
+  G939: {
+    closed: "claude/brain-quotes-templates",
+    title: "The brain-quotes report counted the hub's own sentences as quotes of the owner",
+    severity: "medium",
+    finding: "First run on the real brain, 2026-11-16: 426 lines in 156 of 1425 tracked files shared an 8-word run with the brain, most in src's sentence builders, the dashboard's aria snapshots and tests of them, since the code writes those sentences into the brain. Only runs the two example brains share were dropped, so a report that size could not be triaged by file and line.",
+    fix: "scripts/brain-quotes.ts drops, before reading the repo, every brain run that a string literal of src/ holds (a scanner per .ts file, a template cut at each interpolation, plain strings joined by + read as one), in the checkout and in every commit's src blobs, and every run of a brain `init` makes from examples/seed in a temp home; views/ is no longer read, since it re-renders pages and rules/. A run crossing into a template's filled-in value, and a code comment, still count. What it no longer catches: an owner's sentence pasted inside a string literal of src/ (the personal-term check still reads those files). The summary says how many of the brain's runs were the code's own. Test: test/brain-quotes.test.ts (G939).",
+  },
   G907: {
     closed: "claude/held-never-asks",
     title: "Every private fact an assistant filed was an ask on the home",
@@ -971,7 +985,7 @@ export const GAPS: Record<string, Gap> = {
     closed: "719f59e5",
     title: "The line under a person's name said the org twice",
     severity: "low",
-    finding: "Same page: the line read Organisateur de la réunion du conseil d'administration d'Option Voisins at Option Voisins, because the role already names the org.",
+    finding: "Same page: the line read Coordonnatrice des bénévoles d'Option Voisins at Option Voisins, because the role already names the org.",
     fix: "personLine in src/dashboard/html-page.ts says the role alone when it names the org as whole words, case and accents aside (nameAt in src/util.ts). Test: test/person-page-polish.test.ts.",
   },
   G730: {

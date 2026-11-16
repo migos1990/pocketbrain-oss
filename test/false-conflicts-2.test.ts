@@ -199,8 +199,8 @@ test("G676: the night's report names a conflict asked again after the owner kept
 
 test("G678: a long sentence said again with its parts in another order is the same value; a changed name or number is not", () => {
   const { nearSame } = require("../src/normalize");
-  const a = "Use each sign-in client to retain in a partner sign-in flow or to exchange a refresh token for an access token";
-  const b = "use the sign-in clients in a partner sign-in flow or to exchange a refresh token for an access token, for each client you want to retain";
+  const a = "Use each library card to renew at a branch lending desk or to trade a damaged card for a replacement card";
+  const b = "use the library cards at a branch lending desk or to trade a damaged card for a replacement card, for each card you want to renew";
   expect(nearSame(a, b)).toBe(true);
   expect(nearSame(b, a)).toBe(true);
   expect(nearSame("Send the signed contract to Anna at the main office by Friday morning please", "Send the signed contract to Paul at the main office by Friday morning please")).toBe(false);

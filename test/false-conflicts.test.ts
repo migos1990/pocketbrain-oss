@@ -37,8 +37,8 @@ function pulled(root: string, attribute: string, value: string, as_of: string, i
 }
 
 test("a reworded sentence is the same value; a different one is not", () => {
-  const a = "Use each sign-in client to retain in a partner sign-in flow or to exchange a refresh token for an access token";
-  expect(sameValue(a, "use each sign-in client to be retained in a partner sign-in flow or to exchange a refresh token for an access token")).toBe(true);
+  const a = "Use each library card to renew at a branch lending desk or to trade a damaged card for a replacement card";
+  expect(sameValue(a, "use each library card to be renewed at a branch lending desk or to trade a damaged card for a replacement card")).toBe(true);
   expect(sameValue("Ship the beta to testers on Friday", "Ship the beta to testers on Monday")).toBe(false);
   expect(sameValue("The launch is not on track this week", "The launch is on track this week")).toBe(false);
   expect(sameValue("Review build 4 with the testers", "Review build 5 with the testers")).toBe(false);

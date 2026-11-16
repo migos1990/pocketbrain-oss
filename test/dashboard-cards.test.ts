@@ -61,7 +61,7 @@ test("the Gardener's open question reads in plain words, without rule ids or the
   const root = makeBrain();
   labelled(root);
   mkdirSync(join(root, "inbox"), { recursive: true });
-  const words = "Conflict: the note says no board documents are kept, but a 2026-10-04 update adds Drive indexes of board files. rule:never-store bars board content. Robin to say which holds.";
+  const words = "Conflict: the page keeps no club minutes, yet a 2026-10-04 change lists a folder of minutes for the club. rule:never-store bars those files. Robin to say which holds.";
   writeFileSync(join(root, "inbox", "2026-10-08-gardener-q.yaml"), YAML.stringify({ proposed: "2026-10-08", by: "gardener", reason: "gardener is a trial agent: propose-only", request: { agent: "gardener", kind: "fact", id: "projects/course-a", attribute: "open_question", value: words, as_of: "2026-10-08", sources: ["agent:gardener"] } }));
   const c = card(page(root), "From your assistant <span");
   expect(text(c)).toContain("Add this open question to Course A?");
