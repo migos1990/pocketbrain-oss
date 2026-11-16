@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   due:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.due.outputs.tag }}
@@ -41,7 +41,7 @@ jobs:
     secrets: inherit
   publish:
     needs: [due, ci]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       TAG: ${{ needs.due.outputs.tag }}

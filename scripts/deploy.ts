@@ -4,7 +4,8 @@
 //   push one, so this is how the Mac runs a main sha): check out exactly that commit of origin/main,
 //   `bun install`, restart, and keep it only when the restarted hub's own /health reports that sha
 //   (the code it started on, not what is checked out); else back to the sha before. Then the real
-//   brain's north star once for that code, its counts in the output and deploy.json, report-only.
+//   brain's north star once for that code, its counts in the output and deploy.json, report-only,
+//   and the brain-quotes report (file:line only, what is new since the last deploy, G956).
 // - run, the release follower: a launchd job runs this every 10 minutes: when the
 // `release` branch on GitHub points at a new vX.Y.Z tag (CI moves it there only after the tag
 // passed), check it out, `bun install`, restart the hub with a plain kickstart, and wait for
@@ -27,8 +28,10 @@ export type Status = "deployed" | "current" | "rolled-back" | "down" | "blocked"
 // unreleased_since: the oldest commit on main that the release branch doesn't have (null when level),
 // so the hub's self-check can say a release is overdue. Absent when main couldn't be fetched.
 // mode "go": the last move was `deploy go`; running: the sha the hub's /health reported after it;
-// north_star: that code's real-brain counts (counts only, never a page name).
-export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; checked_at: string }
+// north_star: that code's real-brain counts (counts only, never a page name); brain_quotes: the
+// tracked files' lines that repeat 8 words of a brain page, by file:line only (G956).
+export interface BrainQuotes { lines: number; hits: string[] }
+export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; brain_quotes?: BrainQuotes; checked_at: string }
 export interface Effects {
   install(dir: string): boolean;
   restart(): boolean;
@@ -40,6 +43,19 @@ export interface GoEffects extends Effects {
   // lets the real one wait a little for a hub that is still coming up on the new code.
   code(expect?: string): Promise<string | undefined>;
   northStar(code: string): Promise<NorthStarRecord | undefined>;
+  // scripts/brain-quotes.ts of the code now running, over the real brain: file:line only, report-only.
+  brainQuotes?(code: string): Promise<BrainQuotes | undefined>;
+}
+
+// One line for the deploy log: the count, and which file:line are new since the last count (G956).
+export function brainQuotesLine(q: BrainQuotes, before?: BrainQuotes): string {
+  const head = `brain quotes: ${q.lines} line(s) in tracked files repeat 8 words of a brain page (report only, words never printed)`;
+  if (!before) return `${head}; first count`;
+  const seen = new Set(before.hits);
+  const fresh = q.hits.filter((h) => !seen.has(h));
+  if (!fresh.length) return `${head}; none new since the last deploy`;
+  const shown = fresh.slice(0, 20).join(", ");
+  return `${head}; ${fresh.length} new since the last deploy: ${shown}${fresh.length > 20 ? `, and ${fresh.length - 20} more` : ""}`;
 }
 
 export const configDir = () => dirname(keysDir());
@@ -121,7 +137,8 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
   const last = readState(file);
   const short = (x?: string) => x?.slice(0, 7) ?? "nothing";
   const save = (s: Omit<DeployState, "checked_at" | "mode">): DeployState => {
-    const full: DeployState = { mode: "go", ...s, checked_at: now() };
+    // The last count stays until a new one replaces it, so "new since the last deploy" holds.
+    const full: DeployState = { mode: "go", ...(last?.brain_quotes ? { brain_quotes: last.brain_quotes } : {}), ...s, checked_at: now() };
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(full, null, 2) + "\n");
     fx.log(`${full.checked_at} ${full.status}: ${full.detail}`);
@@ -140,11 +157,18 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
   const report = async (s: Omit<DeployState, "checked_at" | "mode">): Promise<DeployState> => {
     // The north star for the code that runs now: counts only, report-only (no alert, no block).
     let ns: NorthStarRecord | undefined, why = "";
+    const out: Omit<DeployState, "checked_at" | "mode"> = { ...s };
     try { ns = await fx.northStar(target); } catch (e) { why = (e as Error).message; }
-    if (!ns) { fx.log(`north star: didn't run: ${why || "no record"}`); return save(s); }
-    const { at: _at, ...kept } = ns;
-    fx.log(northStarLine(ns));
-    return save({ ...s, north_star: kept });
+    if (!ns) fx.log(`north star: didn't run: ${why || "no record"}`);
+    else { const { at: _at, ...kept } = ns; fx.log(northStarLine(ns)); out.north_star = kept; }
+    // Then the brain-quotes report (G956): file:line only, never a word; it never blocks or rolls back.
+    if (fx.brainQuotes) {
+      try {
+        const q = await fx.brainQuotes(target);
+        if (q) { fx.log(brainQuotesLine(q, last?.brain_quotes)); out.brain_quotes = q; } else fx.log("brain quotes: didn't run: no report");
+      } catch (e) { fx.log(`brain quotes: didn't run: ${(e as Error).message}`); }
+    }
+    return save(out);
   };
   if (head === target && (await fx.code(target)) === target) return report({ ...keep, sha: target, running: target, status: "current", detail: `already running ${short(target)}; hub reports it` });
   const dirty = git(app, "status", "--porcelain", "--untracked-files=no").out;
@@ -171,7 +195,7 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
 
 // The real effects on the Mac.
 const run = (cmd: string[], cwd?: string) => Bun.spawnSync(cmd, { cwd, stdout: "inherit", stderr: "inherit" }).exitCode === 0;
-export function macEffects(health: string, brain?: string): GoEffects {
+export function macEffects(health: string, brain?: string, appDir?: string): GoEffects {
   const uid = Bun.spawnSync(["id", "-u"], { stdout: "pipe" }).stdout.toString().trim();
   return {
     install: (dir) => run(["bun", "install", "--frozen-lockfile"], dir),
@@ -198,6 +222,15 @@ export function macEffects(health: string, brain?: string): GoEffects {
     northStar: async (code) => {
       if (!brain) throw new Error("no brain folder known (pass --brain, or set PB_BRAIN)");
       return northStarFor(brain, code);
+    },
+    // In a child, from the checkout that now runs: it reads the brain and prints file:line only.
+    brainQuotes: async () => {
+      if (!brain) throw new Error("no brain folder known (pass --brain, or set PB_BRAIN)");
+      const app = appDir ?? join(homedir(), "pocketbrain");
+      const r = Bun.spawnSync(["bun", join(app, "scripts", "brain-quotes.ts"), "--brain", brain, "--repo", app, "--json"], { cwd: app, stdout: "pipe", stderr: "pipe" });
+      if (r.exitCode !== 0) throw new Error(r.stderr.toString().trim().split("\n").pop() || `exit ${r.exitCode}`);
+      const j = JSON.parse(r.stdout.toString()) as { lines: number; hits: string[] };
+      return { lines: j.lines, hits: j.hits };
     },
     log: (l) => console.log(l),
   };
@@ -269,7 +302,7 @@ async function main(argv: string[]): Promise<number> {
     const unlock = lock();
     if (!unlock) { console.log("another pass is running"); return 1; }
     try {
-      const s = await deployGo({ app, want, fx: macEffects(health, brainFolder(opt("--brain"))) });
+      const s = await deployGo({ app, want, fx: macEffects(health, brainFolder(opt("--brain")), app) });
       return ["deployed", "current"].includes(s.status) ? 0 : 1;
     } finally { unlock(); }
   }

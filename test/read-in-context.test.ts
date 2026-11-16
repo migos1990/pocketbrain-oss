@@ -54,12 +54,12 @@ test("one held status or amount says itself, never \"status is will renew\"", ()
 
 test("a review paragraph is a note on its page, never read out on the home", async () => {
   const root = makeBrain();
-  const review = "This note holds the full rent ledger (deposit, monthly rent, parking, total around CAD 61K) and is filed under area personal. Money details like these usually belong in the private tier.";
+  const review = "Every rent payment is listed here (deposit, monthly rent, parking, about CAD 61K in all) under area personal; sums like that are better kept private.";
   W(root, "sensitivity_review", review);
   W(root, "amount", "CAD 125.00");
   const { html } = await home(root, 8862, "/home?all=1"); // held values sit on the full list, never the face (G907)
   expect(html).not.toContain("61K");
-  expect(html).not.toContain("rent ledger");
+  expect(html).not.toContain("rent payment");
   expect(looks(html)).toEqual(["Jane Roy comes to CAD 125.00 and has a longer sensitivity review note on its page."]);
   expect(factSentence("people/jane-roy", "Jane Roy", "sensitivity_review", review, new Map())).toBe("Jane Roy has a longer sensitivity review note on its page.");
 });
@@ -120,11 +120,11 @@ test("a page under a page under a name sits under the name, never dropped", () =
 });
 
 test("Memory groups three or more pages that lead with one name under that name", () => {
-  const html = memoryPage(view(["Hosting invoice IN-1", "Hosting purchase", "Streamly Monthly plan", "Streamly subscription", "Streamly Welcome back offer (iPhone)", "Streamly Welcome back offer (web)", "Disney+ Premium (Monthly) subscription"]));
+  const html = memoryPage(view(["Hosting invoice IN-1", "Hosting purchase", "Tidewell Spring term", "Tidewell glaze order", "Tidewell open studio (Saturday)", "Tidewell open studio (Sunday)", "Rowing lessons (Weekly) booking"]));
   const nest = html.match(/<ul class="rows sub">([\s\S]*?)<\/ul>/)?.[1] ?? "";
-  expect(rowsOf(nest)).toEqual(["Monthly plan", "subscription", "Welcome back offer (iPhone)", "Welcome back offer (web)"]);
+  expect(rowsOf(nest)).toEqual(["Spring term", "glaze order", "open studio (Saturday)", "open studio (Sunday)"]);
   expect(rowsOf(html)[0]).toBe("Hosting invoice IN-1");
-  expect(rowsOf(html)).toContain("Streamly");
+  expect(rowsOf(html)).toContain("Tidewell");
   // Two that share a lead word only are left as they are.
   expect(html).not.toMatch(/<b>Hosting<\/b>/);
 });

@@ -870,14 +870,14 @@ const pullCases: Case[] = [
     if (!wiki.parentPlan) return na("no parent plan at this commit");
     const root = sandbox("synthetic", (r) => { const f = join(r, "rules", "policy.yaml"); writeFileSync(f, `${readFileSync(f, "utf8")}page_parents: true\n`); });
     const put = (slug: string, title: string, extra = "") => writeFileSync(join(root, "projects", `${slug}.md`), `---\nid: projects/${slug}\ntype: project\ntitle: ${JSON.stringify(title)}\narea: personal\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\n${extra}---\n`);
-    put("cabin", "Lakeside cabin (rental host)");
-    put("cabin-check-in", "Lakeside cabin: check-in");
-    put("rules", "House rules policy", `facts:\n  property: { value: "[[projects/cabin]]", as_of: 2026-10-28, sources: ["gmail:f0000000000000a1"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
+    put("cabin", "Riverside allotment (plot keeper)");
+    put("cabin-shed-key", "Riverside allotment: shed key");
+    put("rules", "Plot rules policy", `facts:\n  property: { value: "[[projects/cabin]]", as_of: 2026-10-28, sources: ["gmail:f0000000000000a1"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
     put("fair-25", "Harbour fair (2025)"); put("fair-26", "Harbour fair (2026)"); put("fair-stalls", "Harbour fair: stalls");
     Bun.spawnSync(["git", "add", "-A"], { cwd: root }); Bun.spawnSync(["git", "commit", "-qm", "steward: pages"], { cwd: root });
     (await import(join(SRC_DIR, "upkeep.ts"))).upkeep(root, { now: "2026-11-03" });
     const parent = (slug: string) => { const m = readFileSync(join(root, "projects", `${slug}.md`), "utf8").match(/^parent: (.+)$/m); return m?.[1]; };
-    const under = parent("cabin-check-in") === "projects/cabin" && parent("rules") === "projects/cabin";
+    const under = parent("cabin-shed-key") === "projects/cabin" && parent("rules") === "projects/cabin";
     const alone = parent("fair-stalls") === undefined;
     return ok(under && alone, `named and linked pages under the cabin ${under}; a shared name left alone ${alone}`);
   } },

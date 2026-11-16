@@ -553,12 +553,12 @@ export const WEEK_ROWS = 5;
 // A kind's list says a name once (owner's phone, 2026-11-03: "Garden planning" twice, a course
 // as three strangers; G634). Pages with one name are one row that opens a search listing each.
 // A page named "X, Fall 2026" or "X: exam due…" sits under X when X is on the list; three or more
-// that lead with one word ("Streamly plan", "Streamly offer"…) sit under that word, except people,
+// that lead with one word ("Tidewell term", "Tidewell order"…) sit under that word, except people,
 // whose first names are no family. Nothing is merged: each page still opens on its own.
 export interface MemoryRow { title: string; page?: MemoryPage; same?: number; sub: { page: MemoryPage; rest: string }[] }
 const SEP = /^\s*(?:[,:–—]|\s-)\s*|^\s*(?=\()/;
 const key = (t: string) => t.trim().toLowerCase();
-// "Lakeside cabin (rental host)" is named "Lakeside cabin": a page "Lakeside cabin: check-in" sits
+// "Riverside allotment (plot keeper)" is named "Riverside allotment": a page "Riverside allotment: shed key" sits
 // under it (G638). Only a ",", ":" or dash after that name counts, so two "X (…)" pages never sit
 // under each other.
 const nameOf = (t: string) => t.replace(/\s*\([^()]*\)\s*$/, "");

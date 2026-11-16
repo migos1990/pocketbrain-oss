@@ -207,3 +207,14 @@ test("two words of the owner's own inside the hub's sentence still make it a quo
   });
   expect(brainQuotes({ brain, repo, examples: [], history: false }).hits).toContainEqual({ file: "docs/x.md", line: 2 });
 });
+
+test("--json prints one object for the deploy log: counts and file:line, never the words", () => {
+  const words = secret();
+  const brain = brainWith(words);
+  const repo = repoWith({ "docs/x.md": `${words}\n` });
+  const r = Bun.spawnSync(["bun", join(ROOT, "scripts", "brain-quotes.ts"), "--brain", brain, "--repo", repo, "--json"], { stdout: "pipe", stderr: "pipe" });
+  expect(r.exitCode).toBe(0);
+  const out = r.stdout.toString();
+  expect(JSON.parse(out)).toMatchObject({ lines: 1, hits: ["docs/x.md:1"] });
+  expect(out).not.toContain(words.split(" ")[0]);
+}, 30_000);

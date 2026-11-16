@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Owner's phone, 2026-11-03, circling a Memory list of his projects: "all of them are related",
-// "its like wiki". A page "Lakeside cabin: check-in" is part of "Lakeside cabin (rental host)", and a
-// page whose own fact names the cabin's page is part of it too. Upkeep sets `parent:` on such a
+// "its like wiki". A page "Riverside allotment: shed key" is part of "Riverside allotment (plot keeper)", and a
+// page whose own fact names the allotment's page is part of it too. Upkeep sets `parent:` on such a
 // page (one reflect commit with the run's Undo), so Memory and the page tree put it under the
-// cabin. A name that fits two pages, a page that already has a parent, or a parent that would loop
+// allotment. A name that fits two pages, a page that already has a parent, or a parent that would loop
 // is left alone (G640).
 import { test, expect } from "bun:test";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -26,36 +26,36 @@ const parentOf = (root: string, slug: string) => loadBrain(root).find((n) => n.f
 
 test("G640 a page named 'X: …' or 'X, …' goes under the one page named X or 'X (…)', and Undo takes it back", () => {
   const root = brain();
-  project(root, "lakeside-cabin", "Lakeside cabin (rental host)");
-  project(root, "lakeside-cabin-check-in", "Lakeside cabin: check-in for the Moss family");
-  project(root, "lakeside-cabin-2027", "Lakeside cabin, 2027 rebooking inquiry");
-  project(root, "lakeside-cabins-tour", "Lakeside cabins tour");
+  project(root, "riverside-allotment", "Riverside allotment (plot keeper)");
+  project(root, "riverside-allotment-shed-key", "Riverside allotment: shed key for the Moss family");
+  project(root, "riverside-allotment-2029", "Riverside allotment, 2029 waiting list");
+  project(root, "riverside-allotments-tour", "Riverside allotments tour");
   commit(root);
   const r = upkeep(root, { now: "2026-11-03" });
-  expect(parentOf(root, "lakeside-cabin-check-in")).toBe("projects/lakeside-cabin");
-  expect(parentOf(root, "lakeside-cabin-2027")).toBe("projects/lakeside-cabin");
-  expect(parentOf(root, "lakeside-cabins-tour")).toBeUndefined();
-  expect(parentOf(root, "lakeside-cabin")).toBeUndefined();
+  expect(parentOf(root, "riverside-allotment-shed-key")).toBe("projects/riverside-allotment");
+  expect(parentOf(root, "riverside-allotment-2029")).toBe("projects/riverside-allotment");
+  expect(parentOf(root, "riverside-allotments-tour")).toBeUndefined();
+  expect(parentOf(root, "riverside-allotment")).toBeUndefined();
   // The finding names no page title or value: the commit says what changed.
   const f = r.findings.filter((x) => x.rule === "page-parent");
   expect(f).toHaveLength(2);
-  for (const x of f) expect(x.detail).not.toMatch(/Lakeside|cabin/i);
+  for (const x of f) expect(x.detail).not.toMatch(/Riverside|allotment/i);
   expect(undoRun(root, r.run)).not.toMatch(/conflict|no auto-fix/);
-  expect(parentOf(root, "lakeside-cabin-check-in")).toBeUndefined();
-  expect(parentOf(root, "lakeside-cabin-2027")).toBeUndefined();
+  expect(parentOf(root, "riverside-allotment-shed-key")).toBeUndefined();
+  expect(parentOf(root, "riverside-allotment-2029")).toBeUndefined();
   // Undo is for good: the next run doesn't put them back.
   upkeep(root, { now: "2026-11-04" });
-  expect(parentOf(root, "lakeside-cabin-check-in")).toBeUndefined();
+  expect(parentOf(root, "riverside-allotment-shed-key")).toBeUndefined();
 });
 
 test("G640 a page whose own fact names exactly one other project goes under it", () => {
   const root = brain();
-  project(root, "lakeside-cabin", "Lakeside cabin (rental host)");
-  project(root, "house-rules", "House rules policy", links("property", "projects/lakeside-cabin"));
-  project(root, "two-places", "Cleaning rota", `facts:\n  places: { value: "[[projects/lakeside-cabin]] and [[projects/house-rules]]", as_of: 2026-10-28, sources: ["gmail:f000000000000052"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
+  project(root, "riverside-allotment", "Riverside allotment (plot keeper)");
+  project(root, "house-rules", "Plot rules policy", links("property", "projects/riverside-allotment"));
+  project(root, "two-places", "Cleaning rota", `facts:\n  places: { value: "[[projects/riverside-allotment]] and [[projects/house-rules]]", as_of: 2026-10-28, sources: ["gmail:f000000000000052"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n`);
   commit(root);
   upkeep(root, { now: "2026-11-03" });
-  expect(parentOf(root, "house-rules")).toBe("projects/lakeside-cabin");
+  expect(parentOf(root, "house-rules")).toBe("projects/riverside-allotment");
   expect(parentOf(root, "two-places")).toBeUndefined(); // two pages: which one is a guess
 });
 
@@ -111,11 +111,11 @@ test("G640 a link a reader of the page can't see sets no parent", () => {
 
 test("G640 off until the owner turns it on: a count under no page's id, nothing set", () => {
   const root = makeBrain();
-  project(root, "lakeside-cabin", "Lakeside cabin (rental host)");
-  project(root, "lakeside-cabin-check-in", "Lakeside cabin: check-in");
+  project(root, "riverside-allotment", "Riverside allotment (plot keeper)");
+  project(root, "riverside-allotment-shed-key", "Riverside allotment: shed key");
   commit(root);
   const r = upkeep(root, { now: "2026-11-03" });
-  expect(parentOf(root, "lakeside-cabin-check-in")).toBeUndefined();
+  expect(parentOf(root, "riverside-allotment-shed-key")).toBeUndefined();
   const would = r.findings.filter((x) => x.rule === "parent-would-set");
   expect(would.map((x) => x.key)).toEqual(["parent-would-set"]);
   expect(would[0].detail).toMatch(/^1 project page is part of another page; `pocketbrain wiki parents on`/);

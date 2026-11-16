@@ -190,3 +190,25 @@ test("deploy go checks the hub on loopback only: another health URL is refused b
   expect(p.exitCode).toBe(2);
   expect(p.stderr.toString()).toContain("loopback");
 });
+
+// G956 (2026-11-16): the brain-quotes report ran only when someone asked the Mac to, so a test that
+// carried a brain page's words (PR 214) sat in main until the next hand run. deploy go now runs it
+// for the code it just verified: file:line only, what is new since the last deploy, report-only.
+test("go reports brain quotes for the code it deployed, new lines named by file:line, and never blocks", async () => {
+  const r = rig();
+  const quotes = [{ lines: 2, hits: ["test/a.test.ts:3", "docs/b.md:9"] }, { lines: 3, hits: ["test/a.test.ts:3", "docs/b.md:9", "test/c.test.ts:16"] }];
+  const f = (i: number) => ({ ...r.fx(), brainQuotes: async (code: string) => { r.calls.push(`quotes ${code.slice(0, 7)}`); return quotes[i]; } });
+  const s1 = await r.go(r.commit("0.2.0"), f(0));
+  expect(s1.status).toBe("deployed");
+  expect(s1.brain_quotes).toEqual(quotes[0]);
+  expect(logs(r.calls)).toContain("brain quotes: 2 line(s) in tracked files repeat 8 words of a brain page (report only, words never printed); first count");
+  const s2 = await r.go(r.commit("0.3.0"), f(1));
+  expect(s2.status).toBe("deployed");
+  expect(logs(r.calls)).toContain("; 1 new since the last deploy: test/c.test.ts:16");
+  // A report that can't run says so and the deploy stands; the last count is kept for next time.
+  const s3 = await r.go(r.commit("0.4.0"), { ...r.fx(), brainQuotes: async () => { throw new Error("no brain folder known"); } });
+  expect(s3.status).toBe("deployed");
+  expect(logs(r.calls)).toContain("brain quotes: didn't run: no brain folder known");
+  expect(s3.brain_quotes).toEqual(quotes[1]);
+  expect(JSON.parse(readFileSync(r.state, "utf8")).brain_quotes).toEqual(quotes[1]);
+});

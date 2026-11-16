@@ -263,12 +263,15 @@ if (import.meta.main) {
   const argv = process.argv.slice(2);
   const at = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
   const brain = at("--brain");
-  if (!brain) { console.error("usage: bun scripts/brain-quotes.ts --brain <path> [--repo <path>]"); process.exit(2); }
+  if (!brain) { console.error("usage: bun scripts/brain-quotes.ts --brain <path> [--repo <path>] [--json]"); process.exit(2); }
   const repo = at("--repo") ?? join(import.meta.dir, "..");
-  const fresh = freshBrain(repo);
+  // A fresh brain from the code running this script (on the Mac, the same checkout as --repo).
+  const fresh = freshBrain(join(import.meta.dir, ".."));
   let r: ReturnType<typeof brainQuotes>;
   try { r = brainQuotes({ brain, repo, examples: [...["brain", "demo-brain"].map((b) => join(repo, "examples", b)).filter(existsSync), fresh] }); }
   finally { rmSync(join(fresh, ".."), { recursive: true, force: true }); }
+  // --json: one object for the deploy log (G956), still file:line only.
+  if (argv.includes("--json")) { console.log(JSON.stringify({ lines: r.hits.length, files: r.files, code: r.code, hits: r.hits.map((h) => `${h.file}:${h.line}`) })); process.exit(0); }
   for (const h of r.hits) console.log(`${h.file}:${h.line}`);
   console.log(`brain quotes: ${r.hits.length} line(s) in ${r.files} tracked files share an ${RUN}-word run with a page of the brain; ${r.code} runs of the brain's pages are the code's own sentences and not counted (report only; words never printed)`);
 }

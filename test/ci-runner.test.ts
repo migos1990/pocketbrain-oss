@@ -5,7 +5,7 @@
 // variable PB_RUNNER picks the runner, only in the private repo, never for a fork's PR, and the
 // jobs that hold a deploy key or publish stay on GitHub's runners (G751).
 import { test, expect } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 
@@ -20,19 +20,19 @@ test("G751: test, e2e and conformance run on the Mac only when PB_RUNNER is set,
     expect(on).toContain("fromJSON(vars.PB_RUNNER)");
     expect(on).toContain("vars.PB_RUNNER && github.event.repository.private && ");
     expect(on).toContain("github.event.pull_request.head.repo.full_name == github.repository");
-    expect(on).toMatch(/\|\| 'ubuntu-latest' \}\}$/);
+    expect(on).toMatch(/\|\| 'ubuntu-24.04' \}\}$/);
   }
 });
 
 test("G751: a fork's review, publishing and the public copy never run on the Mac", () => {
-  expect(ci.jobs["outside-pr"]["runs-on"]).toBe("ubuntu-latest");
+  expect(ci.jobs["outside-pr"]["runs-on"]).toBe("ubuntu-24.04");
   // The cold install starts a hub of its own: never on the Mac that runs the real one, and the private
   // repo spends no macOS minutes on it (only the public repo's run is on a Mac).
-  expect(ci.jobs["cold-install"]["runs-on"]).toBe("ubuntu-latest");
+  expect(ci.jobs["cold-install"]["runs-on"]).toBe("ubuntu-24.04");
   expect(ci.jobs["cold-install-mac"]).toMatchObject({ if: "${{ !github.event.repository.private }}", "runs-on": "macos-latest" });
   for (const f of ["release.yml", "public-sync.yml", "docs-live.yml"]) for (const [name, j] of Object.entries(wf(f).jobs as Record<string, { "runs-on"?: string; uses?: string }>)) {
     if (j.uses) continue; // release.yml calls ci.yml, which keeps its own rule above
-    expect(`${f} ${name} ${j["runs-on"]}`).toBe(`${f} ${name} ubuntu-latest`);
+    expect(`${f} ${name} ${j["runs-on"]}`).toBe(`${f} ${name} ubuntu-24.04`);
   }
 });
 
@@ -48,4 +48,18 @@ test("G751: the Linux-only steps have a macOS twin, and the Mac's gitleaks is pi
   // On the Mac, age comes from the runner user's own install (the hand step), checked, never sudo.
   const mac = steps.find((s) => s.if === "runner.os == 'macOS'" && s.run?.includes("age"))!;
   expect(mac.run).not.toContain("sudo");
+});
+
+test("G958: no workflow runs on a floating Linux label: ubuntu-latest moved to 26.04 under us and Playwright refused it", () => {
+  // 2026-11-16, main run on bdbd2381: `bunx playwright install --with-deps chromium` failed with
+  // "Playwright does not support chromium on ubuntu26.04-x64" when ubuntu-latest moved to 26.04,
+  // and no test ran. A Linux runner is named by its version; moving it is a change of its own.
+  // cold-install-mac stays on macos-latest: public repo only, no Playwright, not a required check.
+  const dir = join(ROOT, ".github", "workflows");
+  for (const f of readdirSync(dir).filter((n) => /\.ya?ml$/.test(n))) {
+    const text = readFileSync(join(dir, f), "utf8");
+    expect(`${f}: ${text.match(/ubuntu-latest/g)?.length ?? 0}`).toBe(`${f}: 0`);
+    for (const m of text.matchAll(/\b(?:ubuntu|windows)-[a-z]+\b/g)) expect(`${f}: ${m[0]}`).toBe(`${f}: (a version)`);
+    expect((text.match(/macos-latest/g) ?? []).length).toBeLessThanOrEqual(f === "ci.yml" ? 1 : 0);
+  }
 });

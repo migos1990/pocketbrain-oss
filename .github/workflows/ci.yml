@@ -15,7 +15,7 @@ concurrency:
 # key (release.yml, public-sync.yml stay on GitHub's runners). Delete the variable to go back.
 jobs:
   test:
-    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
     # Step timeouts sit below the job's, so a hang turns a step red instead of the job "cancelled".
     timeout-minutes: 90
     steps:
@@ -153,7 +153,7 @@ jobs:
   # (pasted bearer, /b browser, OAuth, local), the same golden path on each, then the free
   # switch-day check. Answers are compared with test/e2e/doors.json. docs/release.md.
   e2e:
-    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -170,7 +170,7 @@ jobs:
   # owner's box, both assistants' answers and the first save, timed. Always on GitHub's runners, never
   # the Mac's (PB_RUNNER): that machine holds the real brain and its hub.
   cold-install:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -197,7 +197,7 @@ jobs:
   # The open spec's conformance suite over real HTTP, against the reference server and a pocketBrain
   # hub on a throwaway sample brain (docs/spec/memory-passport.md, scripts/conformance.ts).
   conformance:
-    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -213,7 +213,7 @@ jobs:
   # and adds the label "reviewed". The review is a session's job; this step only makes it unskippable.
   outside-pr:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:

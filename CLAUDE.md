@@ -228,6 +228,7 @@ The freeze from 2026-10-08 is lifted. Still parked (log only, don't build): a co
 ## Gotchas we hit
 
 - Every source file starts with `// SPDX-License-Identifier: AGPL-3.0-only`.
+- Fixtures, tests, evals, docs and changelog lines never reuse words from the owner's pages, screenshots or reports, not even paraphrased: only invented sentences of a different shape, with other names and dates (G957). `bun scripts/brain-quotes.ts` counts 8-word runs a brain page shares with tracked files; the Mac runs it on each deploy (`deploy go`, report only).
 - The owner is `owner` in code and in new records (`src/owner.ts`): `confirmed-by-owner`, `owner:<date>/<channel>` refs, git author `owner`, `rules/owner-messages.yaml`, `owner_channel`, `/v1/owner/`. The `louis` forms from the first brain are still read everywhere (`isOwnerConfirmed`, `OWNER_REF`, `isOwnerId`); never compare to one spelling. `git()` writes `owner.name` as the author, except a brain whose owner is Louis keeps `louis`. Agent-facing text says `ownerName(rules)` or "the owner", never a literal "Louis".
 - Other people's health, school, legal or money details are stored but forced to private, shared with the resolver only (`thirdPartySensitive` in `src/checks.ts`, applied in `write()`). Word lists that may meet accented text use `wordsRe` from `src/checks.ts`, never `\b`, which only knows ASCII letters (G129).
 

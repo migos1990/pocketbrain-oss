@@ -2,7 +2,7 @@
 // The owner's phone, 2026-10-24 ("How am I supposed to select when there's like three options that I
 // can't even read on my phone? ... it's really not clear what I'm being asked to do"): a next step
 // written three ways showed "Which is right: Hall (booking), next step?" over a row of buttons
-// "Keep Find out whether Mira and T…", "Keep Reply to the booking thread …", "See all 3" running past
+// "Keep Find out whether Mira and T…", "Keep Write back to Ines and Karl…", "See all 3" running past
 // the screen's edge, and three cut lines. A conflict asks one question about the newest, shows it in
 // full, answers with two stacked buttons, and keeps the others, in full, one tap away. Conflicts are
 // asked on the home's settle screen now (outside review v5); the dashboard's CSS still stacks buttons.
@@ -18,8 +18,8 @@ import { overview, CSS } from "../src/dashboard/html";
 
 const STEPS = [
   "Find out whether Mira and Tom run the hall or only clean it before the next booking",
-  "Reply to the booking thread from Ines and Karl about the late pick-up on Oct 26",
-  "Send the drafted (not yet sent) reply to Ines and Karl confirming the pick-up time",
+  "Write back to Ines and Karl, who asked to collect the chairs late on Oct 26",
+  "Ines and Karl still wait for a collection time; the answer is written but not posted",
 ];
 const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").replace(/\s+/g, " ");
 

@@ -5,6 +5,27 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G958: {
+    closed: "claude/pin-runners",
+    title: "CI ran on a floating Linux image, so a new image stopped every test",
+    severity: "high",
+    finding: "Main's run on bdbd2381 (2026-11-16) failed in job test at `bunx playwright install --with-deps chromium`: the job's log shows Image ubuntu-26.04, and Playwright 1.56.1 says it cannot install dependencies for ubuntu26.04-x64. The run before, on 13810cd6, was green; ubuntu-latest had moved under every workflow. No test ran, so nothing could merge or deploy.",
+    fix: "Every workflow names its Linux runner by version (ubuntu-24.04), including the PB_RUNNER fallback, release.yml, public-sync.yml and docs-live.yml; test/ci-runner.test.ts fails on any ubuntu-latest or other unversioned Linux or Windows label in .github/workflows. cold-install-mac keeps macos-latest (public repo only, no Playwright, not required). A newer image is its own change, with Playwright moved and its snapshots checked. Test: test/ci-runner.test.ts (G958).",
+  },
+  G956: {
+    closed: "claude/brain-quotes-deploy",
+    title: "The brain-quotes report ran only when someone asked the Mac for it",
+    severity: "medium",
+    finding: "Fifth run on the real brain, 2026-11-16 (merged main 8cd0f222): a test from PR 214, merged hours before, carried a brain page's words. Nothing reads the code against the brain except a hand run on the Mac, so new copied text sits in main, and in the public repo after the next green main, until someone asks.",
+    fix: "scripts/deploy.ts go runs scripts/brain-quotes.ts --json of the code it just verified over the real brain and logs one line: the count and the file:line new since the last deploy (kept in deploy.json, file:line only). Report-only: it never changes the deploy's status, and a report that can't run says why and keeps the last count. Test: test/deploy-go.test.ts, test/brain-quotes.test.ts (G956).",
+  },
+  G957: {
+    closed: "claude/brain-quotes-deploy",
+    title: "Three scrubbed or new test lines still kept eight words of a real page",
+    severity: "medium",
+    finding: "Same run: two lines of test/phone-conflict.test.ts and one of test/read-in-context.test.ts kept a real run after G940's scrub (a line about a drafted reply, a review's closing sentence) because only names and figures had been swapped, and test/one-step-per-fact.test.ts (PR 214) had a booking's two next steps with only the names changed. Read by eye after that run (paraphrases the 8-word count can't see): a holiday rental's pages (its host, a rebooking question, a guest arrival date) in two tests, a changelog line, two gap findings, a doc and an eval case, and subscription titles in a Memory grouping test, all modelled on the owner's screenshots.",
+    fix: "Each is rewritten with other words and another shape, not only other names: a hall's chairs and a fair instead of a booking, a rent list's own sentence. The rental is now an allotment plot (its keeper, a waiting list, a shed key), the subscriptions a pottery studio's pages, and the three next steps paint, a bakery and a shed door. Lesson kept in docs/release.md, and a rule in CLAUDE.md for every thread: fixtures and tests never reuse words from the owner's pages, screenshots or reports, only invented sentences of a different shape. Test: the same tests, still passing on the new text (G957).",
+  },
   G940: {
     closed: "claude/brain-quotes-templates",
     title: "The brain-quotes report still counted a page's shape and the code's filled-in numbers",
@@ -5373,14 +5394,14 @@ export const GAPS: Record<string, Gap> = {
   G638: {
     title: "Projects read as one flat list: a project, its sub-pages and its related pages looked like strangers",
     severity: "medium",
-    finding: "Owner's phone, 2026-11-03 (\"all of them are related\", \"there should be logical section under project\", \"its like wiki\"): a rental project \"X (host)\" and two pages \"X: rebooking inquiry\", \"X: check-in\" sat as separate rows among unrelated projects; a house-rules page for the same rental sat elsewhere. PR 72 nested \"X: …\" only under a page named exactly X.",
+    finding: "Owner's phone, 2026-11-03 (\"all of them are related\", \"there should be logical section under project\", \"its like wiki\"): an allotment project \"X (keeper)\" and two pages \"X: waiting list\", \"X: shed key\" sat as separate rows among unrelated projects; a plot-rules page for the same allotment sat elsewhere. PR 72 nested \"X: …\" only under a page named exactly X.",
     fix: "src/dashboard/html-app.ts: a kind's list with more than one area comes in sections, one per area, biggest first, each headed by its area and dot; foldRows nests \"X: …\" under \"X (…)\" (only a comma, colon or dash after the name counts, so two \"X (…)\" pages never nest in each other) and a page under its `parent:` when that page is on the list. Display only. Tests: test/project-sections.test.ts.",
   },
   G640: {
     closed: "4a7d2798",
     title: "Pages that are part of one thing sat apart in Memory",
     severity: "medium",
-    finding: "Owner's phone, 2026-11-03, circling a run of his Memory projects: \"all of them are related\", \"its like wiki\", \"somewhat a lot are connected\". A page named after another (\"X: a check-in\", \"X: a rebooking inquiry\" beside \"X (rental host)\") and a page whose fact named X were separate rows; nothing set the parent: the page tree reads.",
+    finding: "Owner's phone, 2026-11-03, circling a run of his Memory projects: \"all of them are related\", \"its like wiki\", \"somewhat a lot are connected\". A page named after another (\"X: a shed key\", \"X: a waiting list\" beside \"X (plot keeper)\") and a page whose fact named X were separate rows; nothing set the parent: the page tree reads.",
     fix: "parentPlan (src/wiki.ts), upkeep step 1c4: a project page named \"X: …\", \"X, …\" or \"X – …\" goes under the one active project named X or \"X (…)\"; one whose own live facts link exactly one other active project goes under that one, counting only a fact every reader of the page sees (none an assistant that sees the page has hidden, none more private than the page, none shared with one person; audit v11). No parent is set that an assistant seeing the page can't see. A set parent is kept, a shared name is a parent-ambiguous count under no page id, a loop is never made. A page a reader of the child can't see never counts as a candidate (builder's slice audit F1). Off until the owner's `pocketbrain wiki parents on` (policy page_parents); off, a parent-would-set count. One reflect commit per page; the run's Undo takes it back and suppresses it. Test: test/project-parents.test.ts. Eval: wiki-project-under-its-parent.",
   },
   G636: {

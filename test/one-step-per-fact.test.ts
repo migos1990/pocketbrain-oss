@@ -13,7 +13,7 @@ import { loadBrain, type FactRecord } from "../src/brain";
 import { setFact } from "../src/dashboard/edit";
 
 const base = { agent: "planner", id: "projects/course-a", attribute: "next_step", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" as const };
-const TWO = "Clear up whether Ana and Bo are the two guests on the Oct 12 to Nov 14, 2026 booking (2 adults). Reply to Cy and Di about a September 2027 stay (August 2027 is taken by Ed Fox; the reply is drafted, not sent).";
+const TWO = "Order 12 litres of blue paint for the shed door before the Jun 4, 2027 sale (two coats). Ask Gus at the hardware desk whether the old brushes can be swapped (the receipt is lost; he said maybe).";
 
 test("sentences are counted by structure: ends outside brackets, with a sentence on each side", () => {
   expect(thingsToDo(TWO)).toBe(2);
@@ -28,7 +28,7 @@ test("sentences are counted by structure: ends outside brackets, with a sentence
   expect(thingsToDo("Send the signed form to Acme Corp. Montreal by Friday")).toBe(1);
   expect(thingsToDo("Envoyer le plan à Mme. Roy avant vendredi")).toBe(1);
   // A sentence end inside brackets is part of the one thing.
-  expect(thingsToDo("Reply to Cy about the stay (August is taken. The reply is drafted)")).toBe(1);
+  expect(thingsToDo("Ask the bakery about the cake (Oven two is down. Ana has their number)")).toBe(1);
   // No capital after it: one sentence going on.
   expect(thingsToDo("Send v2.1 of the plan. then nothing")).toBe(1);
   expect(thingsToDo("Réserver la salle d'examen. Écrire aux étudiants du cours.")).toBe(2);
@@ -50,7 +50,7 @@ test("a writer's own next step holding two things to do is handed back with the 
   expect(r.fails![0]!.fix).toBe("a next step is one thing to do: send the next one alone, in one sentence");
   // The reply names nothing from the brain: only the count the writer sent.
   expect(r.message).toBe("one_step: the next step holds 2 things to do. Fix: a next step is one thing to do: send the next one alone, in one sentence");
-  expect(write(root, { ...base, value: "Clear up who the two guests are on the booking" } as never).outcome).toBe("committed");
+  expect(write(root, { ...base, value: "Paint the shed door blue" } as never).outcome).toBe("committed");
 });
 
 test("only next steps, only the writer's own write: other attributes, the owner's word and a value the owner accepts are taken as given", () => {
