@@ -29,7 +29,7 @@ export const SETTLE_COPY = {
   both: "Not sure, keep both",
   all: "Not sure, keep them all",
   count: "{n} sources",
-  bothSmall: "I stop asking",
+  bothSmall: "You won't be asked again",
   box: "Actually, it's…",
   send: "Send",
   gone: "Nothing to settle here any more.",

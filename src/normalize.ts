@@ -136,3 +136,27 @@ export function nearSame(a: unknown, b: unknown): boolean {
   return lcs(x, y) >= 0.75 * x.length;
 }
 
+
+// How many things to do a next step holds (G952), by structure only: sentence ends outside
+// brackets, counted only where a sentence stands on each side (three words before, two after, a
+// capital to start, the ending word of three letters or more), so an abbreviation or an initial
+// ("Dr. Roy", "J. Smith") is not an end, nor is a listed short form ("Prof.", "Corp."). What it misses is two short sentences ("Send it. Call me.").
+// Anything that is not a string is one thing.
+// Short forms that take a period and end no sentence. It only reads where a sentence ends; it
+// decides nothing about what a step is. A short form it lacks is handed back once and reworded.
+const SHORT_FORMS = new Set(["mrs", "prof", "mme", "mlle", "messrs", "inc", "corp", "ltd", "dept", "etc", "approx", "est", "tel", "ave", "blvd", "apt"]);
+export function thingsToDo(value: unknown): number {
+  if (typeof value !== "string") return 1;
+  let flat = value, was = "";
+  while (flat !== was) { was = flat; flat = flat.replace(/\([^()]*\)|\[[^\[\]]*\]/g, " "); }
+  const words = (t: string) => t.trim().split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  let n = 1, from = 0;
+  for (const m of flat.matchAll(/[.!?]+["'”’]?\s+(?=["'“‘]?\p{Lu})/gu)) {
+    const at = m.index! + m[0].length;
+    // The word that ends a sentence has three letters or more: "Dr.", "St." and "J." end none.
+    const last = flat.slice(from, m.index!).trimEnd().match(/[\p{L}\p{N}]+$/u)?.[0] ?? "";
+    if (last.length < 3 || SHORT_FORMS.has(last.toLowerCase())) continue;
+    if (words(flat.slice(from, m.index!)) >= 3 && words(flat.slice(at).split(/[.!?]+["'”’]?\s+(?=["'“‘]?\p{Lu})/u)[0]!) >= 2) { n++; from = at; }
+  }
+  return n;
+}

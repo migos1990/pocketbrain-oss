@@ -25,7 +25,7 @@ import type { Rules } from "./rules";
 import { logWrite, inboxCards, forgottenName, forgottenSlugs } from "./write";
 import { loadRules, attributeSpec, isOwnerWord, isGardener, tierOf } from "./rules";
 import { writesHeld } from "./write-hold";
-import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide, pageLink } from "./write";
+import { decideProposal, resolveEntity, versionOrder, withdrawConflictSide, pageLink, ownerAnswered } from "./write";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
 import { refString, schemeOf, isExactLouisRef, SCHEMES, sourceRank, asAgentWord, AGENT_MEMORY_SCHEMES } from "./sources";
 import { isOwnerConfirmed, normVerification, isOwnerId } from "./owner";
@@ -203,6 +203,16 @@ function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[]
     // A new page for a name the owner forgot never files itself again: one an older forget left in
     // the inbox, reopened with no writer, read its writer from the request after G601 (slice audit F1).
     if (pr && !pr.request.id && typeof pr.request.title === "string" && forgottenName(pr.request.title, forgottenSlugs(root))) return { never: FORGOTTEN };
+    // What the owner already answered (G951): the value they ended when settling, proposed again by
+    // the same writer from a source of that day or before. Dropped with Undo; it never asks twice.
+    // After every rule above that makes a proposal wait, and never one the two rules just below
+    // would hold (a writer on proposals only, captured or not, by either name it carries; the owner's own word): a hit that left while a miss
+    // waited would tell the writer about a fact it can't see (G953, G598, G680).
+    if (pr && !isOwnerId(pr.by) && !citesOwner(pr) && !writesHeld(root, pr.by) && !writesHeld(root, String((pr.request as { agent?: unknown }).agent ?? pr.by)) && answeredBefore(root, pr, ctx.notes)) return filed({ plan: { choice: "reject", label: KEPT, why: "you already answered this one, so the value you chose stays; Undo brings it back", at: now.toISOString(), run: () => {
+      const res = decideProposal(root, it.ref, "reject", AUTO);
+      if (res.outcome === "refused") throw new CoreError(409, res.message);
+      return `kept ${it.ref}`;
+    } } });
     if (pr && (pr.by === captureAgent(rulesOf(root)) || isOwnerId(pr.by)) && captured(root, pr.file)) return filed(fileVerdict(root, it, pr, ctx.notes, now));
     // An assistant on proposals only (its write tripped the leak wire, src/write-hold.ts, G680)
     // files nothing by itself, through any branch below (core, the Gardener, the capture agent,
@@ -515,6 +525,30 @@ function writerShown(rules: Rules, notes: Note[], agent: string): Note[] {
   if (rules.policy.agents[agent]?.inside_wall) return notes;
   return [...carve(notes, rules, grantFor(rules, agent), { flags: false }).visible.values()].map((v) => v.note);
 }
+// Whether a proposal says again a value the owner ended when settling (write.ts ownerAnswered): on
+// the page the write would reach, as the writer is shown it, against a single live value it differs from.
+function answeredBefore(root: string, pr: ReturnType<typeof proposals>[number], notes: Note[]): boolean {
+  const rules = rulesOf(root);
+  const r = pr.request as { id?: string; title?: string; type?: string; attribute?: string; value?: unknown; retract?: boolean; as_of?: string; agent?: string };
+  if (!r.attribute || r.retract || r.value === undefined) return false;
+  const writer = String(r.agent ?? pr.by);
+  const inside = !!rules.policy.agents[writer]?.inside_wall;
+  const cut = inside ? undefined : carve(notes, rules, grantFor(rules, writer), { flags: false });
+  const shown = cut ? [...cut.visible.values()].map((v) => v.note) : notes;
+  const named = !r.id && r.title && r.type ? resolveEntity(shown, r.type, String(r.title)) : undefined;
+  const id = r.id ?? (named?.ambiguous ? undefined : named?.id);
+  const note = id ? shown.find((n) => n.fm.id === id) : undefined;
+  const cur = note?.fm.facts?.[r.attribute];
+  if (!note || !cur || isList(cur as never) || "candidates" in (cur as object)) return false;
+  // A fact the writer can't see answers like any other there: it waits (invariant 3). The carve
+  // keeps a hidden fact on its visible note and names it in hiddenFacts.
+  if (cut?.hiddenFacts.some((h) => h.key === `${id}#${r.attribute}`)) return false;
+  const spec = attributeSpec(rules, String(note.fm.type), r.attribute);
+  let v: unknown = r.value;
+  try { v = normalizeValue(r.value, spec); if (spec.normalize === "link") v = pageLink(shown, v); } catch { /* as written */ }
+  return !!ownerAnswered(root, `${id}#${r.attribute}`, note.fm.history?.[r.attribute], v, r.as_of, writer, note.fm.type === "money" || String(note.fm.id).startsWith("money/") || !!sensitiveShape(rules, r.attribute, note.fm.title, (cur as { value?: unknown }).value, r.value));
+}
+
 function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[number], notes: Note[], now: Date): Verdict {
   const rules = rulesOf(root);
   const r = pr.request as { id?: string; title?: string; type?: string; attribute?: string; value?: unknown; retract?: boolean; sources?: unknown[]; as_of?: string };

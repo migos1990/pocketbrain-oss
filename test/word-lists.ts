@@ -205,6 +205,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "normalize.ts#valueKey": { class: "parses-a-value", why: "reads a date, a name's decoration or a value's wording" },
   "normalize.ts#FILLER": { class: "parses-a-value", why: "reads a date, a name's decoration or a value's wording" },
   "normalize.ts#WHO": { class: "parses-a-value", why: "reads a date, a name's decoration or a value's wording" },
+  "normalize.ts#SHORT_FORMS": { class: "parses-a-value", why: "short forms that take a period and end no sentence, for counting sentences in a next step (G952)" },
   "normalize.ts#NEGATION": { class: "parses-a-value", why: "reads a date, a name's decoration or a value's wording" },
   "oauth.ts#agentForOAuth": { class: "not-reviewed" },
   "orientation.ts#orientation": { class: "not-reviewed" },

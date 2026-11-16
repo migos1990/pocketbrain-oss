@@ -10,6 +10,8 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A question you already answered no longer comes back. When you settle a conflict, the value you did not keep stays ended: the same assistant or source saying it again from a mail or event of that day or before is kept as history, and the hub drops a waiting proposal of it as "kept your word", with Undo. A source dated after your answer still asks (G951). On the settle screen, "Not sure, keep both" now says "You won't be asked again" beside it.
+- A next step is one thing to do. An assistant that writes several to-dos as one next step gets it handed back with the fix, so a page no longer holds two unrelated tasks as one value from that door. Your own words are never handed back (G952).
 - A new sign-in is no longer one tap from an assistant you already have. The waiting card picks no assistant for you; choosing one opens a page that says what that assistant reads and which connection your yes replaces, and only that page connects it (G905).
 - An assistant's page calls its hourly budget count "saves and asks", since an ask to see spends from it too, and no longer "writes" beside a line saying it wrote nothing (G903). An assistant whose sign-in you just approved reads "Signed in today; it has read nothing yet", not "Hasn't connected yet" (G904).
 

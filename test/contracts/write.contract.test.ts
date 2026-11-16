@@ -859,6 +859,48 @@ test("contract write: dates that end on their day (G799): another read item's da
 });
 
 // G854: must never. A link written by name resolves only through a page's whole title or alias.
+test("contract write: a value the owner ended when settling is kept as history only for the writer who said it, with history's reply; another writer learns nothing from it (G951, invariant 3)", async () => {
+  const { ownerConflicts, ownerDecide } = await import("../../src/core");
+  const root = makeBrain();
+  // The owner's word, then planner's different value: a conflict the owner settles for their own.
+  setFact(root, "projects/course-a", "next_step", "Write the exam");
+  const said = { ...base, as_of: "2026-10-08", value: "Grade the essays" };
+  expect(write(root, said as never).outcome).toBe("disputed");
+  const c = ownerConflicts(root, new Date(), { held: true })[0]!;
+  ownerDecide(root, c.id, c.sides.find((x) => x.value === "Write the exam")!.n);
+  // planner says it again from another mail of that day: history, nothing asks, the value stays.
+  const again = write(root, { ...said, sources: ["gmail:f000000000000007"] } as never);
+  expect([again.outcome, again.message]).toEqual(["committed", "kept as history"]);
+  expect(ownerConflicts(root, new Date(), { held: true })).toEqual([]);
+  expect(fact(root, "projects/course-a", "next_step")!.value).toBe("Write the exam");
+  // A second time adds nothing: history's usual no-op.
+  expect(write(root, { ...said, sources: ["gmail:f000000000000007"] } as never).outcome).toBe("noop");
+  // Another writer with the same value gets what it got before the rule: never "kept as history".
+  const other = write(root, { ...said, agent: "steward" } as never);
+  expect(other.message).not.toBe("kept as history");
+  // The owner's own word for that value is theirs to change: it becomes the value.
+  setFact(root, "projects/course-a", "next_step", "Grade the essays");
+  expect(fact(root, "projects/course-a", "next_step")!.value).toBe("Grade the essays");
+});
+
+test("contract write: only a value the owner ended by answering a conflict is kept as history when said again; one their edit replaced, or one shaped like money, asks as before (G953, invariant 6)", async () => {
+  const { ownerConflicts, ownerDecide } = await import("../../src/core");
+  const day = process.env.PB_TODAY!;
+  // The owner's edit replaces planner's value: no question was asked, so none was answered.
+  const edited = makeBrain();
+  setFact(edited, "projects/course-a", "next_step", "Write the exam");
+  const again = write(edited, { ...base, as_of: day, value: "Grade the midterm", sources: ["gmail:f000000000000007"] } as never);
+  expect(again.message).not.toBe("kept as history");
+  // A money-shaped side the owner turned down, said again that day: still theirs to see.
+  const money = makeBrain();
+  setFact(money, "projects/course-a", "next_step", "Write the exam");
+  const said = { ...base, as_of: day, value: "Pay the $500 hall deposit" };
+  expect(write(money, said as never).outcome).toBe("disputed");
+  const c = ownerConflicts(money, new Date(), { held: true })[0]!;
+  ownerDecide(money, c.id, c.sides.find((x) => x.value === "Write the exam")!.n);
+  expect(write(money, { ...said, sources: ["gmail:f000000000000007"] } as never).message).not.toBe("kept as history");
+});
+
 test("contract write: a name that is one side of a slash in a page's title never becomes a link to it (G854)", () => {
   const n = (id: string, title: string, aliases?: string[]) => ({ fm: { id, type: "org", title, ...(aliases ? { aliases } : {}) }, body: "", path: "" }) as never;
   const two = n("orgs/northwind-brightwell", "Northwind / Brightwell");

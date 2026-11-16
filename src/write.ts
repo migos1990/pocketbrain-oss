@@ -13,7 +13,9 @@ import { loadBrain, parseNote, saveNote, isList, isDisputed, slugify, today, sen
 import type { Rules } from "./rules";
 import { loadRules, attributeSpec, tierOf, ownerName, captureAgentName } from "./rules";
 import { runChecks, shapeFails, thirdPartySensitive, findInjection, speaksToReader, isPreference, TYPE_FOLDER, type WriteRequest, type CheckFail } from "./checks";
-import { normalizeValue, compareKey, valueKey, nearSame } from "./normalize";
+import { normalizeValue, compareKey, valueKey, nearSame, thingsToDo } from "./normalize";
+// The attribute that is what to do next on a page, named by the schema as DATED names it (rules.ts).
+const NEXT_STEP = "next_step";
 import { refString, normalizeRef, sourceRank, isExactLouisRef, schemeOf, isApprovedRef, AGENT_MEMORY_SCHEMES, asAgentWord } from "./sources";
 import { writesHeld, holdWrites } from "./write-hold";
 import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath, machineMail, mailKey } from "./louis";
@@ -409,6 +411,11 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
   // any attribute's name (audit v7, G554: the same order under notes or working_style was served).
   if (!isOwnerId(opts.acceptedBy) && !req.retract && speaksToReader(req.attribute, req.value))
     fails.push({ check: "injection_shapes", outcome: "inbox", reason: `the ${isPreference(req.attribute) ? "preference" : "value"} tells the assistant reading it what to do`, fix: "a fact says how things are; the owner reviews this one" });
+  // One thing to do per next step (G952): a writer's own write holding several is handed back with
+  // the fix. Weighed on the request alone, before any note is read, so the reply says nothing about
+  // the brain. The owner's word, a value they accept and what the hub files are taken as given.
+  if (!opts.acceptedBy && !req.retract && (req.kind ?? "fact") === "fact" && req.attribute === NEXT_STEP && thingsToDo(req.value) > 1)
+    fails.push({ check: "one_step", outcome: "refuse", reason: `the next step holds ${thingsToDo(req.value)} things to do`, fix: "a next step is one thing to do: send the next one alone, in one sentence" });
   // An id naming an assistant is refused for a new note only (G598): a note the writer sees by that
   // id (an org page the owner made) takes the write. Weighed once the notes are loaded below, before
   // any inbox return, and a hidden one counts as missing, so it answers exactly like a new id
@@ -1061,6 +1068,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       beside(6, "contradicts a fact the owner confirmed");
     };
     const kept = !ownerWord(incoming) ? keptBothWith(root, factKey, cur.value, value) : undefined;
+    let answered: FactRecord | undefined;
     // The same sentence in other words, or with its parts in another order (G662, G678).
     // Never for the owner's own word: a near-same correction of theirs is a change (slice audit).
     if (valueKey(cur.value) === valueKey(value) || (!ownerWord(incoming) && nearSame(cur.value, value))) {
@@ -1073,6 +1081,11 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       // The reply is history's usual one, so it never tells a writer which values were kept (slice audit).
       if (known) { if (!mergeSources(known)) return done({ outcome: "noop", fact_key: factKey, step: 7, message: "kept as history" }); }
       else hs.push({ ...incoming, valid_to: incoming.as_of, ended_by: { step: 7, at: d, by: req.agent } });
+      step = 7; msg = "kept as history";
+    } else if (!ownerWord(incoming) && !isOwnerId(opts.acceptedBy) && (answered = ownerAnswered(root, factKey, hist[attr], value, incoming.as_of, req.agent, note.fm.type === "money" || note.fm.id.startsWith("money/") || !!sensitiveShape(rules, attr, note.fm.title, cur.value, value)))) {
+      // The owner already answered this one (G951): its source joins the value they ended, and
+      // nothing asks. History's usual reply, so a writer never learns what the owner answered.
+      if (!mergeSources(answered)) return done({ outcome: "noop", fact_key: factKey, step: 7, message: "kept as history" });
       step = 7; msg = "kept as history";
     } else if (twoDatedThings(rules, note, attr, spec, cur, incoming, readItems, read)) {
       // Another day from another source item the hub read, on an attribute that ends on its date
@@ -1281,6 +1294,37 @@ export function keptBothWith(root: string, factKey: string, a: unknown, b: unkno
     if (p.fm.status !== "kept-both" || p.fm.fact_key !== factKey) continue;
     const keys = new Set(((p.fm as { candidates?: FactRecord[] }).candidates ?? []).map((c) => valueKey(c.value)));
     if (keys.has(ka) && keys.has(kb)) return f.replace(/\.md$/, "");
+  }
+  return undefined;
+}
+
+// A value the owner ended when settling a conflict, said again by a source dated on or before the
+// day they ended it: the question they already answered (G951: a next step the owner settled on
+// the 15th was proposed again from a mail of the 15th and asked again hours later). A source dated
+// after their answer may say the fact changed since.
+// Only the writer whose value the owner ended: it knows what it said, so nothing here tells one
+// assistant what another proposed or what the owner turned down.
+// Answered means a conflict packet on this fact that the owner resolved that day, holding this
+// value as a side they did not pick. A history record ended at step 6 by the owner is not enough:
+// their edits on the dashboard leave the same record, and no question was asked then (G953).
+// Never a value or fact shaped like money, health or legal (`sensitive`): the owner sees those
+// each time (invariant 6).
+export function ownerAnswered(root: string, factKey: string, hist: FactRecord[] | undefined, value: unknown, asOf: unknown, by: string, sensitive: boolean): FactRecord | undefined {
+  const day = typeof asOf === "string" ? asOf.slice(0, 10) : "";
+  if (!day || !by || sensitive) return undefined;
+  const k = valueKey(value);
+  const rec = (hist ?? []).find((h) => !h.retired && h.by === by && h.ended_by?.step === 6 && isOwnerId(String(h.ended_by.by ?? "")) && typeof h.ended_by.at === "string" && day <= h.ended_by.at && valueKey(h.value) === k);
+  if (!rec) return undefined;
+  const dir = join(root, "disputes");
+  if (!existsSync(dir)) return undefined;
+  for (const f of readdirSync(dir).filter((x) => /^c-\d+\.md$/.test(x)).sort().reverse()) {
+    const text = readFileSync(join(dir, f), "utf8");
+    if (!text.includes("status: resolved")) continue;
+    let p: Note;
+    try { p = parseNote(text, `disputes/${f}`); } catch { continue; }
+    const fm = p.fm as unknown as { status?: string; fact_key?: string; candidates?: FactRecord[]; resolution?: { by?: unknown; at?: unknown; value?: unknown } };
+    if (fm.status !== "resolved" || fm.fact_key !== factKey || !isOwnerId(String(fm.resolution?.by ?? "")) || fm.resolution?.at !== rec.ended_by!.at) continue;
+    if (valueKey(fm.resolution?.value) !== k && (fm.candidates ?? []).some((c) => valueKey(c.value) === k)) return rec;
   }
   return undefined;
 }
