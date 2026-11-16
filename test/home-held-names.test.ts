@@ -12,7 +12,7 @@ import { makeBrain } from "./fixture";
 import { homeView, waitingCount } from "../src/dashboard/home";
 import { loadRules } from "../src/rules";
 import { loadBrain } from "../src/brain";
-import { unseenFacts, heldGuesses } from "../src/seen";
+import { unseenFacts, heldGuesses, keptFacts } from "../src/seen";
 import { dashboardHandler } from "../src/dashboard/server";
 
 const fact = (src: string, sender: string) => `{ value: "x", as_of: 2026-10-28, sources: ["gmail:${src}"], verification: verified-by-source, by: steward, recorded: 2026-10-28, unseen: true, sender: ${sender} }`;
@@ -54,12 +54,14 @@ test("Read it on a grouped card shows each of its values", async () => {
   const login = await d.handle(new Request(`http://${H}/login?key=${"k".repeat(32)}`, { headers: { host: H } }));
   const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
   const home = await (await d.handle(new Request(`http://${H}/home?all=1`, { headers: { host: H, cookie } }))).text();
-  const m = home.match(/action="\/action\/diary-seen"><input type="hidden" name="csrf" value="([^"]*)"><input type="hidden" name="key" value="([^"]+)"/)!;
+  // A guess card's one choice is It's right (G945), for each value the card read.
+  const m = home.match(/action="\/action\/held-right"><input type="hidden" name="csrf" value="([^"]*)"><input type="hidden" name="key" value="([^"]+)"><input type="hidden" name="seen" value="([^"]+)"/)!;
   expect(m).not.toBeNull();
-  const key = m[2]!.replace(/&#10;/g, "\n");
-  const r = await d.handle(new Request(`http://${H}/action/diary-seen`, { method: "POST", headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: `http://${H}` }, body: new URLSearchParams({ csrf: m[1]!, key }).toString() }));
+  const key = m[2]!.replace(/&#10;/g, "\n"), seen = m[3]!.replace(/&#10;/g, "\n");
+  const r = await d.handle(new Request(`http://${H}/action/held-right`, { method: "POST", headers: { host: H, cookie, "content-type": "application/x-www-form-urlencoded", origin: `http://${H}` }, body: new URLSearchParams({ csrf: m[1]!, key, seen }).toString() }));
   expect(r.status).toBe(303);
   expect(heldGuesses(root)).toHaveLength(0);
+  expect(keptFacts(root).filter((u) => u.yours)).toHaveLength(3);
 });
 
 test("a held value on a page with a plain name from a known sender still names its page", () => {

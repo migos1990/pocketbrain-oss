@@ -9,7 +9,7 @@ import { waitingLinkAsks } from "../dangling";
 import { HOME_COPY } from "./html-home";
 import { dateWordForms, sha256 } from "../util";
 import type { Note } from "../brain";
-import { isDisputed, sensitivityRank, loadBrain, type Sensitivity } from "../brain";
+import { isDisputed, isList, sensitivityRank, loadBrain, type Sensitivity } from "../brain";
 import { records, scrubExact } from "../carve";
 import { needleFor, findCarried, type Needle } from "../match";
 import type { Rules } from "../rules";
@@ -18,7 +18,7 @@ import { isOwnerId } from "../owner";
 import { readDiary, shownValue, displayName, sayDay, sayDays, sayYearly, ID_IN_TEXT, type DiaryRow } from "../diary";
 import { ownerLocal } from "../clock";
 import { ownerConflicts, type SettleCase } from "../core";
-import { unseenFacts, keptFacts, heldGuesses, type Unseen } from "../seen";
+import { unseenFacts, keptFacts, heldGuesses, heldSeen, type Unseen } from "../seen";
 import { inboxConflicts } from "../settle-inbox";
 import { comms, proposals, type Proposal } from "./data";
 import { agentLabel, agentTitle, cap } from "./labels";
@@ -53,7 +53,7 @@ export interface HomeLine {
   attr?: string; // the attribute, for which lines lead the face (faceLines)
   kind?: string; // the diary row's kind, likewise
 }
-export interface Waiting { what: string; verb: string; href: string; n?: number; teach?: string; link?: string; choices?: { label: string; answer: string }[]; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // teach: a teaching question's key, for its three taps (teachKey); seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
+export interface Waiting { what: string; verb: string; href: string; n?: number; right?: string; teach?: string; link?: string; choices?: { label: string; answer: string }[]; seen?: string; look?: string[]; stranger?: boolean; meta?: string; parts?: string[] } // look: each held value as a sentence, only on a fresh sign-in (G630) // parts: the values that disagree, in the order the sentence says them, for the highlighter; meta: the small line under a conflict ("Two emails disagree") // teach: a teaching question's key, for its three taps (teachKey); seen: a held fact's key, for its Show button; stranger: from an address the pages don't hold
 // reads: each assistant (its policy key and the name the owner knows it by) and how many times it read the brain since the owner's midnight.
 // wrong, more, sees, of, seeHref: the belief radar and See as for that assistant (home-beliefs.ts), added by the dashboard.
 // unconfirmed: what an assistant said and nobody confirmed (unconfirmedLines); first: the owner's page holds under three things yet (firstRun).
@@ -177,6 +177,12 @@ export const LINE_COPY = {
   heldMany: "{value} private things are held from your assistants.",
   keptPrivate: "Kept private: something about {title}",
   keptUnnamed: "Kept private: something only you can see",
+  yoursKept: "Yours, kept private: something about {title}",
+  yoursKeptUnnamed: "Yours, kept private: something only you can see",
+  heldRight: "You said it's right: something about {title}",
+  heldRightUnnamed: "You said it's right: something only you can see",
+  notRight: "You said it's not right: something about {title}",
+  notRightUnnamed: "You said it's not right: something only you can see",
   guessHeld: "Not confirmed: something about {title}",
   guessUnnamed: "Not confirmed: something only you can see",
   guessMany: "Not confirmed: {value} things about {title}",
@@ -364,6 +370,10 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   if (row.kind === "folded") return { token: row.undo_token, page: id, what: named && (!row.dropped || !privateNow(notes.get(row.dropped), "", row.sensitivity) || heldName(rules, notes.get(row.dropped), { page: row.dropped, title: row.title }) !== undefined) ? lineWords("folded", { title: shortName(id, row.title!, notes) }) : lineWords("foldedUnnamed", {}), from, undo: undone.has(row.undo_token) ? "undone" : "undo", maybe: false, shapeless, ...tag };
   // A page that moved with the workplace the owner named (G664), from one area to the other.
   if (row.kind === "moved") { const area = (a: unknown) => String(a ?? "").replace(/^./, (c) => c.toUpperCase()); return { token: row.undo_token, page: id, what: named ? lineWords("moved", { title: shortName(id, row.title!, notes), was: area(row.from), value: area(row.to) }) : lineWords("movedUnnamed", {}), from, undo: undone.has(row.undo_token) ? "undone" : "undo", maybe: false, shapeless, ...tag }; }
+  // It's right on a held guess (G945): what he did, never the value.
+  if (row.kind === "confirmed" && row.held_right) return { token: row.undo_token, page: id, what: named ? lineWords("heldRight", { title: shortName(id, row.title!, notes) }) : lineWords("heldRightUnnamed", {}), from, undo: undone.has(row.undo_token) ? "undone" : "undo", maybe: false, shapeless: true, ...tag };
+  // Not right on a held guess (G946): what he did, never the value; its Undo puts the guess back.
+  if (row.kind === "retracted" && row.why === "not-right") return { token: row.undo_token, page: id, what: named ? lineWords("notRight", { title: shortName(id, row.title!, notes) }) : lineWords("notRightUnnamed", {}), from, undo: undone.has(row.undo_token) ? "undone" : noteNow?.fm.facts?.[attr] ? "changed" : "undo", maybe: false, shapeless: true, ...tag };
   if (row.kind === "set_aside") return { token: row.undo_token, page: id, what: lineWords(attr === "open_question" ? "questionSetAside" : "takeBackSetAside", { title: row.title }), from, undo: "none", maybe: false, shapeless: true, ...tag };
   const verb = isVerbAttribute(attr);
   const t = shortName(id, row.title!, notes);
@@ -559,7 +569,7 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   });
   // The full list also shows what the owner kept private, counted nowhere (n: 0), each with Let
   // them have it, so Keep it private is never final (review of #60, G630).
-  const kept: Waiting[] = expand ? keptFacts(root).map((u) => ({ n: 0, what: ((name) => name ? lineWords("keptPrivate", { title: name }) : lineWords("keptUnnamed", {}))(heldName(rules, notes.get(u.page), u)), verb: "kept private", href: `/p/${u.page.split("/").map(encodeURIComponent).join("/")}`, seen: u.fact_key, ...(fresh ? { look: [factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)] } : {}), ...(u.unknownSender ? { stranger: true } : {}) })) : [];
+  const kept: Waiting[] = expand ? keptFacts(root).map((u) => ({ n: 0, what: ((name) => name ? lineWords(u.yours ? "yoursKept" : "keptPrivate", { title: name }) : lineWords(u.yours ? "yoursKeptUnnamed" : "keptUnnamed", {}))(heldName(rules, notes.get(u.page), u)), verb: "kept private", href: `/p/${u.page.split("/").map(encodeURIComponent).join("/")}`, seen: u.fact_key, ...(fresh ? { look: [factSentence(u.page, notes.get(u.page)?.fm.title ?? u.title, u.attr, u.value, notes)] } : {}), ...(u.unknownSender ? { stranger: true } : {}) })) : [];
   // A stranger's guess (heldGuesses): on the full list only, counted nowhere, read before it is
   // let out or kept like any held value. Its page is named under the held card's rule (heldName),
   // and guesses that would read the same are one card (the keys, one per line), as held cards are.
@@ -568,7 +578,7 @@ function conflicts(root: string, now: Date, expand = false, asks = ownerAsks(roo
   const guessed: Waiting[] = [...guessGroups].map(([name, us]) => {
     const one = us.length === 1, page = us[0]!.page;
     const what = name ? lineWords(one ? "guessHeld" : "guessMany", { title: name, value: String(us.length) }) : lineWords(one ? "guessUnnamed" : "guessManyUnnamed", { value: String(us.length) });
-    return { n: 0, what, verb: "not confirmed", href: us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(fresh ? { look: pageSentences(us.map((u) => ({ page: u.page, title: notes.get(u.page)?.fm.title ?? u.title, attr: u.attr, value: u.value })), notes) } : {}), stranger: true };
+    return { n: 0, what, verb: "not confirmed", href: us.every((u) => u.page === page) ? `/p/${page.split("/").map(encodeURIComponent).join("/")}` : "/home?all=1", seen: us.map((u) => u.fact_key).join("\n"), ...(us.every((u) => !isList(notes.get(u.page)?.fm.facts?.[u.attr] as never)) ? { right: us.map(heldSeen).join("\n") } : {}), ...(fresh ? { look: pageSentences(us.map((u) => ({ page: u.page, title: notes.get(u.page)?.fm.title ?? u.title, attr: u.attr, value: u.value })), notes) } : {}), stranger: true };
   });
   // A contradiction the write path handed over as a proposal is a conflict too (settle-inbox.ts).
   const asking = settleCards(open.filter((c) => !c.held), inboxConflicts(root)).map((cs) => card(cs, "tap to settle"));

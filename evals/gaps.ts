@@ -96,6 +96,20 @@ export const GAPS: Record<string, Gap> = {
     finding: "Found building G941: an accepted proposal's approved: ref names its inbox file (approved:<day>/inbox/<day>-<assistant>-<hash>.yaml), and readerRef passed it to every reader as it was, so a second assistant reading the fact learned which assistant filed it, against the standing rule that assistants never learn that. True of every owner accept since G424; Keep makes accepts routine.",
     fix: "src/sources.ts readerRef: an approved: ref reaches a reader as approved:<day>/inbox, the file dropped; readerText catches it in text too. The owner's screens keep the whole ref. Slice audit of the branch: the Gardener's wiki_sync refusal listed a page's refs raw (another assistant's agent: ref and the approved: file); it now lists them as the Gardener reads them, and a citation of the form it was served counts (src/core.ts gardenerWikiSync). test/keep-guess.test.ts, test/wiki-sync.test.ts, a row in test/contracts/view.contract.test.ts.",
   },
+  G945: {
+    closed: "claude/held-guess-right",
+    title: "A stranger's private guess could never become the owner's own",
+    severity: "medium",
+    finding: "Mac report after deploying 4c880787 (2026-11-16): the owner's only Not confirmed line was a private value from mail whose sender no page holds. Its card offered Keep it private and Let them have it; neither made it his, so it stayed a guess whatever he tapped, and Let them have it could send a stranger's unconfirmed claim to assistants.",
+    fix: "src/seen.ts confirmHeld: It's right, the guess card's one choice on a fresh sign-in, adds an approved: ref (approved:<day>/held, ranked as its mail, never as his typed word) to the value he read, bound to its bytes (heldSeen), and leaves the hold as it is (unseen, kept private): no assistant gets it until his separate Let them have it on the Kept private card, which now says \"Yours, kept private\". Only a held guess now; never on the 30-day sign-in. A confirmed diary row whose Undo takes the ref and the kept mark back out (src/undo.ts). test/held-right.test.ts.",
+  },
+  G946: {
+    closed: "claude/held-guess-right",
+    title: "A wrong stranger's guess had no way off the owner's list",
+    severity: "low",
+    finding: "Coordinator's review of G945, 2026-11-16: with It's right the guess card's only choice, a guess that is wrong, or one the owner doesn't care about, would sit on the full list for good, and a settled thing should leave the screen.",
+    fix: "src/seen.ts notRightHeld: Not right, a quieter second choice on the same card, ends the held guess as never right (to history, ended_by.correction by the owner, so the same mail can't file it again), deletes nothing and asks nothing; a retracted diary row (why not-right) whose Undo puts it back as the held guess it was (src/undo.ts). Only a held guess now, only the bytes read, never on the 30-day sign-in. Security review of the branch: confirmHeld and notRightHeld check the bytes again on the copy they change. Slice audit: a held fact from a known sender, a missing key or a stale hash ends nothing; after It's right and Let them have it a reader gets approved:<day>/held and nothing more. An approved ref makes the value owner-vouched, as Keep does (G941), so an address in it counts as the owner's for same-person and standing, which still need his own click. Code review of #218: Undo puts back one record, so a held guess that is a list is not offered It's right and keeps its old card. test/held-right.test.ts.",
+  },
   G883: {
     closed: "claude/private-guess-no-ask",
     title: "A stranger's private guess counted as an ask on the home",

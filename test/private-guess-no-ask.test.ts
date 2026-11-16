@@ -51,11 +51,11 @@ test("the full list names it, uncounted, never its value on an old sign-in; Let 
   const html = homePage(view(root, { all: true }), "c");
   expect(html).toContain(`<h2 class="group">${APP_COPY.guessHead}</h2>`);
   expect(html).not.toContain("Rimouski");
-  // Read first, then the same two choices as any held value.
+  // Read first, then one choice, It's right (G945); letting it out is a separate step.
   const fresh = homePage(view(root, { all: true, fresh: true }), "c");
   expect(fresh).toContain("Rimouski-Est");
-  expect(fresh).toContain(`>${APP_COPY.letThem}</button>`);
-  expect(fresh).toContain(`>${APP_COPY.keepPrivate}</button>`);
+  expect(fresh).toContain(`>${APP_COPY.itsRight}</button>`);
+  expect(fresh).not.toContain(`>${APP_COPY.keepPrivate}</button>`);
   expect(markSeen(root, KEY).outcome).toBe("seen");
   expect(rec(root, "home_town").unseen).toBeUndefined();
   expect(heldGuesses(root)).toEqual([]);

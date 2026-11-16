@@ -60,11 +60,13 @@ export const APP_COPY = {
   onlyYou: "Only you know this",
   stranger: "From an address your pages don't hold",
   letThem: "Let them have it",
+  itsRight: "It's right",
+  notRight: "Not right",
   keepPrivate: "Keep it private",
   keptHead: "Kept private",
   keptHint: "You kept these from your assistants. Let them have one whenever you like.",
   guessHead: "Not confirmed",
-  guessHint: "From addresses your pages don't hold. Your assistants don't get these, and nothing waits on you.",
+  guessHint: "From addresses your pages don't hold. Your assistants don't get these, and nothing waits on you. Tap It's right on one that is, and it's yours, still only for you. Not right takes one away.",
   readIt: "Read it",
   keptPrivate: "Kept private. Your assistants won't get it.",
   settleHead: "To settle",
@@ -245,6 +247,7 @@ a.mark.not::after{content:"";position:absolute;inset:-10px}
 .state{font-size:13px;color:var(--muted)}
 .more{margin:14px 0 0}
 .quiet{color:var(--muted)}
+.pill.quiet{color:var(--muted);font-weight:600;text-decoration-color:var(--muted);text-decoration-thickness:1px}
 .late{display:block;margin:8px 0 4px;padding:8px 0 8px 12px;border-left:4px solid var(--marker-ink);color:var(--text);font-size:15px;line-height:22px;font-weight:500;overflow-wrap:anywhere}
 .late.night-go{border-left-color:var(--headline-ink);font-weight:700}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;margin:0 0 4px}
@@ -364,6 +367,10 @@ function waitingCard(w: Waiting, csrf: string, gardener = false): string {
   // A held value is read before it goes anywhere (owner's phone, 2026-11-02, G630): on a fresh
   // sign-in the card says it, then Keep it private and Let them have it, two separate choices; on
   // an older one it says no value and offers Read it, a sign-in again (Face ID in the app).
+  // A stranger's guess, read (G945): It's right makes it the owner's and leaves the hold as it is;
+  // letting it out is a separate step, on the card it moves to (Kept private). The quieter Not right
+  // takes it off the list as never right, kept in history, with Undo (G946).
+  if (w.seen && w.look && w.right) return `<li class="card warn"><span class="what">${esc(w.what)}</span><ul class="look">${w.look.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${lock(w.stranger)}<div class="foot"><div class="acts"><form method="post" action="/action/held-not-right">${hidden(csrf, { key: w.seen, seen: w.right })}<button class="pill quiet" aria-label="${esc(`${APP_COPY.notRight}: ${w.what}`)}">${APP_COPY.notRight}</button></form><form method="post" action="/action/held-right">${hidden(csrf, { key: w.seen, seen: w.right })}<button class="pill solid" aria-label="${esc(`${APP_COPY.itsRight}: ${w.what}`)}">${APP_COPY.itsRight}</button></form></div></div></li>`;
   if (w.seen && w.look) return `<li class="card warn"><span class="what">${esc(w.what)}</span><ul class="look">${w.look.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${lock(w.stranger)}<div class="foot"><div class="acts">${w.verb === "kept private" ? "" : `<form method="post" action="/action/diary-keep">${hidden(csrf, { key: w.seen })}<button class="pill" aria-label="${esc(`${APP_COPY.keepPrivate}: ${w.what}`)}">${APP_COPY.keepPrivate}</button></form>`}<form method="post" action="/action/diary-seen">${hidden(csrf, { key: w.seen })}<button class="pill solid" aria-label="${esc(`${APP_COPY.letThem}: ${w.what}`)}">${APP_COPY.letThem}</button></form></div></div></li>`;
   if (w.seen) return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock(w.stranger)}<form method="post" action="/action/sign-in-again">${hidden(csrf, {})}<button class="pill solid" aria-label="${esc(`${APP_COPY.readIt}: ${w.what}`)}">${APP_COPY.readIt}</button></form></div></li>`;
   if (w.href === "/home?all=1") return `<li class="card warn"><span class="what">${esc(w.what)}</span><div class="foot">${lock()}<a class="pill solid" href="${esc(w.href)}">${APP_COPY.seeThem}</a></div></li>`;

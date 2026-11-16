@@ -13,7 +13,7 @@ import { compareKey } from "./normalize";
 import { refString } from "./sources";
 import { commitPaths, gitRun } from "./git";
 import { clock } from "./clock";
-import { OWNER } from "./owner";
+import { OWNER, isOwnerId } from "./owner";
 import { readDiary, appendDiary, diaryRow, shownValue, type DiaryRow } from "./diary";
 import { logWrite } from "./write";
 import { renderTouchedPages, MADE } from "./wiki";
@@ -85,6 +85,8 @@ export function undoFact(root: string, token: string): UndoResult {
     const left = (cur.sources ?? []).filter((x) => !row.added!.includes(refString(x)));
     if (left.length === (cur.sources ?? []).length || !left.length) return changed();
     cur.sources = left;
+    // It's right left the hold as it was and kept it private; Undo makes it a waiting guess again.
+    if (row.held_right) delete cur.kept_private;
   } else if (row.kind === "retracted" && revived) {
     if (!live || isList(live) || !same(shownValue(live), row.from)) { rmSync(join(root, revived)); return changed(); }
     // The page comes back as it was before the set-aside, so the other facts set aside with it are
@@ -98,7 +100,8 @@ export function undoFact(root: string, token: string): UndoResult {
     }
   } else if (row.kind === "retracted") {
     if (live) return changed();
-    const i = replaced(row.from);
+    // Not right ended it as never right (G946): its Undo finds that record, the owner's own.
+    const i = row.why === "not-right" ? (hist[attr] ?? []).findLastIndex((h) => h.ended_by?.correction && isOwnerId(h.ended_by.by) && compareKey(h.value) === compareKey(row.from)) : replaced(row.from);
     if (i < 0) return changed();
     facts[attr] = restore(i);
   } else {

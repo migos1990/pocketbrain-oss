@@ -18,6 +18,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - An assistant's page calls its hourly budget count "saves and asks", since an ask to see spends from it too, and no longer "writes" beside a line saying it wrote nothing (G903). An assistant whose sign-in you just approved reads "Signed in today; it has read nothing yet", not "Hasn't connected yet" (G904).
 - **Keep a guess with one tap.** Each "Not confirmed" line on your home (what an assistant on trial saved about you) now has **Keep**, and a page with several has **Keep all** for that page. A kept line is yours: its page says it as yours and your other assistants that can see that page get it at once, ranked as the assistant's word it came from, so a source or anything you type still wins. Undo takes it back. Money, health, legal and private values never show here; they keep their own Let them have it (G941). The same line said twice is kept once (G943).
 - Undoing the only fact on your own page no longer removes the page (G942).
+- **It's right** on a private value from an address your pages don't hold. Under Not confirmed on your full list, once you read it, its one choice is It's right: the value becomes yours and still no assistant gets it. It then sits under Kept private as "Yours, kept private", where Let them have it is the separate step that shares it. Undo takes it back to a guess (G945). Beside it, **Not right** takes a wrong one off your list: nothing is deleted, the same mail can't file it again, and Undo puts it back (G946).
 
 ### What the hub does
 

@@ -4,7 +4,7 @@
 // never reaches it. The owner can also opt in to their own tailnet (src/dashboard/tailnet.ts). Auth is a local owner session: a login link printed once at start-up
 // sets an HttpOnly cookie; every action also needs the session's CSRF token, and requests
 // for any other Host are refused (DNS rebinding).
-import { markSeen, keepPrivate } from "../seen";
+import { markSeen, keepPrivate, confirmHeld, notRightHeld } from "../seen";
 import { keepGuesses } from "../keep-guess";
 import { displayName } from "../diary";
 import { plain } from "./home";
@@ -805,6 +805,20 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
           hubGate(root, ["commit"]);
           const r = keepGuesses(root, picks, now());
           return r.kept || r.conflicts ? go("/home", { ok: r.message, tok: newTokens(at) }) : go("/home", { err: r.message });
+        } catch (e) { return go("/home", { err: fail(e) }); }
+      }
+      if (action === "held-right" || action === "held-not-right") {
+        // It's right on a stranger's held guess (src/seen.ts confirmHeld, G945): the owner's approval
+        // of the value he read, bound to its bytes; the hold stays. It records his word on a value
+        // only a fresh sign-in shows, so never on the 30-day sign-in (not in STALE_OK).
+        const keys = (form.key ?? "").split("\n").map((k) => k.trim()), seen = (form.seen ?? "").split("\n").map((k) => k.trim());
+        const picks = keys.map((key, i) => ({ key, seen: seen[i] ?? "" })).filter((p) => p.key && p.seen).slice(0, 50);
+        const at = diaryAt();
+        try {
+          hubGate(root, ["commit"]);
+          // Not right (G946): off the list as never right, nothing deleted; its diary row carries the Undo.
+          const r = action === "held-right" ? confirmHeld(root, picks) : ((x) => ({ confirmed: x.dropped, message: x.message }))(notRightHeld(root, picks));
+          return r.confirmed ? go("/home", { ok: r.message, tok: newTokens(at) }) : go("/home", { err: r.message });
         } catch (e) { return go("/home", { err: fail(e) }); }
       }
       if (action === "diary-keep") {
