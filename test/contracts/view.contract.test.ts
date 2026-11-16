@@ -12,6 +12,7 @@ import { redactLinks, scrubCarved, scrubPage, pageSummary, statusBanner, renderN
 import { readNote } from "../../src/core";
 import { useCells } from "../../src/cell";
 import { restoreCells } from "../cells";
+import { readerRef, readerText } from "../../src/sources";
 
 const SRC = `sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-01`;
 function note(root: string, id: string, fm: string, facts = "", body = "") {
@@ -422,5 +423,20 @@ test("contract view: a page whose hub block is empty reads back line for line", 
     const { res } = setup("helper", undefined, (root) => note(root, "projects/course-e", "type: project\narea: work\nsensitivity: personal\nstatus: active", "", body));
     const e = res.visible.get("projects/course-e")!;
     expect(scrubPage(e.note.body, e, res)).toBe(e.note.body);
+  }
+});
+
+// G944: an owner's approval names the inbox file it answered, and that file is named after the
+// assistant that proposed it. A reader gets the day and the channel only, in a fact's sources and
+// in text; never the file.
+test("contract view: an approved: ref never names the proposal's file to a reader", () => {
+  const rows: [string, string][] = [
+    ["approved:2026-10-08/inbox/2026-10-08-planner-43c72911.yaml", "approved:2026-10-08/inbox"],
+    ["approved:2026-10-08/inbox/anything", "approved:2026-10-08/inbox"],
+    ["approved:2026-10-08/inbox", "approved:2026-10-08/inbox"],
+  ];
+  for (const [input, out] of rows) {
+    expect(readerRef(input, "helper"), input).toBe(out);
+    expect(readerText(`Saved (${input}) today.`, "helper"), input).toBe(`Saved (${out}) today.`);
   }
 });

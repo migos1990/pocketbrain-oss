@@ -14,11 +14,14 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 - A next step is one thing to do. An assistant that writes several to-dos as one next step gets it handed back with the fix, so a page no longer holds two unrelated tasks as one value from that door. Your own words are never handed back (G952).
 - A new sign-in is no longer one tap from an assistant you already have. The waiting card picks no assistant for you; choosing one opens a page that says what that assistant reads and which connection your yes replaces, and only that page connects it (G905).
 - An assistant's page calls its hourly budget count "saves and asks", since an ask to see spends from it too, and no longer "writes" beside a line saying it wrote nothing (G903). An assistant whose sign-in you just approved reads "Signed in today; it has read nothing yet", not "Hasn't connected yet" (G904).
+- **Keep a guess with one tap.** Each "Not confirmed" line on your home (what an assistant on trial saved about you) now has **Keep**, and a page with several has **Keep all** for that page. A kept line is yours: its page says it as yours and your other assistants that can see that page get it at once, ranked as the assistant's word it came from, so a source or anything you type still wins. Undo takes it back. Money, health, legal and private values never show here; they keep their own Let them have it (G941). The same line said twice is kept once (G943).
+- Undoing the only fact on your own page no longer removes the page (G942).
 
 ### What the hub does
 
 - The personal-term check (`scripts/check-public.sh`) takes a line `<term> @<path>,<path>` that excuses a term in those files only, and the public export now runs that same check over what it publishes (G936, G937).
 - `bun scripts/brain-quotes.ts --brain <path>`, run on the Mac, lists each tracked file and line that repeats 8 words in a row from a page of your brain, never the words, report only (G938).
+- A fact you approved no longer tells your other assistants which assistant proposed it: the approval's reference named the proposal's file, which carries that assistant's name. Assistants now get the day you approved it and nothing more (G944).
 
 ## [0.3.0] - 2026-11-15
 

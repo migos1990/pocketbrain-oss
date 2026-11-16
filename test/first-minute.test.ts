@@ -33,7 +33,7 @@ test("a trial assistant's save about the owner shows on the home as Not confirme
   const w = await remember(root, token!, { type: "person", title: "Sam Rivera", attribute: "based_in", value: "Lisbon", as_of: "2026-10-01", sources: ["agent:claude"] });
   expect(w.outcome).toBe("inbox");
   const v = view(root);
-  expect(v.unconfirmed).toEqual([{ page: "people/sam-rivera", what: "Sam Rivera's based in is Lisbon.", from: "Not confirmed · Claude said so." }]);
+  expect(v.unconfirmed).toMatchObject([{ page: "people/sam-rivera", what: "Sam Rivera's based in is Lisbon.", from: "Not confirmed · Claude said so." }]);
   // A guess: no count, nothing on the page, no ask anywhere.
   expect(ownerAsks(root).total).toBe(0);
   expect(JSON.stringify(loadBrain(root).find((n) => n.fm.id === "people/sam-rivera")!.fm.facts ?? {})).not.toContain("Lisbon");

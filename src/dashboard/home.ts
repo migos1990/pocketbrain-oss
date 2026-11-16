@@ -211,6 +211,8 @@ export const SAID_COPY = {
   you: "You said so {when}",
   youVia: "You told your {name} {when}",
   assistant: "{name} learned it {when}",
+  // An assistant's line the owner kept (Keep, src/keep-guess.ts) or approved on Settings (G941).
+  kept: "You kept what {name} said {when}",
   other: "From {source} {when}",
   twoEmails: "Two emails disagree",
   twoSources: "Two sources disagree",
@@ -278,7 +280,7 @@ function dayName(day: string, today: string): { day: string; when: string } {
   const w = FULL_DAY[new Date(`${day}T12:00:00Z`).getUTCDay()]!;
   return Date.parse(today) - Date.parse(day) < 7 * 86_400_000 ? { day: w, when: `on ${w}` } : { day: longDay(day), when: `on ${longDay(day)}` };
 }
-export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at"> & Partial<Pick<DiaryRow, "why">>, rules: Rules, today = dayOf(clock().toISOString())): string {
+export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at"> & Partial<Pick<DiaryRow, "why" | "accepted_by">>, rules: Rules, today = dayOf(clock().toISOString())): string {
   const d = dayName(dayOf(row.at), today);
   const label = (by: string) => rules.policy.agents[by]?.label ?? by;
   const f = (s: string, v: Record<string, string>) => { const t = s.replace(/\{(\w+)\}/g, (_m, x: string) => v[x] ?? ""); return t.charAt(0).toUpperCase() + t.slice(1); };
@@ -288,7 +290,7 @@ export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at"> & Par
     case "calendar": return f(SAID_COPY.calendar, d);
     case "notion": return f(SAID_COPY.notion, d);
     case "you": return !row.by || isOwnerId(row.by) ? f(SAID_COPY.you, d) : f(SAID_COPY.youVia, { ...d, name: label(row.by) });
-    case "assistant": case "none": return f(SAID_COPY.assistant, { ...d, name: label(row.by) });
+    case "assistant": case "none": return row.accepted_by && isOwnerId(row.accepted_by) ? f(SAID_COPY.kept, { ...d, name: agentTitle(rules, row.by) }) : f(SAID_COPY.assistant, { ...d, name: label(row.by) });
     default: return f(SAID_COPY.other, { ...d, source: row.source_word });
   }
 }
@@ -754,9 +756,10 @@ export const firstName = (rules: Rules) => (rules.policy.owner?.name ?? ownerNam
 // new owner's first "remember that I prefer short answers" was saved where no screen showed it).
 // Only the open saves the hub leaves to expire (src/filing.ts, its expiring queue): a guess, shown as
 // "Not confirmed" under the standing rule for guesses. Never an ask, never counted, nothing filed or
-// tied by it; it goes when it expires, and the owner keeps one by saying it in the box. Nothing that
-// is private now, looks like money, health or legal, or carried a value the assistant can't see.
-export interface Unconfirmed { page?: string; what: string; from: string }
+// tied by it; it goes when it expires, unless the owner keeps it: Keep, or Keep all on its page
+// (src/keep-guess.ts, G941), with `keep` naming the proposal and the hash of the bytes shown. Nothing
+// that is private now, looks like money, health or legal, or carried a value the assistant can't see.
+export interface Unconfirmed { page?: string; title?: string; what: string; from: string; keep?: { file: string; seen: string } }
 export function unconfirmedLines(root: string, rules: Rules, notes: Map<string, Note>, asks: OwnerAsks, cards: Proposal[] = proposals(root)): Unconfirmed[] {
   const all = [...notes.values()], out: Unconfirmed[] = [];
   for (const p of cards) {
@@ -768,7 +771,7 @@ export function unconfirmedLines(root: string, rules: Rules, notes: Map<string, 
     const title = n?.fm.title ?? r.title;
     if (typeof title !== "string" || (n && (privateNow(n, r.attribute) || sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")))) continue;
     if (sensitiveShape(rules, id, title, r.attribute, r.value, typeof r.text === "string" ? r.text : undefined)) continue;
-    out.push({ ...(n ? { page: n.fm.id } : {}), what: factSentence(n?.fm.id ?? "", title, r.attribute, r.value, notes), from: lineWords("notConfirmed", { a: agentTitle(rules, p.by) }) });
+    out.push({ ...(n ? { page: n.fm.id } : {}), title, what: factSentence(n?.fm.id ?? "", title, r.attribute, r.value, notes), from: lineWords("notConfirmed", { a: agentTitle(rules, p.by) }), ...(p.seen ? { keep: { file: p.file, seen: p.seen } } : {}) });
   }
   return out;
 }

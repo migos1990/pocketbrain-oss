@@ -1182,8 +1182,11 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
   const undef = [...new Set(sectionsIn.flatMap((x) => [...x.text.matchAll(/\[\^([^\]\s]+)\]/g)].map((m) => m[1])))].filter((l) => !defined.has(l));
   if (undef.length) {
     const recs = Object.values(shown).flatMap((f) => records(f as Fact)).filter((r) => !r.valid_to && (r.sources ?? []).length);
-    const refs = [...new Set(recs.flatMap((r) => (r.sources ?? []).map(refString)))].slice(0, 5);
-    const example = recs[0] ? `references: [{ "label": "${undef[0]}", "text": "${reference(recs[0])}" }]` : `references: [{ "label": "${undef[0]}", "text": "Email, <date> (gmail:<id>)" }]`;
+    // Each ref as the Gardener reads it (readerRef): never another assistant's name, nor the inbox
+    // file an owner's approval answered (G944); a ref withheld from it is not offered.
+    const served = (r: FactRecord): FactRecord => ({ ...r, sources: (r.sources ?? []).map((x) => readerSource(x, agent)).filter((x) => !refString(x).includes("[withheld]")) });
+    const refs = [...new Set(recs.flatMap((r) => (served(r).sources ?? []).map(refString)))].slice(0, 5);
+    const example = recs[0] ? `references: [{ "label": "${undef[0]}", "text": "${reference(served(recs[0]))}" }]` : `references: [{ "label": "${undef[0]}", "text": "Email, <date> (gmail:<id>)" }]`;
     throw new CoreError(422, `${undef.map((l) => `[^${l}]`).join(", ")} ${undef.length === 1 ? "has" : "have"} no definition: pass ${example} in this same call, one per label, each naming a source ref a fact of this page cites${refs.length ? ` (${refs.join(", ")})` : ""}, then send the page again`);
   }
   const uncited = problems.find((x) => x.rule === "uncited-line");
@@ -1193,7 +1196,7 @@ export function gardenerWikiSync(root: string, agent: string, body: Record<strin
   // Drift counts only the references this call passes or its sections use: an old one already on
   // the page that no fact cites now is the nightly lint's to report, not a reason to refuse every
   // fresh sync of that page (night run 2026-11-03: three pages refused on old references).
-  const cited = new Set(Object.values(shown).flatMap((f) => records(f as Fact)).filter((r) => !r.valid_to && !r.retired && !r.unseen).flatMap((r) => (r.sources ?? []).map((x) => normalizeRef(refString(x)))));
+  const cited = new Set(Object.values(shown).flatMap((f) => records(f as Fact)).filter((r) => !r.valid_to && !r.retired && !r.unseen).flatMap((r) => (r.sources ?? []).flatMap((x) => [normalizeRef(refString(x)), normalizeRef(readerRef(refString(x), agent))]))); // the form it was served counts too (G944)
   for (const [l, text] of [...references.map((x) => [x.label, x.text] as const), ...[...used].map((l) => [l, defs.get(l) ?? ""] as const)])
     for (const ref of refsIn(text))
       if (!cited.has(normalizeRef(ref))) throw new CoreError(422, `reference ${l} cites ${ref}, which no current fact of this page cites`);

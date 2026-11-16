@@ -5,6 +5,7 @@
 // sets an HttpOnly cookie; every action also needs the session's CSRF token, and requests
 // for any other Host are refused (DNS rebinding).
 import { markSeen, keepPrivate } from "../seen";
+import { keepGuesses } from "../keep-guess";
 import { displayName } from "../diary";
 import { plain } from "./home";
 import { pageParam } from "./paging";
@@ -793,6 +794,18 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
         }
         if (!said.length) return go("/home", { err: "Nothing waiting there any more." });
         return go("/home", { ok: `${pageSentences(said, new Map(notes.map((x) => [x.fm.id, x]))).join(" ")} ${whoGetsIt(only)}`, tok: newTokens(at) });
+      }
+      if (action === "guess-keep") {
+        // Keep a Not confirmed line, or a page's at once (src/keep-guess.ts, G941): the owner's
+        // approval of what the home showed; it lets the value out to assistants, so never on the
+        // 30-day sign-in (not in STALE_OK). The diary's rows from this tap carry the Undo.
+        const picks = (form.keep ?? "").split(/[,\n]/).map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.lastIndexOf(":"); return { file: l.slice(0, i), seen: l.slice(i + 1) }; });
+        const at = diaryAt();
+        try {
+          hubGate(root, ["commit"]);
+          const r = keepGuesses(root, picks, now());
+          return r.kept || r.conflicts ? go("/home", { ok: r.message, tok: newTokens(at) }) : go("/home", { err: r.message });
+        } catch (e) { return go("/home", { err: fail(e) }); }
       }
       if (action === "diary-keep") {
         // Keep it private (G630): still held from every assistant, no longer waiting (src/seen.ts).

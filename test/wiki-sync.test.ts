@@ -244,3 +244,20 @@ test("an old reference already on the page that no fact cites now doesn't block 
   const bad = await tool("gardener", "wiki_sync", { ...GOOD, references: [{ label: "1", text: "Email, Sep 1 (gmail:f0000000000000ff)" }] });
   expect(bad.error).toContain("no current fact of this page cites");
 });
+
+// G944 (slice audit of the Keep branch): a fact the owner approved cites approved:<day>/inbox/<file>,
+// and the file is named after the assistant that proposed it. The Gardener is told the page's refs
+// as any reader gets them, and may cite the form it was served.
+test("the Gardener is never told which assistant proposed an approved fact, and may cite what it was served", async () => {
+  const { root, tool } = setup();
+  const f = join(root, "projects", "course-a.md");
+  const raw = readFileSync(f, "utf8").replace(/  next_step: \{[^\n]*\n/, "").replace("\n---\n", `\n  next_step: { value: Grade the midterm, as_of: 2026-10-01, sources: ["agent:planner", "approved:2026-10-01/inbox/2026-10-01-planner-0a1b2c3d.yaml"], verification: self-reported, by: planner, recorded: 2026-10-01 }\n---\n`);
+  writeFileSync(f, raw);
+  git(root, ["add", "projects/course-a.md"]);
+  git(root, ["commit", "-q", "-m", "owner: approved step", "--", "projects/course-a.md"], "owner");
+  const r = await tool("gardener", "wiki_sync", { id: "projects/course-a", summary: "A course.", sections: [{ heading: "Next steps", text: "Grade the midterm.[^1]" }] });
+  expect(r.error).toContain("has no definition");
+  expect(r.error).not.toContain("planner-0a1b2c3d");
+  const ok = await tool("gardener", "wiki_sync", { ...GOOD, references: [{ label: "1", text: "You approved, Oct 1 (approved:2026-10-01/inbox)" }] });
+  expect(ok.error).toBeUndefined();
+});

@@ -20,6 +20,8 @@ import { renderTouchedPages, MADE } from "./wiki";
 import { undoFold } from "./fold";
 import { undoMove } from "./area-follow";
 import type { Note } from "./brain";
+import { loadRules } from "./rules";
+import { ownerPageOf } from "./dashboard/home";
 
 export type UndoOutcome = "undone" | "changed_since" | "already_undone" | "not_found" | "not_undoable" | "not_saved";
 export interface UndoResult { outcome: UndoOutcome; fact_key?: string; row?: DiaryRow; message: string }
@@ -162,6 +164,9 @@ function rehold(root: string, row: DiaryRow, token: string): UndoResult {
 
 function emptied(root: string, note: Note): boolean {
   if (Object.keys(note.fm.facts ?? {}).length) return false;
+  // The owner's own page is never one just started: a new brain's holds no fact until the owner's
+  // first, so undoing a first kept line took the page with it (G942).
+  if (ownerPageOf(loadRules(root), loadBrain(root))?.fm.id === note.fm.id) return false;
   if (!Object.values(note.fm.history ?? {}).flat().every((r) => (r as FactRecord).ended_by?.correction)) return false;
   return noOwnWords(root, note);
 }

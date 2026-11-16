@@ -64,7 +64,10 @@ export function assistantOf(ref: string): string | undefined {
 }
 // What a reader gets for a ref: another assistant's ref as this one, its own as it is (G722).
 export const ANOTHER_ASSISTANT = "agent:[withheld]";
+// An owner's approval names the inbox file it answered, and that file is named after the assistant
+// that proposed it: a reader gets the day and the channel only (G944).
 export function readerRef(ref: string, reader: string): string {
+  if (schemeOf(ref) === "approved") return ref.replace(/^(approved:[^/\s]*\/inbox)\/.*$/, "$1");
   const a = assistantOf(ref);
   return a === undefined || (a !== "" && a === reader.toLowerCase()) ? ref : ANOTHER_ASSISTANT;
 }
@@ -73,7 +76,7 @@ export function readerSource(s: SourceRef, reader: string): SourceRef {
 }
 // Every assistant ref in a text a reader gets, and a footnote's "<Name>'s note" for another
 // assistant (G723): the page's file keeps them for the owner, who sees which assistant filed what.
-const ASSISTANT_REF = /\b(?:agent|agent-relay|agent-log|town-wiki|town-routine|instinct-mem):(?!\[)[^\s,;)\]]+/g;
+const ASSISTANT_REF = /\b(?:agent|agent-relay|agent-log|town-wiki|town-routine|instinct-mem|approved):(?!\[)[^\s,;)\]]+/g;
 export function readerText(text: string, reader: string): string {
   const me = reader.toLowerCase();
   const word = (seg: string) => seg.replace(/^([ \t]*)([A-Z][\w-]{0,39})'s note\b/, (m, pre: string, who: string) => who.toLowerCase() === me ? m : `${pre}An assistant's note`);

@@ -5,7 +5,7 @@
 // the assistants' rows and Settings. Each is a page over functions that already exist; no script, no
 // model decides anything here. Fixed words are in APP_COPY, held to the owner's words by
 // test/owner-copy.test.ts.
-import type { HomeView, HomeLine, Waiting, ChangedPage } from "./home";
+import type { HomeView, HomeLine, Waiting, ChangedPage, Unconfirmed } from "./home";
 import { faceLines, faceRoom, waitingTotal, SETTINGS_HREF } from "./home";
 import type { Mark } from "./marks";
 import type { WrongLine } from "./home-beliefs";
@@ -53,7 +53,10 @@ export const APP_COPY = {
   firstRun: "Tell your memory three things about you, like where you work, where you live or how you like your answers. Type them in the box below, one at a time.",
   // What an assistant said that nobody confirmed (home.ts unconfirmedLines): never an ask, no count.
   unconfirmedHead: "Not confirmed",
-  unconfirmedHint: "What your assistants said that you haven't confirmed. Each goes away by itself; to keep one, say it in the box.",
+  unconfirmedHint: "What your assistants said that you haven't confirmed. Keep what's right and your other assistants get it too. The rest goes away by itself.",
+  // Keep a guess (src/keep-guess.ts, G941): one line, or every line about one page.
+  keep: "Keep",
+  keepAll: "Keep all",
   onlyYou: "Only you know this",
   stranger: "From an address your pages don't hold",
   letThem: "Let them have it",
@@ -408,6 +411,23 @@ const onSettings = (w: Waiting) => w.href === SETTINGS_HREF;
 const isQuestion = (w: Waiting) => !!w.teach || !!w.link;
 const group = (head: string, hint: string, cards: string[], n: number | null = cards.length) => cards.length ? `<h2 class="group">${esc(head)}${n === null ? "" : ` <b>${n}</b>`}</h2><p class="hint">${esc(hint)}</p><ul class="mind">${cards.join("")}</ul>` : "";
 const DONE = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>';
+// The Not confirmed lines, a page's together (G941): each with Keep, and a page with more than one
+// line first gets one Keep all for that page's lines only. A form names a line by its proposal and
+// the hash of the bytes shown; the server keeps only what is a Not confirmed line now (keep-guess.ts).
+const keepItems = (us: Unconfirmed[]) => us.flatMap((u) => (u.keep ? [`${u.keep.file}:${u.keep.seen}`] : [])).join(",");
+const keepForm = (csrf: string, items: string, label: string, aria: string, cls: string) =>
+  `<form method="post" action="/action/guess-keep">${hidden(csrf, { keep: items })}<button class="${cls}" aria-label="${esc(`${label}: ${aria}`)}">${label}</button></form>`;
+function unconfirmedCards(us: Unconfirmed[], csrf: string): string[] {
+  const byPage = new Map<string, Unconfirmed[]>();
+  for (const u of us) { const k = u.page ?? `new:${u.title ?? u.what}`; byPage.set(k, [...(byPage.get(k) ?? []), u]); }
+  return [...byPage.values()].flatMap((group) => {
+    const keepable = group.filter((u) => u.keep), title = group[0]!.title ?? "";
+    const foot = (small: string, form: string) => `<div class="foot"><small>${esc(small)}</small>${form}</div>`;
+    const all = keepable.length > 1 ? [`<li class="card keep-all"><span class="what">${esc(title)}</span>${foot(`${keepable.length} not confirmed`, keepForm(csrf, keepItems(keepable), APP_COPY.keepAll, title, "pill solid"))}</li>`] : [];
+    const what = (u: Unconfirmed) => u.page ? `<a class="what" href="${href(u.page)}">${esc(u.what)}</a>` : `<span class="what">${esc(u.what)}</span>`;
+    return [...all, ...group.map((u) => `<li class="card">${what(u)}${foot(u.from, u.keep ? keepForm(csrf, keepItems([u]), APP_COPY.keep, u.what, "pill") : "")}</li>`)];
+  });
+}
 export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: SayReply; flash?: string; done?: boolean; undo?: string; night?: string } = {}): string {
   const all = [...v.since, ...v.earlier.flatMap((d) => d.lines)];
   // The face: what waits, then the memories worth acting on, six cards in all (MIND_CAP); the full
@@ -426,7 +446,7 @@ export function homePage(v: HomeView, csrf: string, o: { said?: string; reply?: 
     + group(APP_COPY.guessHead, APP_COPY.guessHint, guessed.map((w) => waitingCard(w, csrf)), null)
     + (v.gardener.length ? `<h2 class="group">${esc(APP_COPY.gardenerHead)}</h2><ul class="mind">${v.gardener.map((w) => waitingCard(w, csrf, true)).join("")}</ul>` : "");
   const mems = lines.map((l) => memoryCard(l, csrf, !v.all));
-  const unconfirmed = group(APP_COPY.unconfirmedHead, APP_COPY.unconfirmedHint, (v.unconfirmed ?? []).map((u) => `<li class="card">${u.page ? `<a class="what" href="${href(u.page)}">${esc(u.what)}</a>` : `<span class="what">${esc(u.what)}</span>`}<div class="foot"><small>${esc(u.from)}</small></div></li>`), null);
+  const unconfirmed = group(APP_COPY.unconfirmedHead, APP_COPY.unconfirmedHint, unconfirmedCards(v.unconfirmed ?? [], csrf), null);
   const first = v.first ? `<p class="hint first-run">${esc(APP_COPY.firstRun)}</p>` : "";
   // What was just done: one quiet line, with Undo when the diary can take it back (G631).
   const reply = o.done && o.flash && !o.reply ? `<div class="done" role="status">${DONE}<span>${esc(o.flash)}</span>${o.undo ? `<form method="post" action="/action/diary-undo">${hidden(csrf, { token: o.undo })}<button class="pill" aria-label="${esc(`${HOME_COPY.undo}: ${o.flash}`)}">${HOME_COPY.undo}</button></form>` : ""}</div>` : replyHtml(csrf, o);
