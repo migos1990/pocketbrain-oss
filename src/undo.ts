@@ -99,6 +99,11 @@ export function undoFact(root: string, token: string): UndoResult {
       (hist[a] ??= []).push({ ...(cur as FactRecord), valid_to: d, ended_by: { step: 0, at: d, by: "hub" } });
       delete facts[a];
     }
+  } else if (row.kind === "retracted" && row.why === "machine" && live && isList(live)) {
+    // One of several on a list, set aside as machine mail (G964): that item is live again.
+    const it = live.items.findLast((i) => i.valid_to && i.ended_by?.by === "hub" && !i.ended_by.correction && compareKey(i.value) === compareKey(row.from));
+    if (!it) return changed();
+    delete it.valid_to; delete it.ended_by;
   } else if (row.kind === "retracted") {
     if (live) return changed();
     // Not right ended it as never right (G946): its Undo finds that record, the owner's own.

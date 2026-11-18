@@ -50,7 +50,7 @@ import { sha256 } from "./util";
 import { TOKEN_ROLES, type TokenRole } from "./tokenrole";
 import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
-import { setAsideMachineMail } from "./receipt-pages";
+import { setAsideMachineMail, classifyOldMail, oldMailLine, machineMailOn } from "./receipt-pages";
 import { setAsideFirstNamePages } from "./first-name-pages";
 import { guessedAreas, setAreasUnguess } from "./area-guess";
 import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setFirstNamePages, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
@@ -333,7 +333,8 @@ const USAGE = `pocketbrain <command>
   overlaps                           assistants' routines that may do the same job, by page id (docs/wiki.md)
   areas guessed | areas unguess on|off   pages a word guess put in an area; on: the night pass moves them back, with Undo (docs/capture.md)
   write-hold | write-hold clear <agent>   who writes proposals only after writing a value it can't see, or let one write again (docs/add-an-agent.md)
-  machine-mail | machine-mail on|off   count the held facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
+  machine-mail | machine-mail on|off   count the facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
+  machine-mail check                 classify mail filed from before machine senders were skipped: a count, or with machine-mail on read each once now
   first-name-pages | first-name-pages on|off   list person pages named only by your first name, or set them aside nightly with Undo (docs/capture.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
@@ -1964,9 +1965,15 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
   if (cmd === "fold" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setFoldTwins(root, args[0]!));
   // Facts assistants filed from machine mail (src/receipt-pages.ts, G668): count, or set aside nightly.
   if (cmd === "machine-mail" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setMachineMailAside(root, args[0]!));
+  if (cmd === "machine-mail" && args[0] === "check") {
+    // Mail filed from before machine senders were skipped, classified now and not at night (G980).
+    const on = machineMailOn(root);
+    classifyOldMail(root, on).then((r) => { console.log(oldMailLine(on, r)); process.exit(0); }, (e) => { console.error(String(e.message ?? e)); process.exit(1); });
+    return -1;
+  }
   if (cmd === "machine-mail") {
     const r = setAsideMachineMail(root, false);
-    console.log(`${r.facts} held fact${r.facts === 1 ? "" : "s"} on ${r.pages} page${r.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside each night, each with Undo.`);
+    console.log(`${r.facts} fact${r.facts === 1 ? "" : "s"} on ${r.pages} page${r.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside each night, each with Undo.`);
     return 0;
   }
   // Person pages named only by the owner's first name (src/first-name-pages.ts, G978): list, or set aside nightly.

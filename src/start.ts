@@ -27,6 +27,7 @@ import { housekeeping } from "./growth";
 import { probeOnce, unsearchable, recordStart, northStarAfterStart, northStarLine } from "./probe";
 import { pullAll, pullsDue, recheckDue, keepSourceWords } from "./pull";
 import { nightBackfill, nightBackfillLine } from "./backfill";
+import { classifyOldMail, oldMailLine, machineMailOn } from "./receipt-pages";
 import { trustReport, recordTrust, trustLine } from "./trust";
 import { proofread, proofreadLine } from "./proofread";
 import { examDue, examRun } from "./exam";
@@ -201,7 +202,9 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
         if (s !== "ok") log(`${stamp()} ${s}`);
         // Facts with no live source get the mail that states them (src/backfill.ts; report-only
         // until the owner's `pocketbrain backfill on`), then the day's trust numbers are kept for the week-on-week line (src/trust.ts). No model.
-        log(`${stamp()} ${await runJob(root, "backfill", async () => nightBackfillLine(await nightBackfill(root)))}`);
+        // Then mail filed from before the hub skipped machine senders is classified once (src/receipt-pages.ts
+        // classifyOldMail, G980): a count until the owner's `pocketbrain machine-mail on`, then up to 200 a night.
+        log(`${stamp()} ${await runJob(root, "backfill", async () => { const line = nightBackfillLine(await nightBackfill(root)); const on = machineMailOn(root); return `${line}; ${oldMailLine(on, await classifyOldMail(root, on))}`; })}`);
         log(`${stamp()} ${await runJob(root, "trust", () => { const t = trustReport(root); recordTrust(root, t); return `trust: ${t.facts} facts, ${trustLine(t)}`; })}`);
         // The brain reads every page as the owner sees it, one set of class rules, counts only
         // (src/proofread.ts, G750; report-only: no card, no ask, no notification).

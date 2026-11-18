@@ -733,7 +733,7 @@ export function getDispute(root: string, agent: string, id: string) {
 
 // Replace the disputed fact with the settled record. Losing candidates go to history (or,
 // in a list, end with valid_to). Flags stay sticky: the strictest of the candidates' wins.
-function settle(root: string, p: Packet, chosen: FactRecord, by: string, step: number, packetPatch: Record<string, unknown>, kind: string) {
+function settle(root: string, p: Packet, chosen: FactRecord, by: string, step: number, packetPatch: Record<string, unknown>, kind: string, why?: DiaryRow["why"]) {
   const d = today();
   const id = String(p.note.fm.id).split("/")[1];
   const cands = (p.note.fm.candidates ?? []) as FactRecord[];
@@ -784,10 +784,34 @@ function settle(root: string, p: Packet, chosen: FactRecord, by: string, step: n
   saveNote(root, p.note);
   // The owner's diary has the answer as one line; its Undo opens the conflict again (src/undo.ts).
   const at = clock().toISOString();
-  const diary = appendDiary(root, diaryRow({ at, factKey: String(p.note.fm.fact_key), title: String(p.target.fm.title ?? p.target.fm.id), kind: "settled", from: before, to: shownValue(facts[p.attr]), incoming: chosen, rank: sourceRank(chosen), sensitivity: chosen.sensitivity ?? p.target.fm.sensitivity, settles: id, settledBy: String((packetPatch.resolution as { by?: unknown } | undefined)?.by ?? by) }), d.slice(0, 7));
+  const line = diaryRow({ at, factKey: String(p.note.fm.fact_key), title: String(p.target.fm.title ?? p.target.fm.id), kind: "settled", from: before, to: shownValue(facts[p.attr]), incoming: chosen, rank: sourceRank(chosen), sensitivity: chosen.sensitivity ?? p.target.fm.sensitivity, settles: id, settledBy: String((packetPatch.resolution as { by?: unknown } | undefined)?.by ?? by) });
+  const diary = appendDiary(root, why ? { ...line, why } : line, d.slice(0, 7));
   git(root, ["add", "-A", p.target.fm.id + ".md", p.note.fm.id + ".md", diary]);
   git(root, ["commit", "-q", "-m", `${by}: settle ${id} on ${p.note.fm.fact_key}\n\nKind: ${kind}\nFact-Keys: ${p.note.fm.fact_key}`], by);
   logWrite(root, { at: clock().toISOString(), agent: by, key: p.note.fm.fact_key, outcome: "committed", step, dispute: id, kind });
+}
+
+// The hub closes a question one of whose sides came only from machine mail (src/receipt-pages.ts,
+// G964): side `keep` (from 0) stays, as the record the page holds when it is that side, so nothing
+// it gained since is lost; a hold on any side stays on the answer. No side is the owner's pick: the
+// diary line (why "machine") has Undo, which opens the question again. False when it can't.
+export function setAsideSide(root: string, id: string, keep: number): boolean {
+  let p: Packet;
+  try { p = loadPacket(root, id); } catch { return false; }
+  if (!["open", "escalated"].includes(String(p.note.fm.status))) return false;
+  const cands = (p.note.fm.candidates ?? []) as FactRecord[];
+  const side = cands[keep];
+  if (!side || cands.length !== 2) return false;
+  const f = p.fact;
+  const held = !f ? [] : isList(f) ? f.items.filter((i) => !i.valid_to && !i.retired) : isDisputed(f) ? f.candidates : [f as FactRecord];
+  const mine = held.find((r) => compareKey(r.value) === compareKey(side.value) && r.as_of === side.as_of);
+  const { contested: _c, ...rec } = structuredClone(mine ?? side) as FactRecord & { contested?: string; dispute?: string };
+  delete rec.dispute;
+  if ([...cands, ...held].some((r) => r.unseen)) rec.unseen = true;
+  const resolution = { by: "hub", at: today(), value: rec.value, why: "the other side came only from machine mail" };
+  try { settle(root, p, rec as FactRecord, "hub", 0, { status: "resolved", resolution }, "machine-mail", "machine"); }
+  catch { return false; }
+  return true;
 }
 
 function asRecord(value: unknown, p: Packet, rules: Rules): unknown {

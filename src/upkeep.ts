@@ -169,14 +169,14 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     }
   }
 
-  // 1c2. Held facts an assistant filed from machine mail (src/receipt-pages.ts, G668): set aside once,
+  // 1c2. Facts an assistant filed from machine mail, held or served (src/receipt-pages.ts, G668, G964): set aside once,
   //      a diary line each with Undo, an emptied page with them; off until `pocketbrain machine-mail
   //      on`, a count then. The always-on receipt-page step that ran here is gone (G862).
   {
     const on = (rules.policy as { machine_mail?: { set_aside?: boolean } }).machine_mail?.set_aside === true;
     const mm = setAsideMachineMail(root, on);
     if (on && mm.facts) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
-    else if (mm.facts) add({ rule: "machine-mail", key: "machine-mail", kind: "review", detail: `${mm.facts} held fact${mm.facts === 1 ? "" : "s"} on ${mm.pages} page${mm.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside, each with Undo` });
+    else if (mm.facts) add({ rule: "machine-mail", key: "machine-mail", kind: "review", detail: `${mm.facts} fact${mm.facts === 1 ? "" : "s"} on ${mm.pages} page${mm.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside, each with Undo` });
   }
   //      Person pages named only by the owner's first name (src/first-name-pages.ts, G978): set aside
   //      once, a diary line each with Undo, an emptied page with them; off until `pocketbrain

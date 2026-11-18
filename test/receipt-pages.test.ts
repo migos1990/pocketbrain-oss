@@ -55,12 +55,12 @@ test("with the owner's switch off nothing is set aside, whatever a page is calle
   const r = upkeep(root, { run: "reflect-receipts-off" });
   expect(unseenFacts(root).map((u) => u.page).sort()).toEqual(HELD);
   expect(readDiary(root).filter((x) => x.why === "receipt" || x.why === "machine")).toHaveLength(0);
-  expect(r.findings.find((f) => f.rule === "machine-mail")?.detail).toContain("4 held facts on 4 pages came only from machine mail");
+  expect(r.findings.find((f) => f.rule === "machine-mail")?.detail).toContain("5 facts on 5 pages came only from machine mail");
 });
 
 test("with the switch on, pages held from machine mail are set aside by their sender, never their title (G862)", async () => {
   const root = brain();
-  expect(machineFacts(loadBrain(root), machineMail(root)).map((f) => f.id).sort()).toEqual(HELD.filter((id) => !KEPT.includes(id)));
+  expect(machineFacts(loadBrain(root), machineMail(root)).map((f) => f.id).sort()).toEqual([...HELD.filter((id) => !KEPT.includes(id)), "money/phone-plan-invoice"].sort());
   // No mail the hub saw was machine-sent: nothing is set aside.
   expect(machineFacts(loadBrain(root), new Set())).toEqual([]);
   setMachineMailAside(root, "on");
@@ -69,7 +69,7 @@ test("with the switch on, pages held from machine mail are set aside by their se
   expect(unseenFacts(root).map((u) => u.page).sort()).toEqual(KEPT);
   expect(readDiary(root).filter((r) => r.why === "receipt")).toHaveLength(0);
   const rows = readDiary(root).filter((r) => r.why === "machine");
-  expect(rows).toHaveLength(4);
+  expect(rows).toHaveLength(5);
   expect(rows.every((r) => r.kind === "retracted")).toBe(true);
   expect(Bun.spawnSync(["git", "log", "-1", "--format=%an%x00%B", "--grep=^Kind: machine-mail"], { cwd: root }).stdout.toString()).toMatch(/^hub\0[\s\S]*^Why: \S/m);
   const { homeView } = await import("../src/dashboard/home");
@@ -80,7 +80,7 @@ test("with the switch on, pages held from machine mail are set aside by their se
   expect(v.waiting.map((w) => w.what).join(" ")).not.toMatch(/Apple|Riverside/);
   // Once: a second upkeep finds nothing.
   upkeep(root);
-  expect(readDiary(root).filter((r) => r.why === "machine")).toHaveLength(4);
+  expect(readDiary(root).filter((r) => r.why === "machine")).toHaveLength(5);
 });
 
 // G537 held for the old step only: the machine-mail step set an undone fact aside again the next
@@ -93,7 +93,7 @@ test("Undo brings a set-aside fact back held as it was, and it is never set asid
   expect(undoFact(root, row.undo_token).outcome).toBe("undone");
   upkeep(root);
   upkeep(root);
-  expect(readDiary(root).filter((r) => r.why === "machine")).toHaveLength(4);
+  expect(readDiary(root).filter((r) => r.why === "machine")).toHaveLength(5);
   expect(unseenFacts(root).map((u) => u.page).sort()).toEqual(["money/apple-order-mtflmn7mfq", ...KEPT]);
 });
 
@@ -117,7 +117,7 @@ test("an old receipt line still undoes, and its page is never set aside again", 
   upkeep(root);
   upkeep(root);
   expect(unseenFacts(root).map((u) => u.page).sort()).toEqual([...KEPT, "money/riverside-co-op"]);
-  expect(readDiary(root).filter((r) => r.why === "machine")).toHaveLength(3);
+  expect(readDiary(root).filter((r) => r.why === "machine")).toHaveLength(4);
 });
 
 // Audit v6 (2026-10-30): the old rule read the page's title, so a person named Bill Harper, held
@@ -158,5 +158,5 @@ test("a page whose facts were all set aside isn't counted in the north star's pa
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
   const before = measure(withPerson(), new Date(now.getTime() - 86_400_000).toISOString(), now);
-  expect(m.pages).toBe(before.pages - 5); // 4 money pages gone with their facts, 1 person page emptied
+  expect(m.pages).toBe(before.pages - 6); // 5 money pages gone with their facts (one already given out, G964), 1 person page emptied
 });

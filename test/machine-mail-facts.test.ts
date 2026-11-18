@@ -108,7 +108,7 @@ test("held facts filed from machine mail before: counted, then set aside with Un
   const id = pages(root)[0]!.fm.id;
   expect(pages(root)[0]!.fm.facts!.trip).toBeDefined();
   const off = upkeep(root, { run: "reflect-mm-off" });
-  expect(off.findings.find((f) => f.rule === "machine-mail")?.detail).toContain("1 held fact on 1 page came only from machine mail");
+  expect(off.findings.find((f) => f.rule === "machine-mail")?.detail).toContain("1 fact on 1 page came only from machine mail");
   expect(pages(root)[0]!.fm.facts!.trip).toBeDefined();
   setMachineMailAside(root, "on");
   upkeep(root, { run: "reflect-mm-on" });
@@ -186,14 +186,13 @@ test("an old line never brings back a page removed later by anything else", asyn
   expect(pages(root)).toHaveLength(0);
 });
 
-test("a fact the owner let out, or the owner's own, is never set aside", async () => {
+test("the owner's own fact is never set aside; an assistant's is, held or already given out (G964)", async () => {
   const { setAsideMachineMail } = await import("../src/receipt-pages");
   const root = makeBrain();
   write(root, { agent: "planner", type: "org", title: "Ride Co Canada Inc.", area: "work", attribute: "trip", value: "a ride on 3 Nov", as_of: "2026-10-05", sources: [RIDE], verification: "verified-by-source" } as never);
   write(root, { agent: "owner", type: "org", title: "Ride Co Canada Inc.", area: "work", attribute: "plan", value: "rides to campus", as_of: "2026-10-05", sources: [RIDE], verification: "verified-by-source" } as never, { owner: true });
   recordMachineMail(root, [RIDE]);
-  const held = (pages(root)[0]!.fm.facts!.trip as { unseen?: boolean }).unseen;
-  expect(setAsideMachineMail(root, false).facts).toBe(held ? 1 : 0);
+  expect(setAsideMachineMail(root, false).facts).toBe(1);
 });
 
 // On the demo brain, through the owner's home: the receipt an assistant filed before is counted,
@@ -212,7 +211,7 @@ test("on the demo brain: an old receipt fact is set aside with a home line, a ne
     expect(ride("a ride on 3 Nov, 14.20").outcome).toBe("committed");
     recordMachineMail(root, [RIDE]);
     expect(ride("a ride on 4 Nov, 9.80").outcome).toBe("refused");
-    expect(upkeep(root, { run: "reflect-demo-off" }).findings.find((f) => f.rule === "machine-mail")?.detail).toContain("1 held fact on 1 page");
+    expect(upkeep(root, { run: "reflect-demo-off" }).findings.find((f) => f.rule === "machine-mail")?.detail).toContain("1 fact on 1 page");
     setMachineMailAside(root, "on");
     upkeep(root, { run: "reflect-demo-on" });
     expect(pages(root)).toHaveLength(0);

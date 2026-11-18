@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G988: {
+    closed: "claude/machine-mail-served",
+    title: "A no-reply sender's value became a side of a question on the home when the source reads machine mail",
+    severity: "medium",
+    finding: "The Home property test (test/home-property.test.ts on claude/home-makes-sense, G987), 2026-11-17: on a mail source with skip_bulk: false (the default skips such mail) a no-reply sender's value files like a person's, and beside a person's different value the filing step filed the two as a conflict, so the home asked the owner to pick with the machine's value as a side; 223 of 900 made-up weeks. The night cleanup (G964) closes such a question only after the owner's machine-mail switch, and a day late.",
+    fix: "src/filing.ts fileVerdict, on every hub, no switch: a captured or assistant's proposal whose every source is mail the hub saw as a machine's (the ledger, src/louis.ts) and whose value differs from a live one is set aside with Undo and never filed as a conflict; a proposal that differs only from values that came only from such mail (nobody's word, no question already open, no private fact on the page) is filed and the question the write opens is closed in the same run as that side (setAsideSide), the machine's value kept in history, a diary line with Undo that opens the question again. Two people's mails that disagree still ask. Test: test/machine-mail-no-side.test.ts (both directions, each Undo, the control).",
+  },
+  G980: {
+    closed: "claude/machine-mail-served",
+    title: "Machine mail read before the skip rule was never in the ledger, so its facts were never set aside",
+    severity: "high",
+    finding: "Coordinator, 2026-11-16, from another thread's trace of a wrong page on the owner's brain: a no-reply sender's mail was read and filed from days before the pull began skipping such senders. log/machine-mail.jsonl is written only when a pull skips a mail or a recheck reads one (src/pull.ts), and a mail already seen is never pulled again, so that mail's ref was never in the ledger and `pocketbrain machine-mail on` (src/receipt-pages.ts, G964) would pass its facts by. log/refs-checked.jsonl keeps only a hash of the sender, so nothing stored can classify it.",
+    fix: "src/receipt-pages.ts classifyOldMail: each mail ref cited by a live fact or a side of an open question, on a record that is not the owner's and cites mail only, and that is in neither the ledger nor log/machine-mail-checked.jsonl, is read once through fetchOne (the pull's own header rule; it records a machine's mail in the ledger). Report-only until the owner's machine-mail switch: a count on the night pass's backfill line and `pocketbrain machine-mail check`; with the switch on, up to 200 a night, a mail the hub can't reach tried again, a mail read never asked for twice. Test: test/machine-mail-backfill.test.ts (counted and nothing read with the switch off; read once, in the ledger and set aside with it on; unreachable retried; the cap). Code review of PR 236: a read that fails is noted and tried again after the mail never tried, so mail that can never be read (outside the allowlist, no source, no consent) does not keep the rest from being classified; and filing reads the machine-only rule from the one function the cleanup uses (fromMachine), so an exact owner ref is never a machine's.",
+  },
   G976: {
     closed: "claude/owner-first-name",
     title: "A shop's mail that greeted the owner by first name started a page for someone else",
@@ -103,10 +117,11 @@ export const GAPS: Record<string, Gap> = {
     fix: "src/dashboard/html-settle.ts leanWords: a bracketed ref is dropped and a bare one is said in words (\"an email\", \"your calendar\"); only a known scheme with an id counts, so a time or a label keeps its colon. The stored reason is unchanged. Code review of PR 221: the scheme lookup took inherited keys, so \"constructor:x\" read as a ref; it is an own-key lookup now. test/owner-settle.test.ts.",
   },
   G964: {
+    closed: "claude/machine-mail-served",
     title: "The machine-mail cleanup leaves a fact assistants already have, and one that is a side in a question",
     severity: "medium",
-    finding: "Same ask as G961 (Mac, counts and yes or no): the fact's only source is in log/machine-mail.jsonl, yet `pocketbrain machine-mail` counted 0. src/receipt-pages.ts machineFacts takes a record only when it is live, still held (unseen) and not contested; a fact filed before write() refused machine mail (G668) that was served, or that later became a side of a conflict, stays and can ask the owner to pick it.",
-    fix: "Proposed, not built; waits for the owner's typed word since it takes facts assistants already had and removes an ask: machineFacts also takes a served record and a conflict side whose every source is logged machine mail, each to history with a diary line and Undo; a conflict left with one side closes as that side.",
+    finding: "Same ask as G961 (Mac, counts and yes or no): the fact's only source is in log/machine-mail.jsonl, yet `pocketbrain machine-mail` counted 0. src/receipt-pages.ts machineFacts took a record only when it was live, still held (unseen) and not contested; a fact filed before write() refused machine mail (G668) that was served, or that later became a side of a conflict, stayed and could ask the owner to pick it.",
+    fix: "By the owner's typed yes (2026-11-16): machineFacts takes a live record whose every source is logged machine mail whether held or served, one item of a list, and one side of an open two-sided question; each goes to history with a diary line (why machine) and Undo. A question closes as its other side through settle() (setAsideSide in src/core.ts: the page's own record when it is that side, a hold on any side kept, flags strictest), and its Undo opens it again. A held fact the owner read and let out (a seen line) is never taken; an Undo holds. Still under the owner's switch. Not covered: three or more sides, twin-page questions. test/machine-mail-served.test.ts.",
   },
   G972: {
     closed: "claude/next-steps-side-by-side",

@@ -121,7 +121,7 @@ export function setWikiOpening(root: string, mode: string): string {
   return editRules(root, "policy.yaml", (doc) => { doc.setIn(["wiki", "opening"], mode === "on"); }, `wiki opening ${mode}`);
 }
 
-// `pocketbrain machine-mail on|off`: whether the nightly pass sets aside the held facts assistants
+// `pocketbrain machine-mail on|off`: whether the nightly pass sets aside the facts assistants
 // filed from machine mail or only counts them (src/receipt-pages.ts, G668). Off until the owner says so.
 export function setMachineMailAside(root: string, mode: string): string {
   if (mode !== "on" && mode !== "off") throw new OwnerSetError("machine-mail on | off");

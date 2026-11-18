@@ -19,7 +19,9 @@ import { loadEscalation, type EscalationPolicy } from "./textline/policy";
 import { loadBrain, sensitivityRank, today, type Note } from "./brain";
 import { proposals, loadState, type Proposal } from "./dashboard/data";
 import { OWNER } from "./owner";
-import { CoreError } from "./core";
+import { CoreError, setAsideSide } from "./core";
+import { machineMail } from "./louis";
+import { machineFacts, fromMachine } from "./receipt-pages";
 import { sensitiveShape } from "./shape";
 import type { Rules } from "./rules";
 import { logWrite, inboxCards, forgottenName, forgottenSlugs } from "./write";
@@ -328,8 +330,8 @@ function proposalRow(root: string, pr: ReturnType<typeof proposals>[number], kin
   };
 }
 
-function setAside(root: string, it: Item, pr: ReturnType<typeof proposals>[number], now: Date): Verdict {
-  const what = pr.request.retract ? "a take-back from an assistant changes nothing on its own (models suggest, never delete)" : "an open question is not a fact, and only a conflict asks you";
+function setAside(root: string, it: Item, pr: ReturnType<typeof proposals>[number], now: Date, reason?: string): Verdict {
+  const what = reason ? reason : pr.request.retract ? "a take-back from an assistant changes nothing on its own (models suggest, never delete)" : "an open question is not a fact, and only a conflict asks you";
   return { plan: { choice: "reject", label: SET_ASIDE, why: `${what}; Undo brings it back`, at: now.toISOString(), run: () => {
     const res = decideProposal(root, it.ref, "reject", AUTO);
     if (res.outcome === "refused") throw new CoreError(409, res.message);
@@ -357,6 +359,10 @@ function noteHeld(root: string, held: ReturnType<typeof proposals>, now: Date): 
 // ---------- saved for you: low-risk facts from the calendar and mail (backlog 393) ----------
 
 const SAVED = "saved it";
+// A value that came only from mail a machine sent, beside a different one (G988).
+const MACHINE_SIDE = "it came only from mail a machine sent, and machine mail is no side in a question";
+const MACHINE_GAVE_WAY = "the value it replaced came only from mail a machine sent, kept in history; Undo takes it back out";
+const MACHINE_RUN = "took over from machine mail";
 // What a save run returns when the write opened a conflict instead (decideNow logs it as one).
 const HELD_RUN = "held as a conflict";
 // What a conflict plan's run returns when the write updated the value instead.
@@ -601,6 +607,12 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
   if (older) return { plan: { choice: "accept", label: KEPT, why: "an older source than your word: kept as history, your value stays; Undo takes it back out", at: now.toISOString(), run: () => {
     return accepted(decideProposal(root, it.ref, "accept", AUTO), `kept ${it.ref}`);
   } } };
+  // Machine mail is no side in a question (G988, the owner's typed yes of 2026-11-16): on a source
+  // that reads it (skip_bulk: false) a no-reply or bulk sender's value files like any other, but a
+  // different value from it beside one the brain holds is set aside, with Undo, and never asked.
+  const machine = machineMail(root);
+  const fromRobot = !citesOwner(pr) && fromMachine({ by: pr.by, verification: (r as { verification?: unknown }).verification, sources: r.sources } as FactRecord, machine);
+  if (fromRobot && live.some(differs)) return setAside(root, it, pr, now, MACHINE_SIDE);
   const askOwner = ownerWords.length > 0;
   // A sender no person page holds files a private or money fact under the serving hold (G420,
   // G429, G454): decideProposal saves it unseen, marked unknown sender, so it waits for the
@@ -619,6 +631,18 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
     return accepted(decideProposal(root, it.ref, "accept", AUTO, [], { contest: true }), UPDATED_RUN);
   } } };
   if (askOwner) return conflict;
+  // The other way round: every value it differs from came only from machine mail (and is nobody's
+  // word). The write files the two as a question, and the hub closes it at once as this side, the
+  // machine's value kept in history; Undo opens the question again (setAsideSide in src/core.ts).
+  const gives = live.filter(differs);
+  if (!fromRobot && !privateRec && gives.length > 0 && !(cur && !isList(cur as never) && (cur as FactRecord).contested) && gives.every((x) => fromMachine(x, machine))) {
+    return { plan: { choice: "accept", label: SAVED, why: MACHINE_GAVE_WAY, at: now.toISOString(), run: () => {
+      const ran = accepted(decideProposal(root, it.ref, "accept", AUTO, [], { contest: true }), UPDATED_RUN);
+      if (ran !== HELD_RUN) return ran;
+      const f = machineFacts(loadBrain(root), machineMail(root)).find((x) => x.packet && x.id === id && x.attr === r.attribute);
+      return f && setAsideSide(root, f.packet!, f.keep!) ? MACHINE_RUN : ran;
+    } } };
+  }
   // A conflict already waits beside the live value (G425): a different value joins it.
   if (cur && typeof cur === "object" && !isList(cur as never) && (cur as FactRecord).contested && valueKey((cur as FactRecord).value) !== valueKey(r.value)) return conflict;
   // Dated ahead (a mail saying what changes on 1 December): filed today it would end the current
@@ -754,7 +778,7 @@ function decideNow(root: string, now: Date, skip: ReadonlySet<string>, filingOnl
     const all = git(root, ["log", "--format=%H", `--author=${AUTO}@pocketbrain.local`, ...(before ? [`${before}..HEAD`] : [])]).split("\n").filter(Boolean);
     const said = ran === HELD_RUN ? (v.plan.label === CONFLICT ? { picked: CONFLICT, why: v.plan.why } : { picked: CONFLICT, why: "the fact changed before it was saved, so it waits as a conflict for the Gardener; Undo takes it back out" })
       : ran === HANDED_BACK ? { picked: LEFT, why: "the write's checks handed it back, so it waits for you; Undo takes the hub's yes back out" }
-      : ran === UPDATED_RUN ? { picked: SAVED, why: "a newer value from as strong a source, so the write updated it; Undo takes it back out" } : { picked: v.plan.label, why: v.plan.why };
+      : ran === MACHINE_RUN ? { picked: SAVED, why: MACHINE_GAVE_WAY } : ran === UPDATED_RUN ? { picked: SAVED, why: "a newer value from as strong a source, so the write updated it; Undo takes it back out" } : { picked: v.plan.label, why: v.plan.why };
     const row: AutoDone = { key: it.key, question: it.title, ...said, at: now.toISOString(), commit, ...(all.length > 1 ? { commits: all } : {}) };
     append(root, AUTO_LOG, row as unknown as Record<string, unknown>);
     done.push(row);
