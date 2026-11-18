@@ -14,7 +14,7 @@ const wf = (f: string) => YAML.parse(readFileSync(join(ROOT, ".github", "workflo
 const ci = wf("ci.yml");
 
 test("G751: test, e2e and conformance run on the Mac only when PB_RUNNER is set, in the private repo, for a branch of its own", () => {
-  for (const job of ["test", "e2e", "conformance"]) {
+  for (const job of ["suite", "suite-cells", "test", "e2e", "conformance"]) {
     const on = String(ci.jobs[job]["runs-on"]);
     expect(on).toContain("vars.PB_RUNNER");
     expect(on).toContain("fromJSON(vars.PB_RUNNER)");
@@ -37,7 +37,7 @@ test("G751: a fork's review, publishing and the public copy never run on the Mac
 });
 
 test("G751: the Linux-only steps have a macOS twin, and the Mac's gitleaks is pinned by its own checksum", () => {
-  const steps = ci.jobs.test.steps as { name?: string; run?: string; if?: string }[];
+  const steps = ci.jobs.suite.steps as { name?: string; run?: string; if?: string }[];
   const apt = steps.find((s) => s.run?.includes("apt-get"))!;
   expect(apt.if).toBe("runner.os == 'Linux'");
   const leaks = steps.find((s) => s.name === "gitleaks")!.run!;
@@ -62,4 +62,33 @@ test("G958: no workflow runs on a floating Linux label: ubuntu-latest moved to 2
     for (const m of text.matchAll(/\b(?:ubuntu|windows)-[a-z]+\b/g)) expect(`${f}: ${m[0]}`).toBe(`${f}: (a version)`);
     expect((text.match(/macos-latest/g) ?? []).length).toBeLessThanOrEqual(f === "ci.yml" ? 1 : 0);
   }
+});
+
+test("G982: the two suites run side by side, and the required `test` check is green only when both succeeded", () => {
+  const runs = (job: string) => (ci.jobs[job].steps as { run?: string }[]).map((s) => s.run ?? "").filter((r) => /\bbun test\b/.test(r));
+  expect(runs("suite").length).toBe(1);
+  expect(runs("suite")[0]).not.toContain("PB_CELLS");
+  expect(runs("suite-cells").length).toBe(1);
+  expect(runs("suite-cells")[0]).toStartWith("PB_CELLS=1 bun test");
+  // The cells suite is two jobs, a part of the test files each (test/test-shard.test.ts); `needs`
+  // on a matrix job is success only when every part succeeded.
+  expect(ci.jobs["suite-cells"].strategy.matrix.part).toEqual([1, 2]);
+  expect(ci.jobs.suite.needs).toBeUndefined();
+  expect(ci.jobs["suite-cells"].needs).toBeUndefined();
+  const t = ci.jobs.test;
+  expect(t.needs).toEqual(["suite", "suite-cells"]);
+  // Without always(), a failed suite leaves `test` skipped, and GitHub counts a skipped required check as passed.
+  expect(t.if).toBe("always()");
+  const step = t.steps[0] as { env: Record<string, string>; run: string };
+  expect(step.env).toEqual({ SUITE: "${{ needs.suite.result }}", CELLS: "${{ needs.suite-cells.result }}" });
+  const verdict = (suite: string, cells: string) => Bun.spawnSync(["bash", "-e", "-c", step.run], { env: { ...process.env, SUITE: suite, CELLS: cells } }).exitCode;
+  expect(verdict("success", "success")).toBe(0);
+  for (const bad of ["failure", "cancelled", "skipped", ""]) {
+    expect(verdict(bad, "success")).not.toBe(0);
+    expect(verdict("success", bad)).not.toBe(0);
+  }
+  // The cells suite installs what its tests need, with the lockfile frozen.
+  const cells = (ci.jobs["suite-cells"].steps as { run?: string }[]).map((s) => s.run ?? "").join("\n");
+  expect(cells).toContain("bun install --frozen-lockfile");
+  expect(cells).toContain("playwright install --with-deps chromium");
 });

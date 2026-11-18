@@ -21,6 +21,11 @@ $refs
 REFS
 fi
 if [ "$released" = yes ]; then echo "pre-push: only a tag or the release branch, at a commit on origin/main; nothing to check again"; exit 0; fi
+# The long checks. The merge gate's full run does exactly these and records a first-time pass for the
+# git tree it ran on (scripts/gate.ts `proved`, G982). They are skipped only when every commit being
+# pushed has that record, for its exact tree, on this bun and machine kind, under a day old; any
+# doubt runs them all. CI runs them again on its own machine either way.
+long_checks() {
 bun test
 bunx tsc --noEmit
 bun run deadcode
@@ -28,6 +33,15 @@ bun evals/run.ts --ci
 # The north star blocks a merge (scripts/gate.ts), so it blocks a push too (audit v4: nothing
 # automated ran the gate).
 bun scripts/north-star.ts
+}
+shas=$(echo "$refs" | while read -r lref lsha rref rsha; do
+  if [ -n "$lsha" ] && [ "$lsha" != "0000000000000000000000000000000000000000" ]; then printf '%s ' "$lsha"; fi
+done)
+proved=no
+if [ -n "$shas" ]; then
+  bun scripts/gate.ts proved $shas && proved=yes || true
+fi
+if [ "$proved" = yes ]; then echo "pre-push: the gate already ran the tests, typecheck, dead code, evals and north star on this exact tree; not run again"; else long_checks; fi
 # A push to main: the gate's rules against what main was (test first, docs, the slice audit and
 # agent evals recorded for this tree). The long checks above already ran.
 echo "$refs" | while read -r lref lsha rref rsha; do

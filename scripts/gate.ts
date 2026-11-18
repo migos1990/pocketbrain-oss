@@ -6,6 +6,8 @@
 //                                           agent-eval rules print as notes; every other rule blocks
 //   bun scripts/gate.ts record <agent-evals|slice-audit> <pass|clear|fail|regression> [note]
 //   bun scripts/gate.ts flaky [--days 7]  tests that failed then passed on rerun twice or more
+//   bun scripts/gate.ts proved <sha>...   exit 0 only when a full run's long checks passed, first time, on each
+//                                         commit's exact tree, here, in the last day (the pre-push hook asks)
 //   bun scripts/gate.ts [base] --ci-red-ok  merge while GitHub CI on main is red (a branch that fixes it)
 //   bun scripts/gate.ts [base] --ci-slow-ok merge while CI's test step is over 70% of its limit (a branch that fixes it)
 // A full run also runs the north-star eval (scripts/north-star.ts) and blocks on a fail (NORTH_STAR_BLOCKING).
@@ -26,7 +28,7 @@ const TESTS = /^(test|evals)\//;
 const DOCS = /^(README\.md|CLAUDE\.md|docs\/|evals\/README\.md)/;
 
 export interface Change { status: string; path: string }
-export interface Entry { tree: string; sha?: string; kind: "agent-evals" | "slice-audit"; result: string; note?: string; at?: string }
+export interface Entry { tree: string; sha?: string; kind: "agent-evals" | "slice-audit" | "check"; result: string; note?: string; at?: string; bun?: string; os?: string }
 
 // Rules only: what this diff requires and whether the evidence is there. Pure, so it is tested.
 // Jobs the hub repeats while it runs (setInterval in src/start.ts). Audit v4: 4 became 6 in a day,
@@ -74,6 +76,43 @@ export function ledgerPath(): string {
 function readLedger(): Entry[] {
   const f = ledgerPath();
   return existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : [];
+}
+
+// The suite ran four times for one change (G982): in the gate, again in the pre-push hook, and twice
+// in CI. A full gate run whose long checks all passed the first time (no rerun, no skip) on a clean
+// checkout records that for the git tree, with the bun version and the machine kind; the pre-push
+// hook asks `proved` and runs the long checks itself unless every commit it pushes has that record.
+// Anything unsure is "not proved": no commit named, another tree, bun or machine, a record over a
+// day old or dated ahead, an unreadable date. Only a full gate run writes the record (`record`
+// refuses the kind). Pure, so it is tested.
+export const CHECK_PROOF_HOURS = 24;
+export interface Machine { bun: string; os: string }
+export const thisMachine = (): Machine => ({ bun: Bun.version, os: `${process.platform}-${process.arch}` });
+export function proved(trees: string[], ledger: Entry[], here: Machine, now = Date.now()): string | undefined {
+  if (!trees.length) return "no commit named";
+  for (const tree of trees) {
+    if (!/^[0-9a-f]{40,64}$/.test(tree)) return `not a git tree: ${tree.slice(0, 12)}`;
+    const ok = ledger.some((e) => {
+      if (e.kind !== "check" || e.result !== "pass" || e.tree !== tree || e.bun !== here.bun || e.os !== here.os) return false;
+      const at = Date.parse(e.at ?? "");
+      return Number.isFinite(at) && at <= now && now - at < CHECK_PROOF_HOURS * 3_600_000;
+    });
+    if (!ok) return `no full gate pass recorded for tree ${tree.slice(0, 7)} on bun ${here.bun}, ${here.os}, in the last ${CHECK_PROOF_HOURS} hours`;
+  }
+  return undefined;
+}
+// Is the checkout what was committed, before the checks and after them? The eval run appends its own row
+// to evals/history/scorecard.jsonl every time (evals/run.ts), so that one file may differ; any
+// other line of `git status --porcelain` means the checks ran on, or left, something uncommitted.
+// Pure, so it is tested.
+export const EVAL_ROW = "evals/history/scorecard.jsonl";
+export function leftClean(porcelain: string): boolean {
+  return porcelain.split("\n").filter((l) => l.trim()).every((l) => l === ` M ${EVAL_ROW}`);
+}
+// A full run's own account of its long checks, and whether it may be recorded. Pure, so it is tested.
+export interface LongChecks { cleanBefore: boolean; cleanAfter: boolean; testsFirstTime: boolean; rest: number; northStar: number; treeBefore: string; treeAfter: string }
+export function mayRecord(c: LongChecks): boolean {
+  return c.cleanBefore && c.cleanAfter && c.testsFirstTime && c.rest === 0 && c.northStar === 0 && !!c.treeBefore && c.treeBefore === c.treeAfter;
 }
 
 // \`bun run check\` passes only with no failure and no skip: a skipped test is a tool this machine
@@ -145,6 +184,18 @@ export function ciTimeVerdict(times: StepTime[]): { lines: string[]; block?: str
   return over.length ? { lines, block: `CI time: ${over.join("; ")}. A slow runner will soon hit the limit and turn main red. Make the suite faster (the slowest tests are in the run's log), or ask the owner to raise timeout-minutes in .github/workflows/ci.yml; the branch that does either merges with --ci-slow-ok` } : { lines };
 }
 
+// The jobs that run a suite, by the name GitHub's jobs API gives them: `test` before the suites ran
+// side by side, `suite`, and each part of the cells suite's matrix ("suite-cells (1)").
+export const isSuiteJob = (name: string) => /^(test|suite|suite-cells(?: \(\d+\))?)$/.test(name);
+export function slowestPerStep(steps: { name: string; started_at: string; completed_at: string }[], limits: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of steps) {
+    const step = stepOf(s.name);
+    if (step && step in limits) out[step] = Math.max(out[step] ?? 0, (Date.parse(s.completed_at) - Date.parse(s.started_at)) / 1000);
+  }
+  return out;
+}
+
 export function ciStepTimes(): StepTime[] | string {
   const url = Bun.spawnSync(["git", "remote", "get-url", "origin"], { stdout: "pipe", stderr: "pipe" }).stdout.toString().trim();
   const repo = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
@@ -158,12 +209,12 @@ export function ciStepTimes(): StepTime[] | string {
   const seconds: Record<string, number[]> = {};
   try {
     for (const id of JSON.parse(ids.stdout.toString()) as number[]) {
-      const r = gh(`repos/${repo}/actions/runs/${id}/jobs`, '[.jobs[] | select(.name == "test") | .steps[] | select(.conclusion == "success" or .conclusion == "failure") | {name, started_at, completed_at}]');
+      const r = gh(`repos/${repo}/actions/runs/${id}/jobs`, '[.jobs[] | {job: .name, steps: [.steps[] | select(.conclusion == "success" or .conclusion == "failure") | {name, started_at, completed_at}]}]');
       if (r.exitCode !== 0) continue;
-      for (const s of JSON.parse(r.stdout.toString()) as { name: string; started_at: string; completed_at: string }[]) {
-        const step = stepOf(s.name);
-        if (step && step in limits) (seconds[step] ??= []).push((Date.parse(s.completed_at) - Date.parse(s.started_at)) / 1000);
-      }
+      // A suite that runs in several jobs (suite-cells, a part of the files each) counts once per
+      // run, as its slowest part: that is the one a limit would stop.
+      const steps = (JSON.parse(r.stdout.toString()) as { job: string; steps: Parameters<typeof slowestPerStep>[0] }[]).filter((j) => isSuiteJob(j.job)).flatMap((j) => j.steps);
+      for (const [step, secs] of Object.entries(slowestPerStep(steps, limits))) (seconds[step] ??= []).push(secs);
     }
   } catch { return "unreadable answer"; }
   return Object.entries(limits).map(([step, limit]) => ({ step, limit, seconds: seconds[step] ?? [] }));
@@ -251,11 +302,13 @@ export const CHECK_REST = "bun run typecheck && bun run deadcode && bun evals/ru
 
 // `changed`: test files this branch adds or changes. A flake there blocks the first time: a new
 // test that passes only sometimes isn't a test yet.
-export function testsWithRerun(tree: string, sha: string, changed: string[] = []): string[] {
+// `seen.firstTime` is set only when the first run passed with nothing skipped: a pass after a rerun
+// lets the gate through but is never recorded as proof for the pre-push hook (G982).
+export function testsWithRerun(tree: string, sha: string, changed: string[] = [], seen: { firstTime?: boolean } = {}): string[] {
   const first = Bun.spawnSync(["bun", "test"], { stdout: "pipe", stderr: "pipe" });
   const out1 = first.stdout.toString() + first.stderr.toString();
   console.log(`bun test: exit ${first.exitCode}`);
-  if (first.exitCode === 0) return checkFailures(0, out1);
+  if (first.exitCode === 0) { const f = checkFailures(0, out1); seen.firstTime = f.length === 0; return f; }
   const fails = parseFailures(out1);
   if (!fails.length) return checkFailures(first.exitCode, out1);
   const odd = unaccounted(out1, fails.length);
@@ -299,6 +352,14 @@ async function main(argv: string[]): Promise<number> {
     console.log(`recorded ${kind} ${result} for ${e.sha!.slice(0, 7)} (tree ${e.tree.slice(0, 7)}) in ${ledgerPath()}`);
     return 0;
   }
+  if (argv[0] === "proved") {
+    // Fail closed: any commit that doesn't resolve, or any doubt in `proved`, exits 1 and the hook runs everything.
+    let why: string | undefined;
+    try { why = proved(argv.slice(1).map((sha) => git("rev-parse", "--verify", "--quiet", `${sha}^{tree}`)), readLedger(), thisMachine()); }
+    catch { why = "a pushed commit doesn't resolve here"; }
+    console.log(why ? `not proved: ${why}` : `proved: the gate's long checks passed first time on ${argv.length - 1 === 1 ? "this exact tree" : "these exact trees"} (${ledgerPath()})`);
+    return why ? 1 : 0;
+  }
   if (argv[0] === "flaky") {
     const d = argv.indexOf("--days"), days = d >= 0 ? Number(argv[d + 1]) : 7;
     const rows = flakyReport(readJsonl<FlakyEntry>(flakyPath()), days);
@@ -318,14 +379,22 @@ async function main(argv: string[]): Promise<number> {
   const { block, needs } = argv.includes("--no-ledger") ? splitEvidence(all) : { block: all, needs: [] };
   const fail = block;
   console.log(`gate: ${changes.length} files changed since ${base} (${mb.slice(0, 7)}); recurring hub jobs ${jobs.head} (base ${jobs.base})`);
+  // Before and after alike: an earlier gate, hook or eval run leaves its row in that file too, and a
+  // run that started from there tested the same committed code (code review of PR 228). Read with
+  // spawnSync, not git(), which trims the first line's leading space away.
+  const clean = () => { try { const o = Bun.spawnSync(["git", "status", "--porcelain"], { stdout: "pipe" }); return o.exitCode === 0 && leftClean(o.stdout.toString()); } catch { return false; } };
+  const long: LongChecks = { cleanBefore: run && clean(), cleanAfter: false, testsFirstTime: false, rest: -1, northStar: -1, treeBefore: run ? git("rev-parse", "HEAD^{tree}") : "", treeAfter: "" };
   if (run) {
     const changedTests = changes.filter((c) => c.status !== "D" && /^test\/.*\.test\.ts$/.test(c.path)).map((c) => c.path);
     const r = red(mb, changedTests);
     if (r) fail.push(r);
     // `bun run check` in two halves: the tests (with one rerun of a failing file), then the rest.
-    fail.push(...testsWithRerun(git("rev-parse", "HEAD^{tree}"), git("rev-parse", "HEAD"), changedTests));
+    const seen: { firstTime?: boolean } = {};
+    fail.push(...testsWithRerun(git("rev-parse", "HEAD^{tree}"), git("rev-parse", "HEAD"), changedTests, seen));
+    long.testsFirstTime = seen.firstTime === true;
     const rest = Bun.spawnSync(["sh", "-c", CHECK_REST], { stdout: "pipe", stderr: "pipe" });
     console.log(`typecheck, deadcode, evals: exit ${rest.exitCode}`);
+    long.rest = rest.exitCode ?? -1;
     if (rest.exitCode !== 0) fail.push(...checkFailures(rest.exitCode, rest.stderr.toString() + rest.stdout.toString()).map((x) => x.replace("`bun run check`", "typecheck, deadcode or evals")));
   }
   if (run) {
@@ -335,6 +404,15 @@ async function main(argv: string[]): Promise<number> {
     console.log(ns.stdout.toString().trim() || `north star: didn't run (${ns.stderr.toString().trim().split("\n").at(-1)})`);
     const v = northStarVerdict(ns.exitCode, NORTH_STAR_BLOCKING);
     if (v) fail.push(v);
+    // The pre-push hook's long checks are exactly these (bun test, typecheck, dead code, evals, the
+    // north star). All passed first time on a clean checkout that is still the same tree: record it,
+    // so the hook doesn't run them again for this tree (G982). The rules below don't change it.
+    long.northStar = ns.exitCode ?? -1; long.cleanAfter = clean(); long.treeAfter = git("rev-parse", "HEAD^{tree}");
+    if (mayRecord(long)) {
+      mkdirSync(dirname(ledgerPath()), { recursive: true });
+      appendFileSync(ledgerPath(), JSON.stringify({ tree: long.treeAfter, sha: git("rev-parse", "HEAD"), kind: "check", result: "pass", at: new Date().toISOString(), ...thisMachine() } satisfies Entry) + "\n");
+      console.log(`long checks: passed first time on a clean checkout; recorded for tree ${long.treeAfter.slice(0, 7)} (the pre-push hook won't run them again for it)`);
+    } else console.log("long checks: not recorded for the pre-push hook (a failure, a rerun, a skip, or files not committed)");
     // The same numbers from a real brain, where one is reachable (PB_NORTH_STAR_BRAIN, read-only,
     // counts only): printed, and blocking like the replay.
     const brain = process.env.PB_NORTH_STAR_BRAIN;

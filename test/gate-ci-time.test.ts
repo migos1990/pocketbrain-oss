@@ -6,7 +6,7 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ciTimeVerdict, stepOf, stepLimits, CI_TIME_SHARE } from "../scripts/gate";
+import { ciTimeVerdict, stepOf, stepLimits, slowestPerStep, isSuiteJob, CI_TIME_SHARE } from "../scripts/gate";
 
 test("the limits are read from ci.yml: both bun test steps, in seconds", () => {
   const limits = stepLimits(readFileSync(join(import.meta.dir, "..", ".github", "workflows", "ci.yml"), "utf8"));
@@ -45,4 +45,22 @@ test("a step keeps its key when its command carries flags, and other steps have 
   expect(stepOf("Run bun test")).toBe("bun test");
   expect(stepOf("Run bun tests/other.ts")).toBeUndefined();
   expect(stepOf("Run bunx tsc --noEmit")).toBeUndefined();
+});
+
+test("G982: a suite split across jobs counts once per run, as its slowest part, and a step with a file list is still that step", () => {
+  const limits = { "bun test": 2400, "PB_CELLS=1 bun test": 2400 };
+  const at = (s: number) => new Date(Date.UTC(2026, 10, 18, 12, 0, s)).toISOString();
+  const steps = [
+    { name: "Run bun test --timeout 20000", started_at: at(0), completed_at: at(50) },
+    { name: "Run PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts 1 2)   # every read through per-agent cells", started_at: at(0), completed_at: at(30) },
+    { name: "Run PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts 2 2)   # every read through per-agent cells", started_at: at(0), completed_at: at(41) },
+    { name: "Run bunx tsc --noEmit", started_at: at(0), completed_at: at(59) },
+  ];
+  expect(slowestPerStep(steps, limits)).toEqual({ "bun test": 50, "PB_CELLS=1 bun test": 41 });
+  expect(stepLimits("      - run: PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts ${{ matrix.part }} 2)   # cells\n        timeout-minutes: 40\n")).toEqual({ "PB_CELLS=1 bun test": 2400 });
+});
+
+test("G982: a matrix part of the cells suite is read under the name GitHub gives it, so the rule keeps watching it", () => {
+  for (const name of ["test", "suite", "suite-cells", "suite-cells (1)", "suite-cells (2)"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: true`);
+  for (const name of ["e2e", "conformance", "cold-install", "suite-cells (x)", "outside-pr"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: false`);
 });

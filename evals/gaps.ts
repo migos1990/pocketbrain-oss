@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G982: {
+    closed: "claude/suite-once",
+    title: "One change ran the whole test suite four times",
+    severity: "low",
+    finding: "Read of main d8251c3 (2026-11-16): a full gate run ran bun test (scripts/gate.ts), the pre-push hook ran it again on the same tree (.githooks/pre-push), and CI's test job ran it twice, one after the other (plain, then PB_CELLS=1). Evals and the north star ran three times. Only one PR lands at a time, so the queue moved at about one change an hour.",
+    fix: "scripts/gate.ts records a first-time pass of a full run's long checks for the git tree (clean checkout, no rerun, no skip; bun version and machine kind kept), and `gate.ts proved` answers the pre-push hook, which runs the long checks unless every pushed commit has that record under a day old. ci.yml runs the plain and the cells suite as two jobs side by side; the required check `test` waits for both and is green only when both succeeded. test/gate-proof.test.ts, test/ci-runner.test.ts. After Actions came back on 2026-11-18 the cells step alone was at 1699 s at the median of main's last five runs (latest 2068 s) against its 2400 s limit, so the gate's 70% rule held every merge: running the suites side by side shortens the wait, not that step. The cells suite now runs as two jobs, each a part of the test files (scripts/test-shard.ts: sorted by path, dealt out in turn; test/test-shard.test.ts: disjoint, together every tracked test file, a bad argument runs every file), and the gate counts a split suite once per run as its slowest part (slowestPerStep, test/gate-ci-time.test.ts). No test dropped, no limit raised.",
+  },
   G975: {
     closed: "claude/tap-once",
     title: "A tap on the settle screen showed nothing for a second, and each extra tap sent its own answer",

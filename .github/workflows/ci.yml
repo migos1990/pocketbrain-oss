@@ -13,8 +13,10 @@ concurrency:
 # GitHub's runners, unless the repo variable PB_RUNNER names the Mac's runner (["self-hosted","pb-mac"]).
 # Only in the private repo, never for a fork's PR, and never the jobs that publish or hold a deploy
 # key (release.yml, public-sync.yml stay on GitHub's runners). Delete the variable to go back.
+# The required check is still named `test`: it passes only when both suites did. They run side by
+# side (G982); until then the cells suite started only when the plain one had finished.
 jobs:
-  test:
+  suite:
     runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
     # Step timeouts sit below the job's, so a hang turns a step red instead of the job "cancelled".
     timeout-minutes: 90
@@ -119,8 +121,6 @@ jobs:
         timeout-minutes: 40
         env:
           PB_UI_SHOT_DIR: ui-shots
-      - run: PB_CELLS=1 bun test --timeout 20000   # every read through per-agent cells
-        timeout-minutes: 40
       # A skipped browser suite looks like a pass: require one screenshot per snapshot.
       - name: the UI regression ran
         run: |
@@ -149,6 +149,46 @@ jobs:
       - name: restore drill on the sample brain
         timeout-minutes: 5
         run: bun src/cli.ts drill --demo
+  # The same tests with every read through per-agent cells (CLAUDE.md invariant 10), beside the plain
+  # suite instead of after it. Only what the tests need: the scans and the gate's rules run once, above.
+  # In two jobs, each a part of the test files (scripts/test-shard.ts: disjoint, together every file;
+  # test/test-shard.test.ts), since the whole cells suite in one step had grown to over 70% of its limit.
+  suite-cells:
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: sudo apt-get install -y openssh-client age
+        if: runner.os == 'Linux'
+      - run: command -v ssh-keygen && command -v age
+        if: runner.os == 'macOS'
+      - run: git config --global user.name ci && git config --global user.email ci@example.com
+      - run: bunx playwright install --with-deps chromium
+      - run: PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts ${{ matrix.part }} 2)   # every read through per-agent cells
+        timeout-minutes: 40
+  # The one required check on main (docs/release.md "Pull requests"). It runs whatever happened to the
+  # suites and is green only when both succeeded: a failed, cancelled or skipped suite turns it red.
+  test:
+    needs: [suite, suite-cells]
+    if: always()
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
+    timeout-minutes: 5
+    steps:
+      - name: both suites passed
+        env:
+          SUITE: ${{ needs.suite.result }}
+          CELLS: ${{ needs.suite-cells.result }}
+        run: |
+          echo "suite: $SUITE, suite-cells: $CELLS"
+          [ "$SUITE" = success ] && [ "$CELLS" = success ]
   # Full-stack regression: a real hub on the sample brain, a fake assistant through each door
   # (pasted bearer, /b browser, OAuth, local), the same golden path on each, then the free
   # switch-day check. Answers are compared with test/e2e/doors.json. docs/release.md.

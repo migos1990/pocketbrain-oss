@@ -24,7 +24,7 @@ test("pre-push runs the north star, and the gate's rules against main's old tip 
   expect(hook).toMatch(/^bun scripts\/north-star\.ts$/m);
   expect(hook).toContain('bun scripts/gate.ts "$rsha" --no-run');
   const loop = hook.slice(hook.indexOf("refs=$(cat)"));
-  const run = (stdin: string) => Bun.spawnSync(["sh", "-c", loop.replace(/^\s*bunx? .*$/gm, (l) => l.includes("gate.ts") ? 'echo "gate $rsha"' : ":")], { stdin: new TextEncoder().encode(stdin) }).stdout.toString().trim();
+  const run = (stdin: string) => Bun.spawnSync(["sh", "-c", loop.replace(/^\s*bunx? .*$/gm, (l) => l.includes("gate.ts proved") ? ":" : l.includes("gate.ts") ? 'echo "gate $rsha"' : ":")], { stdin: new TextEncoder().encode(stdin) }).stdout.toString().trim();
   const z = "0".repeat(40), a = "a".repeat(40), b = "b".repeat(40);
   expect(run(`refs/heads/main ${b} refs/heads/main ${a}\n`)).toBe(`gate ${a}`);
   expect(run(`refs/heads/x ${b} refs/heads/x ${a}\n`)).toBe("");
@@ -44,7 +44,7 @@ test("pre-push lets a tag or the release branch at a commit on origin/main throu
   const tagObj = g("rev-parse", "v1");
   g("commit", "-q", "--allow-empty", "-m", "two");
   const off = g("rev-parse", "HEAD");
-  const head = hook.slice(0, hook.indexOf("bun test\n"));
+  const head = hook.slice(0, hook.indexOf("long_checks() {"));
   const run = (stdin: string) => Bun.spawnSync(["sh", "-c", head + "echo FULL"], { cwd: dir, stdin: new TextEncoder().encode(stdin) }).stdout.toString().trim().split("\n").at(-1);
   const z = "0".repeat(40);
   expect(run(`refs/tags/v1 ${tagObj} refs/tags/v1 ${z}\n`)).toMatch(/nothing to check again/);
