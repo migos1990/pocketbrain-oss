@@ -5,6 +5,34 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G976: {
+    closed: "claude/owner-first-name",
+    title: "A shop's mail that greeted the owner by first name started a page for someone else",
+    severity: "high",
+    finding: "Owner's phone, 2026-11-16: a person page titled with the owner's first name alone, said to work at a shop and to be its customer, from one order mail on the owner's own inbox. ownerOf (src/capture.ts) rightly won't take a first name alone as the owner (a namesake would be merged into them), and nothing else stopped it, so checkCandidate called it a new person and the pull filed a page. On the owner's own mail that first name is most likely the owner, and a namesake can't be told apart: either way it is a guess, and a guess makes no page.",
+    fix: "src/capture.ts checkCandidate: a person named only by the owner's given name (the first word of owner.name or an alias, honorifics, credentials and a bracketed note aside; ownerFirstNameAlone) is unsupported with one sentence, before any page is looked up, so it starts no page and lands on none, not even one already titled that way. Another first name, the owner's full name and a namesake with a surname file as before. Tests: test/owner-first-name.test.ts, test/capture-precision.test.ts.",
+  },
+  G977: {
+    closed: "claude/owner-first-name",
+    title: "The shop that sent a mail became the workplace and the 'how you know' of the person it wrote to",
+    severity: "high",
+    finding: "Same page, 2026-11-16: the model read the order mail's sender as where its addressee works (\"works at\" the shop) and as how the owner knows them (\"customer of\" the shop), two lines that contradict each other. checkCandidate never saw who sent the item, so a commercial sender none of the machine-mail signs caught could tie anyone it wrote to to itself.",
+    fix: "extractCapture takes the item's envelope (a pull passes the mail's From line, a mailbox capture its stored from:, never stored anew) and checkCandidate refuses a person's fact whose value names the sender (its display name whole, or its mail domain's own label) unless the person is the sender, whose own mail may say where they work (senderTie in src/capture.ts). Tests: test/owner-first-name.test.ts, end to end through pullSource with a fake model.",
+  },
+  G978: {
+    closed: "claude/owner-first-name",
+    title: "Pages already made for the owner's first name alone had no way to leave",
+    severity: "medium",
+    finding: "G976 stops new ones; the pages it made before stay, with their facts on the owner's home and Memory. The machine-mail set-aside (src/receipt-pages.ts) doesn't reach them: it needs the mail in the machine-mail ledger and never removes a person page.",
+    fix: "src/first-name-pages.ts: a person page titled with the owner's given name alone, not the owner's own, not started by the owner, every fact a plain value with no owner's word, is counted by upkeep; with `pocketbrain first-name-pages on` each live fact goes to history with a diary line (why first-name) and Undo, and the page goes in the same commit when no one's words are on it; Undo brings it back from that commit (src/undo.ts). Set aside once, never again. Test: test/first-name-pages.test.ts.",
+  },
+  G979: {
+    closed: "claude/owner-first-name",
+    title: "A page whose id begins another page's id never went with its last fact",
+    severity: "low",
+    finding: "Found writing G978: noOwnWords (src/undo.ts) said a page was named by another when the other's text held its id anywhere, so people/<name> counted as named by people/<name>-<surname>. Undo of a page's last fact and the machine-mail set-aside both left such a page behind, empty.",
+    fix: "noOwnWords matches the id as a whole id, not followed or led by a letter, digit, slash, dash or underscore. Test: test/first-name-pages.test.ts (the first-name page goes beside the owner's own page, whose id begins with it).",
+  },
   G982: {
     closed: "claude/suite-once",
     title: "One change ran the whole test suite four times",
@@ -31,7 +59,7 @@ export const GAPS: Record<string, Gap> = {
     title: "Brain quotes counted the hub's own paragraph and side-by-side literals as quotes, and real-shaped text stayed in tests and history docs",
     severity: "medium",
     finding: "The Mac's brain-quotes run on c2df8907 (2026-11-16) listed 19 lines. Six UI snapshot lines (test/ui/door-changes.aria.yml) and the fixtures beside them shared runs with the paragraph the hub writes on each page from its facts (a name's fact is a value, (Written by the hub from this page's facts.), and its [^pf-...] references): the code's sentence with two or more words filled in, which the one-filled-word rule could not see. Three code lines (src/import/notion.ts, src/wiki.ts) built a sentence from short literals passed side by side, which have no group of four of their own. The rest were real-shaped text: Notion row counts and quoted entries in two history docs, and test fixtures in the source-type, person, footnote and money shapes the real brain uses.",
-    fix: "scripts/brain-quotes.ts reads a page less the hub's paragraph (the one paragraph right above the hub's mark) and its p-/pf- references, whose facts it reads from the frontmatter already; and strings the code passes side by side (call arguments, list items, a template after them) read as one sentence of the code. The history docs say the same in general words, and the fixtures use invented names, refs and values in another order. deploy go's line is pinned at 0 too, so a clean report is seen to have run. Tests: test/brain-quotes.test.ts (both rules, each seen failing; the owner's own words around them still count), test/deploy-go.test.ts.",
+    fix: "scripts/brain-quotes.ts reads a page less the hub's paragraph (the one paragraph right above the hub's mark) and its p-/pf- references, whose facts it reads from the frontmatter already; and strings the code passes side by side (call arguments, list items, a template after them) read as one sentence of the code. The history docs say the same in general words, and the fixtures use invented names, refs and values in another order. deploy go's line is pinned at 0 too, so a clean report is seen to have run. Tests: test/brain-quotes.test.ts (both rules, each seen failing; the owner's own words around them still count), test/deploy-go.test.ts. The Mac's run on d8251c37 still found test/import.test.ts:33, the money row's keys in the export's own order with its source line; claude/brain-quotes-import puts them in another order with other words.",
   },
   G968: {
     closed: "claude/copy-brain-race",

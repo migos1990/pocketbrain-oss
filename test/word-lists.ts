@@ -134,6 +134,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "dashboard/html.ts#agentPage": { class: "not-reviewed" },
   "dashboard/html.ts#readsTable": { class: "not-reviewed" },
   "dashboard/labels.ts#questionWords": { class: "phrasing-only", why: "chooses how a sentence is worded, never kind, area or truth" },
+  "first-name-pages.ts#setAsideFirstNamePages": { class: "phrasing-only", why: "the set-aside commit message: one or many, never kind, area or truth" },
   "dashboard/owner-book.ts#DONE": { class: "not-reviewed" },
   "dashboard/people.ts#levelForm": { class: "not-reviewed" },
   "dashboard/people.ts#suggestionItem": { class: "not-reviewed" },

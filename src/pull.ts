@@ -658,7 +658,7 @@ export async function distil(root: string, it: SourceItem, ref: string, fm: Reco
   writeFileSync(join(root, rel), `---\n${YAML.stringify(head, { lineWidth: 0 })}---\nNot kept here: pocketBrain stores the facts, not a copy. The original is at ${ref}.\n`);
   grounding = text;
   try {
-    return { outcome: "done", file: rel, items: await extractCapture(root, rel, model, text, [subject, it.where].filter(Boolean).join("\n")) };
+    return { outcome: "done", file: rel, items: await extractCapture(root, rel, model, text, [subject, it.where].filter(Boolean).join("\n"), { sender: it.from }) };
   } catch (e) {
     rmSync(join(root, rel), { force: true }); // uncommitted; pullOne counts the failure and retries
     throw e;

@@ -128,6 +128,13 @@ export function setMachineMailAside(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { machine_mail: { set_aside: mode === "on" } }, `machine-mail ${mode}`);
 }
 
+// `pocketbrain first-name-pages on|off`: whether the nightly pass sets aside person pages named only
+// by the owner's first name (src/first-name-pages.ts, G978) or only counts them. Off until the owner says so.
+export function setFirstNamePages(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("first-name-pages on | off");
+  return setRulesKeys(root, "policy.yaml", { first_name_pages: { set_aside: mode === "on" } }, `first-name-pages ${mode}`);
+}
+
 // `pocketbrain sources count-sent <gmail source> on [--days N] | off`: whether the hub counts who
 // the owner writes to from his sent mail's headers (To, Cc, Date; never a body, never a fact), for
 // Who matters suggestions (src/pull.ts countSent, G829). The number is the first look-back in days.

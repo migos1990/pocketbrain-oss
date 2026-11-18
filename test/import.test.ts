@@ -30,9 +30,9 @@ function rawBrain(): string {
     url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2: "Vamprose sources:\n- Role Coordinator at Acme: an email, Gmail f000000000000001 (2026-09-18).\n" });
   put("money", [{
-    Name: "2026-09-29 Rainy day jar", Currency: "EUR", Amount: "740", Type: "Account", "Source type": "a text received from Louis",
-    Source: "Louis's messages 2026-09-29", Verification: "Unverified", Confidence: "Stated", Sensitive: "__YES__", "Author agent": "Instinct",
-    Fingerprint: "Instinct \\| created \\| 2026-10-04", "date:Date:start": "2026-09-29", url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3",
+    Name: "2026-09-29 Rainy day jar", Sensitive: "__YES__", Currency: "EUR", Amount: "740", Type: "Account", "Author agent": "Instinct",
+    Confidence: "Stated", Verification: "Unverified", Source: "owner's chat, late Sept 2026-09-29", "Source type": "a text received from Louis",
+    "date:Date:start": "2026-09-29", Fingerprint: "Instinct \\| created \\| 2026-10-04", url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3: "Account number 12345678 at the branch.\n" });
   mkdirSync(join(root, "rules"), { recursive: true });
   writeFileSync(join(root, "rules/import.yaml"), "areas: { Northfield: work }\narea_hints: { work: ['\\bNorthfield\\b'] }\n");

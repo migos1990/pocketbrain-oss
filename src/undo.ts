@@ -50,7 +50,8 @@ export function undoFact(root: string, token: string): UndoResult {
   const id = row.fact_key.slice(0, hash), attr = row.fact_key.slice(hash + 1);
   // A page upkeep removed when it set aside its last machine-mail fact comes back as it was (G668).
   // It comes back as it stood before that commit, the fact still on it, live and held.
-  const revived = row.why === "machine" && !loadBrain(root).some((n) => n.fm.id === id) ? restoreRemoved(root, `${id}.md`) : undefined;
+  // A page set aside for being named only by the owner's first name comes back the same way (G978).
+  const revived = (row.why === "machine" || row.why === "first-name") && !loadBrain(root).some((n) => n.fm.id === id) ? restoreRemoved(root, `${id}.md`) : undefined;
   const note = loadBrain(root).find((n) => n.fm.id === id);
   if (!note || !existsSync(join(root, note.path))) return { outcome: "changed_since", fact_key: row.fact_key, row, message: "Changed since" };
   const facts = (note.fm.facts ??= {}), hist = (note.fm.history ??= {});
@@ -92,7 +93,7 @@ export function undoFact(root: string, token: string): UndoResult {
     // The page comes back as it was before the set-aside, so the other facts set aside with it are
     // live again too: they go back to history, each still waiting on its own Undo.
     for (const r of rows) {
-      if (r.why !== "machine" || r.kind !== "retracted" || r.at !== row.at || r === row || !r.fact_key.startsWith(`${id}#`) || rows.some((u) => u.undoes === r.undo_token)) continue;
+      if (r.why !== row.why || r.kind !== "retracted" || r.at !== row.at || r === row || !r.fact_key.startsWith(`${id}#`) || rows.some((u) => u.undoes === r.undo_token)) continue;
       const a = r.fact_key.slice(id.length + 1), cur = facts[a];
       if (!cur || isDisputed(cur) || isList(cur) || !same(shownValue(cur), r.from)) continue;
       (hist[a] ??= []).push({ ...(cur as FactRecord), valid_to: d, ended_by: { step: 0, at: d, by: "hub" } });
@@ -135,7 +136,7 @@ export function undoFact(root: string, token: string): UndoResult {
 // removed later never comes back through an old line (builder's slice audit of PR 104).
 function restoreRemoved(root: string, rel: string): string | undefined {
   const [sha, ...body] = gitRun(root, ["log", "-1", "--diff-filter=D", "--format=%H%n%B", "--", rel]).out.trim().split("\n");
-  if (!sha || !body.includes("Kind: machine-mail")) return undefined;
+  if (!sha || !(body.includes("Kind: machine-mail") || body.includes("Kind: first-name-page"))) return undefined;
   const r = gitRun(root, ["show", `${sha}^:${rel}`]);
   if (!r.ok || !r.out) return undefined;
   writeFileSync(join(root, rel), r.out.endsWith("\n") ? r.out : `${r.out}\n`);
@@ -179,7 +180,9 @@ export function noOwnWords(root: string, note: Note, notes: Note[] = loadBrain(r
   const paras = note.body.split(/\n\s*\n/);
   const words = paras.filter((p, i) => !p.includes(MADE) && paras[i + 1]?.trim() !== MADE).join("\n").split("\n").filter((l) => !/^\[\^[^\]]+\]:/.test(l)).join("").trim();
   if (words) return false;
-  return !notes.some((n) => n.fm.id !== note.fm.id && JSON.stringify([n.fm, n.body]).includes(note.fm.id));
+  // The id as a whole id: "people/robin" is not named by "people/robin-lake" (G978).
+  const named = new RegExp(`(?<![\\p{L}\\p{N}/_-])${note.fm.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}/_-])`, "u");
+  return !notes.some((n) => n.fm.id !== note.fm.id && named.test(JSON.stringify([n.fm, n.body])));
 }
 
 // Undo of a settled conflict opens it again (spec §5: the inverse write of the settle). The fact and

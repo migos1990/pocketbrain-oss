@@ -112,7 +112,7 @@ export function slugMap(notes: Iterable<Note>): Map<string, string> {
 
 export function fromWords(row: Pick<DiaryRow, "source_word" | "by"> & Partial<Pick<DiaryRow, "why">>, rules: Rules): string {
   // A fact the hub set aside itself says so, never where the fact came from (G673).
-  if (row.why === "receipt" || row.why === "machine") return "set aside by your brain";
+  if (row.why === "receipt" || row.why === "machine" || row.why === "first-name") return "set aside by your brain";
   switch (row.source_word) {
     // The owner's own write; an assistant passing on what the owner told it says so (audit v4).
     case "you": return !row.by || isOwnerId(row.by) ? "you said" : `you told your ${rules.policy.agents[row.by]?.label ?? row.by}`;
@@ -199,6 +199,7 @@ export const LINE_COPY = {
   receiptUnnamed: "A receipt was set aside; receipts aren't facts",
   machine: "A fact from a no-reply mail on {title} was set aside; machine mail isn't read for facts",
   machineUnnamed: "A fact from a no-reply mail was set aside; machine mail isn't read for facts",
+  firstName: "A fact on {title} was set aside; your first name alone could be you or anyone, so it isn't filed",
   family: "{title} may be family: same surname as you",
   disagree: "Two sources disagree on {title}'s {attr}",
   disagreeNext: "Two sources disagree on what's next for {title}",
@@ -289,7 +290,7 @@ export function saidWords(row: Pick<DiaryRow, "source_word" | "by" | "at"> & Par
   const d = dayName(dayOf(row.at), today);
   const label = (by: string) => rules.policy.agents[by]?.label ?? by;
   const f = (s: string, v: Record<string, string>) => { const t = s.replace(/\{(\w+)\}/g, (_m, x: string) => v[x] ?? ""); return t.charAt(0).toUpperCase() + t.slice(1); };
-  if (row.why === "receipt" || row.why === "machine") return f(SAID_COPY.setAside, d);
+  if (row.why === "receipt" || row.why === "machine" || row.why === "first-name") return f(SAID_COPY.setAside, d);
   switch (row.source_word) {
     case "email": return f(SAID_COPY.email, d);
     case "calendar": return f(SAID_COPY.calendar, d);
@@ -388,6 +389,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // name heldName allows, and a family line, like any other, says nothing on a page private now.
   let what = row.why === "receipt" ? (safeName ? w("receipt") : lineWords("receiptUnnamed", {}))
     : row.why === "machine" ? (safeName ? w("machine") : lineWords("machineUnnamed", {}))
+    : row.why === "first-name" ? w("firstName")
     : shapeless ? (named ? w("somethingNew") : lineWords("somethingUnnamed", {}))
     : row.why === "family" ? w("family")
     : verb && (row.kind === "new" || row.kind === "item_added") ? w("verbNew")
@@ -419,7 +421,7 @@ function lineOf(row: DiaryRow & { count?: number }, rules: Rules, notes: Map<str
   // row that doesn't say who settled it says neither.
   const who = row.kind !== "settled" || isOwnerId(row.settled_by) ? undefined : row.settled_by ? agentTitle(rules, row.settled_by) : "";
   if (who !== undefined) what = what.replace(/^You settled it: /, who ? `${who} settled it: ` : "Settled: ").replace(/^You settled /, who ? `${who} settled ` : "Settled ");
-  const about = { ...tag, ...(row.why === "receipt" || row.why === "machine" ? { kind: "receipt" } : { key: row.fact_key, ...(held ? { held } : {}) }) };
+  const about = { ...tag, ...(row.why === "receipt" || row.why === "machine" || row.why === "first-name" ? { kind: "receipt" } : { key: row.fact_key, ...(held ? { held } : {}) }) };
   if (row.kind === "kept" || (row.kind === "confirmed" && !row.added?.length)) return { token: row.undo_token, page: id, what, from, undo: "none", maybe: false, shapeless, ...about };
   const note = notes.get(id);
   const now = note ? shownValue(note.fm.facts?.[attr]) : undefined;

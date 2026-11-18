@@ -10,6 +10,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A shop's mail that greets you by first name no longer starts a page for "someone" with your first name, and the shop that sent a mail is no longer filed as where the person it wrote to works, or as how you know them (G976, G977). Pages made that way before are counted each night; `pocketbrain first-name-pages` lists them and `pocketbrain first-name-pages on` sets them aside, each fact with Undo (G978).
 - A tap on an answer shows at once: the button dims, extra taps are dropped, and a second answer for a question you already settled is no longer an error. The answer itself comes back faster, because the page's text is rewritten just after the reply instead of before it (G975).
 - A gift, promo or licence code (groups of capitals and digits joined by dashes) is now refused like a password or a card number: no assistant can save one, and one in a capture is blanked (G961).
 - A value already in your memory that looks like a secret (a card number, a password, a code) is no longer given to any assistant, whoever's slice holds its page. Nothing in your memory changes and you are not asked anything (G962).
@@ -26,6 +27,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- A page whose id begins another page's id (a first name beside the full name) now goes with its last fact when nothing else names it; the other page's id no longer counted as naming it (G979).
 - For builders: one change no longer runs the whole test suite four times. The pre-push hook skips its long checks when the merge gate already passed them, first time, on that exact tree; and CI runs its two suites side by side, the slower one as two jobs with half of the test files each, with the required `test` check green only when all are; the merge gate's CI-time rule counts only main runs where a step ran the way it does today, and says "not enough runs yet" until there are three (G982).
 - The nightly check of what each assistant is given failed on the night of 2026-11-16 although no assistant was given too little: the check itself expected a page not filed yet to reach an assistant that reads only some of your areas. The check now follows the same rule as the hub, also catches a page of that kind given too freely, and the two memories it failed on are replayed on every change (G981). Your Home line clears after the next nightly check passes on this version.
 - A brain migration's dry run no longer fails when git takes and drops a lock while the brain is copied, and a file git moves away mid-copy starts the copy again instead of failing or being left out. The restore drill copies the same way (G968).

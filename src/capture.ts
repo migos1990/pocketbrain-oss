@@ -346,7 +346,49 @@ const samePhone = (a: string, b: string) => local(a) === local(b);
 
 const KIND_WORDS = { travel: "a flight, stay or booking", event: "a one-off event", errand: "a provider's mail" } as const;
 
-export function checkCandidate(c: Candidate, text: string, notes: Note[], rules: Rules, context = ""): Omit<CaptureItem, "proposal"> {
+// The item's envelope, never stored: `sender` is a mail's From line as the source gave it.
+export interface Envelope { sender?: string }
+
+// The owner's given names: the first word of owner.name and of each alias ("Lake, Robin" is Robin).
+function ownerFirstNames(rules: Rules): Set<string> {
+  const out = new Set<string>();
+  for (const x of [rules.policy.owner?.name, ...(rules.policy.owner?.aliases ?? [])]) {
+    if (typeof x !== "string") continue;
+    const bare = stripCredentials(x).trim();
+    const parts = bare.split(",");
+    const first = (parts.length === 2 ? parts[1] : bare).trim().split(/\s+/)[0];
+    if (first) out.add(personKey(first));
+  }
+  return out;
+}
+// One word, the owner's given name, honorifics, credentials and a bracketed note aside.
+export function ownerFirstNameAlone(rules: Rules, entity: string): boolean {
+  if (KIN_NOTE.test(entity)) return false;
+  const k = personKey(entity.replace(/\s*\([^)]*\)/g, "").trim());
+  return !!k && !k.includes(" ") && ownerFirstNames(rules).has(k);
+}
+
+// Which name of the sender's a person's fact uses, or undefined. The sender is named by its From
+// line's display name (all its words, in order) or its mail domain's own label ("bramblewood" in
+// shop.bramblewood.example). A person the display name names is the sender, and their own mail may
+// say where they work (G977).
+export function senderTie(entity: string, value: string, sender: string | undefined): string | undefined {
+  if (!sender || typeof value !== "string") return undefined;
+  const addr = /<([^>]+)>/.exec(sender)?.[1] ?? (sender.includes("@") ? sender.trim() : "");
+  const display = sender.replace(/<[^>]*>/g, "").replace(/["']/g, "").trim();
+  const words = (s: string) => contentWords(fold(s));
+  const shown = words(display), who = words(entity);
+  if (who.length && who.every((w) => shown.includes(w))) return undefined;
+  const v = squash(value);
+  if (!v) return undefined;
+  if (shown.length && !addr.toLowerCase().includes(display.toLowerCase()) && v.includes(squash(display))) return display;
+  const labels = (addr.split("@")[1] ?? "").toLowerCase().split(".").filter(Boolean);
+  const own = labels.length >= 2 ? [labels.at(-2)!, ...(labels.at(-2)!.length <= 3 && labels.length >= 3 ? [labels.at(-3)!] : [])].filter((l) => l.length >= 4) : [];
+  const hit = own.find((l) => v.includes(squash(l)));
+  return hit ? (shown.length ? display : hit) : undefined;
+}
+
+export function checkCandidate(c: Candidate, text: string, notes: Note[], rules: Rules, context = "", envelope: Envelope = {}): Omit<CaptureItem, "proposal"> {
   if (!wellFormed(c)) return { candidate: c, status: "ungrounded", why: "the model's answer for this fact isn't well-formed" };
   const sq = squash(text);
   if (!squash(c.quote) || !sq.includes(squash(c.quote)))
@@ -409,6 +451,15 @@ export function checkCandidate(c: Candidate, text: string, notes: Note[], rules:
   // words, never the model's paraphrase of them.
   if (c.attribute === "prefers" && !(squash(c.value) && sq.includes(squash(c.value))))
     return { candidate: c, status: "ungrounded", why: "a preference is kept in the text's own words, and these aren't" };
+  // The owner's first name alone ("Hi Robin" in a shop's mail) is a guess at who: on the owner's own
+  // mail it is most likely them, and a namesake can't be told apart. It starts no page and lands on
+  // none, not even one already titled that way (owner's phone, 2026-11-16; G976).
+  if (c.type === "person" && ownerFirstNameAlone(rules, c.entity))
+    return { candidate: c, status: "unsupported", why: `${c.entity.trim()} alone is your own first name; whether it means you or someone else is a guess, so nothing is filed for it` };
+  // The organisation that sent the item is not a tie of anyone else's: a shop's mail names itself
+  // to its customer, and that is no workplace and no "how you know" (G977).
+  const tie = c.type === "person" ? senderTie(c.entity, c.value, envelope.sender) : undefined;
+  if (tie) return { candidate: c, status: "unsupported", why: `it ties ${c.entity} to ${tie}, which sent the item; who sent a message is not where the people it writes to work or how you know them` };
   const self = c.type === "person" ? ownerOf(rules, notes, c.entity) : undefined;
   // No page of the owner's yet: this fact starts it, under the owner's full name (Town's wiki has
   // a Profile page; dropping the fact left the owner the one person the wiki knew nothing about).
@@ -716,7 +767,7 @@ function summaryLines(items: CaptureItem[], pulled: boolean): string[] {
 // capture is sent; a held one waits for Louis, an extracted one is done.
 // A pull passes the text itself: the capture file holds only the ref, never a copy (src/pull.ts).
 // `context` (a pull's channel, thread or subject) can name who an item is about; it is never stored.
-export async function extractCapture(root: string, rel: string, model: Model, given?: string, context = ""): Promise<CaptureItem[]> {
+export async function extractCapture(root: string, rel: string, model: Model, given?: string, context = "", envelope: Envelope = {}): Promise<CaptureItem[]> {
   const read = readCapture(root, rel);
   if (read.status !== "pending") return [];
   const c = given === undefined ? read : { ...read, text: given };
@@ -730,7 +781,7 @@ export async function extractCapture(root: string, rel: string, model: Model, gi
   logJudgment(root, STEP, reply, prompt, out ? { facts: (Array.isArray(out.facts) ? out.facts : []).map(({ quote: _q, ...f }) => f) } : { unparsed: reply.text.length });
   const checked = (Array.isArray(out?.facts) ? out!.facts! : []).map((cand): CaptureItem => wellFormed(cand) && cardOnly(rules, cand.type, cand.attribute)
     ? { candidate: cand, status: "unsupported", why: `${cand.type} has no attribute ${cand.attribute}; not proposed` }
-    : checkCandidate(cand, c.text, notes, rules, [context, c.fm.subject].filter(Boolean).join("\n")));
+    : checkCandidate(cand, c.text, notes, rules, [context, c.fm.subject].filter(Boolean).join("\n"), { sender: envelope.sender ?? (typeof c.fm.from === "string" ? c.fm.from : undefined) }));
   return fileItems(root, rel, c, checked, { label: `${reply.provider}/${reply.model}`, empty: out ? "- no facts" : "- the model's answer couldn't be read; nothing proposed", trailer: `Model: ${reply.provider}/${reply.model}` }, rules, notes);
 }
 

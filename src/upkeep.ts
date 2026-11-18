@@ -30,6 +30,7 @@ import { bothDatesPlan, bothDatesOn, closeBothDates } from "./dated";
 import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
 import { setAsideMachineMail } from "./receipt-pages";
+import { setAsideFirstNamePages, firstNameOn } from "./first-name-pages";
 import { unguessAreas, unguessOn, fileUnfiled } from "./area-guess";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
@@ -176,6 +177,15 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const mm = setAsideMachineMail(root, on);
     if (on && mm.facts) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
     else if (mm.facts) add({ rule: "machine-mail", key: "machine-mail", kind: "review", detail: `${mm.facts} held fact${mm.facts === 1 ? "" : "s"} on ${mm.pages} page${mm.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside, each with Undo` });
+  }
+  //      Person pages named only by the owner's first name (src/first-name-pages.ts, G978): set aside
+  //      once, a diary line each with Undo, an emptied page with them; off until `pocketbrain
+  //      first-name-pages on`, a count then.
+  {
+    const on = firstNameOn(rules);
+    const fp = setAsideFirstNamePages(root, on);
+    if (on && fp.pages.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+    else if (fp.pages.length) add({ rule: "first-name-page", key: "first-name-page", kind: "review", detail: `${fp.pages.length} person page${fp.pages.length === 1 ? " is" : "s are"} named only by your first name; \`pocketbrain first-name-pages on\` sets ${fp.pages.length === 1 ? "it" : "them"} aside, each fact with Undo` });
   }
   //      Pages a word guess put in an area (src/area-guess.ts, G842): back to the default area, a
   //      `moved` diary line each with Undo; off until `pocketbrain areas unguess on`, a count then.
