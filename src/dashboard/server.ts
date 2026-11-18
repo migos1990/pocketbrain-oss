@@ -54,7 +54,7 @@ import type { Note } from "../brain";
 import { ownerPage, askProse, askFact, sideWords } from "./html-page";
 import { signInAgain } from "./html-home";
 import { homePage, askPage, askListPage, memoryPage, whoPage, letPage, appPage, rankAreas, APP_COPY, FONT_PATH } from "./html-app";
-import { parentOf as wikiParent } from "../wiki";
+import { parentOf as wikiParent, pageTextDoor, flushPageText, pageTextBusy } from "../wiki";
 import { findOverlaps, assistantOf } from "../overlap";
 const FONT_FILE = new URL("./fonts/schibsted-grotesk-latin.woff2", import.meta.url).pathname;
 import { withMarks, marksFor, markAgents, shorts, colours } from "./marks";
@@ -589,7 +589,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
   const sayOnce = new Map<string, { at: number; run: Promise<Awaited<ReturnType<typeof ownerSayModel>>> }>();
   const SAY_ONCE_MS = 60_000;
   let lastOwnerMinute = "";
-  async function handle(req: Request, hosts = allowedHosts, secure = false): Promise<Response> {
+  // A conflict packet the owner or the hub already closed.
+  const settledPacket = (r: string, id: string) => { try { return /^status: (resolved|kept-both|both-hold)$/m.test(readFileSync(join(r, "disputes", `${id}.md`), "utf8")); } catch { return false; } };
+  // Owner actions made inside the app's own requests leave the page writer for after the reply.
+  const handle = (req: Request, hosts = allowedHosts, secure = false): Promise<Response> => pageTextDoor.run(root, () => handleIn(req, hosts, secure));
+  async function handleIn(req: Request, hosts = allowedHosts, secure = false): Promise<Response> {
     const url = new URL(req.url);
     const host = req.headers.get("host") ?? "";
     if (!hosts.has(host)) return refusedAppDoor(root, req, oops("dash.host"), "dash.host", now());
@@ -630,6 +634,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     const sid = session(req);
     if (!sid) return remote ? signedOutPhone(secure) : oops("dash.signed-out");
     const csrf = sessions.get(sid)!;
+    // The page writer waits while the owner taps (src/wiki.ts, G975), and runs before any screen
+    // that shows a page's words, so those never lag an answer. Only a signed-in request moves it.
+    if (req.method === "GET" && !/^\/(?:$|home$|settle\/|ask$|let$|favicon)/.test(url.pathname)) flushPageText(root); else pageTextBusy(root);
     // ?ok= and ?err= name a message kept for this sign-in (keepFlash); plain text is still read, so
     // an old link shows its words, but the hub itself never puts a message in an address.
     for (const k of ["ok", "err"]) { const v = url.searchParams.get(k); if (v?.startsWith("@")) url.searchParams.set(k, takeFlash(sid, v.slice(1)) ?? ""); }
@@ -747,6 +754,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       if (action === "settle-pick" || action === "settle-both") {
         const id = form.id ?? "", value = (form.value ?? "").replace(/\s+/g, " ").trim();
         const c = id.startsWith("p-") ? inboxConflict(root, id) : ownerConflict(root, id);
+        // The same answer sent again (a second tap that got through, a page reloaded): the question
+        // is settled, which is what the owner asked for, so no error (G975).
+        if (!c && /^c-\d{4,}$/.test(id) && settledPacket(root, id)) return go("/home", { ok: `That one is settled. ${leftWords()}` });
         if (!c) return go("/home", { err: "Nothing to settle there any more." });
         const back = `/settle/${encodeURIComponent(id)}`;
         const at = diaryAt();

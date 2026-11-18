@@ -300,6 +300,9 @@ nav.tabbar a[aria-current]{background:linear-gradient(transparent 24%,var(--mark
 @media (max-width:380px){nav.tabbar{padding:0 max(8px,env(safe-area-inset-left)) env(safe-area-inset-bottom)}nav.tabbar a{font-size:13px;padding:0 2px}}
 @media (max-width:340px){nav.tabbar a{font-size:12px;padding:0 1px}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+form[method=post]:not(.composer) button:active{opacity:.55}
+form.sending:not(.composer) button{opacity:.55}
+html[data-sent] form[method=post]:not(.composer) button{pointer-events:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 `;
 
@@ -317,7 +320,7 @@ export const tabBar = (on: Tab) => `<nav class="tabbar" aria-label="${APP_COPY.t
 export function appPage(title: string, on: Tab, body: string, o: { css?: string; wrap?: string } = {}): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>${esc(title)}</title><style>${APP_CSS}${o.css ?? ""}</style></head><body><main class="wrap${o.wrap ? ` ${o.wrap}` : ""}">
 ${body}
-</main>${tabBar(on)}${body.includes('class="box composer"') ? COMPOSER_JS : ""}</body></html>`;
+</main>${tabBar(on)}${body.includes('class="box composer"') ? COMPOSER_JS : ""}${body.includes('method="post"') ? ONCE_JS : ""}</body></html>`;
 }
 
 // One mark per assistant: filled when it gets the line, dashed when it doesn't. The group says it
@@ -403,6 +406,12 @@ export function composer(csrf: string, f: Record<string, string>, placeholder: s
 }
 // Grows the text area as it wraps, lights the arrow, sends on Enter, and on Ask shows what was said
 // at once while the page loads.
+// A tap shows at once and a form is sent once (the owner's phone, 2026-11-16, G975: five taps on a
+// side of a question, each one sent). The first submit marks its form (pressed, aria-busy) and
+// holds every other form on the page until the next page shows; a form that asked and was told no
+// (a confirm) is not counted, and a send that never came back frees the page after 20 seconds.
+// The composer has its own (COMPOSER_JS).
+const ONCE_JS = "<script data-once>(()=>{const h=document.documentElement;let t;const free=()=>{clearTimeout(t);delete h.dataset.sent;for(const f of document.querySelectorAll('form.sending:not(.composer)')){f.classList.remove('sending');f.removeAttribute('aria-busy')}};addEventListener('submit',e=>{const f=e.target;if(!(f instanceof HTMLFormElement)||f.method!=='post'||f.classList.contains('composer')||e.defaultPrevented)return;if(h.dataset.sent){e.preventDefault();return}h.dataset.sent='1';f.classList.add('sending');f.setAttribute('aria-busy','true');t=setTimeout(free,20000)});addEventListener('pageshow',free)})();</script>";
 const COMPOSER_JS = "<script>for(const f of document.querySelectorAll('form.composer')){const t=f.querySelector('textarea');const fit=()=>{t.style.height='auto';t.style.height=Math.min(t.scrollHeight," + COMPOSER_MAX + ")+'px';f.classList.toggle('ready',t.value.trim()!=='')};t.addEventListener('input',fit);t.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(t.value.trim())f.requestSubmit()}});f.addEventListener('submit',e=>{if(f.classList.contains('sending')){e.preventDefault();return}if(!t.value.trim()){e.preventDefault();return}f.classList.add('sending');const pin=f.closest('.pinned');if(pin&&f.closest('.chat')){const p=document.createElement('p');p.className='bubble you echo';p.textContent=t.value.replace(/\\s+/g,' ').trim();pin.before(p);scrollTo(0,document.body.scrollHeight)}});fit()}addEventListener('pageshow',()=>{for(const f of document.querySelectorAll('form.composer.sending'))f.classList.remove('sending')});</script>";
 const box = (csrf: string, f: Record<string, string>, placeholder: string) => `<div class="pinned">${composer(csrf, f, placeholder)}</div>`;
 

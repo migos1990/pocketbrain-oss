@@ -2,6 +2,7 @@
 // The wiki shape of a note, read-only (docs/wiki.md): a one-line `summary:`, a `parent:` and the
 // page tree computed from parents (never stored), sections from `## ` headings, and Markdown
 // footnotes for refs. Every field is optional; a note without them reads as it always did.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { MONTHS_SHORT, nameAt } from "./util";
 import { linksIn, parseNote, isDisputed, isList, loadBrain, saveNote, sensitivityRank, today, CONTENT_DIRS, type Note, type FactRecord, type Fact } from "./brain";
 import { git, gitRun, gitTime } from "./git";
@@ -1488,4 +1489,43 @@ export function renderTouchedPages(root: string, since: string, o: { only?: stri
   git(root, ["add", "--", ...written]);
   git(root, ["commit", "-q", "-m", `${WRITER}: page text for ${written.length} ${written.length === 1 ? "page" : "pages"}\n\nWhy: ${whyWritten(root, written, since, via)}; each opening paragraph says what the page's facts say now, with a reference for each.\nKind: page-writer\nFiles: ${written.join(", ")}`], WRITER);
   return { written: written.map((p) => p.slice(0, -3)), kept, commit: git(root, ["rev-parse", "--short", "HEAD"]).trim() };
+}
+
+// ---------- the page writer, after the owner's tap (G975) ----------
+// Writing the touched pages loads every page and carves it for every assistant: most of a second on
+// a small brain, and it ran inside each of the owner's taps (the phone, 2026-11-16). On a hub whose
+// owner app is up, an owner action made inside one of the app's own requests (pageTextDoor, entered by
+// the dashboard's handler; code review of PR 225) asks for it with pageTextSoon: it runs once the app has been quiet for a moment, at the latest PAGE_TEXT_MAX_MS
+// after the first ask, and at once before any screen that shows a page's words (flushPageText), so
+// the owner never reads a page that lags an answer (G707). Anywhere else it runs in place, as before.
+const PAGE_TEXT_IDLE_MS = 3000, PAGE_TEXT_MAX_MS = 30_000;
+// The brain whose owner-app request this code runs in, if any. Every other door, the CLI and the
+// hub's own jobs are outside it, and write the pages in place.
+export const pageTextDoor = new AsyncLocalStorage<string>();
+const waitingText = new Map<string, { since: string; first: number; timer: ReturnType<typeof setTimeout> }>();
+export const pageTextWaiting = (root: string) => waitingText.has(root);
+function armPageText(root: string, since: string, first: number): void {
+  const timer = setTimeout(() => flushPageText(root), Date.now() - first >= PAGE_TEXT_MAX_MS ? 0 : PAGE_TEXT_IDLE_MS);
+  (timer as { unref?: () => void }).unref?.();
+  waitingText.set(root, { since, first, timer });
+}
+export function pageTextSoon(root: string, since: string): void {
+  if (pageTextDoor.getStore() !== root) { renderTouchedPages(root, since); return; }
+  const w = waitingText.get(root);
+  if (w) clearTimeout(w.timer);
+  armPageText(root, w && w.since < since ? w.since : since, w?.first ?? Date.now());
+}
+// The app is in use: the writer waits a little longer, never past its limit.
+export function pageTextBusy(root: string): void {
+  const w = waitingText.get(root);
+  if (!w) return;
+  clearTimeout(w.timer);
+  armPageText(root, w.since, w.first);
+}
+export function flushPageText(root: string): void {
+  const w = waitingText.get(root);
+  if (!w) return;
+  clearTimeout(w.timer);
+  waitingText.delete(root);
+  try { renderTouchedPages(root, w.since); } catch { /* the night run writes it */ }
 }

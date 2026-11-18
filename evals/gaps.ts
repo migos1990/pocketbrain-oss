@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G975: {
+    closed: "claude/tap-once",
+    title: "A tap on the settle screen showed nothing for a second, and each extra tap sent its own answer",
+    severity: "high",
+    finding: "The owner's phone, 2026-11-16: he tapped a side about five times before the screen moved, and it took seconds. Measured on the demo brain: one settle answer cost about 1.2 s, about 0.8 s of it the page writer (renderTouchedPages, called in ownerDecide before the redirect). Nothing on the page changed at the tap, and only the text box's form dropped a second submit, so five taps sent five answers: the first settled the question and each later one came back as the error \"Nothing to settle there any more\", the last of which is what the owner would land on. The same held for every one-tap form of the owner app (Keep, Keep all, It's right, Not sure keep both, Undo).",
+    fix: "src/dashboard/html-app.ts: every owner-app page with a POST form carries one small script (ONCE_JS): the first submit marks the form (class sending, aria-busy, dimmed) and the page (data-sent), and every later submit on that page is dropped until the page shows again or 20 s pass; a pressed button dims at touch by CSS alone. src/dashboard/server.ts: an answer for a question that is already settled says \"That one is settled\" and goes on, never an error. src/wiki.ts pageTextSoon: on the dashboard the page writer runs after the reply (3 s after the owner's last tap, 30 s at most, at once before the owner opens a page or Memory); other doors and the CLI run it in place as before. Test: test/tap-once.test.ts (390px dark touch page with every answer held 2.5 s: pressed at once, one POST from five taps and a tap on the other form; a repeat answer is no error; the answer returns with the page writer still waiting and a page read runs it). Code review of PR 225: the writer is left for later only inside the owner app's own requests (pageTextDoor), so an owner answer through another door writes in place, and only a signed-in request runs or delays it; both are rows in the same test. Not done here: the home's own render (0.3 to 0.5 s) is the next cost of a tap.",
+  },
   G981: {
     closed: "claude/unfiled-owed",
     title: "The nightly slice check failed on facts the carve was right to keep: the owed oracle owed a page not filed yet through one area slice",

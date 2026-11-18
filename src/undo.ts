@@ -16,7 +16,7 @@ import { clock } from "./clock";
 import { OWNER, isOwnerId } from "./owner";
 import { readDiary, appendDiary, diaryRow, shownValue, type DiaryRow } from "./diary";
 import { logWrite } from "./write";
-import { renderTouchedPages, MADE } from "./wiki";
+import { pageTextSoon, MADE } from "./wiki";
 import { undoFold } from "./fold";
 import { undoMove } from "./area-follow";
 import type { Note } from "./brain";
@@ -126,7 +126,7 @@ export function undoFact(root: string, token: string): UndoResult {
   if (unsaved) return { outcome: "not_saved", fact_key: row.fact_key, row, message: `not saved: ${unsaved}` };
   logWrite(root, { at, agent: OWNER, kind: "owner-edit", op: "undo", key: row.fact_key, outcome: "committed" });
   // The page's text follows its facts (the page writer, its own hub commit).
-  try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
+  try { pageTextSoon(root, at); } catch { /* the night run writes it */ }
   return { outcome: "undone", fact_key: row.fact_key, row, message: "Undone" };
 }
 
@@ -220,6 +220,6 @@ function reopen(root: string, row: DiaryRow, token: string): UndoResult {
   const unsaved = commitPaths(root, [note.path, rel, diary], `owner: undo the answer to ${row.settles}\n\nWhy: the owner undid their answer from ${row.at.slice(0, 10)}; the conflict is open again with its sides as they were.\nKind: owner-edit\nFact-Keys: ${row.fact_key}`, OWNER);
   if (unsaved) return { outcome: "not_saved", fact_key: row.fact_key, row, message: `not saved: ${unsaved}` };
   logWrite(root, { at, agent: OWNER, kind: "owner-edit", op: "undo", key: row.fact_key, outcome: "committed", dispute: row.settles });
-  try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
+  try { pageTextSoon(root, at); } catch { /* the night run writes it */ }
   return { outcome: "undone", fact_key: row.fact_key, row, message: "Undone" };
 }

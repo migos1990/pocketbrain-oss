@@ -14,7 +14,7 @@ import { sha256 } from "./util";
 import { refString } from "./sources";
 import { appendDiary, diaryRow, shownValue } from "./diary";
 import { logWrite } from "./write";
-import { renderTouchedPages } from "./wiki";
+import { pageTextSoon } from "./wiki";
 import { lineState } from "./sources";
 
 // unknownSender: a held record came from a mail whose sender no page holds (`sender: "unknown"`,
@@ -145,7 +145,7 @@ export function markSeen(root: string, factKey: string): { outcome: "seen" | "no
   const unsaved = commitPaths(root, [note.path, rel], `owner: seen ${factKey}\n\nWhy: the owner has seen it, so ${shareWith ? (shareWith.length ? `${shareWith.join(", ")} gets it now` : "it stays with the owner") : "their assistants get it now"}.\nKind: owner-seen\nFact-Keys: ${factKey}`, OWNER);
   if (unsaved) return { outcome: "not_saved", message: `not saved: ${unsaved}` };
   logWrite(root, { at, agent: OWNER, kind: "owner-seen", key: factKey, outcome: "committed" });
-  try { renderTouchedPages(root, at); } catch { /* the night run writes it */ }
+  try { pageTextSoon(root, at); } catch { /* the night run writes it */ }
   return { outcome: "seen", value, ...(shareWith ? { shareWith } : {}), message: "Seen" };
 }
 

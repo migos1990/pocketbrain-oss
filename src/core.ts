@@ -20,7 +20,7 @@ import { runChecks, redactSecrets, findInjection, findSecret, refShapeOk, approv
 import { normalizeValue, compareKey } from "./normalize";
 import { sourceRank, refString, normalizeRef, isExactLouisRef, readerSource, readerRef } from "./sources";
 import { git, authorEnv, commitPaths, gitTime } from "./git";
-import { renderTouchedPages, openingProblem, hubLead, leadSentences, ownerWordsOf, applyRewrite, ungrounded, summaryOf, isPersonAuthor, isPersonCommit, partAuthors, pageFindings, pageChanges, footnotes, refsIn, parentOf, sectionWithRefs, reference } from "./wiki";
+import { renderTouchedPages, pageTextSoon, openingProblem, hubLead, leadSentences, ownerWordsOf, applyRewrite, ungrounded, summaryOf, isPersonAuthor, isPersonCommit, partAuthors, pageFindings, pageChanges, footnotes, refsIn, parentOf, sectionWithRefs, reference } from "./wiki";
 import { hiddenNeedles } from "./needles";
 import { findCarried } from "./match";
 import { cellChangesSince, cellGeneration, cellsOn, freshCell, rulesHash } from "./cell";
@@ -912,7 +912,7 @@ export function ownerDecide(root: string, id: string, choice: number | string, v
   // Only a value the owner typed is the owner's word, so only it moves a page with its workplace (G664).
   if (!side) followArea(root, rules, String(p.note.fm.fact_key ?? ""));
   // The page's text says the settled value now, not after the night writer (G707).
-  try { renderTouchedPages(root, began); } catch { /* the night run writes it */ }
+  try { pageTextSoon(root, began); } catch { /* the night run writes it */ }
   return `${id}: settled; ${p.note.fm.fact_key} = ${JSON.stringify(rec.value)}`;
 }
 
@@ -991,7 +991,7 @@ export function ownerKeepBoth(root: string, id: string): string {
   const began = new Date(Math.min(Date.now(), clock().getTime()) - 1000).toISOString(); // either clock: PB_NOW may stand in for today
   const unsaved = commitPaths(root, [p.target.path, p.note.path], `owner: keep both sides of ${id}\n\nWhy: the owner wasn't sure; nothing is decided and the conflict stops asking.\nKind: owner-answer\nFact-Keys: ${p.note.fm.fact_key}`, OWNER);
   if (unsaved) throw new CoreError(500, `not saved: ${unsaved}`);
-  try { renderTouchedPages(root, began); } catch { /* the night run writes it (G707) */ }
+  try { pageTextSoon(root, began); } catch { /* the night run writes it (G707) */ }
   logWrite(root, { at: clock().toISOString(), agent: OWNER, key: String(p.note.fm.fact_key), outcome: "committed", dispute: id, kind: "owner-keep-both" });
   return `${id}: kept both`;
 }
