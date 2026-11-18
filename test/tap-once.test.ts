@@ -27,26 +27,31 @@ test("five taps on a side with a slow hub: pressed at once, one answer sent, no 
     await page.goto(r.dash + "/home");
     const href = await page.locator('a[href^="/settle/c-"]').first().getAttribute("href");
     await page.goto(r.dash + href!);
-    let posts = 0, held = 0;
-    // The hub answers late: every answer is held on its way until this test lets it go, so nothing
-    // here depends on how fast the machine is (CI on 358b329: the page moved on mid-check).
-    let release = () => {};
-    const gate = new Promise<void>((res) => { release = res; });
-    await page.route(/\/action\/settle-/, async (route) => { held++; await gate; await route.continue(); });
+    let posts = 0;
     page.on("request", (q) => { if (q.method() === "POST" && q.url().includes("/action/settle-")) posts++; });
-    const side = page.locator("form.pick:not(.both) button").first();
-    await side.tap({ noWaitAfter: true });
-    // At once, long before the hub answers.
-    const seen = await page.evaluate(() => { const f = document.querySelector("form.pick.sending"); const btn = f?.querySelector("button"); return { n: document.querySelectorAll("form.pick.sending").length, busy: f?.getAttribute("aria-busy"), opacity: btn ? Number(getComputedStyle(btn).opacity) : 1 }; });
+    // The five taps, and what the page shows after the first, all in one turn of the page: the
+    // first tap's answer is only sent once this returns, so the state is read before any answer
+    // can exist, and nothing is asked of the page while its answer is on the way (a page held
+    // mid-answer stalled this test on a busy machine; CI, 2026-11-18).
+    await page.evaluate(() => {
+      const seen = { n: 0, busy: null as string | null, opacity: 1, sent: 0, dropped: 0 };
+      addEventListener("submit", (e) => { if (e.defaultPrevented) seen.dropped++; else seen.sent++; });
+      const bs = [...document.querySelectorAll<HTMLButtonElement>("form.pick button")];
+      bs[0]!.click();
+      const f = document.querySelector("form.pick.sending"), btn = f?.querySelector("button");
+      Object.assign(seen, { n: document.querySelectorAll("form.pick.sending").length, busy: f?.getAttribute("aria-busy") ?? null, opacity: btn ? Number(getComputedStyle(btn).opacity) : 1 });
+      // Four more taps on the same side, and one on the other form: one answer per page.
+      for (let i = 0; i < 4; i++) bs[0]!.click();
+      bs.at(-1)!.click();
+      sessionStorage.setItem("tap-once", JSON.stringify(seen));
+    }).catch(() => { /* the page may already be leaving; what it saw is kept for the next page */ });
+    await page.waitForURL(/\/home/, { timeout: 60_000 });
+    await page.waitForLoadState();
+    const seen = JSON.parse(await page.evaluate(() => sessionStorage.getItem("tap-once") ?? "{}"));
     expect(seen.n).toBe(1);
     expect(seen.busy).toBe("true");
     expect(seen.opacity).toBeLessThan(1);
-    // Four more taps on the same side, and one on the other form: one answer per page.
-    await page.evaluate(() => { const bs = [...document.querySelectorAll<HTMLButtonElement>("form.pick button")]; for (let i = 0; i < 4; i++) bs[0]!.click(); bs.at(-1)!.click(); });
-    release();
-    await page.waitForURL(/\/home/, { timeout: 30_000 });
-    await page.waitForLoadState();
-    expect(held).toBe(1);
+    expect(seen).toMatchObject({ sent: 1, dropped: 5 });
     expect(posts).toBe(1);
     expect(await page.content()).not.toContain("Nothing to settle there any more");
     await b.close();

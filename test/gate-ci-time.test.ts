@@ -6,7 +6,7 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ciTimeVerdict, stepOf, stepLimits, slowestPerStep, isSuiteJob, CI_TIME_SHARE } from "../scripts/gate";
+import { ciTimeVerdict, stepOf, stepLimits, stepParts, runStepTimes, slowestPerStep, isSuiteJob, CI_TIME_SHARE, CI_TIME_MIN_RUNS } from "../scripts/gate";
 
 test("the limits are read from ci.yml: both bun test steps, in seconds", () => {
   const limits = stepLimits(readFileSync(join(import.meta.dir, "..", ".github", "workflows", "ci.yml"), "utf8"));
@@ -63,4 +63,27 @@ test("G982: a suite split across jobs counts once per run, as its slowest part, 
 test("G982: a matrix part of the cells suite is read under the name GitHub gives it, so the rule keeps watching it", () => {
   for (const name of ["test", "suite", "suite-cells", "suite-cells (1)", "suite-cells (2)"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: true`);
   for (const name of ["e2e", "conformance", "cold-install", "suite-cells (x)", "outside-pr"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: false`);
+});
+
+test("G982: only main runs in today's shape are measured; until three exist the rule says so and neither blocks nor passes", () => {
+  const yml = readFileSync(join(import.meta.dir, "..", ".github", "workflows", "ci.yml"), "utf8");
+  expect(stepParts(yml)).toEqual({ "bun test": 1, "PB_CELLS=1 bun test": 2 });
+  expect(stepParts("      - run: PB_CELLS=1 bun test\n        timeout-minutes: 40\n")).toEqual({ "PB_CELLS=1 bun test": 1 });
+  const limits = { "bun test": 2400, "PB_CELLS=1 bun test": 2400 }, parts = stepParts(yml);
+  const at = (s: number) => new Date(Date.UTC(2026, 10, 18, 12, 0, 0) + s * 1000).toISOString();
+  const step = (name: string, s: number) => ({ name, started_at: at(0), completed_at: at(s) });
+  // A run from before the split: the whole cells suite in one step. It is not today's step.
+  const before = [step("Run bun test --timeout 20000", 1252), step("Run PB_CELLS=1 bun test --timeout 20000   # cells", 1718)];
+  expect(runStepTimes(before, limits, parts)).toEqual({ seconds: { "bun test": 1252 }, older: ["PB_CELLS=1 bun test"] });
+  const after = [step("Run bun test --timeout 20000", 1222), step("Run PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts 1 2)", 547), step("Run PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts 2 2)", 370)];
+  expect(runStepTimes(after, limits, parts)).toEqual({ seconds: { "bun test": 1222, "PB_CELLS=1 bun test": 547 }, older: [] });
+  // A run where one part never finished its step is not a whole measurement either.
+  expect(runStepTimes(after.slice(0, 2), limits, parts).seconds).toEqual({ "bun test": 1222 });
+
+  const waiting = ciTimeVerdict([{ step: "PB_CELLS=1 bun test", limit: 2400, seconds: [547], older: 4 }]);
+  expect(waiting).toEqual({ lines: [`CI \`PB_CELLS=1 bun test\` on main: not enough runs yet, 1 of ${CI_TIME_MIN_RUNS} since the step changed shape (4 older runs ran it differently and are not counted)`] });
+  // Slow new runs still don't block before there are three, and three of them do.
+  expect(ciTimeVerdict([{ step: "PB_CELLS=1 bun test", limit: 2400, seconds: [2000, 2100], older: 3 }]).block).toBeUndefined();
+  expect(ciTimeVerdict([{ step: "PB_CELLS=1 bun test", limit: 2400, seconds: [2000, 2100, 1900], older: 2 }]).block).toContain("2000 s at the median of main's last 3 runs");
+  expect(ciTimeVerdict([{ step: "PB_CELLS=1 bun test", limit: 2400, seconds: [547, 560, 530], older: 2 }])).toEqual({ lines: ["CI `PB_CELLS=1 bun test` on main: latest 547 s (23% of its 2400 s limit), median of the last 3 runs 547 s (23%)"] });
 });

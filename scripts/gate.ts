@@ -161,10 +161,19 @@ function ciRuns(): CiRun[] | string {
 // last finished runs and prints the latest and the median; it blocks only when the MEDIAN is over
 // 70% of the limit, so one slow runner never stops a merge.
 export const CI_TIME_SHARE = 0.7;
-export interface StepTime { step: string; seconds: number[]; limit: number } // seconds: newest first
+export const CI_TIME_MIN_RUNS = 3;
+// seconds: newest first, only runs where the step had today's shape; older: runs left out because
+// the step ran in another shape then (the whole cells suite in one step, before it ran in parts).
+export interface StepTime { step: string; seconds: number[]; limit: number; older?: number }
 export function stepLimits(ciYml: string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const m of ciYml.matchAll(/^\s*- run: ((?:PB_CELLS=1 )?bun test)\b[^\n]*\n\s*timeout-minutes: (\d+)/gm)) out[m[1]] = Number(m[2]) * 60;
+  return out;
+}
+// In how many jobs ci.yml runs each step today: the parts of scripts/test-shard.ts, else one.
+export function stepParts(ciYml: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of ciYml.matchAll(/^\s*- run: ((?:PB_CELLS=1 )?bun test)\b([^\n]*)\n\s*timeout-minutes: \d+/gm)) out[m[1]] = Number(m[2].match(/test-shard\.ts \S.*? (\d+)\)/)?.[1] ?? 1);
   return out;
 }
 // A job step's name as GitHub reports it ("Run bun test --timeout 20000") to its key in stepLimits.
@@ -174,6 +183,11 @@ export function stepOf(name: string): string | undefined {
 export function ciTimeVerdict(times: StepTime[]): { lines: string[]; block?: string } {
   const lines: string[] = []; const over: string[] = [];
   for (const t of times) {
+    if (t.older && t.seconds.length < CI_TIME_MIN_RUNS) {
+      // The old shape's times say nothing about today's step, and one or two new runs are no median.
+      lines.push(`CI \`${t.step}\` on main: not enough runs yet, ${t.seconds.length} of ${CI_TIME_MIN_RUNS} since the step changed shape (${t.older} older run${t.older === 1 ? "" : "s"} ran it differently and ${t.older === 1 ? "is" : "are"} not counted)`);
+      continue;
+    }
     if (!t.seconds.length) continue;
     const sorted = [...t.seconds].sort((a, b) => a - b);
     const median = sorted[Math.floor((sorted.length - 1) / 2)];
@@ -195,18 +209,32 @@ export function slowestPerStep(steps: { name: string; started_at: string; comple
   }
   return out;
 }
+// One run's time per step, only where the step ran in as many jobs as ci.yml gives it today: a run
+// from before a suite was split (or with a part that never finished) measured a different step.
+export function runStepTimes(steps: Parameters<typeof slowestPerStep>[0], limits: Record<string, number>, parts: Record<string, number>): { seconds: Record<string, number>; older: string[] } {
+  const count: Record<string, number> = {};
+  for (const s of steps) { const step = stepOf(s.name); if (step && step in limits) count[step] = (count[step] ?? 0) + 1; }
+  const all = slowestPerStep(steps, limits), seconds: Record<string, number> = {}, older: string[] = [];
+  for (const step of Object.keys(all)) {
+    const want = parts[step] ?? 1, inParts = steps.some((s) => stepOf(s.name) === step && /test-shard\.ts/.test(s.name));
+    if (inParts !== want > 1) older.push(step); // whole then and in parts now, or the other way round
+    else if (count[step] === want) seconds[step] = all[step];
+  }
+  return { seconds, older };
+}
 
 export function ciStepTimes(): StepTime[] | string {
   const url = Bun.spawnSync(["git", "remote", "get-url", "origin"], { stdout: "pipe", stderr: "pipe" }).stdout.toString().trim();
   const repo = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
   if (!repo) return "no GitHub origin";
   const yml = join(import.meta.dir, "..", ".github", "workflows", "ci.yml");
-  const limits = existsSync(yml) ? stepLimits(readFileSync(yml, "utf8")) : {};
+  const ymlText = existsSync(yml) ? readFileSync(yml, "utf8") : "";
+  const limits = stepLimits(ymlText), parts = stepParts(ymlText);
   if (!Object.keys(limits).length) return "no bun test step with a limit in ci.yml";
   const gh = (path: string, jq: string) => Bun.spawnSync(["gh", "api", path, "--jq", jq], { stdout: "pipe", stderr: "pipe", timeout: 30_000 });
   const ids = gh(`repos/${repo}/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=5`, ".workflow_runs | map(.id)");
   if (ids.exitCode !== 0) return (ids.stderr.toString().trim().split("\n").at(-1) || "gh failed").slice(0, 120);
-  const seconds: Record<string, number[]> = {};
+  const seconds: Record<string, number[]> = {}, older: Record<string, number> = {};
   try {
     for (const id of JSON.parse(ids.stdout.toString()) as number[]) {
       const r = gh(`repos/${repo}/actions/runs/${id}/jobs`, '[.jobs[] | {job: .name, steps: [.steps[] | select(.conclusion == "success" or .conclusion == "failure") | {name, started_at, completed_at}]}]');
@@ -214,10 +242,12 @@ export function ciStepTimes(): StepTime[] | string {
       // A suite that runs in several jobs (suite-cells, a part of the files each) counts once per
       // run, as its slowest part: that is the one a limit would stop.
       const steps = (JSON.parse(r.stdout.toString()) as { job: string; steps: Parameters<typeof slowestPerStep>[0] }[]).filter((j) => isSuiteJob(j.job)).flatMap((j) => j.steps);
-      for (const [step, secs] of Object.entries(slowestPerStep(steps, limits))) (seconds[step] ??= []).push(secs);
+      const t = runStepTimes(steps, limits, parts);
+      for (const [step, secs] of Object.entries(t.seconds)) (seconds[step] ??= []).push(secs);
+      for (const step of t.older) older[step] = (older[step] ?? 0) + 1;
     }
   } catch { return "unreadable answer"; }
-  return Object.entries(limits).map(([step, limit]) => ({ step, limit, seconds: seconds[step] ?? [] }));
+  return Object.entries(limits).map(([step, limit]) => ({ step, limit, seconds: seconds[step] ?? [], ...(older[step] ? { older: older[step] } : {}) }));
 }
 
 // ---------- flaky tests ----------
