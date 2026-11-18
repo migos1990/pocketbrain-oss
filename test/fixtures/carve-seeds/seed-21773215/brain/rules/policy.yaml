@@ -1,0 +1,47 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: trial
+    slices:
+      - s2
+      - area:personal
+      - area:work
+      - area:home
+      - s1
+    browser: true
+    max_sensitivity: personal
+  bex:
+    tier: core
+    slices:
+      - area:personal
+      - s2
+    browser: true
+    exclude_types:
+      - decisions
+  cyd:
+    tier: core
+    slices:
+      - area:work
+      - all
+      - area:client
+      - s1
+    browser: true
+  dax:
+    tier: trial
+    slices:
+      - area:client
+      - u-byid
+    browser: true
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  personal: {}
+  work: {}
+  home: {}
+  client: {}

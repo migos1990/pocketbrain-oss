@@ -24,6 +24,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { loadBrain } from "../src/brain";
+import { isUnfiled } from "../src/carve";
 import { forbiddenFor, carvedFor, leakFinder, distinctive } from "../evals/lib/oracle";
 
 export interface Owed { id: string; attr: string; value: string }
@@ -34,6 +35,7 @@ export async function owedFor(root: string, agent: string, opts: { role?: "reade
   const slices: Record<string, { exclude?: string[]; exclude_attributes?: string[] }> = (existsSync(sf) ? YAML.parse(readFileSync(sf, "utf8"))?.slices : undefined) ?? {};
   const mine: string[] = policy.agents?.[agent]?.slices ?? [];
   const held = new Set<string>(mine.filter((s) => !(s in slices)));
+  const areas = Object.keys(policy.areas ?? {});
   // A custom slice the agent also holds may take a fact away by name or by attribute: that wins
   // over any slice that gives it, so such a fact is not owed.
   const takenAway = (id: string, attr: string) => mine.some((s) => slices[s]?.exclude_attributes?.includes(attr) || slices[s]?.exclude?.includes(`${id}#${attr}`) || slices[s]?.exclude?.includes(id));
@@ -46,6 +48,10 @@ export async function owedFor(root: string, agent: string, opts: { role?: "reade
     // A page folded into another answers like a missing one; its facts live on the page that took it.
     if (id.split("/")[0] === "agents" || out.has(id) || n.fm.status === "merged") continue;
     if (!held.has("all") && !held.has(`area:${n.fm.area}`)) continue;
+    // A page not filed yet is read whole only by `all` or an area slice for every area (src/carve.ts
+    // readsEveryArea, G849, G872); a level- or attribute-only slice reads it under its own filter,
+    // which this oracle doesn't owe (G981).
+    if (isUnfiled(n) && !held.has("all") && !areas.every((a) => held.has(`area:${a}`))) continue;
     for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
       if (out.has(`${id}#${attr}`) || takenAway(id, attr)) continue;
       const recs = (Array.isArray((f as any)?.items) ? (f as any).items : [f]) as Record<string, unknown>[];

@@ -1,0 +1,41 @@
+{
+ "seed": 21773206,
+ "why": "nightly slice check 2026-11-16 (on 4c880787): bex holds area:home and area:work, not area:personal, plus a level-only slice (public); the owed oracle owed it a personal page not filed yet in area home, which the carve rightly keeps (G872). Oracle fixed, G981",
+ "doors": [
+  "mcp",
+  "api",
+  "browser"
+ ],
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  }
+ ],
+ "ops": [
+  "page writer: 7 pages",
+  "handoff ava -> bex about people/lyzel-geter: ho-20261008210906-dtia"
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "seed": 21773215,
+ "why": "nightly slice check 2026-11-16: ava holds three of four area slices and an attribute-only slice; the owed oracle owed it whole pages not filed yet, which the carve serves only under the attribute-only slice (G872). Oracle fixed, G981",
+ "doors": [
+  "mcp",
+  "api",
+  "browser"
+ ],
+ "agents": [
+  {
+   "name": "ava",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  },
+  {
+   "name": "bex",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "cyd",
+   "roles": [
+    "full"
+   ]
+  },
+  {
+   "name": "dax",
+   "roles": [
+    "full",
+    "reader"
+   ]
+  }
+ ],
+ "ops": [
+  "page writer: 8 pages"
+ ]
+}

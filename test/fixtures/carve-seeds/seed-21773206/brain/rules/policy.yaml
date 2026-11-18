@@ -1,0 +1,51 @@
+owner:
+  name: Robin
+agents:
+  ava:
+    tier: core
+    slices:
+      - s2
+      - area:personal
+    browser: true
+    exclude_types:
+      - people
+    exclude:
+      - decisions/gubapoth-pebamal
+  bex:
+    tier: trial
+    slices:
+      - area:home
+      - area:work
+      - s2
+    browser: true
+  cyd:
+    tier: core
+    slices:
+      - area:home
+      - area:personal
+      - s3
+      - s2
+      - s1
+      - u-every
+    browser: true
+  dax:
+    tier: core
+    slices:
+      - s1
+      - area:work
+      - u-byid
+    browser: true
+    exclude_types:
+      - money
+    max_sensitivity: personal
+tiers:
+  core:
+    max_sensitivity: private
+    writes: direct
+  trial:
+    max_sensitivity: personal
+    writes: propose
+areas:
+  work: {}
+  home: {}
+  personal: {}

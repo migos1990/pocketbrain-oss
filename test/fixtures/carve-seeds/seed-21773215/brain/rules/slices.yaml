@@ -1,0 +1,25 @@
+slices:
+  s2:
+    only_attributes:
+      - detail
+      - split
+    exclude:
+      - money/niqolin-zadir
+  s1:
+    types:
+      - people
+      - money
+      - notes
+      - orgs
+      - decisions
+      - people
+    tags:
+      - alpha
+    max_sensitivity: public
+    only_attributes:
+      - detail
+      - code
+      - detail
+  u-byid:
+    include:
+      - orgs/dodeper-gysex

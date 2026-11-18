@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G981: {
+    closed: "claude/unfiled-owed",
+    title: "The nightly slice check failed on facts the carve was right to keep: the owed oracle owed a page not filed yet through one area slice",
+    severity: "medium",
+    finding: "Night of 2026-11-16 (on 4c880787): \"300 memories, 3 doors, 0 leaks, 2 missing\", seeds 21773206 and 21773215, and the owner's home said the nightly check failed. In both, a reader held area slices for some areas but not all, plus a slice with only a level or an attribute list, and a page not filed yet sat in one of its areas. The carve keeps such a page from the area slice (G849, G872) and reads it only under the filter-only slice, which kept the facts out. test/carve-owed.ts owed the page whenever the leak oracle didn't carve it, and the leak oracle (evals/lib/oracle.ts) still counted any slice with no area, kind or tag as reading every area, so it neither carved the page nor caught a regression of G872. Introduced by PR 194 (claude/new-page-area, 2026-11-15), which tightened the carve and mirrored only half of it in the oracle; CI's six fixed seeds never build that shape.",
+    fix: "test/carve-owed.ts owes a page not filed yet only to all or an area slice for every area; evals/lib/oracle.ts keeps such a page out when every slice that could read it in every area caps it below its level. The carve is unchanged. Both seeds frozen in test/fixtures/carve-seeds/ (replayed on every run, every door), a miss is now frozen like a leak, test/carve-property.test.ts G981. Known limit (slice audit): a page not filed yet that only a level- or attribute-only slice serves is no longer owed, so a miss there is not counted; the leak half still reads it.",
+  },
   G971: {
     closed: "claude/brain-quotes-zero",
     title: "Brain quotes counted the hub's own paragraph and side-by-side literals as quotes, and real-shaped text stayed in tests and history docs",

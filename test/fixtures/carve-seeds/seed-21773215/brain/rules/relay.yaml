@@ -1,0 +1,7 @@
+relay_address: relay@brain.example
+owner_address: robin@example.com
+agents:
+  steward: steward@brain.example
+  planner: planner@brain.example
+  helper: helper@brain.example
+canaries: [Zephyr Holdings 7731]

@@ -56,10 +56,9 @@ test(`carve property: ${SEEDS.length} random brains, every agent and token, ${EV
     const f = c.findings;
     owed += c.owed;
     if (c.missing.length) missing.push(reportMissing(g, c.missing));
-    if (f.length) {
-      failed.push(report(g, f));
-      if (process.env.CARVE_FREEZE) freeze(g, join(FIXTURES, `seed-${seed}`));
-    }
+    if (f.length) failed.push(report(g, f));
+    // A miss is frozen like a leak (G981): the night's two misses of 2026-11-16 replay on every run.
+    if ((f.length || c.missing.length) && process.env.CARVE_FREEZE) freeze(g, join(FIXTURES, `seed-${seed}`));
   }
   expect(failed.join("\n")).toBe("");
   // The other direction (G815): every fact a reader is owed came back, and the run owed something.
@@ -189,4 +188,34 @@ test("carve property, the other direction: readers are owed facts, and an answer
     const full = new Set((await owedFor(g.root, a.name)).map((x) => `${x.id}#${x.attr}`));
     expect((await owedFor(g.root, a.name, { role: "reader" })).filter((x) => !full.has(`${x.id}#${x.attr}`))).toEqual([]);
   }
+});
+
+// G981: the night of 2026-11-16 failed on two "missing" facts the carve was right to keep. A page
+// not filed yet is read in full only by `all` or whole-area slices for every area (G849, G872); a
+// slice that only sets a level or an attribute list reads it under that filter alone. The owed
+// oracle borrowed the leak oracle's looser "reads every area" and owed such a page through one area
+// slice. Owed now follows the carve's rule, and the leak oracle keeps the page out when every slice
+// that could read it caps it below the page's level.
+test("G981: a page not filed yet is owed only to a grant that reads every area whole", async () => {
+  const g = thaw(join(FIXTURES, "seed-21773206"), mkdtempSync(join(tmpdir(), "pb-g981-")));
+  const { carvedFor } = await import("../evals/lib/oracle");
+  const key = (o: { id: string; attr: string }) => `${o.id}#${o.attr}`;
+  // bex: area:home, area:work and s2 (public only), against areas work, home, personal.
+  expect((await owedFor(g.root, "bex")).map(key)).not.toContain("notes/likix-lulex#amount");
+  expect((await carvedFor(g.root, "bex")).carved.map((c) => c.id)).toContain("notes/likix-lulex");
+  // With an area slice for every area the page is read whole, and owed.
+  const pf = join(g.root, "rules", "policy.yaml");
+  const policy = YAML.parse(readFileSync(pf, "utf8"));
+  policy.agents.bex.slices.push("area:personal");
+  writeFileSync(pf, YAML.stringify(policy));
+  expect((await owedFor(g.root, "bex")).map(key)).toContain("notes/likix-lulex#amount");
+  expect((await carvedFor(g.root, "bex")).carved.map((c) => c.id)).not.toContain("notes/likix-lulex");
+  // ava, in the other night's brain: three of four areas and an attribute-only slice. No unfiled page is owed.
+  const h = thaw(join(FIXTURES, "seed-21773215"), mkdtempSync(join(tmpdir(), "pb-g981-")));
+  const unfiled = new Set(loadBrain(h.root).filter((n) => n.fm.unfiled).map((n) => n.fm.id));
+  expect(unfiled.size).toBeGreaterThan(0);
+  expect((await owedFor(h.root, "ava")).filter((o) => unfiled.has(o.id)).map(key)).toEqual([]);
+  // The leak oracle still lets the page in where a filter-only slice reads it at its level: ava's
+  // attribute-only slice serves decisions/vyser-byqifur, so it is not carved out (slice audit).
+  expect((await carvedFor(h.root, "ava")).carved.map((c) => c.id)).not.toContain("decisions/vyser-byqifur");
 });

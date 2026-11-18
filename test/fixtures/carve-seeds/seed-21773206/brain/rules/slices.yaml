@@ -1,0 +1,22 @@
+slices:
+  s3:
+    exclude_attributes:
+      - code
+    exclude:
+      - notes/likix-lulex
+  s2:
+    max_sensitivity: public
+  s1:
+    tags:
+      - gamma
+    max_sensitivity: secret
+    exclude:
+      - notes/fusutur-sivux
+  u-byid:
+    include:
+      - money/gasex-tinath
+  u-every:
+    areas:
+      - work
+      - home
+      - personal

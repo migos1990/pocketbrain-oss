@@ -61,10 +61,13 @@ function intentFor(root: string, agent: string, role?: "reader") {
   const whole = mine.filter((s) => FILTERS.every((k) => s[k] === undefined));
   // A slice with no area, kind or tag reads every area itself (under its own filters, which this
   // oracle doesn't model: it then calls nothing out, never a false leak).
-  const everyArea = mine.some((s) => !s.areas && !s.types && !s.tags && !(s.include && ["max_sensitivity", "since", "until", "only_attributes", "exclude_attributes"].every((k) => s[k] === undefined)))
-    || whole.some((s) => !s.areas) || areas.every((x) => whole.some((s) => (s.areas ?? []).includes(x)));
+  // Only its level is modelled: a page above the level of every such slice is out (G981), unless
+  // whole-area slices read every area.
+  const readsAnyArea = mine.filter((s) => !s.areas && !s.types && !s.tags && !(s.include && ["max_sensitivity", "since", "until", "only_attributes", "exclude_attributes"].every((k) => s[k] === undefined)));
+  const everyAreaWhole = whole.some((s) => !s.areas) || areas.every((x) => whole.some((s) => (s.areas ?? []).includes(x)));
+  const everyArea = (n: any) => everyAreaWhole || readsAnyArea.some((s) => !s.max_sensitivity || rank(n.fm.sensitivity) <= rank(s.max_sensitivity));
   const byId = new Set<string>(mine.flatMap((s) => s.include ?? []));
-  const unfiledOut = (n: any) => (n.fm.unfiled === true || (typeof n.fm.unfiled === "string" && n.fm.unfiled !== "")) && !everyArea && !byId.has(n.fm.id);
+  const unfiledOut = (n: any) => (n.fm.unfiled === true || (typeof n.fm.unfiled === "string" && n.fm.unfiled !== "")) && !everyArea(n) && !byId.has(n.fm.id);
   const noteOut = (n: any) => unfiledOut(n) || excludedTypes.some((t) => t === String(n.fm.id).split("/")[0] || t === n.fm.type) || excludedNotes.includes(n.fm.id) || rank(n.fm.sensitivity) > rank(ceiling)
     || (n.fm.share && Array.isArray(n.fm.share.deny) && n.fm.share.deny.includes(agent));
   // A value the owner hasn't seen yet (`unseen`: a contact card's email or phone, an assistant's
