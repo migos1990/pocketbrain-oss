@@ -19,7 +19,7 @@ const model = makeModel({ provider: "fake", model: "fake-1" }, { fake: (r: Model
 const disputes = (root: string) => loadBrain(root).filter((n) => n.fm.type === "dispute");
 
 async function pulled(heldAsOf: string) {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { mail: { kind: "gmail", fixture: "m.json" } } }));
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: { value: "Write the exam", as_of: ${heldAsOf}, sources: ["agent:planner/${heldAsOf}"], verification: self-reported, by: planner, recorded: ${heldAsOf} }\n---\n`);

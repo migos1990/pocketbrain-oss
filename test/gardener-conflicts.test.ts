@@ -32,7 +32,7 @@ const conflictCards = (root: string, now: Date) => asked(root, now).filter((c) =
 // Course C holds `attr` from mail; the calendar then says something else (a different kind of
 // source, so the old rule asked; the same day, so the write path can't call it newer).
 async function contradicted(attr: string, held: string, said: string, sensitivity = "personal") {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "c.json" } } }));
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: ${sensitivity}\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  ${attr}: { value: "${held}", as_of: 2026-10-07, sources: ["gmail:f000000000000031"], verification: self-reported, by: planner, recorded: 2026-10-07 }\n---\n`);
@@ -153,7 +153,7 @@ test("Undo works after the Gardener suggested a side, and after another value jo
 
 test("a contested more or less precise date is a conflict too, never a silent replacement", () => {
   for (const [held, said] of [["2026-11", "2026-11-14"], ["2026-11-14", "2026-11"]]) {
-    const root = makeBrain();
+    const root = makeBrain({ steps: "one" });
     writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  launch_date: { value: "${held}", as_of: 2026-10-07, sources: ["gmail:f000000000000031"], verification: self-reported, by: planner, recorded: 2026-10-07 }\n---\n`);
     sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "course c");
     const r = write(root, { agent: "planner", id: "projects/course-c", attribute: "launch_date", value: said, as_of: "2026-10-07", sources: ["gcal:e1@e1"], verification: "self-reported" } as never, { acceptedBy: "auto-decide", contest: true });

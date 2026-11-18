@@ -33,9 +33,12 @@ import { coOwnerOf, isOwnerWord } from "./rules";
 import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, isOwnerEmail, isOwnerId, ownerRef, approvedRef, normVerification } from "./owner";
 import { keepQuote, sweepQuotes } from "./quotes";
 import { hubReadRefs } from "./pull";
-import { twoDatedThings, sameItem, endsOnDate, wholeDay, byDay, itemOf, itemsOf, newItems } from "./dated";
+import { twoDatedThings, twoSteps, byNewest, sameItem, endsOnDate, wholeDay, byDay, itemOf, itemsOf, newItems } from "./dated";
 import { appendDiary, diaryRow, shownValue, type DiaryKind } from "./diary";
 import { captureSender, unknownSenderWait } from "./sender";
+
+// The most live items a "several" fact (next steps, G965) holds from assistants and sources (G972).
+export const STEPS_MAX = 12;
 
 // Refs to an item the hub can read at its source (src/pull.ts fetchOne): checked, and ranked as
 // exact only once read (G417, G441). A gmail-thread: ref is never read, so it never counts.
@@ -1023,6 +1026,48 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       if (known) mergeSources(known);
       else hs.push({ ...incoming, valid_to: incoming.as_of, ended_by: { step: 7, at: d, by: req.agent } });
       step = 7; msg = "kept as history";
+    } else if (spec.several && !match && typeof value === "string" && !wholeDay(value)) {
+      // Several things to do, already a list (G965). Each rule is the single value's own, item by
+      // item: the owner's typed word stands alone; a relayed claim waits in the inbox; an assistant's
+      // own word, or a source older than every word of the owner's there, is history beside the
+      // owner's; a newer step from as strong a source ends the ones it may follow; the same source
+      // item saying another step, or a money, health or legal one that follows none, waits beside a
+      // live item as a conflict; anything else goes beside the others, up to STEPS_MAX live.
+      const items = live.items.filter((i) => !i.valid_to && !i.retired);
+      const sens = note.fm.type === "money" || note.fm.id.startsWith("money/") || !!sensitiveShape(rules, attr, note.fm.title, value);
+      const mine = items.filter(ownerWord);
+      const same = sameItem(items, incoming);
+      // An item that is one side of an open question is never ended by a newer step: the question is about it.
+      const follows = (i: FactRecord) => !ownerWord(i) && !i.contested && !incoming.as_of_approx && String(incoming.as_of) > String(i.as_of) && rank(incoming) >= rank(i);
+      const ends = (i: FactRecord, s: number) => { i.valid_to = incoming.as_of; i.ended_by = { step: s, at: d, by: req.agent }; };
+      if (isOwnerId(req.agent) && ownerWord(incoming)) {
+        for (const i of items) ends(i, 4);
+        live.items.push(incoming); byNewest(live.items); step = 4; msg = "the owner's newer word";
+      } else if (rank(incoming) < 1 && incoming.sources.length && incoming.sources.every((x) => refString(x).startsWith("agent-relay:"))) {
+        return done(propose(root, req, "relayed_only: another agent's word can't replace a live fact; cite the original source", []));
+      } else if (mine.length && !ownerWord(incoming) && ((assistantWord(incoming) && !sens) || (!incoming.as_of_approx && mine.every((o) => String(incoming.as_of) < String(o.as_of))))) {
+        const guess = assistantWord(incoming) && !sens;
+        const hs = (hist[attr] ??= []);
+        const known = hs.find((h) => !h.retired && valueKey(h.value) === valueKey(value) && h.ended_by?.step === 6);
+        if (known) mergeSources(known);
+        else hs.push({ ...incoming, valid_to: guess && String(incoming.as_of) > String(mine[0]!.as_of) ? incoming.as_of : mine[0]!.as_of, ended_by: { step: 6, at: d, by: req.agent } });
+        keptOwner = true; step = 6; msg = guess ? "an assistant's word against the owner's: kept as history" : "older than the owner's word: kept as history";
+      } else if (items.some(follows)) {
+        for (const i of items.filter(follows)) ends(i, 4);
+        live.items.push(incoming); byNewest(live.items); step = 4; msg = "real change over time: superseded an earlier step";
+      } else if ((same || sens) && items.length && !ownerWord(incoming)) {
+        const target = same ?? items[0]!;
+        const pending = target.contested && packetOpen(root, target.contested) ? target.contested : undefined;
+        if (pending) { joinPacket(root, pending, incoming); msg = `added to open dispute ${pending}; live item kept`; }
+        else { const id = openDispute(root, note, attr, [(({ contested: _, ...c }) => c)(target), incoming], ownerWord(target) ? 6 : 7, held); target.contested = id; msg = `disputed (${id}); live item kept`; }
+        disputed = true; step = ownerWord(target) ? 6 : 7;
+      } else if (items.length >= STEPS_MAX && !isOwnerId(req.agent)) {
+        // A page's list is not a place to pile up values (slice audit of G965, G972): past the cap an
+        // assistant's further step waits as a proposal, and nothing live changes.
+        return done(propose(root, req, `too_many_steps: this page already holds ${STEPS_MAX} of these; retire one that is done first`, []));
+      } else {
+        live.items.push(incoming); byNewest(live.items); step = 2; msg = "another thing to do: both kept";
+      }
     } else {
       live.items.push(incoming); step = 2; msg = "item added (set)";
       if (endsOnDate(spec) && live.items.every((i) => wholeDay(i.value))) byDay(live.items);
@@ -1043,6 +1088,16 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       const id = openDispute(root, note, attr, [(({ contested: _, ...c }) => c)(cur), incoming], s, hold);
       facts[attr] = { ...cur, contested: id }; disputed = true; step = s;
       msg = `${why}: disputed (${id}); live value kept`;
+    };
+    // Two things to do (G965): on an attribute a page holds several of, a different value that could
+    // not replace the live one is no contradiction. It goes beside it, newest first, and nothing
+    // asks. Never the owner's own word (theirs replaces, as before), and twoSteps keeps the old paths
+    // for the same source item, a relayed claim, and money, health and legal.
+    const stepBeside = () => {
+      if (ownerWord(incoming) || !twoSteps(rules, note, attr, spec, cur, incoming)) return false;
+      const { contested: _c, ...c } = cur;
+      facts[attr] = { items: byNewest([incoming, c as FactRecord]) }; step = 2; msg = "another thing to do: both kept";
+      return true;
     };
     const ownerDispute = () => {
       // Older sources never re-ask (phone UI spec §4.6, owner 2026-10-26): a source dated a day or
@@ -1065,7 +1120,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         return;
       }
       // The owner's word is never held for the Gardener: it asks at once, and stays live meanwhile.
-      beside(6, "contradicts a fact the owner confirmed");
+      if (!stepBeside()) beside(6, "contradicts a fact the owner confirmed");
     };
     const kept = !ownerWord(incoming) ? keptBothWith(root, factKey, cur.value, value) : undefined;
     let answered: FactRecord | undefined;
@@ -1178,7 +1233,7 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
       } else if (opts.contest && !(incoming.as_of > cur.as_of && !incoming.as_of_approx && rNew >= rOld)) {
         // From outside its areas only a real change over time (newer, as strong a source) files as
         // an update, as a capture's does (fileVerdict); anything else is a conflict for the Gardener.
-        beside(7, "contradiction held for the Gardener", held);
+        if (!stepBeside()) beside(7, "contradiction held for the Gardener", held);
       } else if (isOwnerId(opts.acceptedBy) && incoming.as_of >= cur.as_of) {
         // The owner accepting a proposal is their latest choice, even on the same day as the
         // value it replaces (a new brain's day-one facts), so it settles instead of disputing,
@@ -1207,7 +1262,8 @@ export function write(root: string, req: WriteRequest, opts: { acceptedBy?: stri
         supersede(5, `stronger source (${rNew} > ${rOld})`);
       } else {
         const s = rNew < rOld && incoming.as_of > cur.as_of ? 6 : 7;
-        if (held) beside(s, "conflict held for the Gardener", held);
+        if (stepBeside()) { /* both kept */ }
+        else if (held) beside(s, "conflict held for the Gardener", held);
         else {
         const id = openDispute(root, note, attr, [cur, incoming], s, held);
         facts[attr] = { dispute: id, candidates: [cur, incoming] }; disputed = true; step = s;

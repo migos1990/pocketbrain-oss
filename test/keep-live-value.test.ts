@@ -16,7 +16,7 @@ import { loadRules } from "../src/rules";
 
 const sh = (cwd: string, ...cmd: string[]) => Bun.spawnSync(cmd, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
 function brain() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  room: { value: "B-201", as_of: 2026-10-07, sources: ["gmail:f000000000000041"], verification: verified-by-source, by: planner, recorded: 2026-10-07 }\n---\n`);
   sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "owner: course c");
   return root;
@@ -58,7 +58,7 @@ test("two captures on one fact in one tick: the first is saved, the second waits
   const { makeModel } = await import("../src/model");
   const { pullSource } = await import("../src/pull");
   const { runAuto } = await import("../src/filing");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "c.json" } } }));
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\n---\n`);
@@ -85,7 +85,7 @@ test("the digest skips a conflict the Gardener holds, and lists one beside the o
   contest(root, "C-305");
   expect(digest(root).text).not.toContain("C-305");
   // A conflict with the owner's word asks at once, from its packet, the owner's value still live.
-  const r2 = makeBrain();
+  const r2 = makeBrain({ steps: "one" });
   writeFileSync(join(r2, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  room: { value: "B-201", as_of: 2026-10-01, sources: ["owner:2026-10-01/msg-1"], verification: confirmed-by-owner, by: owner, recorded: 2026-10-01 }\n---\n`);
   sh(r2, "git", "add", "-A"); sh(r2, "git", "commit", "-qm", "owner: c");
   expect(write(r2, { agent: "planner", id: "projects/course-c", attribute: "room", value: "C-305", as_of: "2026-10-07", sources: ["gmail:f000000000000042"], verification: "verified-by-source" } as never).outcome).toBe("disputed");
@@ -96,7 +96,7 @@ test("the digest skips a conflict the Gardener holds, and lists one beside the o
 // Owner's re-audit, 2026-10-25: STREAM_PEER made a raw exact id a peer of a value the hub checked
 // against its source, so a newer unchecked capture silently replaced a verified next step.
 test("in a run of values a newer unchecked value never replaces a checked one: it waits beside it", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "checks.yaml"), readFileSync(join(root, "rules", "checks.yaml"), "utf8").replace(/^(\s*next_step:\s*\{[^}]*?)merge:\s*\w+/m, "$1merge: latest"));
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: { value: "Grade the midterm", as_of: 2026-10-01, sources: ["gmail:f000000000000041"], verification: verified-by-source, by: planner, recorded: 2026-10-01 }\n---\n`);
   sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "owner: c");

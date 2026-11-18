@@ -20,7 +20,7 @@ const rec = (v: string, ref: string) => `{ value: "${v}", as_of: 2026-10-07, sou
 // Course C holds three facts from one email; a second email disagrees with all three, and a calendar
 // invite disagrees with its fourth. The Gardener has weighed every one, so all wait on the owner.
 function brain() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const A = "gmail:f000000000000041", B = "gmail:f000000000000042";
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  room: ${rec("B-201", A)}\n  status: ${rec("on track", A)}\n  next_step: ${rec("Book the lab", A)}\n  start_time: ${rec("9:00", "gmail:f000000000000043")}\n---\n`);
   sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "owner: course c");

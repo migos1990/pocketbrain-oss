@@ -637,6 +637,8 @@ function sentence(n: Note, attr: string, values: string[], owner: string[] = [],
   if (attr === "last_contact") return `You were last in touch with ${t} on ${v}.`;
   if (attr === "status") return phrase ? `${t} is ${v}.` : quoted("Status", v!);
   // A plan or a date something is due: what happens, and on which day if it names one.
+  // Several things to do on one page (G965) are said one after the other, never joined as one.
+  if (spec.several && many) return `${attr === "next_step" ? "Next" : label(attr)} for ${t}: ${words.join("; ")}.`;
   if (attr === "next_step" && !many && yourToDo(v!)) return `${yourToDo(v!)!}.`;
   if (spec.ends_on_date || spec.shelf_life === "until_date") return phrase ? `${attr === "next_step" ? "Next" : label(attr)} for ${t}: ${v}.` : quoted(label(attr), v!);
   if (spec.normalize === "date") return `${whose(t)} ${lab} ${many ? "dates are" : "is"} ${v}.`;

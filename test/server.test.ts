@@ -12,7 +12,7 @@ import { loadBrain, type FactRecord } from "../src/brain";
 const fact = (root: string, id: string, attr: string) => loadBrain(root).find((n) => n.fm.id === id)?.fm.facts?.[attr] as FactRecord & { dispute?: string };
 
 function setup() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const tok = { helper: issueToken(root, "helper"), planner: issueToken(root, "planner"), steward: issueToken(root, "steward") };
   const call = async (agent: keyof typeof tok | null, method: string, path: string, body?: unknown) => {
     const res = await handle(root, new Request(`http://pb${path}`, {

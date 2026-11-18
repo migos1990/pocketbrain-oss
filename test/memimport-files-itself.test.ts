@@ -27,7 +27,7 @@ const model = () => makeModel({ provider: "fake", model: "fake-1" }, { fake: () 
 const later = () => new Date(Date.now() + 40 * 86_400_000);
 
 async function imported(who: string) {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const dir = mkdtempSync(join(tmpdir(), "pb-mem-"));
   writeFileSync(join(dir, "m.md"), "- Jane works at Acme\n- Course A: next step is to print the midterm\n");
   await importMemory(root, who, [dir], model());
@@ -54,7 +54,7 @@ test("G587: a trial assistant's imported memory still only proposes, and expires
 // G587 slice audit F2: an assistant's newer word for a value that a source holds is a conflict,
 // never an update, however the value's own sources are spelled (here a capture's doc: ref).
 test("G587: an imported newer value never replaces a source's value without a conflict", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const w = write(root, { agent: "steward", kind: "fact", id: "people/jane-roy", attribute: "org", value: "Globex", as_of: "2026-10-01", sources: ["doc:capture/2026-10-01-aaaa"], source_type: "document" } as never);
   expect(w.outcome).not.toBe("refused");
   const dir = mkdtempSync(join(tmpdir(), "pb-mem-"));

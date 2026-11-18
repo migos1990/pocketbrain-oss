@@ -24,7 +24,7 @@ const STEPS = [
 const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").replace(/\s+/g, " ");
 
 function brain() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const w = { id: "projects/course-a", attribute: "next_step", as_of: "2026-10-07", verification: "verified-by-source" as const };
   write(root, { ...w, agent: "planner", value: STEPS[0], sources: ["gmail:f000000000000006"] } as never);
   expect(write(root, { ...w, agent: "planner", value: STEPS[1], sources: ["gmail:f000000000000004"] } as never).outcome).toBe("disputed");

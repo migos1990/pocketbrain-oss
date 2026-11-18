@@ -31,7 +31,7 @@ async function withCourse(verification: string) {
 }
 
 function brain() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "c.json" } } }));
   writeFileSync(join(root, "c.json"), "[]");
@@ -47,7 +47,7 @@ test("next-steps newest: a newer calendar next step that was a conflict files it
   expect(setNextStepNewest(root)).toBe("rules/checks.yaml: next_step keeps the newest (1 kind)");
   const after = readFileSync(join(root, "rules", "checks.yaml"), "utf8");
   // Only that line changed: shelf life and every other key as they were.
-  expect(after).toBe(before.replace("next_step: { merge: replace, shelf_life: 14d }", "next_step: { merge: latest, shelf_life: 14d }"));
+  expect(after).toBe(before.replace("next_step: { merge: replace, shelf_life: 14d", "next_step: { merge: latest, shelf_life: 14d"));
   expect(git(root, "log", "-1", "--format=%s")).toBe("owner: next_step keeps the newest (1 kind) (rules/checks.yaml)");
 
   const done = runAuto(root, now);
@@ -87,7 +87,7 @@ test("next-steps newest: run twice says so and commits nothing; a kind without n
   writeFileSync(p, YAML.stringify(c)); sh(root, "git", "commit", "-qam", "owner: course");
   expect(setNextStepNewest(root)).toBe("rules/checks.yaml: next_step keeps the newest (2 kinds)");
   const t = checks(root).types;
-  expect([t.project.attributes.next_step, t.course.attributes.next_step]).toEqual([{ merge: "latest", shelf_life: "14d" }, { merge: "latest", shelf_life: "7d" }]);
+  expect([t.project.attributes.next_step, t.course.attributes.next_step]).toEqual([{ merge: "latest", shelf_life: "14d", several: false }, { merge: "latest", shelf_life: "7d" }]);
   expect(t.person.attributes.next_step).toBeUndefined();
   const head = git(root, "rev-parse", "HEAD");
   expect(setNextStepNewest(root)).toBe("rules/checks.yaml already has next_step keeps the newest");

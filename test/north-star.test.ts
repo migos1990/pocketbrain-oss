@@ -42,7 +42,7 @@ test("the north star counts commits, the Gardener's, and those that say why", as
   const { whyCounts } = await import("../scripts/north-star");
   const { writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const since = new Date(Date.now() - 60_000).toISOString();
   const g = (a: string) => a === "gardener";
   const before = whyCounts(root, since, g);
@@ -69,7 +69,8 @@ test("north star: the replay's asks are the planted contradictions, none of its 
   expect(m.asks_by_kind.rules).toBeUndefined();
   expect(m.asks).toBe(m.planted);
   // Audit v3 (2026-10-26): the count matched by luck once, so each ask is checked against its fact.
-  const planted = ["people/ben-okafor#role", "people/dev-patel#org", "projects/spring-course#next_step"];
+  // The third pair is a role too: two next steps both hold and ask nothing (G965).
+  const planted = ["people/ben-okafor#role", "people/dev-patel#org", "people/fay-wong#role"];
   expect([...m.asked].sort()).toEqual(planted);
   expect(m.not_conflict).toBe(0);
   // Audit v4: the Dev Patel pair used to land on a page made private by an org named "Hill School",
@@ -85,7 +86,7 @@ test("north star: the replay's asks are the planted contradictions, none of its 
 // Audit v3: --brain always exited 0, so nothing could ever block on the real brain's numbers.
 test("north star --brain exits 1 when the brain misses the bar, and says why", () => {
   const { makeBrain } = require("./fixture") as typeof import("./fixture");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = Bun.spawnSync(["bun", "scripts/north-star.ts", "--brain", root], { stdout: "pipe", stderr: "pipe" });
   expect(r.stdout.toString()).toContain("north star (real brain");
   expect(r.stdout.toString()).toContain("FAIL");
@@ -109,7 +110,7 @@ test("north star: a page that passes on the hub's own text alone is counted apar
   expect(proseBeyondHub(hubOnly)).toBe(false);
   expect(proseBeyondHub(note("people/ana", `${lead}\n\nShe has run the program since the spring and leads the Harbor Study.[^1]\n\n[^p-1]: gmail:f000000000000001\n[^1]: gmail:f000000000000002`))).toBe(true);
   // The same page, with and without the source's words kept for the owner.
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   mkdirSync(join(root, "people"), { recursive: true });
   writeFileSync(join(root, "people", "ana-diaz.md"), `---\nid: people/ana-diaz\ntype: person\ntitle: Ana Diaz\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: owner\n---\n${hubOnly.body}`);
   const page = () => { const s = loadState(root); return { s, n: s.notes.find((x) => x.fm.id === "people/ana-diaz")! }; };
@@ -135,7 +136,7 @@ test("north star --brain counts an outside assistant's expiring proposal apart f
   const { measure } = await import("../scripts/north-star");
   const { makeBrain } = await import("./fixture");
   const { write } = await import("../src/write");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(write(root, { agent: "helper", id: "people/jane-roy", attribute: "role", value: "Associate dean", as_of: "2026-10-07", sources: ["gmail:1a0e88a496d9705a"] }).outcome).toBe("inbox");
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
@@ -153,7 +154,7 @@ test("north star --brain counts the capture agent's own assistant proposals as h
   const { captureAgent } = await import("../src/capture");
   const { writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all, hold_assistants_until: 2026-10-30 }\n");
   const agent = captureAgent(loadRules(root));
   const r = write(root, { agent, id: "people/jane-roy", attribute: "office", value: "Room B-201", as_of: "2026-10-07", sources: ["gmail:1a0e88a496d9705a"], sensitivity: "private" } as never);
@@ -171,7 +172,7 @@ test("north star: a page with only the hub's own lead doesn't count in pages_ok"
   const { makeBrain } = await import("./fixture");
   const { writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   Bun.sleepSync(1100);
   const since = new Date().toISOString();
   const page = (slug: string, title: string, body: string) => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-05\nby: planner\nfacts:\n  role: { value: Dean, as_of: 2026-10-05, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }\n---\n${body}\n`);

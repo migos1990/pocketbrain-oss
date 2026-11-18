@@ -19,7 +19,7 @@ const IN = "2026-10-08T07:30:00Z";
 afterEach(() => { delete process.env.PB_NOW; });
 
 function setup() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   process.env.PB_NOW = IN;
   const tok: Record<string, string> = { gardener: issueToken(root, "gardener"), planner: issueToken(root, "planner"), steward: issueToken(root, "steward") };
   const call = async (who: string, method: string, path: string, body?: unknown) => {
@@ -158,7 +158,7 @@ test("on a private fact the resolver sees that there is a suggestion, not its re
 });
 
 test("the managed nightly Gardener may call the dispute tools and is told it only suggests", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const plan = tendPlan(root, { dir: mkdtempSync(join(tmpdir(), "pb-tend-")), url: "https://brain.robin.example" });
   const nightly = plan.files["agents/gardener/agent.md"];
   for (const t of ["open_disputes", "suggest_answer", "verify_source"]) expect(nightly).toContain(`{name: ${t}, enabled: true`);
@@ -219,7 +219,7 @@ test("last_run counts the conflicts still waiting for the Gardener's suggestion,
   expect((await tool("gardener", "last_run")).json.conflicts_to_weigh).toBe(1);
   await tool("gardener", "suggest_answer", GOOD);
   expect((await tool("gardener", "last_run")).json.conflicts_to_weigh).toBe(0);
-  const nightly = tendPlan(makeBrain(), { dir: mkdtempSync(join(tmpdir(), "pb-tend-")), url: "https://brain.robin.example" }).files["agents/gardener/agent.md"];
+  const nightly = tendPlan(makeBrain({ steps: "one" }), { dir: mkdtempSync(join(tmpdir(), "pb-tend-")), url: "https://brain.robin.example" }).files["agents/gardener/agent.md"];
   expect(nightly.indexOf("open_disputes")).toBeLessThan(nightly.indexOf("Corroborate."));
 });
 

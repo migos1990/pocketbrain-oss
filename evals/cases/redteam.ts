@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import YAML from "yaml";
 import { loadPB, SRC } from "../lib/pb";
-import { sandbox, sh, commitCount, TODAY, writeNote } from "../lib/sandbox";
+import { sandbox, oneStep, sh, commitCount, TODAY, writeNote } from "../lib/sandbox";
 import { forbiddenFor, findLeaks } from "../lib/oracle";
 import { ok, na, type Case, type Result } from "../lib/case";
 import { door } from "./onboarding";
@@ -1173,7 +1173,7 @@ esac
     const okr = await l.tool("gardener", "suggest_answer", base);
     const seen = await l.api("steward", "GET", "/v1/disputes/c-0001");
     return steps([["approval claim refused", refused(claim)], ["unverified source refused", refused(fake)], ["a clean one stored", !refused(okr)], ["resolver sees no reason", seen.json?.suggestion?.why === "[withheld]"], ["still open", seen.json?.status === "open"]]);
-  }, withGardener()) },
+  }, (r) => { oneStep(r); withGardener()(r); }) },
   // Batch 30 slice audit of 239 (F2-F4, G277 root).
   { id: "rt-gardener-suggest-secret-source", dimension: "write-quality", kind: "attack", gap: "G289", title: "a key hidden in a suggestion's source is refused, and the resolver never reads a source's text", source: "batch 30 slice audit", run: () => live(async (l) => {
     if (!core?.gardenerSuggest) return na("no suggest_answer at this commit");
@@ -1186,7 +1186,7 @@ esac
     const smuggle = await l.tool("gardener", "suggest_answer", { ...base, sources: ["url:https://x.test/leo-appealed-his-midterm-grade"] });
     const seen = await l.api("steward", "GET", "/v1/disputes/c-0001");
     return steps([["key in a source refused", refused(secret)], ["a plain url stored", !refused(smuggle)], ["resolver sees the kind only", JSON.stringify(seen.json?.suggestion?.sources) === '["url:[withheld]"]'], ["no url text for the resolver", !/leo-appealed/.test(seen.text)]]);
-  }, withGardener()) },
+  }, (r) => { oneStep(r); withGardener()(r); }) },
   { id: "rt-gardener-suggest-hidden-id", dimension: "carving", kind: "attack", gap: "G290", title: "suggest_answer on a dispute outside the gardener's view says the same as on a missing one, open or settled", source: "batch 30 slice audit", run: () => live(async (l) => {
     if (!core?.gardenerSuggest) return na("no suggest_answer at this commit");
     l.tokens.gardener = auth.issueToken(l.root, "gardener");
@@ -1196,7 +1196,7 @@ esac
     await l.api("steward", "POST", "/v1/disputes/c-0001/resolve", { value: "Grade the midterm", as_of: "2026-10-08", sources: ["gmail:f000000000000004"] });
     const hiddenSettled = await ask("c-0001");
     return steps([[`hidden open answers like missing (${hiddenOpen.slice(0, 60)})`, hiddenOpen === missing], [`hidden settled answers like missing (${hiddenSettled.slice(0, 60)})`, hiddenSettled === missing]]);
-  }, (r) => { withGardener()(r); const f = join(r, "rules", "policy.yaml"); writeFileSync(f, readFileSync(f, "utf8").replace("  gardener: { ", '  gardener: { exclude: ["projects/course-a#next_step"], ')); }) },
+  }, (r) => { oneStep(r); withGardener()(r); const f = join(r, "rules", "policy.yaml"); writeFileSync(f, readFileSync(f, "utf8").replace("  gardener: { ", '  gardener: { exclude: ["projects/course-a#next_step"], ')); }) },
   { id: "rt-gardener-open-disputes-no-agent-names", dimension: "carving", kind: "attack", gap: "G291", title: "open_disputes shows each side's value and sources, not which assistant wrote it", source: "batch 30 slice audit", run: () => live(async (l) => {
     if (!core?.gardenerDisputes) return na("no open_disputes at this commit");
     l.tokens.gardener = auth.issueToken(l.root, "gardener");
@@ -1204,7 +1204,7 @@ esac
     const listed = await l.tool("gardener", "open_disputes", {});
     const sides = JSON.parse(listed.text || "{}").conflicts?.[0]?.sides ?? [];
     return steps([["the dispute is listed", sides.length === 2], ["no side names an assistant", sides.every((s: any) => !("by" in s)) && !/planner/.test(listed.text)]]);
-  }, withGardener()) },
+  }, (r) => { oneStep(r); withGardener()(r); }) },
   { id: "rt-gardener-suggest-vs-owner-word", dimension: "write-quality", kind: "attack", gap: "G292", title: "the gardener can't suggest the side against Robin's own word, so the owner is never offered it as approve", source: "batch 30 slice audit (G277 root)", run: () => live(async (l) => {
     if (!core?.gardenerSuggest) return na("no suggest_answer at this commit");
     l.tokens.gardener = auth.issueToken(l.root, "gardener");
@@ -1217,7 +1217,7 @@ esac
     const against = await l.tool("gardener", "suggest_answer", { id: "c-0001", choice: owner === 0 ? 2 : 1, sources: ["gmail:f000000000000006"], why: "The newer email moves the review session." });
     const stored = pb.brain.loadBrain(l.root).find((n: any) => n.fm.id === "disputes/c-0001").fm.suggestion;
     return steps([["suggestion against the owner's word refused", against.isError || /"error"/.test(against.text)], ["nothing stored to offer as approve", stored === undefined]]);
-  }, withGardener()) },
+  }, (r) => { oneStep(r); withGardener()(r); }) },
   // One card per fact (backlog 200, slice audit of the first design): proposals of the same value
   // are grouped only in the owner's view; an agent's answers never depend on what else waits.
   { id: "rt-one-card-no-inbox-oracle", dimension: "carving", kind: "attack", title: "proposing a guess twice answers the same whether or not another proposal of that value waits in the inbox", source: "synthetic", run: () => live(async (l) => {
@@ -2485,6 +2485,7 @@ const deckCases: Case[] = [
     } },
     { id: "rt-contested-keeps-live-value", dimension: "write-quality", kind: "attack", gap: "G425", title: "a capture that contradicts a held value never freezes it: every reader keeps the live value while the conflict waits for the Gardener, and the digest doesn't ask it yet", source: "owner's re-audit, 2026-10-25", run: () => {
       const root = deckBrain("health: { url: null }\nauto_decide: { file: all }\n");
+      oneStep(root, true);
       const before = (pb.brain.loadBrain(root).find((n: any) => n.fm.id === "projects/course-a")?.fm.facts?.next_step ?? {}) as any;
       const r = pb.write.write(root, { agent: "planner", id: "projects/course-a", attribute: "next_step", value: "Hall Z999 booking", as_of: "2026-10-07", sources: ["gcal:e1@e1"], verification: "self-reported" }, { acceptedBy: "auto-decide", contest: true });
       const after = (pb.brain.loadBrain(root).find((n: any) => n.fm.id === "projects/course-a")?.fm.facts?.next_step ?? {}) as any;

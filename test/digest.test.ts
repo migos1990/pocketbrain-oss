@@ -10,7 +10,7 @@ import { loadBrain, type FactRecord } from "../src/brain";
 const base = { id: "projects/course-a", attribute: "next_step", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" as const };
 
 test("Robin accepts a proposal: it goes through the write path, keeps the proposer as by, authored by the owner", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const p = write(root, { ...base, agent: "helper", value: "Publish grades" });
   const r = decideProposal(root, p.file!, "accept");
   expect(r.outcome).toBe("committed");
@@ -22,7 +22,7 @@ test("Robin accepts a proposal: it goes through the write path, keeps the propos
 });
 
 test("an accepted proposal still can't smuggle a secret", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const p = write(root, { ...base, agent: "helper", value: "fine" });
   const req = Bun.file(join(root, p.file!));
   expect(req.size).toBeGreaterThan(0);
@@ -30,7 +30,7 @@ test("an accepted proposal still can't smuggle a secret", () => {
 });
 
 test("the digest leads with what needs Robin", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   write(root, { ...base, agent: "helper", value: "Publish grades" });
   write(root, { ...base, agent: "planner", value: "Other plan", as_of_approx: true }); // dispute
   write(root, { ...base, agent: "planner", value: "Ask Maple Trust Bank" }); // tripwire alert
@@ -45,7 +45,7 @@ test("the digest leads with what needs Robin", () => {
 
 // G92: the digest is a file that stays and is backed up; a proposal's value is shown as a short slice.
 test("G92: the digest prints at most a short slice of a proposal's value", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const tail = "the rest of this paragraph should never be copied into the digest file at all";
   const p = write(root, { ...base, agent: "helper", value: "Publish grades " + "and then do a long list of other things ".repeat(6) + tail });
   expect(p.file).toBeTruthy();

@@ -108,11 +108,26 @@ export const GAPS: Record<string, Gap> = {
     finding: "Same ask as G961 (Mac, counts and yes or no): the fact's only source is in log/machine-mail.jsonl, yet `pocketbrain machine-mail` counted 0. src/receipt-pages.ts machineFacts takes a record only when it is live, still held (unseen) and not contested; a fact filed before write() refused machine mail (G668) that was served, or that later became a side of a conflict, stays and can ask the owner to pick it.",
     fix: "Proposed, not built; waits for the owner's typed word since it takes facts assistants already had and removes an ask: machineFacts also takes a served record and a conflict side whose every source is logged machine mail, each to history with a diary line and Undo; a conflict left with one side closes as that side.",
   },
+  G972: {
+    closed: "claude/next-steps-side-by-side",
+    title: "A page's next steps had no upper bound",
+    severity: "low",
+    finding: "Slice audit of claude/next-steps-side-by-side: 200 writes of different steps with the same day and different sources all went live on one page (the old path joined one conflict). Only the per-agent write budget limited it.",
+    fix: "STEPS_MAX (12) in src/write.ts: past it an assistant's or source's further step waits as a proposal (too_many_steps) and nothing live changes; the owner's typed step is never capped. test/next-steps-side-by-side.test.ts.",
+  },
+  G973: {
+    closed: "claude/next-steps-side-by-side",
+    title: "A writer outside its areas puts a different next step live beside the one held",
+    severity: "low",
+    finding: "Slice audit of claude/next-steps-side-by-side: a contest write (a core agent outside its areas, G422) of a different next step used to be held for the Gardener as a contradiction; with G965 it is no contradiction, so it commits beside the live step.",
+    fix: "Intended by the owner's typed yes (next steps sit side by side and never ask): two things to do contradict nothing, and a fact that contradicts nothing files itself (invariant 6). Pinned: the step already there is byte-identical after the write, nothing is ended, every write check still runs before the branch. test/next-steps-side-by-side.test.ts.",
+  },
   G965: {
+    closed: "claude/next-steps-side-by-side",
     title: "The Gardener said the two sides do not conflict and the question still stood",
     severity: "medium",
-    finding: "Same ask as G961: the Gardener's reason said the other side was about something else, and the card still asked the owner to pick one. suggest_answer (src/core.ts gardenerSuggest) can only name a side, and no model settles a conflict (invariant 6), so its reading changes nothing.",
-    fix: "Proposed, not built: the structural side-by-side rule for next steps (plans/next-steps-both-hold-2026-11-16.md, fault A) puts a different next step from a different source item beside the one held instead of asking. Waits for the owner's typed word. No model decides it.",
+    finding: "Same ask as G961: the Gardener's reason said the other side was about something else, and the card still asked the owner to pick one. suggest_answer (src/core.ts gardenerSuggest) can only name a side, and no model settles a conflict (invariant 6), so its reading changes nothing. A next step was one value, so any different one that could not replace it became pick-one (src/write.ts ownerDispute, the contest branch and step 7).",
+    fix: "By the owner's typed yes (2026-11-16): a page holds several next steps. A different next step that could not replace the live one goes beside it as a list, newest first, and nothing asks (twoSteps in src/dated.ts, SEVERAL in src/rules.ts, stepBeside and the list branch in src/write.ts); the night pass closes older conflicts of that shape as both kept with Undo (bothDatesPlan); a waiting proposal of another step is no question on the home (src/settle-inbox.ts). Still asked: the same source item saying another step, the same words about another day, money, health and legal; a relayed step still waits in the inbox; the owner's typed step stands alone. `several: false` in checks.yaml keeps one step. The north star's third planted pair is a role. No model decides any of it. test/next-steps-side-by-side.test.ts, contract row in test/contracts/write.contract.test.ts.",
   },
   G958: {
     closed: "claude/pin-runners",

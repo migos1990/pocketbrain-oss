@@ -63,7 +63,7 @@ test("G757 a contested list item is marked, and no read carries the conflict's i
   const { makeBrain } = require("./fixture") as typeof import("./fixture");
   const { writeFileSync } = require("node:fs") as typeof import("node:fs");
   const { join } = require("node:path") as typeof import("node:path");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const src = `as_of: 2026-10-07, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-07`;
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  next_step: { value: Book the room, contested: c-9001, ${src} }\n  rooms:\n    items:\n      - { value: Hall B, contested: c-9002, ${src} }\n      - { value: Hall C, ${src} }\n---\n`);
   Bun.spawnSync(["git", "add", "-A"], { cwd: root });
@@ -82,7 +82,7 @@ test("G757 a fact stored as two candidates is never served as current", () => {
   const { makeBrain } = require("./fixture") as typeof import("./fixture");
   const { writeFileSync } = require("node:fs") as typeof import("node:fs");
   const { join } = require("node:path") as typeof import("node:path");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const src = `as_of: 2026-10-07, sources: ["gmail:f000000000000009"], verification: verified-by-source, by: steward, recorded: 2026-10-07`;
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  next_step:\n    dispute: c-9003\n    candidates:\n      - { value: book the hall on 10 October, ${src} }\n      - { value: book the hall on 12 October, ${src} }\n---\n`);
   Bun.spawnSync(["git", "add", "-A"], { cwd: root });

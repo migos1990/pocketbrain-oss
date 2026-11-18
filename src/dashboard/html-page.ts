@@ -277,7 +277,8 @@ function projectCard(s: State, n: Note, fresh: boolean): string {
   const id = n.fm.id;
   const open = [...ownerConflicts(s.root, s.now), ...inboxConflicts(s.root)].find((c) => c.page === id);
   const f = n.fm.facts?.next_step;
-  const r = f && !isDisputed(f) && !isList(f) ? f as FactRecord : undefined;
+  // Several next steps (G965): the card leads with the newest; the page's prose says them all.
+  const r = !f || isDisputed(f) ? undefined : isList(f) ? f.items.find((i) => !i.valid_to && !i.retired && !(i as { dispute?: string }).dispute) : f as FactRecord;
   const next = r && !r.valid_to && (fresh || !shut(n, r)) ? plain(r.value, (x) => { const t = s.notes.find((m) => m.fm.id === x)?.fm.title; return t === undefined ? undefined : String(t); }) : "";
   if (!open && !next) return "";
   // The card sits on its own page, so it leads with what's next and never repeats the page's name (G782).

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { loadPB, SRC as SRC_DIR } from "../lib/pb";
-import { sandbox, commitCount, appendBody, TODAY } from "../lib/sandbox";
+import { sandbox, oneStep, commitCount, appendBody, TODAY } from "../lib/sandbox";
 import { forbiddenFor, findLeaks } from "../lib/oracle";
 import { ok, na, type Case, type Result } from "../lib/case";
 import { llm, JUDGE_MODEL } from "../lib/llm";
@@ -457,7 +457,7 @@ const EXPECTED: [string, string | RegExp][] = [
   ["recheck-confirmed", "people/marc-tremblay#role"],
 ];
 function upkeepRun(now = TODAY) {
-  const root = sandbox();
+  const root = sandbox("synthetic", oneStep);
   const live = join(root, "..", `${root.split("/").pop()}-live.json`);
   writeFileSync(live, JSON.stringify({
     "people/jane-roy#role": { value: "Course coordinator", ref: "gmail:f000000000000014" },

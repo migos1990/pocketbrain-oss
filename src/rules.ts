@@ -132,6 +132,8 @@ export interface AttributeSpec {
   item_key?: string;
   // Set by attributeSpec for DATED attributes: like until_date, on top of any shelf life.
   ends_on_date?: boolean;
+  // Set by attributeSpec for SEVERAL attributes: a page holds several of them side by side (src/dated.ts twoSteps, G965).
+  several?: boolean;
 }
 
 export interface Checks {
@@ -364,6 +366,10 @@ export function tierOf(rules: Rules, agent: string) {
 
 // Attributes that end on the date they name: past it, a next step or a due date is no longer the plan.
 export const DATED = ["next_step", "due", "deadline"];
+// Attributes a page holds several of at once: one thing to do does not contradict another. A
+// different value that could not replace the one held goes beside it instead of asking the owner to
+// pick (owner's typed yes, 2026-11-16; G965). Named by the schema, as DATED is; nothing reads a value's words.
+export const SEVERAL = ["next_step"];
 // Attributes every brain has, whatever checks.yaml says (checks.yaml still wins where it names one).
 // prefers: how a person likes things done, in the words an assistant's memory or a note used
 // ("prefers email over phone calls"). A vendor's memory is mostly this, so an import keeps it as
@@ -392,6 +398,8 @@ export const LATEST = ["version", "build", "build_number", "latest_version", "la
 export function attributeSpec(rules: Rules, type: string, attribute: string): AttributeSpec {
   let s = rules.checks.types?.[type]?.attributes?.[attribute] ?? BUILTIN[type]?.[attribute] ?? CARD_ATTRS[type]?.[attribute] ?? {};
   if (type === "project" && LATEST.includes(attribute) && !s.merge) s = { ...s, merge: "latest" };
+  // checks.yaml wins where it says either way: `several: false` keeps one next step, asked as pick-one.
+  if (SEVERAL.includes(attribute) && s.several === undefined) s = { ...s, several: true };
   return DATED.includes(attribute) ? { ...s, ends_on_date: true } : s;
 }
 

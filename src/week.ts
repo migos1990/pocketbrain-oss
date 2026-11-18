@@ -11,7 +11,7 @@
 // a note it can see, so this block never widens what an assistant reads.
 import { isDisputed, isList, type Fact, type FactRecord, type Sensitivity } from "./brain";
 import { attributeSpec, type Rules } from "./rules";
-import { factFreshness } from "./freshness";
+import { factFreshness, recordFreshness } from "./freshness";
 import type { Upcoming } from "./upcoming";
 
 export type WeekKind = "event" | "due" | "date" | "birthday" | "next";
@@ -46,6 +46,9 @@ const MONTH_IX = (w: string) => ["jan", "feb|fev|fév", "mar", "apr|avr", "may|m
 const DAY_MONTH = new RegExp(`(?<![\\p{L}\\p{N}])(\\d{1,2})(?:st|nd|rd|th|er)? ${MONTHS.source}(?![\\p{L}])`, "iu");
 const MONTH_DAY = new RegExp(`(?<![\\p{L}])${MONTHS.source} (\\d{1,2})(?:st|nd|rd|th)?(?![\\p{L}\\p{N}])`, "iu");
 // The day a next step names in its words, in the year that puts it nearest after it was said.
+// A sentence with the day it names taken out ("freeze the build on 15 October" -> "freeze the build on"):
+// two next steps that are the same words about another day are one step whose day is in doubt (src/dated.ts twoSteps).
+export const withoutDay = (text: string) => text.replace(/(?<![\d-])\d{4}-\d{2}-\d{2}(?![\d-])/g, " ").replace(new RegExp(DAY_MONTH.source, "giu"), " ").replace(new RegExp(MONTH_DAY.source, "giu"), " ");
 export function dayInWords(text: string, said: string): string | undefined {
   const iso = text.match(/(?<![\d-])(\d{4}-\d{2}-\d{2})(?![\d-])/);
   if (iso) return iso[1];
@@ -126,9 +129,10 @@ export function weekOf(notes: WeekNote[], rules: Rules, events: Upcoming[], day:
         else dated.push(line);
         continue;
       }
-      if (listed) continue;
+      // Several next steps on one page (G965) are each a line of their own, each stale by its own day.
+      if (listed && attr !== "next_step") continue;
       // A next step with no date, on a project still going, while it is not stale.
-      if (attr === "next_step" && n.type === "project" && factFreshness(f, attributeSpec(rules, n.type, attr), day) !== "stale") {
+      if (attr === "next_step" && n.type === "project" && (listed ? recordFreshness(r, attributeSpec(rules, n.type, attr), day) : factFreshness(f, attributeSpec(rules, n.type, attr), day)) !== "stale") {
         const w = said(r.value, title);
         if (!w) continue;
         // A step that names its day goes on that day; one whose day went by is no longer next.

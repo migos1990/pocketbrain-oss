@@ -18,7 +18,7 @@ const PORT = 8788;
 const H = `127.0.0.1:${PORT}`;
 
 function setup() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const tok = { helper: issueToken(root, "helper"), planner: issueToken(root, "planner"), steward: issueToken(root, "steward") };
   const d = dashboardHandler(root, { port: PORT, loginKey: "k".repeat(32) });
   let cookie = "";
@@ -219,7 +219,7 @@ test("upkeep undo from the dashboard reverts the run", async () => {
 
 test("port 0 picks a free port and the host check follows it", async () => {
   const { serveDashboard } = await import("../src/dashboard/server");
-  const { server, loginUrl } = serveDashboard(makeBrain(), { port: 0 });
+  const { server, loginUrl } = serveDashboard(makeBrain({ steps: "one" }), { port: 0 });
   try {
     const r = await fetch(loginUrl, { redirect: "manual" });
     expect(r.status).not.toBe(421);

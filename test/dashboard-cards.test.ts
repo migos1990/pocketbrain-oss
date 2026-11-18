@@ -24,7 +24,7 @@ function labelled(root: string) {
 }
 
 test("a fact pulled from an email asks one question, shows its words, and says what each button does", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   mkdirSync(join(root, "inbox"), { recursive: true });
   const rel = "2026-10-08-capture-aaaa1111.yaml";
   writeFileSync(join(root, "inbox", rel), YAML.stringify({ proposed: "2026-10-08", by: "hub", reason: "capture inbox/captures/2026-10-08-abc.md: a new fact", checks: ["capture"], capture: "inbox/captures/2026-10-08-abc.md", request: { agent: "hub", kind: "fact", id: "projects/course-a", attribute: "room", value: "B-204", as_of: "2026-10-07", sources: ["gmail:f000000000000005"], source_type: "gmail", confidence: "stated" } }));
@@ -45,7 +45,7 @@ test("a fact pulled from an email asks one question, shows its words, and says w
 });
 
 test("a change to a fact asks to update it and names what each answer keeps", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const w = write(root, { agent: "helper", id: "projects/course-a", attribute: "next_step", value: "Book the room", as_of: "2026-03-09", sources: ["gmail:f000000000000005"], verification: "verified-by-source" });
   expect(w.outcome).toBe("inbox");
   const html = page(root);
@@ -58,7 +58,7 @@ test("a change to a fact asks to update it and names what each answer keeps", ()
 });
 
 test("the Gardener's open question reads in plain words, without rule ids or the owner named in the third person", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   labelled(root);
   mkdirSync(join(root, "inbox"), { recursive: true });
   const words = "Conflict: the page keeps no club minutes, yet a 2026-10-04 change lists a folder of minutes for the club. rule:never-store bars those files. Robin to say which holds.";

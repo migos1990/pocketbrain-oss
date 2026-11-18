@@ -17,7 +17,7 @@ import { FILING_CODE } from "../src/filing";
 const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 function brain() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const f = join(root, "rules", "policy.yaml");
   const doc = YAML.parseDocument(readFileSync(f, "utf8").replace(/max_proposals_per_day: \d+/, "max_proposals_per_day: 100"));
   doc.setIn(["agents", "gardener", "label"], "Gardener");

@@ -21,7 +21,7 @@ const event = (id: string, line: string, updated: string) => ({ id, etag: `"${id
 const NOW = new Date();
 
 function brain(ownerAsOf: string) {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "c.json" } } }));
   const b = join(root, "projects", "course-b.md");

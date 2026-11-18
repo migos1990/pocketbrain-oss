@@ -23,7 +23,7 @@ const later = (min: number, from = NOON) => new Date(from.getTime() + min * 60_0
 const noHealth = async () => new Response("{}", { status: 200 });
 
 function brain(policy = "health: { url: null }\n") {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   // These cases answer by letter, so they use the lettered list; the one-line text is test/stale-alerts.test.ts.
   const doc = YAML.parse(policy) ?? {};
   writeFileSync(join(root, "rules/escalation.yaml"), YAML.stringify({ ...doc, batch: { style: "list", ...(doc.batch ?? {}) } }));
@@ -285,7 +285,7 @@ test("compose keeps to the SMS budget and lists the rest as more", () => {
 });
 
 test("twilio and imessage transports build the right calls", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const calls: { url: string; init?: RequestInit }[] = [];
   const f = async (url: string, init?: RequestInit) => { calls.push({ url, init }); return new Response(JSON.stringify(init?.method === "POST" ? { sid: "SM1" } : { messages: [{ sid: "SM9", body: "approve", date_sent: new Date(Date.now() + 1000).toUTCString(), direction: "inbound" }] }), { status: 200 }); };
   const tw = twilioTransport(root, { from: "+15145550100", to: "+15145550199" }, { fetch: f, sid: "AC1", token: "t" });
@@ -309,7 +309,7 @@ test("twilio and imessage transports build the right calls", async () => {
 });
 
 test("watchdog from outside the hub texts once when it dies and once when it's back", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const dir = mkdtempSync(join(tmpdir(), "wd-"));
   const t = fakeTransport(root);
   const dead = async () => { throw new Error("down"); };
@@ -359,7 +359,7 @@ test("hub health: the disk check reads the injected free-disk figure, not the te
 test("replies whose ids differ only in punctuation, or equal another's file name, are all kept", async () => {
   const { queueReply, instinctTransport } = await import("../src/textline/transport");
   const { readdirSync } = await import("node:fs");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   queueReply(root, { id: "p:0/ABC.1", text: "yes", at: "2026-10-08T10:00:00Z" });
   queueReply(root, { id: "p_0_ABC_1", text: "no", at: "2026-10-08T10:01:00Z" });
   const crafted = readdirSync(join(root, "textline", "replies")).find((f) => f.endsWith(".json") && f !== "p_0_ABC_1.json")!.replace(/\.json$/, "");
@@ -372,7 +372,7 @@ test("replies whose ids differ only in punctuation, or equal another's file name
 
 test("queued texts whose ids differ only in punctuation stay separate, and sent marks only its own", async () => {
   const { instinctTransport, outbox, markOutbox } = await import("../src/textline/transport");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const t = instinctTransport(root);
   await t.send({ id: "t.1", text: "first", at: "2026-10-08T10:00:00Z" } as never);
   await t.send({ id: "t_1", text: "second", at: "2026-10-08T10:01:00Z" } as never);

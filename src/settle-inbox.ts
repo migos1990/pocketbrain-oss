@@ -18,6 +18,7 @@ import { sourceKind } from "./diary";
 import { inboxCards, decideProposal, resolveEntity, write, pageLink } from "./write";
 import { OWNER, OWNER_CONFIRMED, ownerRef } from "./owner";
 import { today } from "./brain";
+import { twoSteps } from "./dated";
 import { CoreError, type SettleCase } from "./core";
 
 export interface InboxConflict extends SettleCase { file: string }
@@ -47,6 +48,8 @@ export function inboxConflicts(root: string): InboxConflict[] {
     if (compareKey(live.value) === compareKey(value) || nearSame(live.value, value)) continue;
     // An assistant's own word against the owner's never asks; the filing tick keeps it as history (G677).
     if (isOwnerWord(rules, note.fm.area, live) && !sensitiveShape(rules, req.attribute, live.value, req.value) && (req.sources ?? []).length > 0 && (req.sources ?? []).every((x) => AGENT_MEMORY_SCHEMES.has(schemeOf(refString(x)) ?? ""))) continue;
+    // Another thing to do beside the one held is no pick-one question (G965): it waits as a proposal.
+    if (twoSteps(rules, note, req.attribute, spec, live, { value, sources: (req.sources ?? []) as FactRecord["sources"] })) continue;
     const incoming = { sources: req.sources ?? [], verification: req.verification } as Pick<FactRecord, "sources" | "verification">;
     out.push({
       // Private as the page and the fact are now (G583 and its slice audit): the page, any live

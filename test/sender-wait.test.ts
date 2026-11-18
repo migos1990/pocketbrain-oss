@@ -25,7 +25,7 @@ const disputes = (root: string) => loadBrain(root).filter((n) => n.fm.type === "
 const mail = (id: string, from: string, line: string) => ({ id, threadId: id, internalDate: String(Date.parse("2026-10-07T10:00:00Z")), labelIds: ["INBOX"], payload: { headers: [{ name: "From", value: from }, { name: "To", value: "me@example.org" }, { name: "Subject", value: "Course C" }] }, text: line });
 
 async function pulled(from: string, line: string, knownFriend = false, plant?: (root: string) => string) {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { mail: { kind: "gmail", fixture: "m.json" } } }));
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: { value: "Write the exam", as_of: 2026-10-07, sources: ["gmail:f000000000000031"], verification: self-reported, by: planner, recorded: 2026-10-07 }\n---\n`);

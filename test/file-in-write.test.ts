@@ -20,7 +20,7 @@ const fact = (root: string, id: string, attr: string) => loadBrain(root).find((n
 const req = (over: Record<string, unknown> = {}) => ({ agent: "steward", id: "projects/course-a", attribute: "room", value: "B-201", as_of: "2026-10-07", sources: ["gmail:f000000000000041"], verification: "self-reported", ...over }) as never;
 
 test("file all is the default, with no rules/escalation.yaml at all; file-all off writes file: ask", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(existsSync(join(root, "rules", "escalation.yaml"))).toBe(false);
   expect(loadEscalation(root).auto_decide.file).toBe("all");
   setFileAll(root, "off");
@@ -29,14 +29,14 @@ test("file all is the default, with no rules/escalation.yaml at all; file-all of
 });
 
 test("a full agent's new fact outside its own area files itself", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(write(root, req()).outcome).toBe("committed");
   expect((fact(root, "projects/course-a", "room") as FactRecord).value).toBe("B-201");
   expect(inbox(root)).toEqual([]);
 });
 
 test("a different value outside its own area is a conflict held for the Gardener, never a replacement", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, req({ attribute: "next_step", value: "Write the exam", as_of: "2026-10-07" }));
   expect(r.outcome).toBe("disputed");
   const d = loadBrain(root).find((n) => n.fm.type === "dispute")!;
@@ -49,12 +49,12 @@ test("a different value outside its own area is a conflict held for the Gardener
 });
 
 test("outside its area on a private note it still waits for the owner; a trial agent still proposes", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const f = join(root, "projects", "course-a.md");
   writeFileSync(f, readFileSync(f, "utf8").replace("sensitivity: personal", "sensitivity: private"));
   Bun.spawnSync(["git", "commit", "-qam", "private"], { cwd: root, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
   expect(write(root, req()).outcome).toBe("inbox");
-  const r2 = makeBrain();
+  const r2 = makeBrain({ steps: "one" });
   expect(write(r2, req({ agent: "helper" })).outcome).toBe("inbox");
   // And the hub never files a trial agent's proposal on its own.
   expect(runAuto(r2, new Date())).toEqual([]);
@@ -89,14 +89,14 @@ const kim = (root: string, withEmail: boolean) => {
 const out = (over: Record<string, unknown>) => ({ as_of: "2026-10-07", sources: ["gmail:f000000000000041"], verification: "self-reported", ...over }) as never;
 
 test("a retract from outside its area waits for the owner", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(write(root, req({ attribute: "next_step", value: "Grade the midterm", retract: true })).outcome).toBe("inbox");
   expect((fact(root, "projects/course-a", "next_step") as FactRecord).value).toBe("Grade the midterm");
 });
 
 test("outside its area, a write to an attribute it can't see answers the same whether it is set or not", () => {
   const replies = [true, false].map((has) => {
-    const root = makeBrain(); kim(root, has);
+    const root = makeBrain({ steps: "one" }); kim(root, has);
     const r = write(root, out({ agent: "planner", id: "people/kim-lee", attribute: "emails", value: "guess@example.org" }));
     return `${r.outcome} ${r.message}`;
   });
@@ -105,7 +105,7 @@ test("outside its area, a write to an attribute it can't see answers the same wh
 });
 
 test("outside its area a weaker source never moves a max value: it is a held conflict", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const f = join(root, "people", "jane-roy.md");
   writeFileSync(f, readFileSync(f, "utf8").replace("  phones:", "  last_contact: { value: 2026-09-01, as_of: 2026-09-01, sources: [\"gmail:f000000000000001\"], verification: verified-by-source, by: planner, recorded: 2026-10-01 }\n  phones:"));
   commitAll(root);
@@ -115,7 +115,7 @@ test("outside its area a weaker source never moves a max value: it is a held con
 
 
 test("outside its area a real change over time files as an update; the owner's pick of a side keeps its email", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, req({ attribute: "next_step", value: "Write the exam", as_of: "2026-10-07", sources: ["gmail:f000000000000042"], verification: "verified-by-source" }));
   expect(r.outcome).toBe("committed");
   expect((fact(root, "projects/course-a", "next_step") as FactRecord).value).toBe("Write the exam");

@@ -17,11 +17,18 @@ function files(dir = EXAMPLE, rel = ""): Record<string, string> {
 const FILES = files();
 export const FIXTURE_MAIL = [...Array.from({ length: 255 }, (_, i) => `gmail:f0000000000000${(i + 1).toString(16).padStart(2, "0")}`), "gmail:a1b2c3d4e5f60718", "gmail:1a0e88a496d9705a"];
 
-export function makeBrain(opts: { git?: boolean } = {}): string {
+const oneStep = (text: string) => {
+  const out = text.replace("next_step: { merge: replace, shelf_life: 14d }", "next_step: { merge: replace, shelf_life: 14d, several: false }");
+  if (out === text) throw new Error("fixture: checks.yaml no longer has the next_step line");
+  return out;
+};
+// `steps: "one"`: the brain's rules say a page holds one next step (`several: false` in checks.yaml),
+// for tests of the conflict ladder itself that use a next step as their one-value fact (G965).
+export function makeBrain(opts: { git?: boolean; steps?: "one" } = {}): string {
   const root = mkdtempSync(join(tmpdir(), "pb-test-"));
   for (const [rel, text] of Object.entries(FILES)) {
     mkdirSync(dirname(join(root, rel)), { recursive: true });
-    writeFileSync(join(root, rel), text);
+    writeFileSync(join(root, rel), opts.steps === "one" && rel === "rules/checks.yaml" ? oneStep(text) : text);
   }
   // The fixture's mailbox: messages the hub has read, so citing them passes the always-on source
   // check (src/louis.ts checkedRefs, G417). Any other mail id a test cites is one the hub never read.

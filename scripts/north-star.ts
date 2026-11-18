@@ -269,7 +269,9 @@ export function week(): Fact[] {
     out.push({ day: 7, entity, type, attribute, value: b, sentence: say(b), from: from[1], planted: true });
   };
   pair("Ben Okafor", "person", "role", "outreach lead", "senior assistant", (v) => `Ben Okafor is now the ${v} for the Spring Course team this term`, [3, 4]);
-  pair("Spring Course", "project", "next_step", "book the exam hall", "cancel the exam hall", (v) => `For the Spring Course the next step is to ${v} with Fay Wong`, [0, 5]);
+  // A person's role, not a project's next step: two next steps both hold side by side and ask
+  // nothing (G965, the owner's typed yes of 2026-11-16), so the third pair is a one-value fact too.
+  pair("Fay Wong", "person", "role", "exam coordinator", "course registrar", (v) => `Fay Wong is now the ${v} for the Spring Course team this term`, [0, 5]);
   pair("Dev Patel", "person", "org", "Bay Institute", "Lake Centre", (v) => `Dev Patel works at ${v} and sees Eli Novak there most weeks`, [2, 1]);
   return out;
 }

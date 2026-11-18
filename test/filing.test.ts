@@ -18,7 +18,7 @@ const NOW = new Date();
 const hours = (h: number) => new Date(NOW.getTime() + h * 3_600_000);
 
 function brain(policy = "health: { url: null }\n") {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules/escalation.yaml"), policy);
   Bun.spawnSync(["git", "-C", root, "add", "-A"]);
   Bun.spawnSync(["git", "-C", root, "-c", "user.name=louis", "-c", "user.email=l@x", "commit", "-q", "-m", "escalation"]);

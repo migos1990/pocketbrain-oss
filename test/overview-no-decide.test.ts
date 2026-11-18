@@ -23,7 +23,7 @@ async function settings(root: string) {
 }
 
 test("Settings decides nothing: a contradiction links to its settle screen, the rest are held", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const w = write(root, { agent: "helper", id: "projects/course-a", attribute: "next_step", value: "Book the room", as_of: "2026-03-09", sources: ["gmail:f000000000000005"], verification: "verified-by-source" });
   expect(w.outcome).toBe("inbox");
   mkdirSync(join(root, "inbox"), { recursive: true });
@@ -38,7 +38,7 @@ test("Settings decides nothing: a contradiction links to its settle screen, the 
 });
 
 test("a fact in dispute opens its settle screen from the edit page", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const n = loadBrain(root).find((x) => x.fm.id === "projects/course-a")!;
   n.fm.facts!.room = { dispute: "c-7", candidates: [{ value: "B-201", as_of: "2026-10-01", sources: ["gmail:f000000000000001"], verification: "verified-by-source", by: "planner", recorded: "2026-10-01" }, { value: "C-305", as_of: "2026-10-02", sources: ["gmail:f000000000000002"], verification: "verified-by-source", by: "helper", recorded: "2026-10-02" }] } as never;
   saveNote(root, n);
@@ -52,7 +52,7 @@ test("a fact in dispute opens its settle screen from the edit page", async () =>
 // Use-it on e3d36b14: a live conflict keeps its value (`contested`, G425), so the edit page showed the
 // value with no way to the settle screen.
 test("a value a conflict waits beside links to its settle screen from the edit page", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  room: { value: "B-201", as_of: 2026-10-07, sources: ["gmail:f000000000000041"], verification: verified-by-source, by: planner, recorded: 2026-10-07 }\n---\n`);
   Bun.spawnSync(["git", "add", "-A"], { cwd: root });
   Bun.spawnSync(["git", "commit", "-qm", "owner: course c"], { cwd: root });

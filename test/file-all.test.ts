@@ -35,7 +35,7 @@ const mail = (id: string, line: string, from?: string) => ({ id, labelIds: ["Lab
 
 const ON = "health: { url: null }\nauto_decide: { file: all }\n";
 function brain(escalation = ON, srcs: Record<string, unknown> = {}) {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "rules", "escalation.yaml"), escalation);
   writeFileSync(join(root, "rules", "sources.yaml"), YAML.stringify({ sources: { cal: { kind: "gcal", fixture: "c.json" }, mail: { kind: "gmail", where: ["Label_school"], fixture: "m.json" }, ...srcs } }));
   writeFileSync(join(root, "c.json"), "[]"); writeFileSync(join(root, "m.json"), "[]");

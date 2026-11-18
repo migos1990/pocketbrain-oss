@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadPB, SRC } from "../lib/pb";
-import { sandbox, sh, TODAY } from "../lib/sandbox";
+import { sandbox, oneStep, sh, TODAY } from "../lib/sandbox";
 import { ok, na, type Case, type Result } from "../lib/case";
 
 const pb = await loadPB();
@@ -92,7 +92,7 @@ const NEXT_CONFLICT = /two sources disagree on what.s next for|next for [^:]+: .
 async function episode(fn: (r: Rig) => Promise<Result>): Promise<Result> {
   if (!server || !auth || !dash) return na("no dashboard at this commit");
   if (!pw) return na("Playwright not installed (add it, or set PLAYWRIGHT_MODULE)");
-  const r = new Rig(sandbox());
+  const r = new Rig(sandbox("synthetic", oneStep));
   try { return await fn(r); }
   catch (e) { return ok(false, `episode threw: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`); }
   finally { await r.stop(); }

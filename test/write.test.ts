@@ -17,7 +17,7 @@ const commits = (root: string) => Number(Bun.spawnSync(["git", "rev-list", "--co
 const base = { agent: "planner", id: "projects/course-a", attribute: "next_step", as_of: "2026-10-07", sources: ["gmail:f000000000000006"], verification: "verified-by-source" as const };
 
 test("owner writes directly; the same write twice is a no-op with no commit", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r1 = write(root, { ...base, value: "Publish grades" });
   expect(r1.outcome).toBe("committed");
   expect(r1.step).toBe(4); // newer, as strong: real change over time
@@ -33,7 +33,7 @@ test("owner writes directly; the same write twice is a no-op with no commit", ()
 });
 
 test("same value from a new source merges sources instead of duplicating", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, value: "grade the  midterm", as_of: "2026-10-01", sources: ["gmail:f000000000000004"] });
   expect(r.step).toBe(1);
   const f = fact(root, "projects/course-a", "next_step");
@@ -42,7 +42,7 @@ test("same value from a new source merges sources instead of duplicating", () =>
 });
 
 test("trial agents only propose; a full agent outside its area files, a different value as a conflict held for the Gardener (G422)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const m = write(root, { ...base, agent: "helper", value: "Publish grades" });
   expect(m.outcome).toBe("inbox");
   expect(existsSync(join(root, m.file!))).toBe(true);
@@ -53,7 +53,7 @@ test("trial agents only propose; a full agent outside its area files, a differen
 });
 
 test("refusals: secrets, rules/, laundering, approval without id, future as_of", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(write(root, { ...base, value: "Card 4111 1111 1111 1111 for fees" }).fails?.[0].check).toBe("no_secret_shapes");
   expect(write(root, { ...base, id: "rules/policy", value: "x" }).fails?.map((f) => f.check)).toContain("rules_read_only");
   const laundered = write(root, { ...base, value: "x", sources: ["instinct-mem:entities/people/x"], source_type: "louis_message", verification: "confirmed-by-louis" });
@@ -64,7 +64,7 @@ test("refusals: secrets, rules/, laundering, approval without id, future as_of",
 });
 
 test("an approximate date never supersedes an exact one", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, value: "Something else", as_of: "2026-10-07", as_of_approx: true });
   expect(r.outcome).toBe("disputed");
   expect(existsSync(join(root, "disputes/c-0001.md"))).toBe(true);
@@ -74,7 +74,7 @@ test("an approximate date never supersedes an exact one", () => {
 });
 
 test("a fact Robin confirmed is never overridden automatically (step 6)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   registerLouisMessages(root, ["imsg:phonemsg-01FAKE0000000000000000000T"]);
   write(root, { ...base, value: "Publish grades", sources: ["imsg:phonemsg-01FAKE0000000000000000000T"], verification: "confirmed-by-louis" });
   const r = write(root, { ...base, value: "Cancel the course", as_of: "2026-10-08" });
@@ -83,7 +83,7 @@ test("a fact Robin confirmed is never overridden automatically (step 6)", () => 
 });
 
 test("stronger source at the same time wins (step 5); same strength conflicts (step 7)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const b = { ...base, attribute: "status" };
   expect(write(root, { ...b, value: "Plan A", as_of: "2026-10-08", sources: ["town-wiki:work"], verification: "self-reported" }).outcome).toBe("committed");
   const s5 = write(root, { ...b, value: "Plan B", as_of: "2026-10-08", sources: ["gmail:f000000000000004"] });
@@ -93,7 +93,7 @@ test("stronger source at the same time wins (step 5); same strength conflicts (s
 });
 
 test("merge rules: last_contact keeps the max, phones are a set", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const p = { agent: "planner", id: "people/jane-roy", as_of: "2026-10-05", sources: ["gmail:f000000000000004"], verification: "verified-by-source" as const };
   expect(write(root, { ...p, attribute: "last_contact", value: "2026-10-05" }).outcome).toBe("committed");
   expect(write(root, { ...p, attribute: "last_contact", value: "2026-09-01", as_of: "2026-09-01" }).outcome).toBe("noop");
@@ -105,7 +105,7 @@ test("merge rules: last_contact keeps the max, phones are a set", () => {
 });
 
 test("entity resolution: exact title or alias reuses the id; a near name goes to inbox", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { agent: "planner", title: "Jane", type: "person", attribute: "role", value: "Course coordinator", as_of: "2026-09-01", sources: ["gmail:f000000000000004"], verification: "verified-by-source" });
   expect(r.fact_key).toBe("people/jane-roy#role");
   const near = write(root, { agent: "planner", title: "Janet Roy", type: "person", area: "work", attribute: "role", value: "TA", as_of: "2026-09-01", sources: ["gmail:f000000000000004"] });
@@ -116,7 +116,7 @@ test("entity resolution: exact title or alias reuses the id; a near name goes to
 });
 
 test("leak tripwire: an agent writing a value it was never shown is refused and logged", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, value: "Ask Maple Trust Bank about fees" });
   expect(r.outcome).toBe("refused");
   expect(r.alert).toBe(true);
@@ -124,7 +124,7 @@ test("leak tripwire: an agent writing a value it was never shown is refused and 
 });
 
 test("the leak refusal never names the hidden note or fact; only the owner's alert does (G165)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, value: "Ask Maple Trust Bank about fees" });
   expect(r.outcome).toBe("refused");
   const seen = JSON.stringify({ message: r.message, fails: r.fails });
@@ -134,7 +134,7 @@ test("the leak refusal never names the hidden note or fact; only the owner's ale
 });
 
 test("write log is hash-chained", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   write(root, { ...base, value: "One" });
   write(root, { ...base, value: "Two", as_of: "2026-10-08" });
   const lines = readFileSync(join(root, "log/writes.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
@@ -142,7 +142,7 @@ test("write log is hash-chained", () => {
 });
 
 test("git author is the writing agent", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   write(root, { ...base, value: "Publish grades" });
   const author = Bun.spawnSync(["git", "log", "-1", "--format=%an"], { cwd: root }).stdout.toString().trim();
   expect(author).toBe("planner");
@@ -151,7 +151,7 @@ test("git author is the writing agent", () => {
 test("a fact flagged private leaves helper's view but stays in planner's, enforced in code", async () => {
   const { loadRules } = await import("../src/rules");
   const { carve, grantFor, visibleFacts } = await import("../src/carve");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { agent: "planner", id: "people/jane-roy", attribute: "role", value: "Course coordinator", as_of: "2026-09-01", sources: ["gmail:f000000000000001"], verification: "verified-by-source", sensitivity: "private" });
   expect(r.message).toContain("flag tightened");
   const view = (agent: string) => {
@@ -170,7 +170,7 @@ test("a fact flagged private leaves helper's view but stays in planner's, enforc
 test("share_with: only named agents get the fact; flags survive a supersede and can't be lowered", async () => {
   const { loadRules } = await import("../src/rules");
   const { carve, grantFor } = await import("../src/carve");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   write(root, { ...base, value: "Grade the midterm", as_of: "2026-10-01", sources: ["gmail:f000000000000003"], share_with: ["planner"] });
   const hidden = (agent: string) => carve(loadBrain(root), loadRules(root), grantFor(loadRules(root), agent)).hiddenFacts.map((h) => h.key);
   expect(hidden("helper")).toContain("projects/course-a#next_step");
@@ -183,7 +183,7 @@ test("share_with: only named agents get the fact; flags survive a supersede and 
 });
 
 test("third parties' health or school details are stored private, for the resolver only", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { agent: "planner", id: "people/jane-roy", attribute: "relationship", value: "On leave for a medical treatment", as_of: "2026-10-01", sources: ["gmail:f000000000000001"], share_with: ["planner", "steward"] });
   expect(r.outcome).toBe("committed");
   const f = fact(root, "people/jane-roy", "relationship");
@@ -198,7 +198,7 @@ test("third parties' health or school details are stored private, for the resolv
 });
 
 test("a core agent without money writing a money word is diverted to Robin, not stored", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, attribute: "status", value: "Waiting on the TFSA transfer" });
   expect(r.outcome).toBe("inbox");
   expect(r.alert).toBe(true);
@@ -207,7 +207,7 @@ test("a core agent without money writing a money word is diverted to Robin, not 
 });
 
 test("a made-up Robin message id waits for Robin; accepting it registers the id (G1)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const forged = "imsg:phonemsg-01M9FAKEFAKEFAKEFAKEFAKE00";
   const r = write(root, { ...base, value: "Cancel the course", as_of: "2026-10-08", sources: [forged], verification: "confirmed-by-louis" });
   expect(r.outcome).toBe("inbox");
@@ -219,19 +219,19 @@ test("a made-up Robin message id waits for Robin; accepting it registers the id 
 });
 
 test("a value only relayed by another agent never supersedes (G3)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, value: "Something else", as_of: "2026-10-08", sources: ["agent-relay:comms/2026-10-08/x"], verification: "self-reported" });
   expect(r.outcome).toBe("inbox");
   expect(fact(root, "projects/course-a", "next_step").value).toBe("Grade the midterm");
 });
 
 test("booking codes are caught whatever the case of the keyword (G9)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(write(root, { ...base, attribute: "status", value: "Booking ref: X7K2PQ" }).outcome).toBe("refused");
 });
 
 test("the agent that reads Robin's texts records them below private, and the digest asks him (G1)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const id = "imsg:phonemsg-01M5LOUISREALTEXTQQQQQQQQ01";
   const r = write(root, { ...base, agent: "steward", id: "people/paul-advisor", attribute: "role", value: "Retired advisor", as_of: "2026-10-08", sources: [id], verification: "confirmed-by-louis" });
   expect(r.outcome).toBe("committed");
@@ -245,7 +245,7 @@ test("the agent that reads Robin's texts records them below private, and the dig
 // own view-email link, and the write was refused, so the brain stayed stale. The link carries the
 // Gmail id, and an approval seen in an email goes to the owner instead of being refused.
 test("an approval cited by an email's view link becomes a proposal citing the Gmail id", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const link = "https://www.town.com/view-email?eid=m1.ZjAwMDAwMDAwMDAwMDAwNw&email=robin%40example.com&tid=t1.ZjAwMDAwMDAwMDAwMDAwOA";
   const r = write(root, { ...base, value: "Robin approved the final midterm; sent to the print shop", sources: [link] });
   expect(r.outcome).toBe("inbox");
@@ -259,7 +259,7 @@ test("an approval cited by an email's view link becomes a proposal citing the Gm
 // can only link to proposes the fix with the link; the owner confirms it in one tap. A message id
 // still commits on its own.
 test("a stale fact fixed from a Slack or Gmail web link goes to the owner with the link; an id commits", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const slack = "https://acme.slack.com/archives/C0123ABCD/p1791933000123456";
   const s = write(root, { ...base, value: "Midterm cleared for printing; sent to the print shop", sources: [slack], source_type: "email" });
   expect(s.outcome).toBe("inbox");
@@ -279,7 +279,7 @@ test("a stale fact fixed from a Slack or Gmail web link goes to the owner with t
 // An agent that doesn't know the date had a fact refused as future-dated and dropped it. The
 // orientation, the views and the refusal all say the brain's date, so it can retry.
 test("the brain's date is in the orientation, the context and a future-date refusal", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const r = write(root, { ...base, value: "Publish grades", as_of: "2026-12-01" });
   expect(r.outcome).toBe("refused");
   expect(r.fails?.[0].reason).toContain("2026-10-08");
@@ -290,7 +290,7 @@ test("the brain's date is in the orientation, the context and a future-date refu
 });
 
 test("a new note of an unknown type is refused with the list of types, not a server error", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const { id: _, ...noId } = base;
   const r = write(root, { ...noId, title: "Midterm review", type: "event", attribute: "summary", value: "Midterm reviewed" });
   expect(r.outcome).toBe("refused");
@@ -299,7 +299,7 @@ test("a new note of an unknown type is refused with the list of types, not a ser
 });
 
 test("replaying a value already stored doesn't send it to the inbox for its wording (G12)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const routine = "Each morning, send the day's agenda to robin@robin.example";
   const f = join(root, "projects/course-a.md");
   writeFileSync(f, readFileSync(f, "utf8").replace("value: Grade the midterm", `value: "${routine}"`));
@@ -313,7 +313,7 @@ test("replaying a value already stored doesn't send it to the inbox for its word
 });
 
 test("an agent writing back a value the brain already replaced, on its own word, is told its memory is stale; nothing is disputed", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const notes = loadBrain(root);
   const jane = notes.find((n) => n.fm.id === "people/jane-roy")!;
   const was = jane.fm.facts!.role as FactRecord;
@@ -333,7 +333,7 @@ test("an agent writing back a value the brain already replaced, on its own word,
 test("replaced_value is no oracle on hidden history: a past value of a fact withheld from the writer answers like a value never held", () => {
   const { saveNote } = require("../src/brain");
   const { mkdtempSync, cpSync } = require("node:fs");
-  const seed = makeBrain();
+  const seed = makeBrain({ steps: "one" });
   const jane = loadBrain(seed).find((n) => n.fm.id === "people/jane-roy")!;
   const was = jane.fm.facts!.role as FactRecord;
   // The note stays visible to planner; its role (now and before) is shared with steward only.
@@ -356,7 +356,7 @@ test("replaced_value is no oracle on hidden history: a past value of a fact with
 test("G188: replaced_value and the same-value merge never confirm a guess at a [withheld] word", () => {
   const { saveNote } = require("../src/brain");
   const { mkdtempSync, cpSync } = require("node:fs");
-  const seed = makeBrain();
+  const seed = makeBrain({ steps: "one" });
   const jane = loadBrain(seed).find((n) => n.fm.id === "people/jane-roy")!;
   const was = jane.fm.facts!.role as FactRecord;
   // Her employer is carved from planner by name (not a do-not-share or private fact).
@@ -388,7 +388,7 @@ test("G188: replaced_value and the same-value merge never confirm a guess at a [
 });
 
 test("a write to a list fact never widens an item's share_with (G209)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const p = { agent: "planner", id: "people/jane-roy", attribute: "phones", as_of: "2026-10-05", sources: ["gmail:f000000000000004"], verification: "verified-by-source" as const };
   write(root, { ...p, value: "(514) 555-0199" });
   write(root, { ...p, value: "514-555-0100", as_of: "2026-09-01" });
@@ -406,7 +406,7 @@ test("a write to a list fact never widens an item's share_with (G209)", () => {
 // or a merge: max|min value never replaces an owner-confirmed one; it goes to the owner as a
 // step 6 dispute, like any other contradiction of the owner's word.
 test("an assistant's more precise date never replaces the owner's vaguer one (G163)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   registerLouisMessages(root, ["imsg:phonemsg-01FAKE0000000000000000000A"]);
   expect(write(root, { ...base, value: "2026-11", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-owner" }).outcome).toBe("committed");
   const r = write(root, { ...base, value: "2026-11-05", as_of: "2026-10-08" });
@@ -417,7 +417,7 @@ test("an assistant's more precise date never replaces the owner's vaguer one (G1
   const f = { candidates: loadBrain(root).find((n) => n.fm.type === "dispute")!.fm.candidates as FactRecord[] };
   expect(f.candidates?.map((c) => [c.value, c.verification])).toEqual([["2026-11", "confirmed-by-owner"], ["2026-11-05", "verified-by-source"]]);
   // A vaguer assistant value still only adds its source to the owner's value.
-  const root2 = makeBrain();
+  const root2 = makeBrain({ steps: "one" });
   registerLouisMessages(root2, ["imsg:phonemsg-01FAKE0000000000000000000A"]);
   write(root2, { ...base, value: "2026-11-05", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-louis" });
   const v = write(root2, { ...base, value: "2026-11", as_of: "2026-10-08" });
@@ -426,7 +426,7 @@ test("an assistant's more precise date never replaces the owner's vaguer one (G1
 });
 
 test("an assistant can't retract the owner's word; the retract goes to the owner (G173)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   registerLouisMessages(root, ["imsg:phonemsg-01FAKE0000000000000000000A", "imsg:phonemsg-01FAKE0000000000000000000B"]);
   write(root, { ...base, value: "Publish grades", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-owner" });
   const r = write(root, { ...base, value: "Publish grades", retract: true, as_of: "2026-10-08" });
@@ -435,13 +435,13 @@ test("an assistant can't retract the owner's word; the retract goes to the owner
   // The owner's own retract still ends it, and an assistant still retracts a fact that isn't the owner's word.
   const o = write(root, { ...base, value: "Publish grades", retract: true, as_of: "2026-10-08", sources: ["imsg:phonemsg-01FAKE0000000000000000000B"], verification: "confirmed-by-owner" });
   expect(o.outcome).toBe("committed");
-  const root2 = makeBrain();
+  const root2 = makeBrain({ steps: "one" });
   write(root2, { ...base, value: "Publish grades" });
   expect(write(root2, { ...base, value: "Publish grades", retract: true, as_of: "2026-10-08" }).outcome).toBe("committed");
 });
 
 test("the owner's own refinement, or the owner accepting one, still applies (G163)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   registerLouisMessages(root, ["imsg:phonemsg-01FAKE0000000000000000000A", "imsg:phonemsg-01FAKE0000000000000000000B"]);
   write(root, { ...base, value: "2026-11", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-louis" });
   const r = write(root, { ...base, value: "2026-11-05", as_of: "2026-10-08", sources: ["imsg:phonemsg-01FAKE0000000000000000000B"], verification: "confirmed-by-owner" });
@@ -449,7 +449,7 @@ test("the owner's own refinement, or the owner accepting one, still applies (G16
   const f = fact(root, "projects/course-a", "next_step");
   expect([f.value, f.verification]).toEqual(["2026-11-05", "confirmed-by-owner"]);
   // An assistant's refinement the owner accepts from the inbox carries the owner's word.
-  const root2 = makeBrain();
+  const root2 = makeBrain({ steps: "one" });
   registerLouisMessages(root2, ["imsg:phonemsg-01FAKE0000000000000000000A"]);
   write(root2, { ...base, value: "2026-11", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-owner" });
   const p = write(root2, { ...base, agent: "helper", value: "2026-11-05", as_of: "2026-10-08" });
@@ -460,7 +460,7 @@ test("the owner's own refinement, or the owner accepting one, still applies (G16
 });
 
 test("merge: max never takes an assistant's value over the owner's word; the owner's own max write applies (G163)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   registerLouisMessages(root, ["imsg:phonemsg-01FAKE0000000000000000000A", "imsg:phonemsg-01FAKE0000000000000000000B"]);
   const p = { agent: "planner", id: "people/jane-roy", attribute: "last_contact", as_of: "2026-10-05" };
   expect(write(root, { ...p, value: "2026-10-05", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-louis" }).outcome).toBe("committed");
@@ -469,7 +469,7 @@ test("merge: max never takes an assistant's value over the owner's word; the own
   expect((loadBrain(root).find((n) => n.fm.type === "dispute")!.fm.candidates as FactRecord[])[0].value).toBe("2026-10-05");
   expect((fact(root, "people/jane-roy", "last_contact") as unknown as FactRecord).value).toBe("2026-10-05");
   // An older assistant value is still ignored, as before.
-  const root2 = makeBrain();
+  const root2 = makeBrain({ steps: "one" });
   registerLouisMessages(root2, ["imsg:phonemsg-01FAKE0000000000000000000A", "imsg:phonemsg-01FAKE0000000000000000000B"]);
   write(root2, { ...p, value: "2026-10-05", sources: ["imsg:phonemsg-01FAKE0000000000000000000A"], verification: "confirmed-by-owner" });
   expect(write(root2, { ...p, value: "2026-09-01", as_of: "2026-09-01", sources: ["gmail:f000000000000004"], verification: "verified-by-source" }).outcome).toBe("noop");
@@ -480,7 +480,7 @@ test("merge: max never takes an assistant's value over the owner's word; the own
 
 test("a paused or read-only agent's refused write is still logged, so its attempts leave a trace", () => {
   for (const status of ["paused", "read-only"]) {
-    const root = makeBrain();
+    const root = makeBrain({ steps: "one" });
     const p = join(root, "rules/policy.yaml");
     writeFileSync(p, readFileSync(p, "utf8").replace("planner: { tier: core,", `planner: { status: ${status}, tier: core,`));
     expect(write(root, { ...base, value: "Publish grades" }).outcome).toBe("refused");
@@ -490,7 +490,7 @@ test("a paused or read-only agent's refused write is still logged, so its attemp
 });
 
 test("a new note's id looks the same whether its name is fresh or taken by a note the writer can't see (G28)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const mk = (title: string) => write(root, { ...base, id: undefined, type: "person", title, area: "work", attribute: "role", value: "Advisor" } as any);
   const taken = mk("Paul Advisor"); // people/paul-advisor exists; Planner can't see it
   const fresh = mk("Pat Nobody");

@@ -12,6 +12,8 @@ import { saveNote, today, type FactRecord, type Note } from "./brain";
 import { attributeSpec, type AttributeSpec, type Rules } from "./rules";
 import { refString } from "./sources";
 import { sensitiveShape } from "./shape";
+import { valueKey } from "./normalize";
+import { withoutDay } from "./week";
 import { clock, ownerDay } from "./clock";
 import { commitPaths } from "./git";
 import { appendDiary, diaryRow } from "./diary";
@@ -50,6 +52,29 @@ export function twoDatedThings(rules: Rules, note: Note, attr: string, spec: Att
   return true;
 }
 
+// Whether two records of one fact are two things to do on the page (G965): the schema says a page
+// holds several of this attribute, both values are words (a whole day keeps the rule above), nothing
+// about them is money, health or legal, the new side is not only another agent's relayed claim, and
+// they are not the same words about another day, and they share no source item: the same mail or
+// event saying another step is that one step in doubt.
+// By structure only. Items are counted as cited, read by the hub or not: a side that names no item
+// shares none.
+export function twoSteps(rules: Rules, note: Note, attr: string, spec: AttributeSpec, a: Pick<FactRecord, "value" | "sources">, b: Pick<FactRecord, "value" | "sources">): boolean {
+  if (!spec.several) return false;
+  const words = (v: unknown) => typeof v === "string" && !!v.trim() && !wholeDay(v);
+  if (!words(a.value) || !words(b.value)) return false;
+  if (note.fm.type === "money" || note.fm.id.startsWith("money/") || sensitiveShape(rules, attr, note.fm.title, a.value, b.value)) return false;
+  // The same words about another day is one step whose day is in doubt, not two steps.
+  if (valueKey(withoutDay(String(a.value))) === valueKey(withoutDay(String(b.value)))) return false;
+  const refs = (b.sources ?? []).map(refString);
+  if (refs.length && refs.every((x) => x.startsWith("agent-relay:"))) return false;
+  const x = itemsOf(a), y = itemsOf(b);
+  for (const i of x) if (y.has(i)) return false;
+  return true;
+}
+// Several things to do, the newest first.
+export const byNewest = <T extends Pick<FactRecord, "as_of">>(items: T[]): T[] => items.sort((a, b) => String(b.as_of).localeCompare(String(a.as_of)));
+
 // The items a new record cites at a version the hub read itself, by item.
 export function newItems(r: Pick<FactRecord, "sources">, exact: Set<string>): Set<string> {
   return new Set((r.sources ?? []).map(refString).filter((x) => ITEM.test(x) && exact.has(x)).map(itemOf));
@@ -74,13 +99,14 @@ export function sameItem<T extends Pick<FactRecord, "sources">>(items: T[], r: P
 // side the live record no longer holds, or a fact that changed since leaves the conflict as it is.
 export const bothDatesOn = (rules: Rules) => (rules.policy as { both_dates?: boolean }).both_dates !== false;
 
-export interface BothDates { packet: Note; page: Note; attr: string; live: FactRecord; other: FactRecord; list?: FactRecord[] }
+// `steps`: the two sides are two things to do (twoSteps, G965), not two dates.
+export interface BothDates { packet: Note; page: Note; attr: string; live: FactRecord; other: FactRecord; list?: FactRecord[]; steps?: boolean }
 
 export function bothDatesPlan(root: string, rules: Rules, notes: Note[]): BothDates[] {
   const byId = new Map(notes.map((n) => [n.fm.id, n]));
   const read = new Set([...hubReadRefs(root)].map(itemOf));
   const out: BothDates[] = [];
-  const day = (r: FactRecord) => String(r.value).slice(0, 10);
+  const dayOf = (r: FactRecord) => String(r.value).slice(0, 10);
   for (const p of notes) {
     if (p.fm.type !== "dispute" || !["open", "escalated"].includes(String(p.fm.status))) continue;
     const key = String(p.fm.fact_key ?? ""), hash = key.lastIndexOf("#"), pid = String(p.fm.id).replace(/^disputes\//, "");
@@ -98,12 +124,16 @@ export function bothDatesPlan(root: string, rules: Rules, notes: Note[]): BothDa
     const held = !list && "dispute" in f && (f as { dispute?: string }).dispute === pid ? f as { candidates?: FactRecord[] } : undefined;
     if (!beside && !held) continue;
     const spec = attributeSpec(rules, page.fm.type, attr);
-    if (!twoDatedThings(rules, page, attr, spec, cands[0]!, cands[1]!, read)) continue;
+    // Two next steps asked as pick-one before G965 close the same way: both stay, side by side.
+    const dates = twoDatedThings(rules, page, attr, spec, cands[0]!, cands[1]!, read);
+    const steps = !dates && twoSteps(rules, page, attr, spec, cands[0]!, cands[1]!);
+    if (!steps && !dates) continue;
+    const day = steps ? (r: FactRecord) => valueKey(r.value) : dayOf;
     const live = beside ?? held!.candidates?.find((c) => day(c) === day(cands[0]!)) ?? cands[0]!;
     const other = cands.find((c) => day(c) !== day(live));
     // A live value that changed since the conflict opened is not one of its sides: left as it is.
     if (!other || (beside && !cands.some((c) => day(c) === day(beside)))) continue;
-    out.push({ packet: p, page, attr, live, other, ...(list ? { list } : {}) });
+    out.push({ packet: p, page, attr, live, other, ...(list ? { list } : {}), ...(steps ? { steps } : {}) });
   }
   return out;
 }
@@ -119,22 +149,24 @@ export function closeBothDates(root: string, rules: Rules, plan: BothDates[]): s
     if (x.list) {
       delete (x.live as FactRecord & { contested?: string }).contested;
       const live = x.list.filter((i) => !i.valid_to && !i.retired);
-      if (!live.some((i) => String(i.value).slice(0, 10) === String(other.value).slice(0, 10))) x.list.push(other as FactRecord);
-      byDay(x.list);
+      const same = x.steps ? (i: FactRecord) => valueKey(i.value) === valueKey(other.value) : (i: FactRecord) => String(i.value).slice(0, 10) === String(other.value).slice(0, 10);
+      if (!live.some(same)) x.list.push(other as FactRecord);
+      if (x.steps) byNewest(x.list); else byDay(x.list);
     } else {
       const { contested: _c, ...live } = x.live as FactRecord & { contested?: string };
-      (x.page.fm.facts ??= {})[x.attr] = { items: byDay([live as FactRecord, other as FactRecord]) };
+      (x.page.fm.facts ??= {})[x.attr] = { items: x.steps ? byNewest([other as FactRecord, live as FactRecord]) : byDay([live as FactRecord, other as FactRecord]) };
     }
     x.page.fm.updated = d;
     saveNote(root, x.page);
-    Object.assign(x.packet.fm, { status: "both-hold", answer: { by: "hub", at: d, keep: "both", why: "two dates from two items" }, updated: d });
+    const why = x.steps ? "two things to do" : "two dates from two items";
+    Object.assign(x.packet.fm, { status: "both-hold", answer: { by: "hub", at: d, keep: "both", why }, updated: d });
     saveNote(root, x.packet);
     const key = `${x.page.fm.id}#${x.attr}`;
     paths.push(x.page.path, x.packet.path);
     keys.push(key);
-    rel = appendDiary(root, { ...diaryRow({ at, factKey: key, title: String(x.page.fm.title ?? x.page.fm.id), kind: "item_added", from: undefined, to: other.value, incoming: other as FactRecord, acceptedBy: "hub", rank: 0, sensitivity: other.sensitivity ?? x.page.fm.sensitivity }), why: "both-dates" }, month);
+    rel = appendDiary(root, { ...diaryRow({ at, factKey: key, title: String(x.page.fm.title ?? x.page.fm.id), kind: "item_added", from: undefined, to: other.value, incoming: other as FactRecord, acceptedBy: "hub", rank: 0, sensitivity: other.sensitivity ?? x.page.fm.sensitivity }), why: x.steps ? "both-steps" : "both-dates" }, month);
   }
-  const unsaved = commitPaths(root, [...paths, rel], `hub: ${keys.length} date conflict${keys.length === 1 ? "" : "s"} closed as both kept\n\nWhy: each one's two dates came from two different calendar events or mails, so they are two dated things on the page, not one value in doubt (G800). Both stay live; nothing was picked or deleted; the date that was waiting has a diary line with Undo.\nKind: upkeep\nFact-Keys: ${keys.join(", ")}`, "hub");
+  const unsaved = commitPaths(root, [...paths, rel], `hub: ${keys.length} conflict${keys.length === 1 ? "" : "s"} closed as both kept\n\nWhy: each one's two sides are two things on the page, not one value in doubt: two dates from two different calendar events or mails (G800), or two different next steps (G965). Both stay live; nothing was picked or deleted; the one that was waiting has a diary line with Undo.\nKind: upkeep\nFact-Keys: ${keys.join(", ")}`, "hub");
   if (unsaved) return [];
   for (const x of plan) logWrite(root, { at, agent: "hub", kind: "both-dates", key: `${x.page.fm.id}#${x.attr}`, outcome: "committed", dispute: String(x.packet.fm.id) });
   return keys;

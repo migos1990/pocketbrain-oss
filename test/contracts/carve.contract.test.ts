@@ -28,7 +28,7 @@ const carveFor = (root: string, agent: string, slices?: string[]) => {
 
 // A brain with one note per carve rule, on top of the fixture.
 function brain() {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   note(root, "disputes/c-0001", "type: dispute\narea: work\nsensitivity: personal\nstatus: open");
   note(root, "projects/old-course", "type: project\narea: work\nsensitivity: personal\nstatus: merged");
   note(root, "projects/decoy", "type: project\narea: probe\nsensitivity: personal\nstatus: active");
@@ -348,7 +348,7 @@ test("contract carve: a remembered carve follows an edit to the own slice (slice
 // Phone UI spec §7 (owner 2026-10-26): a value held for the owner's eyes reaches no agent, not even
 // one granted everything; once seen it serves like any other.
 test("must never: a value marked unseen reaches any agent's carve", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   note(root, "projects/held", "type: project\narea: work\nsensitivity: personal\nstatus: active",
     `  fee: { value: 900 a term, as_of: 2026-10-01, unseen: true, ${SRC} }\n  room: { value: B-12, as_of: 2026-10-01, ${SRC} }`);
   for (const agent of ["steward", "planner"]) {
@@ -370,7 +370,7 @@ test("contract carve: a hub-made family fact carries no ref of a fact its reader
     { name: "slice exclude_attributes", fact: "", policy: (s) => s.replace("helper: { tier: trial, slices: [area:work, contacts-basic], exclude_types: [money] }", "helper: { tier: trial, slices: [nohidden], exclude_types: [money] }"), slices: (s) => s.replace("slices:\n", "slices:\n  nohidden:\n    areas: [work]\n    exclude_attributes: [hidden]\n    max_sensitivity: personal\n") },
   ];
   for (const h of hiders) {
-    const root = makeBrain();
+    const root = makeBrain({ steps: "one" });
     const pol = join(root, "rules", "policy.yaml");
     writeFileSync(pol, (h.policy ?? ((s: string) => s))(readFileSync(pol, "utf8").replace("owner: { name: Robin }", "owner: { name: Robin, aliases: [Robin Lake] }")) + "family_links: true\n");
     if (h.slices) { const sl = join(root, "rules", "slices.yaml"); writeFileSync(sl, h.slices(readFileSync(sl, "utf8"))); }
@@ -389,7 +389,7 @@ test("contract carve: a hub-made family fact carries no ref of a fact its reader
 test("contract carve: a fact tightened after the family link leaves no ref of it on the page (G546)", async () => {
   const { linkFamily } = await import("../../src/family");
   const { saveNote } = await import("../../src/brain");
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const pol = join(root, "rules", "policy.yaml");
   writeFileSync(pol, readFileSync(pol, "utf8").replace("owner: { name: Robin }", "owner: { name: Robin, aliases: [Robin Lake] }") + "family_links: true\n");
   const page = (slug: string, title: string, more = "") => writeFileSync(join(root, "people", `${slug}.md`), `---\nid: people/${slug}\ntype: person\ntitle: ${title}\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-28\nupdated: 2026-10-28\nby: steward\nfacts:\n  city: { value: Lyon, as_of: 2026-10-28, sources: ["gmail:f000000000000042"], verification: verified-by-source, by: steward, recorded: 2026-10-28 }\n${more}---\n`);
@@ -404,7 +404,7 @@ test("contract carve: a fact tightened after the family link leaves no ref of it
 });
 
 test("contract carve: a by-name exclude hides the page's twins too, same folder, type, title and area (G657)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const page = (id: string, title: string, area: string) => {
     mkdirSync(join(root, "projects"), { recursive: true });
     writeFileSync(join(root, `${id}.md`), `---\nid: ${id}\ntype: project\ntitle: ${title}\narea: ${area}\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: steward\nfacts:\n  place: { value: Quellmoor slipway, ${SRC} }\n---\nAbout ${title}.\n`);
@@ -430,7 +430,7 @@ test("contract carve: a by-name exclude hides the page's twins too, same folder,
 
 test("must never: an agent's own new page tells it whether a same-title page kept from it by name exists (G657, slice audit F1)", () => {
   const seen = (hidden: boolean) => {
-    const root = makeBrain();
+    const root = makeBrain({ steps: "one" });
     const p = join(root, "rules/policy.yaml");
     writeFileSync(p, readFileSync(p, "utf8").replace("planner: { tier: core, aliases: [Planbot], slices: [area:work, contacts-basic]", "planner: { tier: core, aliases: [Planbot], slices: [area:work, contacts-basic], exclude: [projects/harbour-refit]"));
     if (hidden) {
@@ -446,7 +446,7 @@ test("must never: an agent's own new page tells it whether a same-title page kep
 });
 
 test("contract carve: a fact with a conflict waiting beside it never renders as plainly current (G757)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   note(root, "projects/course-c", "type: project\narea: work\nsensitivity: personal\nstatus: active",
     `  next_step: { value: Book the room, contested: c-9001, as_of: 2026-10-07, ${SRC} }\n  room: { value: Hall B, as_of: 2026-10-07, ${SRC} }`);
   const md = (core.readNote(root, "helper", "projects/course-c") as { markdown: string }).markdown;
@@ -459,7 +459,7 @@ test("contract carve: a fact with a conflict waiting beside it never renders as 
 });
 
 test("must never: a page not filed yet reaches an assistant through an area, type or tag slice; only one reading every area, or listing it by id", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   note(root, "people/new-face", "type: person\narea: personal\nsensitivity: personal\nstatus: active\ntags: [met]\nunfiled: true", `  role: { value: driver, as_of: 2026-10-01, ${SRC} }`);
   writeFileSync(join(root, "rules", "slices.yaml"), `${readFileSync(join(root, "rules", "slices.yaml"), "utf8")}  by-type: { types: [people] }\n  by-tag: { tags: [met] }\n  by-id: { include: [people/new-face] }\n`);
   const seen = (slices: string[]) => carveFor(root, "planner", slices).visible.has("people/new-face");
@@ -475,7 +475,7 @@ test("must never: a page not filed yet reaches an assistant through an area, typ
 test("must never: a mark that names its source is weaker than unfiled: true, nor a mark of false or empty a hold", () => {
   const forms: [string, boolean][] = [["unfiled: true", false], ["unfiled: feed-home", false], ["unfiled: false", true], ['unfiled: ""', true]];
   for (const [mark, filed] of forms) {
-    const root = makeBrain();
+    const root = makeBrain({ steps: "one" });
     note(root, "people/new-face", `type: person\narea: personal\nsensitivity: personal\nstatus: active\n${mark}`, `  role: { value: driver, as_of: 2026-10-01, ${SRC} }`);
     expect([mark, carveFor(root, "planner", ["area:personal"]).visible.has("people/new-face")]).toEqual([mark, filed]);
     expect([mark, carveFor(root, "planner", ["all"]).visible.has("people/new-face")]).toEqual([mark, true]);
@@ -483,7 +483,7 @@ test("must never: a mark that names its source is weaker than unfiled: true, nor
 });
 
 test("must never: a slice with only a level or attribute filter lends an area slice a page not filed yet in full", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   note(root, "people/new-face", "type: person\narea: personal\nsensitivity: personal\nstatus: active\nunfiled: true", `  role: { value: driver, as_of: 2026-10-01, ${SRC} }`);
   writeFileSync(join(root, "rules", "slices.yaml"), `${readFileSync(join(root, "rules", "slices.yaml"), "utf8")}  pub-only: { max_sensitivity: public }\n  title-only: { only_attributes: [title] }\n`);
   expect(carveFor(root, "planner", ["area:personal", "pub-only"]).visible.has("people/new-face")).toBe(false);
@@ -494,7 +494,7 @@ test("must never: a slice with only a level or attribute filter lends an area sl
 // G962: a stored value that holds a secret shape (filed before the write check knew the shape) is
 // served to nobody. Built at run time so gitleaks never sees a code whole.
 test("contract carve: a live value holding a secret shape is hidden from every carve, with its own reason", async () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
   const p = join(root, "projects", "course-a.md");
   writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "Hand ${code} to the registrar"`));
@@ -516,7 +516,7 @@ test("contract carve: a live value holding a secret shape is hidden from every c
 // G962, the dispute door: a conflict whose side holds a secret shape shows the resolver no values.
 // The conflict is older than the rule: its files are edited by hand to hold the code.
 test("contract carve: a conflict side holding a secret shape is withheld in its packet", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
   const r = write(root, { agent: "planner", id: "projects/course-a", attribute: "next_step", value: "Post the reading list", as_of: "2026-10-07", sources: ["gcal:e1@e1"], verification: "self-reported" } as never, { acceptedBy: "auto-decide", contest: true });
   expect(r.outcome).toBe("disputed");
@@ -531,7 +531,7 @@ test("contract carve: a conflict side holding a secret shape is withheld in its 
 // Slice audit of G962, 2026-11-16: four rows.
 // (1) The Gardener's door served a side held only in the packet while the fact itself was clean.
 test("contract carve: a secret-shaped side held only in the packet reaches neither the Gardener nor the resolver", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
   expect(write(root, { agent: "planner", id: "projects/course-a", attribute: "next_step", value: "Post the reading list", as_of: "2026-10-07", sources: ["gcal:e1@e1"], verification: "self-reported" } as never, { acceptedBy: "auto-decide", contest: true }).outcome).toBe("disputed");
   const packet = loadBrain(root).find((n) => n.fm.type === "dispute")!;
@@ -546,7 +546,7 @@ test("contract carve: a secret-shaped side held only in the packet reaches neith
 // (2) The code said alone in a page's text, a title or an alias was still served: only the whole
 // sentence that held it was a withheld value.
 test("contract carve: the secret itself is withheld wherever it is said, not only the sentence that holds it", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const code = ["Q7RT2", "MX4KD", "9PLHB", "T3VNC", "W8ZFA"].join("-");
   const p = join(root, "projects", "course-a.md");
   writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "Hand ${code} to the registrar"`).replace("Course logistics.", `Course logistics. The registrar wants ${code} by Friday.`));
@@ -559,7 +559,7 @@ test("contract carve: the secret itself is withheld wherever it is said, not onl
 
 // (3) A card number typed into a page by hand is a YAML number, and numbers were skipped.
 test("contract carve: a secret-shaped number is hidden like a secret-shaped string", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const card = ["4111", "1111", "1111", "1111"].join("");
   const p = join(root, "projects", "course-a.md");
   writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: ${card}`));
@@ -569,7 +569,7 @@ test("contract carve: a secret-shaped number is hidden like a secret-shaped stri
 
 // (4) Known over-hold, kept as a row: one secret-shaped item hides its whole list fact.
 test("contract carve: one secret-shaped item in a list hides the whole list fact", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const code = ["K2MP", "7XQD", "R9TB"].join("-");
   note(root, "projects/course-y", "type: project\narea: work\nsensitivity: personal\nstatus: active", `  rooms:\n    items:\n      - { value: "B-201", as_of: 2026-10-01, ${SRC} }\n      - { value: "use ${code}", as_of: 2026-10-01, ${SRC} }`, "", "planner");
   const res = carveFor(root, "planner");
@@ -580,7 +580,7 @@ test("contract carve: one secret-shaped item in a list hides the whole list fact
 // stored "password is on …" value (an over-hold of the write check) must not blank that phrase on
 // other pages; a password with a digit is withheld alone.
 test("contract carve: a secret-shaped value's ordinary words are not withheld on other pages", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const pw = "hunter" + "42";
   const p = join(root, "projects", "course-a.md");
   writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "the password is on the fridge and the wifi password is ${pw}"`));
@@ -592,7 +592,7 @@ test("contract carve: a secret-shaped value's ordinary words are not withheld on
 
 // Third slice audit of G962, clear, with two limits kept as rows so a change that moves one shows.
 test("contract carve: limits of the secret needle (ceiling and over-hold)", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   const p = join(root, "projects", "course-a.md");
   writeFileSync(p, readFileSync(p, "utf8").replace("value: Grade the midterm", `value: "Booking ZQXWVK, and pin: 7.4.1"`));
   note(root, "projects/course-z", "type: project\narea: work\nsensitivity: personal\nstatus: active", "", "Ask for ZQXWVK at the desk. The tool moved to release 7.4.1 last week.", "planner");

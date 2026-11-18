@@ -49,6 +49,16 @@ export function sandbox(source: BrainSource = "synthetic", patch?: (root: string
   return root;
 }
 
+// A brain whose rules keep one next step per page (`several: false`), for cases about the conflict
+// ladder that use a next step as their one-value fact (G965). `commit` for a sandbox already made.
+export function oneStep(root: string, commit = false) {
+  const f = join(root, "rules", "checks.yaml"), text = readFileSync(f, "utf8");
+  const out = text.replace(/(next_step:\s*\{ merge: replace, shelf_life: 14d) \}/, "$1, several: false }");
+  if (out === text) throw new Error("sandbox: checks.yaml no longer has the next_step line");
+  writeFileSync(f, out);
+  if (commit) { sh(root, ["git", "add", "-A"]); sh(root, ["git", "commit", "-q", "-m", "owner: one next step per page"]); }
+}
+
 // Small helpers for patching a sandbox before its first commit.
 export function appendBody(root: string, id: string, text: string) {
   const f = join(root, id + ".md");

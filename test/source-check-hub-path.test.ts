@@ -14,7 +14,7 @@ import { recordCheckedRefs } from "../src/louis";
 const sh = (cwd: string, ...cmd: string[]) => Bun.spawnSync(cmd, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: "louis", GIT_AUTHOR_EMAIL: "l@x", GIT_COMMITTER_NAME: "louis", GIT_COMMITTER_EMAIL: "l@x" } });
 const FAKE = "gmail:00000000000fa4e1";
 function brain(heldSources: string[], heldAsOf = "2026-10-05") {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   writeFileSync(join(root, "projects", "course-c.md"), `---\nid: projects/course-c\ntype: project\ntitle: Course C\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-01\nupdated: 2026-10-01\nby: planner\nfacts:\n  next_step: { value: "Write the exam", as_of: ${heldAsOf}, sources: [${heldSources.map((s) => `"${s}"`).join(", ")}], verification: self-reported, by: planner, recorded: ${heldAsOf} }\n---\n`);
   sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "owner: setup");
   return root;

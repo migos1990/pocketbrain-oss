@@ -40,7 +40,7 @@ test("the week's tables read as words on a phone, not pipes", () => {
 });
 
 test("the digest page counts what waits as the home page does, and shows no ids, hashes or commands", () => {
-  const root = makeBrain();
+  const root = makeBrain({ steps: "one" });
   expect(write(root, { agent: "helper", id: "projects/course-a", attribute: "next_step", value: "Book the room", as_of: "2026-10-07", sources: ["gmail:f000000000000005"], verification: "verified-by-source" } as never).outcome).toBe("inbox");
   const daily = [
     "# pocketBrain digest, 2026-10-08", "",
