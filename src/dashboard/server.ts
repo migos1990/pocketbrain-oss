@@ -1048,9 +1048,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const page = id ? note && seePage(s, csrf, agent, note, { fresh }) : seeListPage(s, agent, { fresh });
       return page ? new Response(page, { headers: PAGE_HEADERS }) : appOops("app.no-page");
     }
-    // The share picture: counts and shapes from the same carves, drawn in the owner's browser. Nothing
-    // private is on it, so it opens on the 30-day sign-in; never logged as a read.
-    if (p === "/share") return new Response(sharePage(s), { headers: PAGE_HEADERS });
+    // The share picture: kinds and counts from the same carves, drawn in the owner's browser (?names=off
+    // draws it with no assistant's name). Nothing private is on it, so it opens on the 30-day sign-in; never logged as a read.
+    if (p === "/share") return new Response(sharePage(s, { names: url.searchParams.get("names") !== "off" }), { headers: PAGE_HEADERS });
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];

@@ -3,11 +3,15 @@
     - link "‹ Who knows":
       - /url: /who
   - heading "The picture" [level=1]
-  - paragraph: "What each of your assistants is given from your memory, as one picture. It shows shapes and counts only: no names, no words, nothing private."
-  - img "One memory. Three readers. Claude is given 99 of 99 pages. ChatGPT is given 97 of 99 pages. Gemini is given 83 of 99 pages. Shapes and counts only. No names, no words."
+  - paragraph: "A picture of what each of your assistants gets from your memory, made to show someone else. It has counts only: no names of people or pages, and nothing from the pages."
+  - img "Each of my AI assistants gets a different part of my life. Claude gets 99 of 99 pages. ChatGPT gets 97 of 99 pages. Gemini gets 83 of 99 pages. This picture shows counts only, with no names and nothing from the pages."
   - paragraph:
     - button "Save"
   - paragraph: It goes nowhere until you share it. Or touch and hold the picture to save it.
+  - paragraph:
+    - text: The picture shows each assistant by the name you gave it.
+    - link "Hide their names":
+      - /url: /share?names=off
 - navigation "Tabs":
   - link "On your mind":
     - /url: /home
