@@ -19,6 +19,13 @@ every `bun test` and fails on any of these:
   banner. The rig pins the hub's clock (`PB_NOW`) to the demo's morning, 8 Oct 2026 at 10:00 in
   Montréal, so the home's date, its diary and its reads all fall on that day.
 - **Phone width:** the overview and the door's start page don't scroll sideways at 390 px, and neither does Settings with its folded sections open and long words with no break in them (a path, an address) in what is still open: a dashboard page breaks such a word rather than widen the page. What each page does for a phone is in [dashboard-phone.md](dashboard-phone.md).
+- **Touch and type, the owner app at 390 px dark (`touch` in `test/ui-audit.ts`, pages in `OWNER_PAGES`):**
+  - *Tap size.* A link inside a line of text or a footnote mark is reachable over 24 by 24 px, any other control over 24 wide by 44 high. It is measured as what a finger at that spot would hit, so a neighbour lying over a link counts against it.
+  - *A short highlight stays whole.* A `<mark>` of 28 characters or fewer never breaks over two lines (`SHORT_MARK`).
+  - *One type scale.* Every text size is one of 11, 13, 15, 17, 19, 22, 30, 44, 56, 60 px, and one page uses eight of them at most.
+  - *No browser default.* The tap flash is off, a selection has the app's colour, the typing cursor differs from the text colour, and a number set at 30 px or more has tabular numerals.
+
+  This list is also the rubric for a review by eye: a finding from a checklist or a screenshot is measured first, and a real one becomes a rule here before it is fixed. Settings pages are not covered yet (G998).
 
 Pages are listed in `test/ui-rig.ts`: add a page there when you add one to the dashboard or the door.
 

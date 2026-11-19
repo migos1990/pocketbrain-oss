@@ -129,17 +129,17 @@ export function nightLink(root: string, rules: Rules, notes: Note[], now: Date):
 }
 
 const NIGHT_CSS = `
-.night-top h1{font-size:54px;line-height:.92;max-width:none}
+.night-top h1{font-size:56px;line-height:.92;max-width:none}
 .night-ran{margin:14px 0 0;font-size:15px;line-height:21px;color:var(--muted)}
 .night-n{display:flex;gap:22px;margin:20px 0 0;padding:14px 0 0;border-top:2px solid var(--text)}
 .night-n div{display:flex;flex-direction:column;gap:2px}
-.night-n b{font-size:40px;line-height:1;font-weight:900;letter-spacing:-.03em}
+.night-n b{font-size:44px;line-height:1;font-weight:900;letter-spacing:-.03em}
 .night-n div:first-child b{color:var(--headline-ink)}
-.night-n span{font-size:14px;line-height:18px;color:var(--muted)}
-.night-quiet{margin:22px 0 0;padding:22px 16px;border:2px solid var(--text);font-size:21px;line-height:27px;font-weight:800}
+.night-n span{font-size:15px;line-height:18px;color:var(--muted)}
+.night-quiet{margin:22px 0 0;padding:22px 16px;border:2px solid var(--text);font-size:22px;line-height:27px;font-weight:800}
 .night h2{margin:28px 0 4px}
-.night-hint{margin:0 0 4px;font-size:14px;line-height:20px;color:var(--muted)}
-.night-more{margin:8px 0 0;font-size:14px;line-height:20px;color:var(--muted)}
+.night-hint{margin:0 0 4px;font-size:15px;line-height:20px;color:var(--muted)}
+.night-more{margin:8px 0 0;font-size:15px;line-height:20px;color:var(--muted)}
 .night-wait{list-style:none;margin:0;padding:0}
 .night-wait li{border-top:2px solid var(--text)}
 .night-wait li:last-child{border-bottom:2px solid var(--text)}

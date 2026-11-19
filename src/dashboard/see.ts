@@ -154,7 +154,7 @@ const seeHref = (agent: string, id?: string) => `/see/${encodeURIComponent(agent
 const BAR = `<span class="bar" role="img" aria-label="${SEE_COPY.bar}"></span>`;
 const SEE_CSS = `
 .see-top h1{font-size:44px;line-height:.92;max-width:none}
-.see-as{margin:18px 0 0;font-size:14px;line-height:20px;color:var(--muted)}
+.see-as{margin:18px 0 0;font-size:15px;line-height:20px;color:var(--muted)}
 .readers{display:flex;gap:8px;margin:6px 0 0;overflow-x:auto;scrollbar-width:none}
 .readers a{flex:1 0 auto;min-width:64px;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0 12px;font-size:15px;font-weight:800;color:var(--text);box-shadow:inset 0 0 0 2px var(--text)}
 .readers a[aria-current]{background:var(--headline-ink);color:var(--on-headline);box-shadow:none}
@@ -168,8 +168,8 @@ const SEE_CSS = `
 .facts .val{font-size:19px;line-height:25px;overflow-wrap:anywhere}
 .facts .shut{font-size:15px;line-height:21px;color:var(--muted)}
 .words{margin:6px 0 0}
-.none{margin:18px 0 0;padding:22px 16px;border:2px solid var(--text);font-size:21px;line-height:27px;font-weight:800;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--text) 14%,transparent) 0 8px,transparent 8px 16px)}
-.see-note{margin:22px 0 0;font-size:15px;line-height:21px;color:var(--muted)}
+.none{margin:18px 0 0;padding:22px 16px;border:2px solid var(--text);font-size:22px;line-height:27px;font-weight:800;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--text) 14%,transparent) 0 8px,transparent 8px 16px)}
+.see-note{margin:22px 0 0;font-size:15px;line-height:24px;color:var(--muted)}.see-note a{padding-block:3px}
 .see-note a{color:var(--text);font-weight:800;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:5px}
 .rows .given{flex:none;font-size:13px;line-height:18px;font-weight:500;color:var(--muted);text-align:right}
 .rows .bar{flex:none;width:72px;height:16px}
@@ -177,7 +177,7 @@ h2.kind-head{margin:26px 0 6px}
 .tested{margin:30px 0 0;padding:14px 0 0;border-top:2px solid var(--text)}
 .tested h2{margin:0}
 .tested-line{margin:8px 0 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;font-size:19px;line-height:25px}
-.tested-line span{font-size:14px;color:var(--muted)}
+.tested-line span{font-size:15px;color:var(--muted)}
 .tested .see-note{margin-top:8px}
 `;
 

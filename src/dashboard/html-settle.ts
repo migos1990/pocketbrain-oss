@@ -53,10 +53,10 @@ const day = (iso?: string) => iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${Number(
 // Two inks on Settle: the question as a headline, each side between rules, the part that differs
 // under the marker ink's highlighter; the Gardener's side carries a headline-ink bar.
 const SETTLE_CSS = `
-.bar{display:flex;justify-content:space-between;align-items:center;font-size:14px;line-height:20px}
+.bar{display:flex;justify-content:space-between;align-items:center;font-size:15px;line-height:20px}
 .bar a{font-weight:700;display:inline-flex;align-items:center;min-height:44px}
-.bar span{font-size:14px;font-weight:500;color:var(--muted)}
-.where{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:14px;line-height:20px;font-weight:700}
+.bar span{font-size:15px;font-weight:500;color:var(--muted)}
+.where{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:15px;line-height:20px;font-weight:700}
 .where .dot{flex:none;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--text);mix-blend-mode:var(--blend)}
 .where .dot.a-work{background:var(--headline-ink);box-shadow:none}.where .dot.a-teaching{background:var(--marker-ink);box-shadow:none}.where .dot.a-personal{background:var(--text);box-shadow:none}
 .ask h1{font-size:44px;line-height:.92;margin:10px 0 10px;max-width:none}
@@ -66,11 +66,11 @@ form.pick button{width:100%;text-align:left;font:inherit;color:var(--text);backg
 form.pick button b{align-self:flex-start;font-size:30px;line-height:34px;font-weight:900;letter-spacing:-.03em;overflow-wrap:anywhere;background:linear-gradient(transparent 45%,color-mix(in srgb,var(--marker-ink) 55%,transparent) 45%);padding:0 2px}
 form.pick button small{font-size:13px;line-height:18px;color:var(--muted)}
 form.pick button .whole{font-size:15px;line-height:21px;color:var(--text);overflow-wrap:anywhere}
-form.pick button q.said{font-size:14px;line-height:20px;color:var(--text);font-style:italic;overflow-wrap:anywhere}
+form.pick button q.said{font-size:15px;line-height:20px;color:var(--text);font-style:italic;overflow-wrap:anywhere}
 form.pick button .lean{color:var(--text);font-weight:700}
 form.pick.first button{box-shadow:inset 6px 0 0 var(--headline-ink);padding-left:16px}
 form.pick.both button{border-bottom:2px solid var(--text);flex-direction:row;justify-content:space-between;align-items:center;gap:12px}
-form.pick.both button b{font-size:16px;line-height:22px;font-weight:800;letter-spacing:0;background:none;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}form.pick.both button small{font-size:13px;text-align:right}
+form.pick.both button b{font-size:17px;line-height:22px;font-weight:800;letter-spacing:0;background:none;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}form.pick.both button small{font-size:13px;text-align:right}
 .tell{margin:14px 0 6px;font-size:13px;line-height:18px;font-weight:700;color:var(--muted)}
 `;
 

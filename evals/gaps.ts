@@ -54,6 +54,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Slice audit of claude/share-picture, 2026-11-18. safeNames (G992) replaces a label that names a person or the owner. A label that holds an org or project page's title is left alone, because an assistant is often named after the product it is (a page about that product would otherwise blank its row). The owner sees the picture before sharing it, and docs/owner-home.md says so.",
     fix: "src/dashboard/share.ts: the page under the picture says the assistants are shown by the names the owner gave them, and Hide their names (/share?names=off) draws every one as Assistant 1, Assistant 2. Only the owner knows which label names something private, so the choice is the owner's tap each time; nothing is stored and no rule guesses. Test: test/share-picture.test.ts (the owner can draw the picture with no assistant's name on it).",
   },
+  G998: {
+    closed: "claude/tap-and-type",
+    title: "On a phone some links were too small to tap, a short date broke inside its highlight, and text sizes and browser defaults were left to chance",
+    severity: "low",
+    finding: "An outside design checklist applied to the owner app at 390 px dark on the demo memory, 2026-11-19, each point then measured in Chromium. Real: links inside a sentence and footnote marks under 24 px, the late-job line 38 px tall, the page title's box lying over the lower edge of the link above it, a highlighted day and month split over two lines, nine text sizes on the home and sixteen across the app, and the tap flash, text selection, typing cursor and big numerals on the browser's defaults. Not real: the assistant chip on a memory line, which already had a 44 px hit area.",
+    fix: "test/ui-audit.ts touch(): on every owner-app page at phone width a control is reachable over 24 by 44 px (a link inside a line or a footnote mark 24 by 24), measured as what a finger at that spot would hit; a highlight of 28 characters or fewer stays on one line; every text size is on one scale of ten steps and a page uses eight at most; a number set big has tabular numerals; the tap flash is off, a selection has the app's colour and the typing cursor differs from the text. test/ui-quality.test.ts runs it over OWNER_PAGES (test/ui-rig.ts). The rules are in src/dashboard/html-app.ts and the page styles. A short highlight wider than its line (28 wide capitals at 320 px) wraps inside it and never widens the page (code review of PR 243; same test). Open: Settings pages are outside this check.",
+  },
   G991: {
     closed: "claude/secret-set-aside",
     title: "A secret-shaped value saved before the write check knew its shape was printed whole on the owner's own screens, and still stands as a side of a question",

@@ -99,6 +99,78 @@ export async function audit(page: any): Promise<string[]> {
   });
 }
 
+// The owner app's type scale: every size a visible word is set in comes from here, and one page
+// uses at most TYPE_MAX of them (design checklist, 2026-11-19).
+export const TYPE_SCALE = [11, 13, 15, 17, 19, 22, 30, 44, 56, 60];
+export const TYPE_MAX = 8;
+// A highlight this short stays on one line.
+export const SHORT_MARK = 28;
+
+// Touch checks for the owner app on a phone, measured where a finger lands (elementFromPoint), so
+// a small glyph with a larger hit area passes and a large box covered by another fails:
+// a control standing on its own takes a tap 44 px high and 24 px wide (WCAG 2.2 target size, the
+// platform's 44 for height); a link inside a sentence, 24 by 24. Then: a short highlight never
+// breaks across lines; text sizes come from the scale; a big numeral is set in tabular figures;
+// the tap flash, the selection and the typing cursor are the app's own, not the browser's.
+export async function touch(page: any): Promise<string[]> {
+  return page.evaluate(async ({ scale, max, short }: { scale: number[]; max: number; short: number }) => {
+    const out: string[] = [];
+    const where = (el: Element) => {
+      const cls = el.getAttribute("class") ? `.${el.getAttribute("class")!.trim().split(/\s+/).join(".")}` : "";
+      const txt = (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
+      return `<${el.tagName.toLowerCase()}${cls}>${txt ? ` "${txt}"` : ""}`;
+    };
+    const visible = (el: Element) => {
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none";
+    };
+    // In a line of text: a link laid out inline (it flows with words or other links), or a footnote mark.
+    const inText = (el: Element) => getComputedStyle(el).display === "inline" || el.matches("a.b-ref");
+    for (const el of document.querySelectorAll("a[href],button,[role=button],summary,select")) {
+      if (!visible(el) || (el as HTMLButtonElement).disabled) continue;
+      (el as HTMLElement).scrollIntoView({ block: "center", inline: "nearest" });
+      const rects = [...el.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+      const r = rects.sort((a, b) => b.width - a.width)[0];
+      if (!r) continue;
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const hits = (x: number, y: number) => { const h = document.elementFromPoint(x, y); return !!h && (el.contains(h) || h.contains(el) && h.closest("a,button,summary,label") === h); };
+      if (!hits(cx, cy)) continue; // covered or off the screen: not this check's
+      const inline = inText(el);
+      // How far the hit area reaches from the centre, each way, up to the size asked for.
+      const reach = (x: number, y: number, most: number) => { let d = 0; while (d < most && hits(cx + x * (d + 1), cy + y * (d + 1))) d++; return d; };
+      const needH = inline ? 24 : 44, needW = 24;
+      const h = 1 + reach(0, -1, needH) + reach(0, 1, needH), w = 1 + reach(-1, 0, needW) + reach(1, 0, needW);
+      if (h < needH || w < needW) out.push(`tap target under ${inline ? "24x24" : "24x44"} (${Math.round(r.width)}x${Math.round(r.height)} drawn): ${where(el)}`);
+    }
+    window.scrollTo(0, 0);
+    for (const m of document.querySelectorAll("mark")) {
+      if (visible(m) && (m.textContent ?? "").trim().length <= short && m.getClientRects().length > 1) out.push(`a short highlight breaks across lines: ${where(m)}`);
+    }
+    const sizes = new Set<number>();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement;
+      if (!el || !n.textContent?.trim() || !visible(el) || el.closest("script,style,svg,canvas")) continue;
+      const cs = getComputedStyle(el), px = Math.round(parseFloat(cs.fontSize) * 10) / 10;
+      if (!sizes.has(px) && !scale.includes(px)) out.push(`text size ${px}px is not on the type scale: ${where(el)}`);
+      sizes.add(px);
+      if (px >= 30 && /^[\d\s.,:%]+$/.test(n.textContent.trim()) && !cs.fontVariantNumeric.includes("tabular-nums")) out.push(`a big numeral is not in tabular figures: ${where(el)}`);
+    }
+    if (sizes.size > max) out.push(`${sizes.size} text sizes on one page (at most ${max}): ${[...sizes].sort((a, b) => a - b).join(", ")}`);
+    const root = getComputedStyle(document.documentElement);
+    const alpha = (c: string) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return 1; const p = m[1]!.split(/[,\s/]+/).filter(Boolean); return p.length > 3 ? Number(p[3]) : 1; };
+    if (alpha((root as unknown as Record<string, string>).webkitTapHighlightColor ?? "") > 0) out.push("the browser's own tap flash is on (-webkit-tap-highlight-color)");
+    const sel = getComputedStyle(document.body, "::selection").backgroundColor;
+    if (!sel || alpha(sel) === 0) out.push("text selection has no colour of the app's own (::selection)");
+    for (const f of document.querySelectorAll("input[type=text],input:not([type]),textarea")) {
+      if (!visible(f)) continue;
+      const cs = getComputedStyle(f);
+      if (cs.caretColor === cs.color) out.push(`the typing cursor is the text colour, not the app's ink: ${where(f)}`);
+    }
+    return out;
+  }, { scale: TYPE_SCALE, max: TYPE_MAX, short: SHORT_MARK });
+}
+
 // Tab through the page: every stop must be visible and show a focus ring.
 export async function keyboard(page: any, stops = 40): Promise<string[]> {
   const out: string[] = [];

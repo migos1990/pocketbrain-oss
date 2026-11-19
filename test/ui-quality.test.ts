@@ -7,8 +7,8 @@
 import { test, expect, afterAll, setSystemTime } from "bun:test";
 import { join } from "node:path";
 import { appendFileSync } from "node:fs";
-import { audit, keyboard, matchScreenshot } from "./ui-audit";
-import { uiRig, DASHBOARD_PAGES, BUSY_PAGES, DOOR_PAGES, ASK_SAYS } from "./ui-rig";
+import { audit, keyboard, matchScreenshot, touch } from "./ui-audit";
+import { uiRig, DASHBOARD_PAGES, BUSY_PAGES, DOOR_PAGES, ASK_SAYS, OWNER_PAGES } from "./ui-rig";
 
 let pw: any;
 let browser: any;
@@ -87,6 +87,37 @@ run("on a phone the overview and the door's start page fit the screen without si
     await ctx.close();
   } finally { r.stop(); }
 }, 60_000);
+
+// The owner app on a phone, dark, a lived-in day: where a finger lands, highlights, the type scale
+// and the browser defaults (test/ui-audit.ts touch; design checklist 2026-11-19).
+run("on a phone every owner-app page takes a tap, keeps a short highlight whole, stays on the type scale and leaves no browser default", async () => {
+  setSystemTime(CLOCK);
+  const r = await uiRig({ busy: true, ports: [18971, 18972] });
+  const problems: string[] = [];
+  try {
+    const ctx = await browser.newContext({ colorScheme: "dark", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await page.goto(r.loginUrl);
+    for (const [name, path] of DASHBOARD_PAGES.filter(([n]) => OWNER_PAGES.includes(n))) {
+      await page.goto(r.dash + path);
+      for (const p of await touch(page)) problems.push(`${name}: ${p}`);
+    }
+    // A short highlight is kept whole only while it fits: 28 wide capitals on a narrow phone wrap
+    // inside the line and never push the page sideways (code review of PR 243).
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.goto(r.dash + "/home");
+    const wide = await page.evaluate(() => {
+      const m = document.querySelector("mark.nb");
+      if (!m) return "no short highlight on the home";
+      m.textContent = "W".repeat(28);
+      const b = m.getBoundingClientRect();
+      return b.right > innerWidth || document.documentElement.scrollWidth > innerWidth ? `a wide short highlight runs off the screen (${Math.round(b.right)} of ${innerWidth})` : "";
+    });
+    if (wide) problems.push(`home at 320: ${wide}`);
+    await ctx.close();
+  } finally { r.stop(); }
+  expect(problems).toEqual([]);
+}, 120_000);
 
 // Settings on a phone with what a lived-in brain holds and the demo doesn't: a gardener alert naming a
 // path, a clash naming an address, long words with no break in them (use-it check on v0.2.1).

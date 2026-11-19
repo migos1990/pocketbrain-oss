@@ -115,25 +115,27 @@ const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w
 // Two inks on a page: the name big, the surname in the headline ink; the role line between two
 // rules; footnote numbers as small headline-ink blocks; what links here as one sentence.
 export const PAGE_CSS = `
-form.notes{display:flex;flex-direction:column;gap:8px;margin:0 0 18px}form.notes label{display:flex;flex-direction:column;gap:2px}form.notes label b{font-weight:900;font-size:15px;text-transform:uppercase}form.notes label small{font-size:14px;line-height:19px;color:var(--muted)}
+form.notes{display:flex;flex-direction:column;gap:8px;margin:0 0 18px}form.notes label{display:flex;flex-direction:column;gap:2px}form.notes label b{font-weight:900;font-size:15px;text-transform:uppercase}form.notes label small{font-size:15px;line-height:19px;color:var(--muted)}
 form.notes textarea{font:inherit;font-size:17px;line-height:24px;color:var(--text);background:var(--paper);border:2px solid var(--text);border-radius:0;padding:10px 12px;min-height:160px;width:100%;resize:vertical}
 form.notes .acts{display:flex;gap:18px;align-items:center}
 /* The box's answer, pinned with it (G727). */
 .pinned .said{max-height:38vh;overflow:auto;background:var(--paper);margin-bottom:6px}.pinned .said .you{display:none}.pinned .said .chips{margin:0 0 6px}
 p.edited{font-size:13px;line-height:18px;color:var(--muted);margin:0 0 10px}
 .band{display:flex;flex-direction:column;gap:0;margin:0 0 14px}
-.band .bar{display:flex;justify-content:space-between;align-items:center;font-size:14px;line-height:20px;font-weight:500}
+.band .bar{display:flex;justify-content:space-between;align-items:center;font-size:15px;line-height:20px;font-weight:500}
 .band .bar a{font-weight:700;display:inline-flex;align-items:center;min-height:44px}
 .band h1{font-size:56px;line-height:.9;margin:12px 0 10px;color:var(--text);mix-blend-mode:normal;max-width:none}
 .band h1 span{display:block;color:var(--headline-ink);mix-blend-mode:var(--blend)}
 .band .kind{margin:0;font-size:15px;line-height:20px;font-weight:500;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:7px 0}
-.band .chips{margin:0}.band .chip{font-size:14px;line-height:20px;font-weight:500;color:var(--muted)}
+.band .chips{margin:0}.band .chip{font-size:15px;line-height:20px;font-weight:500;color:var(--muted)}
 .band .head{display:block}
 .prose{font-size:17px;line-height:25px}
 .prose a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
 .prose h2,.prose h3{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:22px 0 4px}
 .prose sup{line-height:0}
-.prose sup a{font-size:10px;line-height:14px;font-weight:800;display:inline-block;min-width:14px;padding:0 3px;margin-left:2px;text-align:center;background:var(--headline-ink);color:var(--on-headline);vertical-align:2px}
+.prose a{padding-block:2px}p.links a{padding-block:1.5px}dd a{padding-block:3px}.prose a,p.links a,dd a{background-clip:content-box}
+.prose sup a{position:relative;padding-block:0}.prose sup a::after{content:"";position:absolute;inset:0 -5px -10px}
+.prose sup a{font-size:11px;line-height:14px;font-weight:800;display:inline-block;min-width:14px;padding:0 3px;margin-left:2px;text-align:center;background:var(--headline-ink);color:var(--on-headline);vertical-align:2px}
 .prose ol{padding-left:30px;color:var(--muted);font-size:13px;line-height:18px;list-style:decimal}
 .prose ol li{margin:0 0 6px}
 .prose details.quote{border:0;margin:0 0 4px}.prose details.quote summary{display:flex;align-items:center;gap:8px;min-height:44px;font-weight:600;color:var(--text);cursor:pointer;list-style:none}.prose details.quote summary::-webkit-details-marker{display:none}.prose details.quote summary::before{content:"+";display:inline-grid;place-items:center;width:18px;height:18px;border:1.5px solid currentColor;font-weight:800;line-height:1}.prose details.quote[open] summary::before{content:"−"}
@@ -148,15 +150,15 @@ p.edited{font-size:13px;line-height:18px;color:var(--muted);margin:0 0 10px}
 .describe blockquote{margin:0;padding-left:12px;border-left:3px solid var(--marker-ink);font-size:15px;line-height:22px;color:var(--text);overflow-wrap:anywhere}
 .describe .acts{display:flex;gap:10px;flex-wrap:wrap}.describe form{margin:0}
 .describe .acts{align-items:center;gap:18px}
-.describe button.yes{font:inherit;font-size:16px;font-weight:800;border:0;border-radius:0;padding:0 16px;min-height:44px;background:var(--headline-ink);color:var(--on-headline);cursor:pointer}
+.describe button.yes{font:inherit;font-size:17px;font-weight:800;border:0;border-radius:0;padding:0 16px;min-height:44px;background:var(--headline-ink);color:var(--on-headline);cursor:pointer}
 .describe .kind{margin:0;font-size:13px;line-height:18px;color:var(--muted)}
 .describe.quiet-card{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 h2.sec{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:24px 0 6px}
-p.links{margin:0;font-size:16px;line-height:24px}
+p.links{margin:0;font-size:17px;line-height:24px}
 p.links a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
 ul.book{margin:0;padding:0;list-style:none}
 h3.day{font-size:13px;line-height:18px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:16px 0 0}
-ul.book li{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:16px;line-height:22px}
+ul.book li{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:17px;line-height:22px}
 ul.book li>span:first-child{min-width:0;flex:1;overflow-wrap:anywhere}
 ul.book a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
 ul.book .kind{flex:none;max-width:40%;text-align:right;font-size:13px;line-height:18px;color:var(--muted)}
@@ -166,7 +168,7 @@ details summary{min-height:44px;display:flex;align-items:center;cursor:pointer;f
 #who select{font:inherit;font-size:17px;line-height:24px;color:var(--text);background:var(--paper);border:2px solid var(--text);border-radius:0;padding:0 10px;min-height:44px;flex:1;min-width:0}
 #who form[action$="note-sensitivity"] button{font:inherit;font-size:15px;line-height:20px;font-weight:800;color:var(--text);background:none;border:0;border-radius:0;padding:0;min-height:44px;cursor:pointer;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}
 dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:15px;line-height:22px}
-dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere;line-height:24px}
 .seen{display:flex;gap:6px 14px;align-items:center;flex-wrap:wrap;margin:16px 0 0;padding:10px 0 0;border-top:2px solid var(--text);font-size:13px;line-height:18px;color:var(--muted)}
 .seen b{font-weight:800;color:var(--text)}.seen span{font-weight:500;color:var(--text)}
 .wrap.page{padding-bottom:calc(170px + env(safe-area-inset-bottom))}

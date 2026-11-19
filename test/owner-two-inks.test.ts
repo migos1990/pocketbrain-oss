@@ -68,14 +68,14 @@ test("On your mind: the headline, how many things wait in the marker ink, the va
   const { get } = await setup();
   const home = await get("/home");
   expect(home).toMatch(/<header class="top"><p class="day"><span>[^<]+<\/span><a class="me" href="\/who">Robin[^<]*<\/a><\/p><h1>On your mind<\/h1><\/header><p class="count"><b>\d+<\/b><span>things? waits? for you<\/span><\/p>/);
-  expect(home).toContain("Next for Atlas launch: freeze the beta build on <mark>15 October</mark>. Or <mark>22 October</mark>?");
+  expect(home).toContain("Next for Atlas launch: freeze the beta build on <mark class=\"nb\">15 October</mark>. Or <mark class=\"nb\">22 October</mark>?");
   expect(home).toMatch(/<nav class="tabbar" aria-label="Tabs"><a href="\/home" aria-current="page">On your mind<\/a><a href="\/memory">Memory<\/a><a href="\/ask">Ask Braniac<\/a><a href="\/who">Who knows<\/a><\/nav>/);
   expect(home).not.toContain("<svg aria-hidden=\"true\" width=\"24\"");
 }), 60_000);
 
 test("the highlighter marks each part after the last, and escapes the rest", () => {
-  expect(marked("A <b> 15 October. Or 22 October?", ["15 October", "22 October"])).toBe("A &lt;b&gt; <mark>15 October</mark>. Or <mark>22 October</mark>?");
-  expect(marked("Grace is x. Or y?", ["missing", "y"])).toBe("Grace is x. Or <mark>y</mark>?");
+  expect(marked("A <b> 15 October. Or 22 October?", ["15 October", "22 October"])).toBe("A &lt;b&gt; <mark class=\"nb\">15 October</mark>. Or <mark class=\"nb\">22 October</mark>?");
+  expect(marked("Grace is x. Or y?", ["missing", "y"])).toBe("Grace is x. Or <mark class=\"nb\">y</mark>?");
   expect(marked("plain")).toBe("plain");
 });
 

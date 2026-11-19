@@ -82,6 +82,9 @@ export const DASHBOARD_PAGES: [string, string][] = [
   ["night", "/night"],
 ];
 
+// The owner app's pages, as the phone shows them (the touch checks in test/ui-audit.ts).
+export const OWNER_PAGES = ["home", "memory", "memory-kind", "memory-search", "memory-changes", "ask", "ask-chats", "who", "let", "owner-page", "owner-project", "owner-page-edit", "settle", "see", "see-page", "share", "night"];
+
 // The same rig with o.busy: lists with items in them.
 export const BUSY_PAGES: [string, string][] = [
   ["overview-busy", "/overview"],

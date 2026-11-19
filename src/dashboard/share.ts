@@ -167,15 +167,15 @@ export function shareWords(s: State, p: SharePicture) {
 
 const SHARE_CSS = `
 .share-top h1{font-size:44px;line-height:.92;max-width:none}
-.share-intro{margin:14px 0 0;font-size:16px;line-height:23px}
+.share-intro{margin:14px 0 0;font-size:17px;line-height:23px}
 .shot{display:block;width:100%;height:auto;aspect-ratio:4/5;margin:18px 0 0;box-shadow:0 0 0 2px var(--text);background:var(--raised);-webkit-touch-callout:default}
 .share-go{display:flex;gap:10px;margin:16px 0 0}
 .share-go button{flex:1;font:inherit;font-size:17px;font-weight:800;min-height:48px;display:flex;align-items:center;justify-content:center;border:0;border-radius:0;cursor:pointer;text-decoration:none;background:var(--headline-ink);color:var(--on-headline)}
 .share-go .plain{background:none;color:var(--text);box-shadow:inset 0 0 0 2px var(--text)}
 .share-go [hidden]{display:none}
-.share-note{margin:12px 0 0;font-size:14px;line-height:20px;color:var(--muted)}
+.share-note{margin:12px 0 0;font-size:15px;line-height:20px;color:var(--muted)}
 .share-note a{color:var(--text);font-weight:800;display:inline-block;padding:12px 0}
-.none{margin:18px 0 0;padding:22px 16px;border:2px solid var(--text);font-size:21px;line-height:27px;font-weight:800}
+.none{margin:18px 0 0;padding:22px 16px;border:2px solid var(--text);font-size:22px;line-height:27px;font-weight:800}
 `;
 
 // The drawing: a 1080 by 1350 canvas (4:5, the tallest a feed shows whole) in the page's own
