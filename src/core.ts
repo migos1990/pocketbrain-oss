@@ -982,6 +982,13 @@ function settleCase(p: Packet, held = false, rules?: Rules): SettleCase {
   };
 }
 
+// One question as the owner's page of it reads it (G1002): the same sides the settle screen shows,
+// for a question in any state, from notes the caller already holds. Nothing is read or written.
+export function questionCase(note: Note, target: Note, rules: Rules): SettleCase {
+  const attr = String(note.fm.fact_key).split("#")[1] ?? "";
+  return settleCase({ note, target, attr, fact: target.fm.facts?.[attr] }, false, rules);
+}
+
 // held: also the ones the Gardener hasn't weighed yet, marked `held` (the owner may answer them
 // early on the settle screen; home lists them under the Gardener, never as waiting on the owner).
 export function ownerConflicts(root: string, now = clock(), o: { held?: boolean } = {}): SettleCase[] {

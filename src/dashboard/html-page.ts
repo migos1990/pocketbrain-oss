@@ -20,7 +20,11 @@ import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
 import { appPage, composer } from "./html-app";
 import { editedOn, dayWords, yourNotes, NOTE_MAX } from "../page-notes";
 import { plain, shutBody, attrWords, maskSecrets } from "./home";
-import { ownerConflicts } from "../core";
+import { ownerConflicts, questionCase } from "../core";
+import { question, ordered } from "./html-settle";
+import { fromWords } from "./home";
+import { MONTHS_SHORT } from "../util";
+import { today } from "../brain";
 import { inboxConflicts } from "../settle-inbox";
 import { MADE } from "../wiki";
 import { sensitivityRank } from "../brain";
@@ -105,6 +109,17 @@ export const PAGE_COPY = {
   declined: "You said the web's guess wasn't it.",
   askAgain: "Ask again",
   undo: "Undo",
+  question: "question",
+  qOpen: "not settled yet",
+  qSettled: "settled",
+  qSettledOn: "settled {day}",
+  qAbout: "About {page}.",
+  qSaid: "What the sources said:",
+  qSettle: "Settle it",
+  qBoth: "You kept both.",
+  qDone: "This one is settled.",
+  qGone: "The page this was about is no longer in your memory.",
+  qAsk: "A question",
 } as const;
 
 // The line the Notion import wrote on an org it made from a free-text field: how the page came to
@@ -155,6 +170,10 @@ p.edited{font-size:13px;line-height:18px;color:var(--muted);margin:0 0 10px}
 .describe.quiet-card{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 h2.sec{font-size:22px;line-height:26px;font-weight:900;letter-spacing:-.02em;margin:24px 0 6px}
 p.links{margin:0;font-size:17px;line-height:24px}
+ul.sides{list-style:none;margin:0 0 16px;padding:0;border-bottom:2px solid var(--text)}
+ul.sides li{padding:10px 0 12px;border-top:2px solid var(--text);font-size:17px;line-height:24px;font-weight:700;overflow-wrap:anywhere}
+ul.sides .kind{display:block;margin:0 0 2px;font-size:13px;line-height:18px;font-weight:500;color:var(--muted)}
+.prose a.settle{background:none;display:inline-flex;align-items:center;min-height:44px;font-size:17px;font-weight:800;text-decoration:underline;text-decoration-color:var(--headline-ink);text-decoration-thickness:3px;text-underline-offset:6px}
 p.links a{background:linear-gradient(transparent 60%,color-mix(in srgb,var(--headline-ink) 35%,transparent) 60%)}
 ul.book{margin:0;padding:0;list-style:none}
 h3.day{font-size:13px;line-height:18px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:16px 0 0}
@@ -469,8 +488,74 @@ function weekSection(s: State, w: Week, going: Note[], link: (n: Note) => string
   return `<h2 class="sec">${PAGE_COPY.bookNow}</h2>${parts.join("")}${quiet}${rest}`;
 }
 
+// A page's own text as the owner reads it (G1002): what a person or an import typed into it is
+// kept, and said in words. A day written 2026-03-04 reads "4 Mar" (with its year when it is another
+// year, as the page writer says a fact's date), a web address reads as its site's name and opens
+// it, and **bold** or `code` marks are not printed. Only words between tags, above the references:
+// a link's own words, a source's quoted words and a reference are left as they are.
+const SKIP_IN = /^<(a|sup|blockquote|code|pre|q)\b/i, SKIP_OUT = /^<\/(a|sup|blockquote|code|pre|q)>/i;
+function dayInWords(t: string): string {
+  return t.replace(/(?<![\w/-])(\d{4})-(\d{2})-(\d{2})(?![\w/-])/g, (m, y: string, mo: string, d: string) => +mo >= 1 && +mo <= 12 && +d >= 1 && +d <= 31 ? `${+d} ${MONTHS_SHORT[+mo - 1]}${y === today().slice(0, 4) ? "" : ` ${y}`}` : m);
+}
+const WEB = /\bhttps?:\/\/[^\s<>"]+/g;
+function siteLink(m: string): string {
+  const end = /(?:&quot;|&#39;|[.,;:!?)\]])+$/.exec(m)?.[0] ?? "", url = m.slice(0, m.length - end.length);
+  const host = /^https?:\/\/(?:www\.)?([^/?#:&]+)/.exec(url)?.[1];
+  return host ? `<a href="${url}" rel="noopener noreferrer nofollow" target="_blank">${host}</a>${end}` : m;
+}
+const inWords = (t: string) => dayInWords(t).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/`([^`\n]+)`/g, "$1");
+export function readable(html: string): string {
+  const cut = html.indexOf("<h2>References</h2>"), head = cut < 0 ? html : html.slice(0, cut);
+  let skip = 0;
+  return head.split(/(<[^>]+>)/).map((part) => {
+    if (part.startsWith("<")) { if (SKIP_IN.test(part)) skip++; else if (SKIP_OUT.test(part) && skip) skip--; return part; }
+    if (skip || !part.trim()) return part;
+    // An address is linked whole, before anything in it could read as a day or a mark.
+    let out = "", at = 0;
+    for (const m of part.matchAll(WEB)) { out += inWords(part.slice(at, m.index)) + siteLink(m[0]); at = m.index + m[0].length; }
+    return out + inWords(part.slice(at));
+  }).join("") + (cut < 0 ? "" : html.slice(cut));
+}
+
+// A chip that only says again a word of the page's name or of the line under it adds nothing
+// (G1002): a routine filed under its assistant's name ("Town's routine", chip "Town"), a page whose
+// name starts with its area. Whole words only, any letters.
+export function chipSays(chip: string, ...lines: (string | undefined)[]): boolean {
+  if (!chip) return false;
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(chip)}(?![\\p{L}\\p{N}])`, "iu").test(lines.filter(Boolean).join(" · "));
+}
+
+// A question's own page (G1002): the question as the settle screen asks it and each side in words,
+// never the packet the hub and the resolver read. An open one leads to the settle screen, the only
+// screen that asks; a settled one says so. It has no box, no edit and no who-sees of its own: a
+// question is given to no assistant but the resolver. Private sides show only right after a
+// sign-in, by the settle screen's own rule.
+function questionPage(s: State, csrf: string, n: Note, fresh: boolean): string {
+  const target = s.notes.find((x) => x.fm.id === String(n.fm.fact_key ?? "").split("#")[0]);
+  const status = String(n.fm.status ?? ""), open = status === "open" || status === "escalated";
+  const head = (h1: string, state: string, area = "") => `<header class="band${AREAS.has(area) ? ` t-${area}` : ""}"><div class="bar"><a href="/memory">‹ ${PAGE_COPY.back}</a></div>
+<div class="head"><div><h1>${esc(h1)}</h1><p class="kind">${esc(`${PAGE_COPY.question} · ${state}`)}</p></div></div></header>`;
+  const at = String((n.fm.answer as { at?: unknown } | undefined)?.at ?? (n.fm.resolution as { at?: unknown } | undefined)?.at ?? "");
+  const state = open ? PAGE_COPY.qOpen : /^\d{4}-\d{2}-\d{2}/.test(at) ? fill(PAGE_COPY.qSettledOn, { day: dayWords(at.slice(0, 10)) }) : PAGE_COPY.qSettled;
+  if (!target) return appPage(PAGE_COPY.qAsk, "memory", `${head(PAGE_COPY.qAsk, state)}\n<p class="quiet">${PAGE_COPY.qGone}</p>`, { css: PAGE_CSS, wrap: "page" });
+  const c = questionCase(n, target, s.rules);
+  const name = displayName(c.page, c.title);
+  const about = `<p>${fill(esc(PAGE_COPY.qAbout), { page: `<a href="${href(c.page)}">${esc(name)}</a>` })}</p>`;
+  const title = (id: string) => s.notes.find((x) => x.fm.id === id)?.fm.title as string | undefined;
+  const side = (x: (typeof c.sides)[number]) => {
+    const v = maskSecrets(plain(x.value, title)).trim(), from = cap([fromWords(x, s.rules), x.as_of ? dayWords(String(x.as_of).slice(0, 10)) : ""].filter(Boolean).join(", "));
+    return `<li>${from ? `<span class="kind">${esc(from)}:</span> ` : ""}${esc(v)}${/[.!?…]$/.test(v) ? "" : "."}</li>`;
+  };
+  const sides = c.private && !fresh ? `<p class="quiet">${PAGE_COPY.shutPage}</p>${signInAgain(csrf)}` : c.sides.length ? `<p>${PAGE_COPY.qSaid}</p><ul class="sides">${ordered(c).map(side).join("")}</ul>` : "";
+  const end = open ? `<a class="settle" href="/settle/${esc(c.id)}">${PAGE_COPY.qSettle}</a>` : `<p>${status === "kept-both" || status === "both-hold" ? PAGE_COPY.qBoth : PAGE_COPY.qDone}</p>`;
+  const h1 = c.private && !fresh ? name : question(c);
+  return appPage(h1, "memory", `${head(h1, state, String(target.fm.area ?? ""))}
+<div class="prose">${about}${sides}${end}</div>`, { css: PAGE_CSS, wrap: "page" });
+}
+
 export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o: { said?: string; reply?: SayReply; flash?: string; undo?: string; fresh?: boolean; edit?: boolean } = {}): string {
   const fresh = !!o.fresh, closed = !fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private");
+  if (folderOf(n.fm.id) === "disputes" && n.fm.fact_key) return questionPage(s, csrf, n, fresh);
   const name = displayName(n.fm.id, n.fm.title);
   const first = callName(n.fm.id, name);
   const count = sourceCount(n);
@@ -480,11 +565,11 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   // sign-in, whatever it was then (audit v7, G551).
   const met = meetings(s, n, fresh, closed);
   const text = dropStaleContact(maskSecrets((fresh ? n.body : shutInProse(n)) ?? ""), n, met);
-  const prose = wikiBody(s, isOrg(n) ? text.replace(IMPORT_LINE, "") : text, (ref) => {
+  const prose = readable(wikiBody(s, isOrg(n) ? text.replace(IMPORT_LINE, "") : text, (ref) => {
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
     return [];
-  }, 2, true).replace(/href="\/note\//g, 'href="/p/').replace(/(class="b-ref">)\[(\d+)\]/g, "$1$2").replace(/\s+(<sup>)/g, "$1");
+  }, 2, true)).replace(/href="\/note\//g, 'href="/p/').replace(/(class="b-ref">)\[(\d+)\]/g, "$1$2").replace(/\s+(<sup>)/g, "$1");
   const c = connections(s, n);
   // What links here, as one sentence of links.
   const mentioned = c.mentionedIn.length ? `<h2>${PAGE_COPY.mentioned}</h2><p class="links">${c.mentionedIn.map((x) => `<a href="${href(x.fm.id)}">${esc(displayName(x.fm.id, x.fm.title))}</a>`).join(", ")}.</p>` : "";
@@ -505,11 +590,13 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   // The area's chip: its label in policy, a short slug ("ov") in capitals, never a lone "Ov"; none
   // when it only repeats the org the line under the name already says (owner's phone, 2026-11-07;
   // G732).
-  const chip = areaChip(s, n, area, personLine(s, n, fresh, closed));
+  const areaWord = areaChip(s, n, area, personLine(s, n, fresh, closed));
   // A routine says whose it is: "Town's routine" (owner, 2026-11-03: "which agent does what").
   const runsIn = (x: Note) => x.fm.type === "capability" && assistantOf(x.fm.id) ? agentTitle(s.rules, assistantOf(x.fm.id)) : undefined;
   const kind = runsIn(n) ? `${whose(runsIn(n)!)} ${PAGE_COPY.routine}` : kindWord(String(n.fm.type ?? kindLabel(folderOf(n.fm.id))));
   // A person's name in two lines, the surname in the headline ink; anything else in one.
+  const under = personLine(s, n, fresh, closed) ?? kind;
+  const chip = chipSays(areaWord, name, under) ? "" : areaWord;
   const words = name.split(/\s+/);
   const title = folderOf(n.fm.id) === "people" && words.length > 1 ? `${esc(words[0]!)} <span>${esc(words.slice(1).join(" "))}</span>` : esc(name);
   // Edit opens the page's own notes (G718), right after a sign-in only.

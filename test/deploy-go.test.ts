@@ -232,22 +232,22 @@ test("go prints the brain-quotes line at 0, so a clean report is seen to have ru
 test("go reads the owner's pages before and after the change and says what the new code did, and never blocks", async () => {
   const r = rig();
   const reads: PageRead[] = [
-    { pages: 40, failed: 0, odd: 3, odd_pages: 2, by_rule: { doubled: 3 }, median_ms: 20, p95_ms: 60, max_ms: 90, slow: 0 },
-    { pages: 40, failed: 0, odd: 5, odd_pages: 4, by_rule: { doubled: 2, "machine-date": 3 }, median_ms: 22, p95_ms: 400, max_ms: 900, slow: 2 },
+    { pages: 40, failed: 0, odd: 3, odd_pages: 2, by_rule: { doubled: 3 }, by_kind: {}, median_ms: 20, p95_ms: 60, max_ms: 90, slow: 0 },
+    { pages: 40, failed: 0, odd: 5, odd_pages: 4, by_rule: { doubled: 2, "machine-date": 3 }, by_kind: {}, median_ms: 22, p95_ms: 400, max_ms: 900, slow: 2 },
   ];
   let i = 0;
   const s = await r.go(r.commit("0.2.0"), { ...r.fx(), pageRead: async () => { r.calls.push(`read v${readFileSync(join(r.app, "VERSION"), "utf8").trim()}`); return reads[i++]; } });
   expect(s.status).toBe("deployed");
   // The first reading is taken on the old checkout, before anything is installed; the second after the hub is verified.
   expect(steps(r.calls).filter((c) => /^(read|install|restart)/.test(c))).toEqual(["read v0.1.0", "install", "restart", "read v0.2.0"]);
-  expect(logs(r.calls)).toContain("pages read: 5 odd sentences on 4 of 40 pages, 2 more than on the code before (machine-date +3, doubled -1); a page renders in 22 ms at the median (was 20), 900 ms at the slowest (was 90), 2 over 300 ms (was 0); WORSE than the code before: sentences and speed (report only; counts and milliseconds, never a page's name or words)");
+  expect(logs(r.calls)).toContain("pages read: 5 odd sentences on 4 of 40 pages, 2 more than on the code before (machine-date +3, doubled -1); a page renders in 22 ms at the median (was 20), 900 ms at the slowest (was 90), 2 over 300 ms (was 0); by rule: machine-date 3, doubled 2; WORSE than the code before: sentences and speed (report only; counts and milliseconds, never a page's name or words)");
   expect(s.page_read).toEqual(reads[1]);
   expect(JSON.parse(readFileSync(r.state, "utf8")).page_read).toEqual(reads[1]);
 });
 
 test("go with no reading from the code before says so; a reading that fails says so and the deploy stands", async () => {
   const r = rig();
-  const one: PageRead = { pages: 12, failed: 1, odd: 0, odd_pages: 0, by_rule: {}, median_ms: 9, p95_ms: 30, max_ms: 31, slow: 0 };
+  const one: PageRead = { pages: 12, failed: 1, odd: 0, odd_pages: 0, by_rule: {}, by_kind: {}, median_ms: 9, p95_ms: 30, max_ms: 31, slow: 0 };
   let n = 0;
   // The code that was running has no such script: the first call answers nothing.
   const s1 = await r.go(r.commit("0.2.0"), { ...r.fx(), pageRead: async () => (n++ === 0 ? undefined : one) });
@@ -269,7 +269,7 @@ test("go on a checkout already moved by hand takes no reading 'before': the new 
   const sha = r.commit("0.2.0");
   const sh = (cwd: string, ...a: string[]) => Bun.spawnSync(["git", "-C", cwd, ...a]);
   sh(r.app, "fetch", "-q", "origin"); sh(r.app, "checkout", "-q", "--detach", sha); // by hand, no restart: the hub still runs 0.1.0
-  const one: PageRead = { pages: 12, failed: 0, odd: 4, odd_pages: 3, by_rule: { doubled: 4 }, median_ms: 9, p95_ms: 30, max_ms: 31, slow: 0 };
+  const one: PageRead = { pages: 12, failed: 0, odd: 4, odd_pages: 3, by_rule: { doubled: 4 }, by_kind: {}, median_ms: 9, p95_ms: 30, max_ms: 31, slow: 0 };
   let n = 0;
   const s = await r.go(sha, { ...r.fx(), pageRead: async () => { n++; return one; } });
   expect(s.status).toBe("deployed");

@@ -120,6 +120,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "dashboard/html-history.ts#brainOnPage": { class: "not-reviewed" },
   "dashboard/html-home.ts#replyHtml": { class: "not-reviewed" },
   "dashboard/html-map.ts#accessMap": { class: "not-reviewed" },
+  "dashboard/html-page.ts#SKIP_IN": { class: "machine-words", why: "HTML tag names whose words the page's text pass leaves as they are (a link, a reference, a quote, code)" },
   "dashboard/html-page.ts#describeCard": { class: "not-reviewed" },
   "dashboard/html-page.ts#ownerPage": { class: "not-reviewed" },
   "dashboard/html.ts#button": { class: "not-reviewed" },

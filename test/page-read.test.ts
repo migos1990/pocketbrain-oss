@@ -25,8 +25,8 @@ test("page-read prints counts and milliseconds only, and writes no page, commit 
   expect(r.exitCode).toBe(0);
   const out = r.stdout.toString().trim();
   const j = JSON.parse(out) as Record<string, unknown>;
-  expect(Object.keys(j).sort()).toEqual(["by_rule", "failed", "max_ms", "median_ms", "odd", "odd_pages", "p95_ms", "pages", "slow"]);
-  for (const [k, v] of Object.entries(j)) if (k !== "by_rule") expect(typeof v).toBe("number");
+  expect(Object.keys(j).sort()).toEqual(["by_kind", "by_rule", "failed", "max_ms", "median_ms", "odd", "odd_pages", "p95_ms", "pages", "slow"]);
+  for (const [k, v] of Object.entries(j)) if (k !== "by_rule" && k !== "by_kind") expect(typeof v).toBe("number");
   for (const [k, v] of Object.entries(j.by_rule as object)) { expect(RULES as readonly string[]).toContain(k); expect(typeof v).toBe("number"); }
   expect(j.pages as number).toBeGreaterThan(50);
   expect(asPageRead(j)).toEqual(j as unknown as PageRead);
@@ -58,12 +58,12 @@ test("the night's run counts what the read counts, and is still the one that kee
 const read = (o: Partial<Proofread> = {}): Proofread => ({ at: "x", pages: 5, odd_pages: 0, by_rule: {}, by_kind: {}, ...o });
 test("the summary: totals by rule, the middle and the slowest page, and how many are over the line", () => {
   expect(SLOW_PAGE_MS).toBe(300);
-  expect(pageReadOf(read({ odd_pages: 2, by_rule: { doubled: 2, "said-twice": 1 }, failed: 1 }), [10.4, 20.2, 30.6, 301, 950.5])).toEqual({ pages: 5, failed: 1, odd: 3, odd_pages: 2, by_rule: { doubled: 2, "said-twice": 1 }, median_ms: 31, p95_ms: 951, max_ms: 951, slow: 2 });
+  expect(pageReadOf(read({ odd_pages: 2, by_rule: { doubled: 2, "said-twice": 1 }, failed: 1 }), [10.4, 20.2, 30.6, 301, 950.5])).toEqual({ pages: 5, failed: 1, odd: 3, odd_pages: 2, by_rule: { doubled: 2, "said-twice": 1 }, by_kind: {}, median_ms: 31, p95_ms: 951, max_ms: 951, slow: 2 });
   expect(pageReadOf(read({ pages: 0 }), [])).toMatchObject({ median_ms: 0, max_ms: 0, slow: 0, odd: 0 });
 });
 
 test("an answer that isn't counts is refused, and a rule name this code doesn't know is dropped", () => {
-  const ok = { pages: 5, failed: 0, odd: 1, odd_pages: 1, by_rule: { doubled: 1, "people/someone": 4, note: "words" }, median_ms: 3, p95_ms: 4, max_ms: 5, slow: 0 };
+  const ok = { pages: 5, failed: 0, odd: 1, odd_pages: 1, by_rule: { doubled: 1, "people/someone": 4, note: "words" }, by_kind: {}, median_ms: 3, p95_ms: 4, max_ms: 5, slow: 0 };
   expect(asPageRead(ok)?.by_rule).toEqual({ doubled: 1 });
   expect(asPageRead({ ...ok, pages: "many" })).toBeUndefined();
   expect(asPageRead({ ...ok, max_ms: -1 })).toBeUndefined();
@@ -71,7 +71,7 @@ test("an answer that isn't counts is refused, and a rule name this code doesn't 
   expect(asPageRead("5 pages")).toBeUndefined();
 });
 
-const base: PageRead = { pages: 40, failed: 0, odd: 3, odd_pages: 2, by_rule: { doubled: 3 }, median_ms: 20, p95_ms: 60, max_ms: 90, slow: 0 };
+const base: PageRead = { pages: 40, failed: 0, odd: 3, odd_pages: 2, by_rule: { doubled: 3 }, by_kind: {}, median_ms: 20, p95_ms: 60, max_ms: 90, slow: 0 };
 test("the line says better, the same or worse than the code before, and worse only for a real change", () => {
   expect(pageReadLine(base, base)).toContain("the same count as on the code before;");
   expect(pageReadLine(base, base)).not.toContain("WORSE");
@@ -84,5 +84,5 @@ test("the line says better, the same or worse than the code before, and worse on
   expect(pageReadLine({ ...base, max_ms: 400 }, base)).toContain("WORSE than the code before: speed ");
   expect(pageReadLine({ ...base, max_ms: 400 }, { ...base, max_ms: 380 })).not.toContain("WORSE");
   expect(pageReadLine({ ...base, max_ms: 400, slow: 1 }, { ...base, max_ms: 380 })).toContain("WORSE than the code before: speed ");
-  expect(pageReadLine({ ...base, failed: 1 }, base)).toContain("1 page failed to render (was 0); WORSE than the code before: sentences ");
+  expect(pageReadLine({ ...base, failed: 1 }, base)).toContain("1 page failed to render (was 0); by rule: doubled 3; WORSE than the code before: sentences ");
 });

@@ -509,7 +509,8 @@ test("note page and phone page: an id in a section someone else wrote reads as w
   for (const html of [note, phone]) {
     // What a reader sees: the edit boxes hold the file's own text, ids and all.
     const text = html.replace(/<(textarea|script)\b[\s\S]*?<\/\1>/g, " ").replace(/<[^>]*>/g, " ");
-    expect(text).toContain("Firewood question: an email (2026-09-22).");
+    // The phone page says a day typed into the text in words (G1002); the note page shows it as typed.
+    expect(text).toMatch(html === phone ? /Firewood question: an email \(22 Sep(?: 2026)?\)\./ : /Firewood question: an email \(2026-09-22\)\./);
     expect(text).toContain("Kit decline: an email, email thread.");
     expect(text).not.toMatch(/1a0b2c3d4e5f6a7b|99aa88bb77cc66dd|0f1e2d3c4b5a6978|1122334455667788/);
   }

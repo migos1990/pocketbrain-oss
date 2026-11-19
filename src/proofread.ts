@@ -13,6 +13,7 @@ import { loadState } from "./dashboard/data";
 import { ownerPage } from "./dashboard/html-page";
 import { pageLines } from "./dashboard/home";
 import { beat } from "./heartbeat";
+import { NOTE_TYPES } from "./checks";
 
 export const RULES = [
   "template-slot", // a slot the template never filled: {day}, undefined, null
@@ -96,7 +97,7 @@ export function readPage(html: string): Rule[] {
     const caps = /^[A-Z]{2,5}$/.test(c);
     const words = initials(kind);
     const spelled = caps && words.some((_, i) => words.slice(i, i + c.length).map((w) => w[0]).join("") === c);
-    if ((!caps && c.length > 2 && line.includes(c.toLowerCase())) || spelled) hit("chip-repeats");
+    if ((!caps && c.length > 2 && new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(c.toLowerCase())}(?![\\p{L}\\p{N}])`, "u").test(line)) || spelled) hit("chip-repeats");
   }
   // A heading with nothing under it, a quote with no words.
   for (const m of prose.matchAll(/<h2\b[^>]*>[\s\S]*?<\/h2>(?=\s*(?:<h2\b|$))/g)) if (m) hit("empty-section");
@@ -106,6 +107,11 @@ export function readPage(html: string): Rule[] {
   }
   return hits;
 }
+
+// A page's kind as a count may name it: a note type the code defines, never a word a brain made up
+// for a type of its own (that one counts as "page").
+const KINDS: readonly string[] = [...NOTE_TYPES, "dispute", "page"];
+const kindOf = (type: unknown) => (KINDS.includes(String(type)) ? String(type) : "page");
 
 const file = (root: string) => join(root, "log", "proofread.json");
 
@@ -125,7 +131,7 @@ export function readPages(root: string, now = new Date()): { read: Proofread; ms
     finally { ms.push(performance.now() - t); }
     if (!hits.length) continue;
     r.odd_pages++;
-    const kind = String(n.fm.type ?? "page").replace(/[^a-z_-]/gi, "").slice(0, 24) || "page";
+    const kind = kindOf(n.fm.type);
     const k = (r.by_kind[kind] ??= {});
     for (const h of hits) { r.by_rule[h] = (r.by_rule[h] ?? 0) + 1; k[h] = (k[h] ?? 0) + 1; }
   }
@@ -152,13 +158,26 @@ export function proofread(root: string, now = new Date()): Proofread {
 // own brain, as counts and milliseconds only. Never a page's id, title or words. `slow` counts
 // pages that took over SLOW_PAGE_MS to render.
 export const SLOW_PAGE_MS = 300;
-export interface PageRead { pages: number; failed: number; odd: number; odd_pages: number; by_rule: Partial<Record<Rule, number>>; median_ms: number; p95_ms: number; max_ms: number; slow: number }
+export interface PageRead { pages: number; failed: number; odd: number; odd_pages: number; by_rule: Partial<Record<Rule, number>>; by_kind: Record<string, Partial<Record<Rule, number>>>; median_ms: number; p95_ms: number; max_ms: number; slow: number }
+// Counts by kind of page, kept only under names the code knows (a kind, then a rule) and above zero.
+function kindsOf(j: unknown): PageRead["by_kind"] {
+  const out: PageRead["by_kind"] = {};
+  if (!j || typeof j !== "object") return out;
+  for (const kind of KINDS) {
+    const from = (j as Record<string, unknown>)[kind];
+    if (!from || typeof from !== "object") continue;
+    const row: Partial<Record<Rule, number>> = {};
+    for (const k of RULES) { const n = (from as Record<string, unknown>)[k]; if (typeof n === "number" && Number.isFinite(n) && n > 0) row[k] = n; }
+    if (Object.keys(row).length) out[kind] = row;
+  }
+  return out;
+}
 export function pageReadOf(read: Proofread, ms: number[]): PageRead {
   const sorted = [...ms].sort((a, b) => a - b);
   const at = (q: number) => (sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]) : 0);
   const by_rule: Partial<Record<Rule, number>> = {};
   for (const k of RULES) if (read.by_rule[k]) by_rule[k] = read.by_rule[k];
-  return { pages: read.pages, failed: read.failed ?? 0, odd: Object.values(by_rule).reduce((a, n) => a + (n ?? 0), 0), odd_pages: read.odd_pages, by_rule, median_ms: at(0.5), p95_ms: at(0.95), max_ms: sorted.length ? Math.round(sorted[sorted.length - 1]) : 0, slow: ms.filter((x) => x > SLOW_PAGE_MS).length };
+  return { pages: read.pages, failed: read.failed ?? 0, odd: Object.values(by_rule).reduce((a, n) => a + (n ?? 0), 0), odd_pages: read.odd_pages, by_rule, by_kind: kindsOf(read.by_kind), median_ms: at(0.5), p95_ms: at(0.95), max_ms: sorted.length ? Math.round(sorted[sorted.length - 1]) : 0, slow: ms.filter((x) => x > SLOW_PAGE_MS).length };
 }
 // What a script printed is checked before it is trusted: numbers, and rule names this code knows.
 export function asPageRead(j: unknown): PageRead | undefined {
@@ -167,23 +186,33 @@ export function asPageRead(j: unknown): PageRead | undefined {
   if (!o || typeof o !== "object" || !["pages", "failed", "odd", "odd_pages", "median_ms", "p95_ms", "max_ms", "slow"].every(num)) return undefined;
   const by_rule: Partial<Record<Rule, number>> = {};
   for (const k of RULES) { const n = (o.by_rule as Record<string, unknown> | undefined)?.[k]; if (typeof n === "number" && n > 0) by_rule[k] = n; }
-  return { pages: o.pages as number, failed: o.failed as number, odd: o.odd as number, odd_pages: o.odd_pages as number, by_rule, median_ms: o.median_ms as number, p95_ms: o.p95_ms as number, max_ms: o.max_ms as number, slow: o.slow as number };
+  return { pages: o.pages as number, failed: o.failed as number, odd: o.odd as number, odd_pages: o.odd_pages as number, by_rule, by_kind: kindsOf(o.by_kind), median_ms: o.median_ms as number, p95_ms: o.p95_ms as number, max_ms: o.max_ms as number, slow: o.slow as number };
 }
 // One line for the deploy log. With the reading taken on the code before, minutes earlier on the
 // same brain, it says what the new code changed. Slower means over SLOW_PAGE_MS now and at least
 // half again as slow as before, or more pages over the line.
+// Where the odd sentences are, for whoever fixes them (G1002): by rule, then by kind of page with
+// its rules, most first. Rule and kind names are the code's own.
+const most = <K extends string>(o: Partial<Record<K, number>>) => (Object.entries(o) as [K, number][]).filter(([, n]) => n > 0).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+function whereLine(a: PageRead): string {
+  const rules = most(a.by_rule).map(([k, n]) => `${k} ${n}`).join(", ");
+  if (!rules) return "";
+  const total = (row: Partial<Record<Rule, number>>) => Object.values(row).reduce((x, n) => x + (n ?? 0), 0);
+  const kinds = Object.entries(a.by_kind).sort((x, y) => total(y[1]) - total(x[1]) || x[0].localeCompare(y[0])).map(([kind, row]) => `${kind} ${total(row)} (${most(row).map(([k, n]) => `${k} ${n}`).join(", ")})`).join(", ");
+  return `; by rule: ${rules}${kinds ? `; by kind of page: ${kinds}` : ""}`;
+}
 export function pageReadLine(a: PageRead, before?: PageRead): string {
   const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const fails = a.failed ? `; ${s(a.failed, "page")} failed to render${before ? ` (was ${before.failed})` : ""}` : "";
   const tail = "(report only; counts and milliseconds, never a page's name or words)";
-  if (!before) return `pages read: ${s(a.odd, "odd sentence")} on ${a.odd_pages} of ${s(a.pages, "page")}; a page renders in ${a.median_ms} ms at the median, ${a.max_ms} ms at the slowest, ${a.slow} over ${SLOW_PAGE_MS} ms${fails}; no reading on the code before, so nothing to compare ${tail}`;
+  if (!before) return `pages read: ${s(a.odd, "odd sentence")} on ${a.odd_pages} of ${s(a.pages, "page")}; a page renders in ${a.median_ms} ms at the median, ${a.max_ms} ms at the slowest, ${a.slow} over ${SLOW_PAGE_MS} ms${fails}${whereLine(a)}; no reading on the code before, so nothing to compare ${tail}`;
   const d = a.odd - before.odd;
   const moved = RULES.map((k) => [k, (a.by_rule[k] ?? 0) - (before.by_rule[k] ?? 0)] as const).filter(([, n]) => n).map(([k, n]) => `${k} ${n > 0 ? "+" : ""}${n}`).join(", ");
   const sentences = `${d === 0 ? "the same count as" : d > 0 ? `${d} more than` : `${-d} fewer than`} on the code before${moved ? ` (${moved})` : ""}`;
   const worse: string[] = [];
   if (d > 0 || a.failed > before.failed) worse.push("sentences");
   if (a.slow > before.slow || (a.max_ms > SLOW_PAGE_MS && a.max_ms > before.max_ms * 1.5)) worse.push("speed");
-  return `pages read: ${s(a.odd, "odd sentence")} on ${a.odd_pages} of ${s(a.pages, "page")}, ${sentences}; a page renders in ${a.median_ms} ms at the median (was ${before.median_ms}), ${a.max_ms} ms at the slowest (was ${before.max_ms}), ${a.slow} over ${SLOW_PAGE_MS} ms (was ${before.slow})${fails}${worse.length ? `; WORSE than the code before: ${worse.join(" and ")}` : ""} ${tail}`;
+  return `pages read: ${s(a.odd, "odd sentence")} on ${a.odd_pages} of ${s(a.pages, "page")}, ${sentences}; a page renders in ${a.median_ms} ms at the median (was ${before.median_ms}), ${a.max_ms} ms at the slowest (was ${before.max_ms}), ${a.slow} over ${SLOW_PAGE_MS} ms (was ${before.slow})${fails}${whereLine(a)}${worse.length ? `; WORSE than the code before: ${worse.join(" and ")}` : ""} ${tail}`;
 }
 
 export function readProofread(root: string): Proofread | undefined {
