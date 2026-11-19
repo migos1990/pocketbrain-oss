@@ -6,7 +6,7 @@ The line the app and the site show comes from here:
 
 > 300 memories, 3 doors, 0 leaks, 0 missing
 
-with the day it was last run.
+with the day it was last run. The [scoreboard](scoreboard.md) holds a full run of it beside the other numbers, each with the command that prints it.
 
 Code: `test/carve-check.ts` (the check), `test/carve-gen.ts` (the made-up memories), `evals/lib/oracle.ts` (what counts as a leak), `test/carve-owed.ts` (what each assistant is owed), `scripts/slice-proof.ts` (the run), `src/slice-proof.ts` (the nightly job and the line). Tests: `test/carve-property.test.ts`, `test/slice-proof.test.ts`, and `test/burst-property.test.ts` for calls sent many at a time ("A burst of calls" below).
 

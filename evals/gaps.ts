@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G999: {
+    closed: "claude/scoreboard",
+    title: "No page said the claims as numbers a stranger could print again, and the demo answers count moved with whether the search model was installed",
+    severity: "medium",
+    finding: "Plan step Q2, 2026-11-19: the nightly slice line, the burst check, the demo answers and the LongMemEval recall each had a command, but no one page held the numbers with the command, commit and day beside them, and the LongMemEval bench was left out of the public copy. Building the page found that `bun scripts/usefulness.ts` printed other counts once the local search model was on the machine (by context pack 30, 28 and 19 by words alone; 29, 27 and 19 with the model; the questions that move are among the ten drawn from the demo week's reads), and nothing in its output said which was run.",
+    fix: "scripts/scoreboard.ts: one row per command (slice, burst, answers by words alone under PB_SEMANTIC=0, answers with the model, longmemeval), each number read by code from the command's own output and kept with its commit and day in docs/scoreboard.json; docs/scoreboard.md and the README block are that record rendered; `run` runs the commands again and compares number by number; a row whose check is not in the repo has no row. The LongMemEval bench, its doc and its test leave scripts/public-exclude.txt by the owner's typed word of 2026-11-19. Test: test/scoreboard.test.ts.",
+  },
   G983: {
     closed: "claude/no-fixed-waits",
     title: "Tests paused a fixed time and hoped the machine got there",

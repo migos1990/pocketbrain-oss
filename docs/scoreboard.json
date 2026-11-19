@@ -1,0 +1,247 @@
+{
+  "rows": {
+    "slice": {
+      "command": "bun scripts/slice-proof.ts",
+      "commit": "2705acc2e49dc227edb1153d92beb69b40f5b8df",
+      "day": "2026-11-19",
+      "values": {
+        "memories": 300,
+        "doors": 3,
+        "leaks": 0,
+        "missing": 0,
+        "owed": 8166,
+        "readers": 1338,
+        "pages": 3023,
+        "answers": 206213,
+        "seconds": 2006
+      }
+    },
+    "burst": {
+      "command": "BURST_SOAK=1 bun test test/burst-property.test.ts",
+      "commit": "b0cd967770f5b13867c04eaf447f3f2f6ee4355c",
+      "day": "2026-11-19",
+      "values": {
+        "brains": 60,
+        "tokens": 254,
+        "reads": 115644,
+        "same": 76894,
+        "writes": 2972,
+        "filed": 113,
+        "refused": 1194,
+        "turnedAway": 3600,
+        "findings": 0
+      }
+    },
+    "answers": {
+      "command": "PB_SEMANTIC=0 bun scripts/usefulness.ts",
+      "commit": "999ccbe1837929d7d634df205aa52e0c7b0f1075",
+      "day": "2026-11-19",
+      "values": [
+        {
+          "assistant": "claude",
+          "door": "memory_check, then read 3",
+          "asked": 34,
+          "answered": 10,
+          "answerable": 34,
+          "outside": 0,
+          "tokens": 1548
+        },
+        {
+          "assistant": "chatgpt",
+          "door": "memory_check, then read 3",
+          "asked": 34,
+          "answered": 10,
+          "answerable": 32,
+          "outside": 2,
+          "tokens": 1548
+        },
+        {
+          "assistant": "gemini",
+          "door": "memory_check, then read 3",
+          "asked": 35,
+          "answered": 10,
+          "answerable": 22,
+          "outside": 13,
+          "tokens": 1774
+        },
+        {
+          "assistant": "claude",
+          "door": "context pack",
+          "asked": 34,
+          "answered": 30,
+          "answerable": 34,
+          "outside": 0,
+          "tokens": 1677
+        },
+        {
+          "assistant": "chatgpt",
+          "door": "context pack",
+          "asked": 34,
+          "answered": 28,
+          "answerable": 32,
+          "outside": 2,
+          "tokens": 1737
+        },
+        {
+          "assistant": "gemini",
+          "door": "context pack",
+          "asked": 35,
+          "answered": 19,
+          "answerable": 22,
+          "outside": 13,
+          "tokens": 1622
+        },
+        {
+          "assistant": "claude",
+          "door": "search, then read 3",
+          "asked": 34,
+          "answered": 29,
+          "answerable": 34,
+          "outside": 0,
+          "tokens": 3598
+        },
+        {
+          "assistant": "chatgpt",
+          "door": "search, then read 3",
+          "asked": 34,
+          "answered": 27,
+          "answerable": 32,
+          "outside": 2,
+          "tokens": 3549
+        },
+        {
+          "assistant": "gemini",
+          "door": "search, then read 3",
+          "asked": 35,
+          "answered": 16,
+          "answerable": 22,
+          "outside": 13,
+          "tokens": 2718
+        }
+      ]
+    },
+    "answers_model": {
+      "command": "bun scripts/usefulness.ts",
+      "commit": "999ccbe1837929d7d634df205aa52e0c7b0f1075",
+      "day": "2026-11-19",
+      "values": [
+        {
+          "assistant": "claude",
+          "door": "memory_check, then read 3",
+          "asked": 34,
+          "answered": 8,
+          "answerable": 34,
+          "outside": 0,
+          "tokens": 1548
+        },
+        {
+          "assistant": "chatgpt",
+          "door": "memory_check, then read 3",
+          "asked": 34,
+          "answered": 8,
+          "answerable": 32,
+          "outside": 2,
+          "tokens": 1548
+        },
+        {
+          "assistant": "gemini",
+          "door": "memory_check, then read 3",
+          "asked": 35,
+          "answered": 9,
+          "answerable": 22,
+          "outside": 13,
+          "tokens": 1774
+        },
+        {
+          "assistant": "claude",
+          "door": "context pack",
+          "asked": 34,
+          "answered": 29,
+          "answerable": 34,
+          "outside": 0,
+          "tokens": 1677
+        },
+        {
+          "assistant": "chatgpt",
+          "door": "context pack",
+          "asked": 34,
+          "answered": 27,
+          "answerable": 32,
+          "outside": 2,
+          "tokens": 1737
+        },
+        {
+          "assistant": "gemini",
+          "door": "context pack",
+          "asked": 35,
+          "answered": 19,
+          "answerable": 22,
+          "outside": 13,
+          "tokens": 1622
+        },
+        {
+          "assistant": "claude",
+          "door": "search, then read 3",
+          "asked": 34,
+          "answered": 28,
+          "answerable": 34,
+          "outside": 0,
+          "tokens": 3598
+        },
+        {
+          "assistant": "chatgpt",
+          "door": "search, then read 3",
+          "asked": 34,
+          "answered": 26,
+          "answerable": 32,
+          "outside": 2,
+          "tokens": 3549
+        },
+        {
+          "assistant": "gemini",
+          "door": "search, then read 3",
+          "asked": 35,
+          "answered": 16,
+          "answerable": 22,
+          "outside": 13,
+          "tokens": 2718
+        }
+      ]
+    },
+    "longmemeval": {
+      "command": "bun scripts/longmemeval.ts --data ~/lme/longmemeval_s_cleaned.json --slice rest --semantic",
+      "commit": "2705acc2e49dc227edb1153d92beb69b40f5b8df",
+      "day": "2026-11-19",
+      "values": {
+        "data": "longmemeval_s_cleaned.json",
+        "sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+        "questions": 450,
+        "commit": "2705acc2e49dc227edb1153d92beb69b40f5b8df",
+        "tables": {
+          "words": [
+            "| question type | scored | skipped | recall_any@5 | recall_any@10 | recall_all@5 | recall_all@10 |",
+            "|---|---|---|---|---|---|---|",
+            "| knowledge-update | 63 | 6 | 100% | 100% | 95% | 98% |",
+            "| multi-session | 108 | 12 | 95% | 97% | 64% | 78% |",
+            "| single-session-assistant | 5 | 48 | 100% | 100% | 100% | 100% |",
+            "| single-session-preference | 29 | 0 | 72% | 83% | 72% | 83% |",
+            "| single-session-user | 50 | 6 | 98% | 98% | 98% | 98% |",
+            "| temporal-reasoning | 118 | 5 | 88% | 92% | 74% | 85% |",
+            "| all | 373 | 77 | 92% | 95% | 78% | 87% |"
+          ],
+          "words + local model": [
+            "| question type | scored | skipped | recall_any@5 | recall_any@10 | recall_all@5 | recall_all@10 |",
+            "|---|---|---|---|---|---|---|",
+            "| knowledge-update | 63 | 6 | 100% | 100% | 94% | 100% |",
+            "| multi-session | 108 | 12 | 97% | 100% | 74% | 90% |",
+            "| single-session-assistant | 5 | 48 | 100% | 100% | 100% | 100% |",
+            "| single-session-preference | 29 | 0 | 93% | 97% | 93% | 97% |",
+            "| single-session-user | 50 | 6 | 96% | 100% | 96% | 100% |",
+            "| temporal-reasoning | 118 | 5 | 92% | 94% | 80% | 89% |",
+            "| all | 373 | 77 | 95% | 98% | 84% | 93% |"
+          ]
+        }
+      }
+    }
+  }
+}

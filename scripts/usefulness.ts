@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scoreUsefulness, countsText, detailText, compareShapes, shapesText, lostToWide, lostText, type UAgent } from "../src/usefulness";
 import { readJsonl } from "../src/util";
+import { semanticOn } from "../src/semantic";
 
 const argv = process.argv.slice(2);
 const arg = (k: string) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : undefined; };
@@ -80,6 +81,8 @@ const root = brain ? clone(brain) : await demo();
 try {
   const s = scoreUsefulness(root, brain ? {} : { file: SET });
   console.log(brain ? countsText(s) : argv.includes("--detail") ? detailText(s) : countsText(s));
+  // Which search this run used: the counts differ between the two, so a number is quoted with this line (G999).
+  console.log(`search: ${semanticOn() ? "words and the local model" : "words alone"}`);
   if (brain) console.log(doorUse(brain));
   if (argv.includes("--shapes")) console.log(shapesText(compareShapes(root, brain ? {} : { file: SET })));
   if (argv.includes("--lost")) console.log(lostText(lostToWide(root, brain ? {} : { file: SET })));

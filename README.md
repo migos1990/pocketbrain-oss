@@ -33,6 +33,19 @@ The honest limit: a hosted assistant still has whatever it was shown in a sessio
 
 If you want the pattern without this code, [IDEA.md](IDEA.md) describes it in one page.
 
+## Scoreboard
+
+The claims above as numbers, each printed by a command in this repo on made-up memories or a public benchmark, never on anyone's own memory. The full page, with the commit and day of each run and what the numbers do not say, is [docs/scoreboard.md](docs/scoreboard.md); `bun scripts/scoreboard.ts run` runs the commands again and compares every number.
+
+<!-- scoreboard:start -->
+| What is measured | Result | Command |
+|---|---|---|
+| Each assistant gets its slice and nothing else | 300 memories, 3 doors, 0 leaks, 0 missing | `bun scripts/slice-proof.ts` |
+| Many calls at once get the same slice as one call | 115,644 reads in bursts, 0 memories with a fault | `BURST_SOAK=1 bun test test/burst-property.test.ts` |
+| Each assistant answers what it is allowed to know | answered, of the questions its slice can answer: claude 30 of 34, chatgpt 28 of 32, gemini 19 of 22 | `PB_SEMANTIC=0 bun scripts/usefulness.ts` |
+| Search finds the right past sessions (LongMemEval, retrieval only) | one evidence session in the top 5 for 95% of questions, every one for 84% | `bun scripts/longmemeval.ts --data ~/lme/longmemeval_s_cleaned.json --slice rest --semantic` |
+<!-- scoreboard:end -->
+
 ## What it is
 
 ```

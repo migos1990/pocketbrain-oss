@@ -13,7 +13,3 @@ test/public-sync-workflow.test.ts
 # names: PB_OSS_DEPLOY_KEY
 # Plans for posts and outreach, private to this repo:
 plans/
-# The LongMemEval retrieval bench and its numbers stay private until the owner says a score may be published:
-docs/longmemeval.md
-scripts/longmemeval.ts
-test/longmemeval.test.ts
