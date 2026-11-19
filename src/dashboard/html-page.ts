@@ -19,7 +19,7 @@ import { sensitiveShape } from "../shape";
 import { esc, hidden, href, line, replyHtml, signInAgain } from "./html-home";
 import { appPage, composer } from "./html-app";
 import { editedOn, dayWords, yourNotes, NOTE_MAX } from "../page-notes";
-import { plain, shutBody, attrWords } from "./home";
+import { plain, shutBody, attrWords, maskSecrets } from "./home";
 import { ownerConflicts } from "../core";
 import { inboxConflicts } from "../settle-inbox";
 import { MADE } from "../wiki";
@@ -221,7 +221,7 @@ function facts(s: State, n: Note, fresh: boolean): string {
     // Each attribute in the owner's words and each day as a person writes it (audit v11).
     const name = esc(cap(attrWords(attr)));
     if (!fresh && live.some((r) => shut(n, r))) return `<dt>${name}</dt><dd class="kind">${PAGE_COPY.shut}</dd>`;
-    const v = wikiLinks(s, live.map((r) => sayYearly(attr, sayDays(linkText(r.value)))).join(", ")).replace(/href="\/note\//g, 'href="/p/');
+    const v = wikiLinks(s, live.map((r) => sayYearly(attr, sayDays(maskSecrets(linkText(r.value))))).join(", ")).replace(/href="\/note\//g, 'href="/p/');
     // A date said as "last week" stays a guess: "since around".
     const first = [...live].filter((r) => r.as_of).sort((a, b) => String(a.as_of).localeCompare(String(b.as_of)))[0];
     // A value that is itself that day ("last contact 4 Sep 2026") doesn't say it twice.
@@ -477,7 +477,7 @@ export function ownerPage(s: State, csrf: string, n: Note, lines: HomeLine[], o:
   // The prose was written when its facts were; a value private now is never in it on the 30-day
   // sign-in, whatever it was then (audit v7, G551).
   const met = meetings(s, n, fresh, closed);
-  const text = dropStaleContact(fresh ? n.body : shutInProse(n), n, met);
+  const text = dropStaleContact(maskSecrets((fresh ? n.body : shutInProse(n)) ?? ""), n, met);
   const prose = wikiBody(s, isOrg(n) ? text.replace(IMPORT_LINE, "") : text, (ref) => {
     if (!held.has(itemRef(ref))) return keptQuotes(s.root, ref);
     withheld ||= keptQuotes(s.root, ref).length > 0;
@@ -544,7 +544,7 @@ export function askProse(s: State, n: Note, fresh: boolean): AskProse | undefine
   if (!fresh && sensitivityRank(n.fm.sensitivity) >= sensitivityRank("private")) return undefined;
   // The page's opening: someone's own paragraph and the hub's sentences beneath it under "From its
   // facts" (G682), or the hub's alone; never a later section.
-  const top = (fresh ? n.body ?? "" : shutInProse(n)).replace(/^## From its facts\n/m, "").split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith("[^") && x !== MADE).slice(0, 2).join("\n\n") || undefined;
+  const top = maskSecrets(fresh ? n.body ?? "" : shutInProse(n)).replace(/^## From its facts\n/m, "").split(/^#{1,6} /m)[0]!.split(/\n\s*\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith("[^") && x !== MADE).slice(0, 2).join("\n\n") || undefined;
   if (!top) return undefined;
   const notes = new Set((top.match(/\[\^[^\]\s]+\]/g) ?? []));
   const text = top.replace(/\[\^[^\]\s]+\]/g, "").split(MADE).join(" ").replace(/\s+/g, " ").trim();

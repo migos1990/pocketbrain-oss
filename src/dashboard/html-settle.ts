@@ -9,7 +9,7 @@ import type { Rules } from "../rules";
 import type { Note } from "../brain";
 import type { HeldMessage } from "./data";
 import { agentLabel, cap, factName, withNames, refusalWords } from "./labels";
-import { fromWords, plain, differ } from "./home";
+import { fromWords, plain, differ, maskSecrets } from "./home";
 import { SOURCE_WORDS } from "./browse";
 import { SCHEMES } from "../sources";
 import { displayName } from "../diary";
@@ -100,10 +100,10 @@ export function leanWords(why: string): string {
 // it when that is more, then where it came from.
 function row(c: SettleCase, s: SettleSide, csrf: string, rules: Rules, first = false, said?: string): string {
   const from = cap([fromWords(s, rules), day(s.as_of)].filter(Boolean).join(", ") + (s.sources > 1 ? ` · ${fill(SETTLE_COPY.count, { n: s.sources })}` : ""));
-  const lean = s.lean ? `<small class="lean">${esc(fill(SETTLE_COPY.lean, { why: leanWords(s.lean) }))}</small>` : "";
+  const lean = s.lean ? `<small class="lean">${esc(fill(SETTLE_COPY.lean, { why: maskSecrets(leanWords(s.lean)) }))}</small>` : "";
   const d = differ(c.sides.map((x) => plain(x.value)));
   const whole = plain(s.value), big = d.rest[c.sides.indexOf(s)] ?? whole;
-  return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(big)}</b>${said ? `<q class="said">${esc(said)}</q>` : big !== whole ? `<span class="whole">${esc(whole)}</span>` : ""}<small>${esc(from)}</small>${lean}</button></form>`;
+  return `<form class="pick${first ? " first" : ""}" method="post" action="/action/settle-pick">${hidden(csrf, { id: c.id, n: String(s.n) })}<button><b>${esc(big)}</b>${said ? `<q class="said">${esc(maskSecrets(said))}</q>` : big !== whole ? `<span class="whole">${esc(whole)}</span>` : ""}<small>${esc(from)}</small>${lean}</button></form>`;
 }
 
 export interface SettleWhere { area?: string; pos?: number; of?: number }

@@ -3,6 +3,7 @@
 // the owner (only real conflicts so far), and the diary of what the brain learned, newest day first,
 // each line with Undo. Built from diary/*.jsonl (src/diary.ts), never from git log. The page itself is
 // html-home.ts; the words are the owner's (test/owner-copy.test.ts).
+import { secretsIn } from "../checks";
 import { ownerAsks, type OwnerAsks } from "../waiting";
 import { waitingTeachAsks } from "../teaching";
 import { waitingLinkAsks } from "../dangling";
@@ -83,6 +84,11 @@ const VERB_ATTRIBUTES = new Set(["prefers", "works_with", "works_on"]);
 export const isVerbAttribute = (attr: string) => VERB_ATTRIBUTES.has(attr);
 // A value as words: a [[link]] shows its label, else the linked page's name; a bare page id in
 // the text shows the page's name too. Never an id.
+// A secret-shaped run inside a value saved before the write check knew its shape (a code, a card
+// number, a password; SECRET_SHAPES in src/checks.ts) is never printed on the owner's screens
+// either (G991): its characters read as one mark, the words around it stay. Display only.
+export const SECRET_MARK = "••••";
+export const maskSecrets = (t: string): string => { let out = t; for (const m of secretsIn(t)) out = out.split(m).join(SECRET_MARK); return out; };
 export const plain = (v: unknown, title?: (id: string) => string | undefined, slugs?: Map<string, string>): string => {
   const name = (id: string) => displayName(id, title?.(id));
   if (v === undefined || v === null) return "";
@@ -91,7 +97,7 @@ export const plain = (v: unknown, title?: (id: string) => string | undefined, sl
     const bare = slugs?.get(v.trim());
     if (bare) return name(bare);
     if (/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return sayDay(v);
-    const text = v.replace(/\[\[([^\]|]*?)(?:\|([^\]]+))?\]\]/g, (_m, id: string, label?: string) => label ?? name(id)).replace(ID_IN_TEXT, (id) => name(id))
+    const text = maskSecrets(v).replace(/\[\[([^\]|]*?)(?:\|([^\]]+))?\]\]/g, (_m, id: string, label?: string) => label ?? name(id)).replace(ID_IN_TEXT, (id) => name(id))
       // a page's slug inside a sentence ("moved to bay-institute") is that page
       .replace(/(?<![\w/-])[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?![\w/-])/g, (w) => { const id = slugs?.get(w); return id ? name(id) : w; })
       // a day inside a sentence reads as "12 Oct 2026" too

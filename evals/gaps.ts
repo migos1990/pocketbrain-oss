@@ -5,6 +5,12 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G991: {
+    title: "A secret-shaped value saved before the write check knew its shape was printed whole on the owner's own screens, and still stands as a side of a question",
+    severity: "high",
+    finding: "The owner's phone, 2026-11-18: a question on a project's next step showed one side that was a sentence from a shop's mail with a redeemable code in it, every character printed, on the settle screen. The code's shape is refused at write since G961 and the stored value is served to no assistant since G962 (src/carve.ts, src/core.ts), but neither touched what the owner's screens print or what is asked: a fresh sign-in shows a private value, so calling it private would not hide it, and after G965 the two next steps sit side by side on the page, the code with them.",
+    fix: "Done here, display only: maskSecrets in src/dashboard/home.ts says each secret-shaped run (secretsIn, src/checks.ts) as one mark with the words around it kept, in the owner app's value helper (plain: the question's sides, the home's lines, the night page, See as, Ask), the Gardener's line and a source's quoted words on the settle screen, and a page's Details and prose (src/dashboard/html-page.ts). Nothing stored changes. Test: test/secret-masked-owner.test.ts (an old brain's files put on disk by hand; fresh sign-in or not). Known limit: the Settings note view and the editor show the stored text, since they edit it. Still open, waits for the owner's typed yes because it changes what is asked and what a page holds: the night pass sets such a live record aside with a diary line and Undo (report-only first), and a side set aside this way closes its question as the other side (setAsideSide), so it is never asked.",
+  },
   G988: {
     closed: "claude/machine-mail-served",
     title: "A no-reply sender's value became a side of a question on the home when the source reads machine mail",

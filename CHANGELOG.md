@@ -10,6 +10,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- A code, card number or password inside something saved long ago is no longer printed on your own screens: the sentence stays and the code reads as •••• (on a question's sides, the home, a page). Nothing in your memory changes (G991).
 - A shop's mail that greets you by first name no longer starts a page for "someone" with your first name, and the shop that sent a mail is no longer filed as where the person it wrote to works, or as how you know them (G976, G977). Pages made that way before are counted each night; `pocketbrain first-name-pages` lists them and `pocketbrain first-name-pages on` sets them aside, each fact with Undo (G978).
 - A tap on an answer shows at once: the button dims, extra taps are dropped, and a second answer for a question you already settled is no longer an error. The answer itself comes back faster, because the page's text is rewritten just after the reply instead of before it (G975).
 - A value that came only from a no-reply or bulk mail is never a side of a question, on sources set to read such mail too: beside a different value you already have it is set aside with Undo, and a value you have from such mail gives way to a person's, kept in history, with Undo (G988).
