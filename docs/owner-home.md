@@ -85,6 +85,19 @@ When one of the hub's scheduled jobs is late or failing, one line sits under the
 
 When one of your connected assistants has gone quiet, one more line in the same shape links to Who knows: "Planner has not read your brain in 9 days. Who knows has the details." Each assistant is measured against its own habit, from the read log of the last 42 days: reads closer than half an hour are one session, its usual gap is the larger of the median and the gap three sessions in four stay under, and it is quiet after three times that, never sooner than a day and always by two weeks. An hourly reader is flagged after a day, a weekly one after about two weeks. Only the owner's own assistants count, connected (a live token or an OAuth sign-in) and not paused; one with fewer than four sessions says nothing yet. Its row on Who knows says "Last read 9 days ago; it used to read about every day". The line is never an ask and adds nothing to the count (`quietAssistants`, `quietLine` in `src/quiet.ts`).
 
+## The share picture
+
+`/share`, opened from **Share the picture** on Who knows (shown once two assistants are connected), is one image made to be posted: "One memory. Three readers." Each assistant gets a row of squares, one square per page of the memory, the same page in the same place in every row, filled when that assistant is given the whole page, half filled when it is given part of it, and hatched when it is not given it. Beside each name are its pages and facts out of the memory's totals. The numbers are the ones See as shows (`sharePicture` in `src/dashboard/share.ts` reads `seeList`, one carve per assistant), most pages first, six rows at most with the rest counted, and past 600 pages a square stands for several pages and the picture says how many.
+
+The picture is public, so it holds shapes and counts only:
+
+- No page name, value or word of the memory is on it or in the page that draws it. The data it is drawn from has no field one could travel in (`test/share-picture.test.ts` checks every title, other name, page address, value and line of the demo memory against the page).
+- The one name per row is the assistant's label from `rules/policy.yaml`. A label that holds a person page's title or other name, or a word of the owner's name, is drawn as "Assistant 1". A label that names something else of yours (a workplace, a project) is drawn as written (G994): look at the picture before you post it.
+- A square's place comes from a hash of the page's address inside its kind, never from its title.
+- The nightly check's line ([slice-proof.md](slice-proof.md)) is on it with its day only when the last finished night found no leak and nothing missing.
+
+The hub sends the picture nowhere. The page draws it in your browser, in the app's own colours (light or dark, as the phone is set), 1080 by 1350. **Share** opens the phone's own share sheet where the browser offers one; **Save** downloads the image; touch and hold saves it too. Opening the page writes nothing and is never logged as a read; it opens on the 30-day sign-in, like See as.
+
 ## While you slept
 
 `/night` (`src/dashboard/night.ts`) is one morning page of what the memory did overnight. The home links to it with one line under its count ("While you slept, 3 things changed in your memory.") while last night has something to say, and only until the page was opened once for that night (the day and the newest line it listed are kept in `.git/pb-night-seen`, never committed, so a page opened before morning links again when the night files more); the page itself stays at `/night` until the next night replaces it.

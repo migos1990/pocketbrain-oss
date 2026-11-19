@@ -78,6 +78,7 @@ export const DASHBOARD_PAGES: [string, string][] = [
   ["settle", "/settle/c-0001"],
   ["see", "/see/gemini"],
   ["see-page", "/see/gemini/people/helene-lefebvre"],
+  ["share", "/share"],
   ["night", "/night"],
 ];
 

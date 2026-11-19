@@ -140,6 +140,8 @@ export const APP_COPY = {
   trialWhy: "what it writes waits for you",
   asked: "What it asked today ({n})",
   settingsWhy: "Everything else: sign-ins, sources, spending, history",
+  sharePicture: "Share the picture",
+  sharePictureWhy: "What each assistant is given, as one image. Shapes and counts only",
 } as const;
 
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
@@ -281,7 +283,7 @@ h3.section{display:flex;align-items:center;gap:8px;margin:22px 0 4px;font-size:1
 .sees{margin:6px 0 0;font-size:13px;line-height:18px;color:var(--muted)}
 .wrongs{margin:8px 0 0}
 .agent details{margin:4px 0 0}.agent summary{font-size:14px}
-.settings{display:flex;flex-direction:column;justify-content:center;min-height:56px;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0;margin:22px 0 0;color:var(--text);font-weight:900;font-size:22px;letter-spacing:-.02em}
+.settings+.settings{margin-top:0;border-top:0}.settings{display:flex;flex-direction:column;justify-content:center;min-height:56px;border-top:2px solid var(--text);border-bottom:2px solid var(--text);padding:10px 0;margin:22px 0 0;color:var(--text);font-weight:900;font-size:22px;letter-spacing:-.02em}
 .settings small{font-weight:500;color:var(--muted);font-size:13px;letter-spacing:0}
 .pinned{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));background:linear-gradient(to bottom,transparent,var(--paper) 18px);padding:18px max(14px,env(safe-area-inset-left)) 10px}
 form.composer{display:flex;align-items:flex-end;gap:8px;min-height:56px;padding:6px 6px 6px 18px;background:var(--raised);border:0;border-radius:28px;box-shadow:0 1px 2px rgba(20,20,20,.08),0 8px 24px rgba(20,20,20,.12);margin:0;transition:box-shadow .15s}
@@ -697,7 +699,7 @@ export function whoPage(v: HomeView, csrf: string, o: WhoExtras = {}): string {
   const flash = o.flash ? `<p class="bubble" role="status">${esc(o.flash)}</p>` : "";
   return appPage(APP_COPY.who, "who", `<header class="top"><p class="day"><span>${esc(v.date)}</span><a class="top-link" href="/overview">${APP_COPY.settings}</a></p><h1>${APP_COPY.who}</h1></header>
 ${flash}${numbers}${v.reads.length ? `<h2>${APP_COPY.assistants}</h2><ul class="agents">${v.reads.map(card).join("")}</ul>` : ""}
-<a class="settings" href="/overview">${APP_COPY.settings}<small>${APP_COPY.settingsWhy}</small></a>`);
+${v.reads.length > 1 ? `<a class="settings" href="/share">${APP_COPY.sharePicture}<small>${APP_COPY.sharePictureWhy}</small></a>` : ""}<a class="settings" href="/overview">${APP_COPY.settings}<small>${APP_COPY.settingsWhy}</small></a>`);
 }
 
 // The sheet a dashed mark opens (/let): "Let Gemini know this?" with what only the owner may do.

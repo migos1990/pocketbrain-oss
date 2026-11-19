@@ -68,6 +68,7 @@ import { undoFact } from "../undo";
 import { fixEverywhere } from "../beliefs";
 import { withRadar } from "./home-beliefs";
 import { seePage, seeListPage } from "./see";
+import { sharePage } from "./share";
 import { nightView, nightPage, nightLink, markNightSeen } from "./night";
 import { mapPage, mapGrid } from "./html-map";
 import { fgaPage, fgaGrid } from "./html-fga";
@@ -1015,10 +1016,11 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
     // Audit v5: only the owner screens open on the 30-day sign-in, each shutting what is private on
     // its own: the four tabs (Memory lists titles only), the page and settle screens, See as
     // (src/dashboard/see.ts: titles, counts and the values a page itself would show) and While you
-    // slept (src/dashboard/night.ts: the home's own lines and waiting list, nothing else). Every other
+    // slept (src/dashboard/night.ts: the home's own lines and waiting list, nothing else) and the share
+    // picture (src/dashboard/share.ts: counts and assistants' names only). Every other
     // page can show a private value, so it needs a sign-in from the last 10 minutes, like a private
     // value on /p.
-    if (!/^\/(home|memory|ask|who|let|night|p\/.+|settle\/.+|see\/.+)?$/.test(p) && !freshSignIn(root, sid, now()))
+    if (!/^\/(home|memory|ask|who|let|night|p\/.+|settle\/.+|see\/.+|share)?$/.test(p) && !freshSignIn(root, sid, now()))
       return html({ title: "Sign in again", tab: "", body: ownerErrorHtml("dash.sign-in-again", {}, esc) + signInAgain(csrf) }, ownerStatus("dash.sign-in-again"));
     const undo = url.searchParams.get("undo")?.match(/^[0-9a-f]{7,40}$/)?.[0];
     const wrong = url.searchParams.get("wrong")?.match(/^[a-z][a-z0-9_]*$/)?.[0];
@@ -1046,6 +1048,9 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const page = id ? note && seePage(s, csrf, agent, note, { fresh }) : seeListPage(s, agent, { fresh });
       return page ? new Response(page, { headers: PAGE_HEADERS }) : appOops("app.no-page");
     }
+    // The share picture: counts and shapes from the same carves, drawn in the owner's browser. Nothing
+    // private is on it, so it opens on the 30-day sign-in; never logged as a read.
+    if (p === "/share") return new Response(sharePage(s), { headers: PAGE_HEADERS });
     const mailId = p.match(/^\/settle\/m-([A-Za-z0-9_-]+)$/)?.[1];
     if (mailId) return new Response(heldMailPage(comms(root).find((x) => x.id === mailId && x.verdict === "held"), csrf, loadRules(root), loadBrain(root), url.searchParams.get("err") ?? undefined, { fresh: freshSignIn(root, sid, now()) }), { headers: PAGE_HEADERS });
     const settleId = p.match(/^\/settle\/(c-\d{4,}|p-[A-Za-z0-9._-]+)$/)?.[1];

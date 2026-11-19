@@ -133,6 +133,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "dashboard/html.ts#overview": { class: "not-reviewed" },
   "dashboard/html.ts#agentPage": { class: "not-reviewed" },
   "dashboard/html.ts#readsTable": { class: "not-reviewed" },
+  "dashboard/share.ts#sharePage": { class: "machine-words", why: "the share page's own HTML attribute values (button ids and types), never read as words" },
   "dashboard/labels.ts#questionWords": { class: "phrasing-only", why: "chooses how a sentence is worded, never kind, area or truth" },
   "first-name-pages.ts#setAsideFirstNamePages": { class: "phrasing-only", why: "the set-aside commit message: one or many, never kind, area or truth" },
   "dashboard/owner-book.ts#DONE": { class: "not-reviewed" },

@@ -10,6 +10,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What you see
 
+- Who knows has **Share the picture**: one image of your memory made to be posted, "One memory. Three readers." Each assistant is a row of squares, one per page, filled as that assistant is given it, with its page and fact counts. It shows shapes and counts only: no names, no words, nothing private. It is drawn on your phone and goes nowhere until you share or save it (G992, G993).
 - A code, card number or password inside something saved long ago is no longer printed on your own screens: the sentence stays and the code reads as •••• (on a question's sides, the home, a page). Nothing in your memory changes (G991).
 - A shop's mail that greets you by first name no longer starts a page for "someone" with your first name, and the shop that sent a mail is no longer filed as where the person it wrote to works, or as how you know them (G976, G977). Pages made that way before are counted each night; `pocketbrain first-name-pages` lists them and `pocketbrain first-name-pages on` sets them aside, each fact with Undo (G978).
 - A tap on an answer shows at once: the button dims, extra taps are dropped, and a second answer for a question you already settled is no longer an error. The answer itself comes back faster, because the page's text is rewritten just after the reply instead of before it (G975).

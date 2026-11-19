@@ -35,6 +35,8 @@
       - link "See as":
         - /url: /see/gemini
       - paragraph: Sees 83 pages · what it writes waits for you
+  - link "Share the picture What each assistant is given, as one image. Shapes and counts only":
+    - /url: /share
   - 'link "Settings Everything else: sign-ins, sources, spending, history"':
     - /url: /overview
 - navigation "Tabs":

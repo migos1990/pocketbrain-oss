@@ -5,6 +5,26 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G992: {
+    closed: "claude/share-picture",
+    title: "The share picture could carry a person's name in an assistant's label",
+    severity: "medium",
+    finding: "Slice audit of claude/share-picture, 2026-11-18. The picture is made to be posted and its only words from the owner's files are the assistants' labels (rules/policy.yaml). A label is free text: one such as a relative's name with 'helper' after it, or the owner's own first name before the product's, would put a person's name on a public image whose promise is no names.",
+    fix: "src/dashboard/share.ts safeNames: a label that holds a person page's title or other name as whole words (any case or accents), or a word of the owner's name, is drawn as Assistant 1, Assistant 2. Test: test/share-picture.test.ts (an assistant named after a person, or after the owner).",
+  },
+  G993: {
+    closed: "claude/share-picture",
+    title: "A square's place in the share picture would have followed its page's title",
+    severity: "low",
+    finding: "Slice audit of claude/share-picture, 2026-11-18. See as lists pages by title. Drawn in that order on a public picture, a hole's place in an alphabetical row would narrow which page it is for anyone who knows a few of the owner's pages, and a bar drawn to the length of what it hides would say more still.",
+    fix: "src/dashboard/share.ts: every square is one size, and a page's place is the order of a hash of its address inside its kind, the same in every assistant's row. The drawing's data has no string but the assistants' names (test/share-picture.test.ts: nothing of the memory is in the picture or its page).",
+  },
+  G994: {
+    title: "An assistant's label that names a workplace or a project is drawn on the share picture as written",
+    severity: "low",
+    finding: "Slice audit of claude/share-picture, 2026-11-18. safeNames (G992) replaces a label that names a person or the owner. A label that holds an org or project page's title is left alone, because an assistant is often named after the product it is (a page about that product would otherwise blank its row). The owner sees the picture before sharing it, and docs/owner-home.md says so.",
+    fix: "Open. Either a line under the picture naming the labels it shows, or the same rule for org pages with the assistant's own product pages left out. Needs the owner's word on which.",
+  },
   G991: {
     title: "A secret-shaped value saved before the write check knew its shape was printed whole on the owner's own screens, and still stands as a side of a question",
     severity: "high",

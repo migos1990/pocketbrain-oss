@@ -89,6 +89,7 @@ export const DASHBOARD_PAGES: Record<string, string> = {
   "owner-settle": "/settle/c-0001",
   "owner-see": "/see/gemini",
   "owner-see-page": "/see/gemini/people/helene-lefebvre",
+  "owner-share": "/share",
   "owner-night": "/night",
 };
 export const DOOR_PAGES: Record<string, string> = {
