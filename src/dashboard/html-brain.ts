@@ -21,6 +21,7 @@ import type { Why, WhyRecord } from "../why";
 import { kindLabel, folderOf, browsable, kindCounts, audience, factAudience, searchNotes, queryWords, recentChanges, needsLook, freshnessOf, lifeWords, sinceDate, sourceWords, who, connections } from "./browse";
 import { pageTree, ancestors, sections, footnotes, summaryOf, recentUpdates, idsAsWords } from "../wiki";
 import { ownerLocal } from "../clock";
+import { maskSecrets } from "./home";
 
 const val = (v: unknown) => (typeof v === "object" ? JSON.stringify(v) : String(v ?? ""));
 // /note/<id> is the owner's edit page, reached from "Edit this page" on /p; a link that opens a page goes to /p.
@@ -207,7 +208,8 @@ export function wikiLinks(s: State, text: string) {
 // linked or not) shows that page's name.
 const plainValue = (v: unknown, s?: State) => {
   const title = (id: string) => { const n = s?.notes.find((x) => x.fm.id === id); return n ? String(n.fm.title ?? id) : undefined; };
-  const t = val(v);
+  // A code or password inside a saved value shows as a mark here too (G991); the editors hold the stored text.
+  const t = maskSecrets(val(v));
   return title(t.trim()) ?? t.replace(/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g, (_m, to: string, label?: string) => label ?? title(to) ?? to);
 };
 
@@ -349,7 +351,7 @@ export function notePage(s: State, csrf: string, note: Note, text: string, edito
   const whoBox = whoCanSee(s, csrf, note, seen);
   const addFact = `<div class="b-addfact${addOpen ? " editing" : ""}"><a class="b-add" href="${noteHref(fm.id)}?edit=_new#b-facts" data-edit="_new">+ Add a fact</a>${form(csrf, "/action/fact-set", `<input type="hidden" name="id" value="${esc(fm.id)}"><div class="b-pair"><input type="text" name="attribute" placeholder="What, e.g. phone" aria-label="what"><input type="text" name="value" placeholder="Value" aria-label="value" autocomplete="off"></div><div class="b-foot"><span>${whoWillSee(s, note, "", true)}</span><span class="b-gap"></span><input type="text" name="as_of" placeholder="since (today)" aria-label="as of" class="b-asof"><a class="btn" href="${noteHref(fm.id)}#b-facts" data-cancel>Cancel</a><button class="go">Add</button></div>`, `class="b-edit"${addOpen ? "" : " hidden"}`)}</div>`;
   const body = note.body.trim();
-  const prose = `<h2>Notes</h2><div id="b-text" class="b-text" tabindex="0" role="button" aria-label="Edit the notes" title="Click to edit">${body ? wikiBody(s, body) : '<span class="sub">Add notes about this, in your own words.</span>'}</div>
+  const prose = `<h2>Notes</h2><div id="b-text" class="b-text" tabindex="0" role="button" aria-label="Edit the notes" title="Click to edit">${body ? wikiBody(s, maskSecrets(body)) : '<span class="sub">Add notes about this, in your own words.</span>'}</div>
 ${form(csrf, "/action/note-body-save", `<input type="hidden" name="id" value="${esc(fm.id)}"><textarea name="body" rows="6" aria-label="notes">${esc(body)}</textarea><div class="b-foot"><span>${seen.length ? `${esc(names(seen.map((a) => agentLabel(s.rules, a))))} will see this text.` : "Only you see this text."}</span><span class="b-gap"></span><a class="btn" href="${noteHref(fm.id)}" data-cancel>Cancel</a><button class="go">Save notes</button></div>`, 'id="b-text-form" class="b-textform" hidden')}`;
   const earlier = history.length ? `<details class="b-hist"><summary>Earlier values (${history.length})</summary><div class="card b-list">${history.map(({ a, r }) => `<div class="b-row"><span class="b-main"><span><span class="sub" title="${esc(a)}">${esc(cap(a))}:</span> <s>${esc(plainValue(r.value, s))}</s></span><span class="b-meta">${r.as_of ? `from ${esc(r.as_of)}` : ""}${r.ended_by?.correction ? ` · never right, corrected by ${esc(who(s, r.ended_by.by))} ${esc(r.ended_by.at)}` : r.ended_by ? ` until ${esc(r.ended_by.at)}, replaced by ${esc(who(s, r.ended_by.by))}` : r.retired ? ` · forgotten ${esc(r.retired.at)}` : ""} · added by ${esc(who(s, r.by))}</span></span></div>`).join("")}</div></details>` : "";
   const tell = form(csrf, `/propose/${fm.id}`, `<input type="text" name="instruction" placeholder="What changed?" aria-label="What changed?" autocomplete="off"><button>Suggest</button>`, 'class="b-tell"');

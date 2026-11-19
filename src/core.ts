@@ -795,7 +795,9 @@ function settle(root: string, p: Packet, chosen: FactRecord, by: string, step: n
 // G964): side `keep` (from 0) stays, as the record the page holds when it is that side, so nothing
 // it gained since is lost; a hold on any side stays on the answer. No side is the owner's pick: the
 // diary line (why "machine") has Undo, which opens the question again. False when it can't.
-export function setAsideSide(root: string, id: string, keep: number): boolean {
+// `o` names another reason for the same close (a side that held a code or password, why "secret",
+// src/kept-secrets.ts, G991).
+export function setAsideSide(root: string, id: string, keep: number, o: { kind?: string; why?: DiaryRow["why"]; reason?: string } = {}): boolean {
   let p: Packet;
   try { p = loadPacket(root, id); } catch { return false; }
   if (!["open", "escalated"].includes(String(p.note.fm.status))) return false;
@@ -808,8 +810,8 @@ export function setAsideSide(root: string, id: string, keep: number): boolean {
   const { contested: _c, ...rec } = structuredClone(mine ?? side) as FactRecord & { contested?: string; dispute?: string };
   delete rec.dispute;
   if ([...cands, ...held].some((r) => r.unseen)) rec.unseen = true;
-  const resolution = { by: "hub", at: today(), value: rec.value, why: "the other side came only from machine mail" };
-  try { settle(root, p, rec as FactRecord, "hub", 0, { status: "resolved", resolution }, "machine-mail", "machine"); }
+  const resolution = { by: "hub", at: today(), value: rec.value, why: o.reason ?? "the other side came only from machine mail" };
+  try { settle(root, p, rec as FactRecord, "hub", 0, { status: "resolved", resolution }, o.kind ?? "machine-mail", o.why ?? "machine"); }
   catch { return false; }
   return true;
 }

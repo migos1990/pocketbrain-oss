@@ -31,6 +31,7 @@ import { foldTwins } from "./fold";
 import { findOverlaps } from "./overlap";
 import { setAsideMachineMail } from "./receipt-pages";
 import { setAsideFirstNamePages, firstNameOn } from "./first-name-pages";
+import { setAsideKeptSecrets, savedCodesOn } from "./kept-secrets";
 import { unguessAreas, unguessOn, fileUnfiled } from "./area-guess";
 import { linkFamily } from "./family";
 import { OWNER } from "./owner";
@@ -186,6 +187,15 @@ export function upkeep(root: string, opts: { live?: LiveSource[]; now?: string; 
     const fp = setAsideFirstNamePages(root, on);
     if (on && fp.pages.length) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
     else if (fp.pages.length) add({ rule: "first-name-page", key: "first-name-page", kind: "review", detail: `${fp.pages.length} person page${fp.pages.length === 1 ? " is" : "s are"} named only by your first name; \`pocketbrain first-name-pages on\` sets ${fp.pages.length === 1 ? "it" : "them"} aside, each fact with Undo` });
+  }
+  //      Saved values that hold a code or password (src/kept-secrets.ts, G991): set aside once, a
+  //      diary line each with Undo; off until `pocketbrain saved-codes on`, a count then (no value,
+  //      no page named).
+  {
+    const on = savedCodesOn(rules);
+    const ks = setAsideKeptSecrets(root, on);
+    if (on && ks.facts) { notes = loadBrain(root); byId.clear(); for (const n of notes) byId.set(n.fm.id, n); }
+    else if (ks.facts) add({ rule: "saved-code", key: "saved-code", kind: "review", detail: `${ks.facts} saved value${ks.facts === 1 ? "" : "s"} on ${ks.pages} page${ks.pages === 1 ? "" : "s"} hold${ks.facts === 1 ? "s" : ""} a code or password; \`pocketbrain saved-codes on\` sets ${ks.facts === 1 ? "it" : "them"} aside, each with Undo` });
   }
   //      Pages a word guess put in an area (src/area-guess.ts, G842): back to the default area, a
   //      `moved` diary line each with Undo; off until `pocketbrain areas unguess on`, a count then.

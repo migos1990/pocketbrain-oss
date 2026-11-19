@@ -135,6 +135,13 @@ export function setFirstNamePages(root: string, mode: string): string {
   return setRulesKeys(root, "policy.yaml", { first_name_pages: { set_aside: mode === "on" } }, `first-name-pages ${mode}`);
 }
 
+// `pocketbrain saved-codes on|off`: whether the nightly pass sets aside saved values that hold a code
+// or password (src/kept-secrets.ts, G991) or only counts them. Off until the owner says so.
+export function setSavedCodes(root: string, mode: string): string {
+  if (mode !== "on" && mode !== "off") throw new OwnerSetError("saved-codes on | off");
+  return setRulesKeys(root, "policy.yaml", { saved_codes: { set_aside: mode === "on" } }, `saved-codes ${mode}`);
+}
+
 // `pocketbrain sources count-sent <gmail source> on [--days N] | off`: whether the hub counts who
 // the owner writes to from his sent mail's headers (To, Cc, Date; never a body, never a fact), for
 // Who matters suggestions (src/pull.ts countSent, G829). The number is the first look-back in days.

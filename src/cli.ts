@@ -52,8 +52,9 @@ import { openWindow, cleanup, rotate } from "./gardener";
 import { namePlan } from "./mentions";
 import { setAsideMachineMail, classifyOldMail, oldMailLine, machineMailOn } from "./receipt-pages";
 import { setAsideFirstNamePages } from "./first-name-pages";
+import { setAsideKeptSecrets } from "./kept-secrets";
 import { guessedAreas, setAreasUnguess } from "./area-guess";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setFirstNamePages, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setFirstNamePages, setSavedCodes, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -335,6 +336,7 @@ const USAGE = `pocketbrain <command>
   write-hold | write-hold clear <agent>   who writes proposals only after writing a value it can't see, or let one write again (docs/add-an-agent.md)
   machine-mail | machine-mail on|off   count the facts assistants filed from machine mail, or set them aside nightly with Undo (docs/owner-home.md)
   machine-mail check                 classify mail filed from before machine senders were skipped: a count, or with machine-mail on read each once now
+  saved-codes | saved-codes on|off             count saved values that hold a code or password, or set them aside nightly with Undo (docs/owner-home.md)
   first-name-pages | first-name-pages on|off   list person pages named only by your first name, or set them aside nightly with Undo (docs/capture.md)
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
@@ -1974,6 +1976,13 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
   if (cmd === "machine-mail") {
     const r = setAsideMachineMail(root, false);
     console.log(`${r.facts} fact${r.facts === 1 ? "" : "s"} on ${r.pages} page${r.pages === 1 ? "" : "s"} came only from machine mail; \`pocketbrain machine-mail on\` sets them aside each night, each with Undo.`);
+    return 0;
+  }
+  // Saved values that hold a code or password (src/kept-secrets.ts, G991): count, or set aside nightly.
+  if (cmd === "saved-codes" && (args[0] === "on" || args[0] === "off")) return ownerSet(() => setSavedCodes(root, args[0]!));
+  if (cmd === "saved-codes") {
+    const r = setAsideKeptSecrets(root, false);
+    console.log(`${r.facts} saved value${r.facts === 1 ? "" : "s"} on ${r.pages} page${r.pages === 1 ? "" : "s"} hold${r.facts === 1 ? "s" : ""} a code or password; \`pocketbrain saved-codes on\` sets them aside each night, each with Undo.`);
     return 0;
   }
   // Person pages named only by the owner's first name (src/first-name-pages.ts, G978): list, or set aside nightly.
