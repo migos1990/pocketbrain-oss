@@ -250,6 +250,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "page-kind.ts#rankOf": { class: "not-reviewed" },
   "probe.ts#NOTIFY": { class: "not-reviewed" },
   "probe.ts#jobChecks": { class: "not-reviewed" },
+  "proofread.ts#asPageRead": { class: "machine-words", why: "the field names of the page reading a deploy script printed, each checked to be a number" },
   "proofread.ts#readPage": { class: "not-reviewed" },
   "pull.ts#STANDING_KINDS": { class: "not-reviewed" },
   "pull.ts#SCHEME": { class: "not-reviewed" },

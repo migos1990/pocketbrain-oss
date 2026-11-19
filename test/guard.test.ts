@@ -48,7 +48,9 @@ test("guard fails closed on a payload without a tool name", () => {
 });
 
 import { reminder } from "../.claude/hooks/after-edit";
-test("after-edit reminds on the access core and prompts only", () => {
+test("after-edit reminds on the access core, prompts and the owner's screens only", () => {
+  expect(reminder("/r/src/dashboard/html-home.ts")).toMatch(/verify\.ts --for origin\/main/);
+  expect(reminder("/r/test/dashboard.test.ts")).toBeUndefined();
   expect(reminder("/r/src/carve.ts")).toMatch(/slice audit/);
   expect(reminder("/r/src/orientation.ts")).toMatch(/--only agents/);
   expect(reminder("/r/src/digest.ts")).toBeUndefined();

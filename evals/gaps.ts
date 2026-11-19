@@ -124,6 +124,20 @@ export const GAPS: Record<string, Gap> = {
     finding: "Night of 2026-11-16 (on 4c880787): \"300 memories, 3 doors, 0 leaks, 2 missing\", seeds 21773206 and 21773215, and the owner's home said the nightly check failed. In both, a reader held area slices for some areas but not all, plus a slice with only a level or an attribute list, and a page not filed yet sat in one of its areas. The carve keeps such a page from the area slice (G849, G872) and reads it only under the filter-only slice, which kept the facts out. test/carve-owed.ts owed the page whenever the leak oracle didn't carve it, and the leak oracle (evals/lib/oracle.ts) still counted any slice with no area, kind or tag as reading every area, so it neither carved the page nor caught a regression of G872. Introduced by PR 194 (claude/new-page-area, 2026-11-15), which tightened the carve and mirrored only half of it in the oracle; CI's six fixed seeds never build that shape.",
     fix: "test/carve-owed.ts owes a page not filed yet only to all or an area slice for every area; evals/lib/oracle.ts keeps such a page out when every slice that could read it in every area caps it below its level. The carve is unchanged. Both seeds frozen in test/fixtures/carve-seeds/ (replayed on every run, every door), a miss is now frozen like a leak, test/carve-property.test.ts G981. Known limit (slice audit): a page not filed yet that only a level- or attribute-only slice serves is no longer owed, so a miss there is not counted; the leak half still reads it.",
   },
+  G984: {
+    closed: "claude/deploy-reads-pages",
+    title: "Nothing read the owner's real pages between a deploy and the owner opening his phone",
+    severity: "medium",
+    finding: "Read of main d8251c3 (2026-11-16): the nightly read (src/proofread.ts) counts odd sentences on the real brain but runs only in the night pass and tells no one; `deploy go` printed the north star and brain quotes, nothing about sentences or speed; the render budgets (scripts/perf.ts) run on a synthetic brain only. Odd sentences and a slow page were found by the owner on his phone.",
+    fix: "scripts/page-read.ts reads every owner page once (src/proofread.ts readPages: the nightly read's rules and each page's render time, nothing written) and prints counts and milliseconds only. scripts/deploy.ts go runs it from the checkout before the change and again after the new code is verified, and prints one line with the difference and WORSE when sentences or speed got worse; report-only. test/page-read.test.ts, test/deploy-go.test.ts. Open: a page made odd by new mail on old code is still only counted at night.",
+  },
+  G985: {
+    closed: "claude/verify-taps",
+    title: "Nothing tapped the owner's app or looked at it before a pull request",
+    severity: "medium",
+    finding: "The UI regression compares each page's accessibility text with a snapshot and the UI quality suite checks states and contrast, but no check tapped a button, measured how long a tap took to show its result, or put the picture in front of the thread; \"checked at 390px dark\" was a rule in project notes. A slow tap and wording faults were found by the owner on his phone (lessons from the verification article, 2026-11-16, change 2).",
+    fix: "scripts/verify.ts walks a feature map of owner flows (FLOWS) on the demo brain at 390px dark with touch, one tap at a time; each step is timed against TAP_BUDGET_MS and screenshotted, and a step that doesn't show its result, a page wider than the phone, a console error or a refused request fails the run. The skill .claude/skills/verify has the thread read every screenshot, --for <base> runs it only for the ui lane, and the after-edit hook reminds after an edit under src/dashboard/. test/verify.test.ts pins what blocks, the map against docs/ui-quality.md, and runs one flow.",
+  },
   G971: {
     closed: "claude/brain-quotes-zero",
     title: "Brain quotes counted the hub's own paragraph and side-by-side literals as quotes, and real-shaped text stayed in tests and history docs",

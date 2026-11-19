@@ -38,6 +38,41 @@ except under `CI`, where it fails and asks for the baseline to be committed.
 
 Comparison runs inside Chromium: both images are drawn on a canvas and the pixels counted there.
 
+## Verify: taps, timings and a look
+
+The checks above read what each page says. `bun scripts/verify.ts` uses the app: it boots the demo
+brain's dashboard, opens it 390 px wide in dark mode with a touch screen, and walks the feature map
+below one tap at a time. Each flow starts from its own copy of the demo brain's morning.
+
+| Flow | What the owner does | Steps |
+|---|---|---|
+| `home` | Open the app on what waits for you | 2 |
+| `settle` | Settle a question, then take it back | 4 |
+| `tell` | Tell your memory something, then undo it | 3 |
+| `page` | Open a page from a line on the home | 3 |
+| `memory` | Find a person in your memory | 3 |
+| `ask` | Ask about someone | 2 |
+| `see-as` | See your memory as one assistant does | 2 |
+| `let` | Let an assistant have one thing it doesn't get | 2 |
+
+For each step it records how long the tap took to show its result and a full-page screenshot, and
+it fails (exit 1) on a step that doesn't reach its screen, a tap over 1500 ms (`--budget <ms>`;
+opening a page by its address is a load, not a tap, and has no budget), a page wider than the
+phone, an error in the page's console, or a request the hub answered with 400 or more.
+
+```
+bun scripts/verify.ts --list                 # the feature map with each step
+bun scripts/verify.ts --out <folder>         # every flow, screenshots in <folder>
+bun scripts/verify.ts --only settle,tell     # some flows
+bun scripts/verify.ts --for origin/main      # only when the change touches the ui lane (scripts/lane.ts)
+```
+
+`VERIFY OK` means the taps worked, not that the screens look right: the skill `/verify`
+(`.claude/skills/verify/SKILL.md`) has the thread read every screenshot before the pull request,
+and an edit under `src/dashboard/` reminds the session of it (`.claude/hooks/after-edit.ts`). It
+is not part of `bun test` or CI, apart from one flow that `test/verify.test.ts` runs to keep the
+walk itself working. A new thing the owner can do gets a flow in `FLOWS` and a row here.
+
 ## The demo brain
 
 `examples/demo-brain` is Robin Lefebvre's made-up life on 30 September 2026: 60 people across work,

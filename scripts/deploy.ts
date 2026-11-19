@@ -5,7 +5,9 @@
 //   `bun install`, restart, and keep it only when the restarted hub's own /health reports that sha
 //   (the code it started on, not what is checked out); else back to the sha before. Then the real
 //   brain's north star once for that code, its counts in the output and deploy.json, report-only,
-//   and the brain-quotes report (file:line only, what is new since the last deploy, G956).
+//   and the brain-quotes report (file:line only, what is new since the last deploy, G956). It also
+//   reads the owner's pages on the real brain before and after the change (scripts/page-read.ts) and
+//   prints what the new code did to odd sentences and render time: counts only, report-only (G984).
 // - run, the release follower: a launchd job runs this every 10 minutes: when the
 // `release` branch on GitHub points at a new vX.Y.Z tag (CI moves it there only after the tag
 // passed), check it out, `bun install`, restart the hub with a plain kickstart, and wait for
@@ -23,6 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { keysDir } from "../src/secrets";
 import { northStarFor, northStarLine, type NorthStarRecord } from "../src/probe";
+import { asPageRead, pageReadLine, type PageRead } from "../src/proofread";
 
 export type Status = "deployed" | "current" | "rolled-back" | "down" | "blocked" | "held" | "error";
 // unreleased_since: the oldest commit on main that the release branch doesn't have (null when level),
@@ -31,7 +34,7 @@ export type Status = "deployed" | "current" | "rolled-back" | "down" | "blocked"
 // north_star: that code's real-brain counts (counts only, never a page name); brain_quotes: the
 // tracked files' lines that repeat 8 words of a brain page, by file:line only (G956).
 export interface BrainQuotes { lines: number; hits: string[] }
-export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; brain_quotes?: BrainQuotes; checked_at: string }
+export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; brain_quotes?: BrainQuotes; page_read?: PageRead; checked_at: string }
 export interface Effects {
   install(dir: string): boolean;
   restart(): boolean;
@@ -45,6 +48,9 @@ export interface GoEffects extends Effects {
   northStar(code: string): Promise<NorthStarRecord | undefined>;
   // scripts/brain-quotes.ts of the code now running, over the real brain: file:line only, report-only.
   brainQuotes?(code: string): Promise<BrainQuotes | undefined>;
+  // scripts/page-read.ts of the checkout as it is when called, over the real brain: counts and
+  // milliseconds only. Undefined when that checkout has no such script (code from before G984).
+  pageRead?(): Promise<PageRead | undefined>;
 }
 
 // One line for the deploy log: the count, and which file:line are new since the last count (G956).
@@ -138,7 +144,7 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
   const short = (x?: string) => x?.slice(0, 7) ?? "nothing";
   const save = (s: Omit<DeployState, "checked_at" | "mode">): DeployState => {
     // The last count stays until a new one replaces it, so "new since the last deploy" holds.
-    const full: DeployState = { mode: "go", ...(last?.brain_quotes ? { brain_quotes: last.brain_quotes } : {}), ...s, checked_at: now() };
+    const full: DeployState = { mode: "go", ...(last?.brain_quotes ? { brain_quotes: last.brain_quotes } : {}), ...(last?.page_read ? { page_read: last.page_read } : {}), ...s, checked_at: now() };
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(full, null, 2) + "\n");
     fx.log(`${full.checked_at} ${full.status}: ${full.detail}`);
@@ -154,6 +160,8 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
   const target = t.out;
   if (!git(app, "merge-base", "--is-ancestor", target, `refs/remotes/${remote}/main`).ok) return save({ ...keep, status: "error", detail: `${short(target)} is not on ${remote}/main; not deploying` });
   const head = git(app, "rev-parse", "HEAD").out;
+  // The owner's pages on the code that runs before the change (G984). Set just before the checkout.
+  let readBefore: PageRead | undefined;
   const report = async (s: Omit<DeployState, "checked_at" | "mode">): Promise<DeployState> => {
     // The north star for the code that runs now: counts only, report-only (no alert, no block).
     let ns: NorthStarRecord | undefined, why = "";
@@ -168,12 +176,25 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
         if (q) { fx.log(brainQuotesLine(q, last?.brain_quotes)); out.brain_quotes = q; } else fx.log("brain quotes: didn't run: no report");
       } catch (e) { fx.log(`brain quotes: didn't run: ${(e as Error).message}`); }
     }
+    // Then the same pages on the code that runs now, against the reading from before (G984):
+    // counts and milliseconds only; it never blocks or rolls back.
+    if (fx.pageRead) {
+      try {
+        const a = await fx.pageRead();
+        if (a) { fx.log(pageReadLine(a, readBefore)); out.page_read = a; } else fx.log("pages read: didn't run: no reading");
+      } catch (e) { fx.log(`pages read: didn't run: ${(e as Error).message}`); }
+    }
     return save(out);
   };
   if (head === target && (await fx.code(target)) === target) return report({ ...keep, sha: target, running: target, status: "current", detail: `already running ${short(target)}; hub reports it` });
   const dirty = git(app, "status", "--porcelain", "--untracked-files=no").out;
   if (dirty) return save({ ...keep, status: "blocked", detail: `${app} has uncommitted changes (${dirty.split("\n").length} file(s)); not deploying ${short(target)} over them` });
 
+  // A reading that can't be taken never stops a deploy: the line after it then has nothing to compare.
+  // The checkout is "the code before" only while it isn't the target yet: a checkout already moved
+  // by hand (the hub still on the old code) would be read by the new code twice and always say
+  // "the same" (code review of PR 230), so that deploy has nothing to compare with.
+  if (fx.pageRead && head !== target) { try { readBefore = await fx.pageRead(); } catch { readBefore = undefined; } }
   fx.log(`${now()} deploying ${short(target)} (was ${short(head)})`);
   const restart = () => { writeFileSync(join(dirname(file), "deploy.restart"), now() + "\n"); return fx.restart(); };
   const up = (sha: string) => git(app, "checkout", "-q", "--detach", sha).ok && fx.install(app) && restart();
@@ -231,6 +252,19 @@ export function macEffects(health: string, brain?: string, appDir?: string): GoE
       if (r.exitCode !== 0) throw new Error(r.stderr.toString().trim().split("\n").pop() || `exit ${r.exitCode}`);
       const j = JSON.parse(r.stdout.toString()) as { lines: number; hits: string[] };
       return { lines: j.lines, hits: j.hits };
+    },
+    // In a child, from the checkout as it is now (the old code before the change, the new after):
+    // it reads the brain, writes nothing and prints counts and milliseconds only.
+    pageRead: async () => {
+      if (!brain) throw new Error("no brain folder known (pass --brain, or set PB_BRAIN)");
+      const app = appDir ?? join(homedir(), "pocketbrain");
+      const script = join(app, "scripts", "page-read.ts");
+      if (!existsSync(script)) return undefined;
+      const r = Bun.spawnSync(["bun", script, "--brain", brain, "--json"], { cwd: app, stdout: "pipe", stderr: "pipe", timeout: 180_000 });
+      if (r.exitCode !== 0) throw new Error(r.stderr.toString().trim().split("\n").pop() || `exit ${r.exitCode}`);
+      const read = asPageRead(JSON.parse(r.stdout.toString()));
+      if (!read) throw new Error("an answer that isn't counts");
+      return read;
     },
     log: (l) => console.log(l),
   };

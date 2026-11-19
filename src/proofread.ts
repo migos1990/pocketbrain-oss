@@ -109,25 +109,34 @@ export function readPage(html: string): Rule[] {
 
 const file = (root: string) => join(root, "log", "proofread.json");
 
-// Every page the owner has, as he sees it tonight. Never throws for one page: a page that fails
-// to render is counted under `failed`, not named.
+// Every page the owner has, as he sees it now, with how long each took to render. Never throws for
+// one page: a page that fails to render is counted under `failed`, not named. Writes nothing.
+export function readPages(root: string, now = new Date()): { read: Proofread; ms: number[] } {
+  const s = loadState(root, now);
+  const r: Proofread = { at: now.toISOString(), pages: 0, odd_pages: 0, by_rule: {}, by_kind: {} };
+  const ms: number[] = [];
+  for (const n of s.notes) {
+    if (n.fm.type === "hub") continue;
+    r.pages++;
+    let hits: Rule[];
+    const t = performance.now();
+    try { hits = readPage(ownerPage(s, "", n, pageLines(root, s.rules, s.notes, n.fm.id), { fresh: true })); }
+    catch { r.failed = (r.failed ?? 0) + 1; continue; }
+    finally { ms.push(performance.now() - t); }
+    if (!hits.length) continue;
+    r.odd_pages++;
+    const kind = String(n.fm.type ?? "page").replace(/[^a-z_-]/gi, "").slice(0, 24) || "page";
+    const k = (r.by_kind[kind] ??= {});
+    for (const h of hits) { r.by_rule[h] = (r.by_rule[h] ?? 0) + 1; k[h] = (k[h] ?? 0) + 1; }
+  }
+  return { read: r, ms };
+}
+
+// The night's run: the same read, kept in log/proofread.json with a heartbeat.
 export function proofread(root: string, now = new Date()): Proofread {
   const t0 = Date.now();
   try {
-    const s = loadState(root, now);
-    const r: Proofread = { at: now.toISOString(), pages: 0, odd_pages: 0, by_rule: {}, by_kind: {} };
-    for (const n of s.notes) {
-      if (n.fm.type === "hub") continue;
-      r.pages++;
-      let hits: Rule[];
-      try { hits = readPage(ownerPage(s, "", n, pageLines(root, s.rules, s.notes, n.fm.id), { fresh: true })); }
-      catch { r.failed = (r.failed ?? 0) + 1; continue; }
-      if (!hits.length) continue;
-      r.odd_pages++;
-      const kind = String(n.fm.type ?? "page").replace(/[^a-z_-]/gi, "").slice(0, 24) || "page";
-      const k = (r.by_kind[kind] ??= {});
-      for (const h of hits) { r.by_rule[h] = (r.by_rule[h] ?? 0) + 1; k[h] = (k[h] ?? 0) + 1; }
-    }
+    const r = readPages(root, now).read;
     mkdirSync(join(root, "log"), { recursive: true });
     writeFileSync(`${file(root)}.${process.pid}.tmp`, JSON.stringify(r) + "\n");
     renameSync(`${file(root)}.${process.pid}.tmp`, file(root));
@@ -137,6 +146,44 @@ export function proofread(root: string, now = new Date()): Proofread {
     beat(root, "proofread", { ok: false, error: (e as Error).message, ms: Date.now() - t0, now });
     throw e;
   }
+}
+
+// The read a deploy takes, before and after it changes the code (G984): the owner's pages on his
+// own brain, as counts and milliseconds only. Never a page's id, title or words. `slow` counts
+// pages that took over SLOW_PAGE_MS to render.
+export const SLOW_PAGE_MS = 300;
+export interface PageRead { pages: number; failed: number; odd: number; odd_pages: number; by_rule: Partial<Record<Rule, number>>; median_ms: number; p95_ms: number; max_ms: number; slow: number }
+export function pageReadOf(read: Proofread, ms: number[]): PageRead {
+  const sorted = [...ms].sort((a, b) => a - b);
+  const at = (q: number) => (sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]) : 0);
+  const by_rule: Partial<Record<Rule, number>> = {};
+  for (const k of RULES) if (read.by_rule[k]) by_rule[k] = read.by_rule[k];
+  return { pages: read.pages, failed: read.failed ?? 0, odd: Object.values(by_rule).reduce((a, n) => a + (n ?? 0), 0), odd_pages: read.odd_pages, by_rule, median_ms: at(0.5), p95_ms: at(0.95), max_ms: sorted.length ? Math.round(sorted[sorted.length - 1]) : 0, slow: ms.filter((x) => x > SLOW_PAGE_MS).length };
+}
+// What a script printed is checked before it is trusted: numbers, and rule names this code knows.
+export function asPageRead(j: unknown): PageRead | undefined {
+  const o = j as Record<string, unknown> | null;
+  const num = (k: string) => typeof o?.[k] === "number" && Number.isFinite(o[k] as number) && (o[k] as number) >= 0;
+  if (!o || typeof o !== "object" || !["pages", "failed", "odd", "odd_pages", "median_ms", "p95_ms", "max_ms", "slow"].every(num)) return undefined;
+  const by_rule: Partial<Record<Rule, number>> = {};
+  for (const k of RULES) { const n = (o.by_rule as Record<string, unknown> | undefined)?.[k]; if (typeof n === "number" && n > 0) by_rule[k] = n; }
+  return { pages: o.pages as number, failed: o.failed as number, odd: o.odd as number, odd_pages: o.odd_pages as number, by_rule, median_ms: o.median_ms as number, p95_ms: o.p95_ms as number, max_ms: o.max_ms as number, slow: o.slow as number };
+}
+// One line for the deploy log. With the reading taken on the code before, minutes earlier on the
+// same brain, it says what the new code changed. Slower means over SLOW_PAGE_MS now and at least
+// half again as slow as before, or more pages over the line.
+export function pageReadLine(a: PageRead, before?: PageRead): string {
+  const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const fails = a.failed ? `; ${s(a.failed, "page")} failed to render${before ? ` (was ${before.failed})` : ""}` : "";
+  const tail = "(report only; counts and milliseconds, never a page's name or words)";
+  if (!before) return `pages read: ${s(a.odd, "odd sentence")} on ${a.odd_pages} of ${s(a.pages, "page")}; a page renders in ${a.median_ms} ms at the median, ${a.max_ms} ms at the slowest, ${a.slow} over ${SLOW_PAGE_MS} ms${fails}; no reading on the code before, so nothing to compare ${tail}`;
+  const d = a.odd - before.odd;
+  const moved = RULES.map((k) => [k, (a.by_rule[k] ?? 0) - (before.by_rule[k] ?? 0)] as const).filter(([, n]) => n).map(([k, n]) => `${k} ${n > 0 ? "+" : ""}${n}`).join(", ");
+  const sentences = `${d === 0 ? "the same count as" : d > 0 ? `${d} more than` : `${-d} fewer than`} on the code before${moved ? ` (${moved})` : ""}`;
+  const worse: string[] = [];
+  if (d > 0 || a.failed > before.failed) worse.push("sentences");
+  if (a.slow > before.slow || (a.max_ms > SLOW_PAGE_MS && a.max_ms > before.max_ms * 1.5)) worse.push("speed");
+  return `pages read: ${s(a.odd, "odd sentence")} on ${a.odd_pages} of ${s(a.pages, "page")}, ${sentences}; a page renders in ${a.median_ms} ms at the median (was ${before.median_ms}), ${a.max_ms} ms at the slowest (was ${before.max_ms}), ${a.slow} over ${SLOW_PAGE_MS} ms (was ${before.slow})${fails}${worse.length ? `; WORSE than the code before: ${worse.join(" and ")}` : ""} ${tail}`;
 }
 
 export function readProofread(root: string): Proofread | undefined {
