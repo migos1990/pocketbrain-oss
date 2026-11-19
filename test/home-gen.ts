@@ -14,15 +14,18 @@
 //   code      a person's mail whose next step carries a voucher code, read by a careless
 //             extractor that hands the code back                              -> none, and the
 //             code on no screen
+//   steps     two people, the same day, two different next steps for one project (G965: a page
+//             holds several things to do)                                     -> none, and both
+//             steps on the project's page
 //   answered  a clash the owner then answers (a side, the other side, keep both, or their own
 //             words); some are said again by the same sender the day after    -> gone, and it stays gone
 // Every name, role and sentence here is invented for this file.
 import { prng } from "./carve-gen";
 
-export type Kind = "clash" | "three" | "split" | "agree" | "forward" | "reworded" | "machine" | "code" | "answered";
+export type Kind = "clash" | "three" | "split" | "agree" | "forward" | "reworded" | "machine" | "code" | "steps" | "answered";
 export type Answer = "first" | "second" | "both" | "typed";
 export interface Mail { day: number; minute: number; from: number | "machine"; entity: string; type: "person" | "project"; attribute: string; value: string; sentence: string; stem?: string }
-export interface Case { kind: Kind; key: string; entity: string; attribute: string; mails: Mail[]; sides?: number; answer?: Answer; typed?: string; again?: Mail; never?: string[] }
+export interface Case { kind: Kind; key: string; entity: string; attribute: string; mails: Mail[]; sides?: number; answer?: Answer; typed?: string; again?: Mail; never?: string[]; both?: string[] }
 export interface Week { seed: number; owner: { name: string; address: string }; people: string[]; cases: Case[] }
 
 export const OWNER = { name: "Mara Quill", address: "mara@example.org" };
@@ -33,6 +36,11 @@ export const PROJECTS = ["Orchard Survey", "Winter Fair", "Ferry Timetable", "Ar
 const ROLES = ["field lead", "volunteer host", "route planner", "scan operator", "press contact", "stage manager", "site steward", "data keeper", "tour guide", "print buyer", "floor captain", "map editor"];
 const ORGS = ["Tide Works", "Alder Hall", "Quay Trust", "Fern Guild", "Mill Row Studio", "Lantern House", "Cedar Wharf", "Moss Lane Press"];
 const STEPS = ["count the east rows", "order the stall tents", "post the spring sailings", "box the old ledgers"];
+// Projects for the two-steps case: titles the hub starts a page for (an errand's or a trip's title starts
+// none), with no word a privacy rule reads as money (a step about money is asked, by design).
+const BUSY = ["Harbour Map", "Seed Library", "Bell Tower Repair", "Reed Marsh Census"];
+// Things to do that are not each other in other words: two of them on one project are two steps.
+const MORE_STEPS = ["hire the tally clerks", "paint the gate signs", "weigh the spare crates", "mend the reading lamps", "chart the tide tables", "label the seed trays"];
 const TYPED = ["harbour liaison", "Birch Yard"];
 
 export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -93,6 +101,11 @@ export function week(seed: number): Week {
     { day: 1, minute: minute++, from: a, entity: project, type: "project", attribute: "next_step", value: STEPS[PROJECTS.indexOf(project)]!, sentence: say(project, "next_step", STEPS[PROJECTS.indexOf(project)]!, PEOPLE[a]!) },
     { day: 4, minute: minute++, from: b, entity: project, type: "project", attribute: "next_step", value: `redeem the print voucher ${code}`, sentence: `${stem} ${code} before Friday`, stem },
   ] });
+  // Another project gets two next steps the same day, from two people. (Drawn after everything
+  // above, so the weeks of the seeds kept in test/fixtures/home-seeds.json are the weeks they were.)
+  const busy = pick(BUSY), [s1, s2] = two(MORE_STEPS), [c, d] = two(PEOPLE.map((_, k) => k)), when = 2 + Math.floor(r.next() * 3);
+  const step = (from: number, value: string): Mail => ({ day: when, minute: minute++, from, entity: busy, type: "project", attribute: "next_step", value, sentence: say(busy, "next_step", value, PEOPLE[from]!) });
+  cases.push({ kind: "steps", key: keyOf("project", busy, "next_step"), entity: busy, attribute: "next_step", both: [s1, s2], mails: [step(c, s1), step(d, s2)] });
   return { seed, owner: OWNER, people: PEOPLE, cases };
 }
 

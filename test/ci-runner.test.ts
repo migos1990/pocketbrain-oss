@@ -5,8 +5,10 @@
 // variable PB_RUNNER picks the runner, only in the private repo, never for a fork's PR, and the
 // jobs that hold a deploy key or publish stay on GitHub's runners (G751).
 import { test, expect } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testFiles, shard } from "../scripts/test-shard";
 import YAML from "yaml";
 
 const ROOT = join(import.meta.dir, "..");
@@ -14,7 +16,7 @@ const wf = (f: string) => YAML.parse(readFileSync(join(ROOT, ".github", "workflo
 const ci = wf("ci.yml");
 
 test("G751: test, e2e and conformance run on the Mac only when PB_RUNNER is set, in the private repo, for a branch of its own", () => {
-  for (const job of ["suite", "suite-cells", "test", "e2e", "conformance"]) {
+  for (const job of ["suite", "suite-plain", "suite-cells", "test", "e2e", "conformance"]) {
     const on = String(ci.jobs[job]["runs-on"]);
     expect(on).toContain("vars.PB_RUNNER");
     expect(on).toContain("fromJSON(vars.PB_RUNNER)");
@@ -64,10 +66,14 @@ test("G958: no workflow runs on a floating Linux label: ubuntu-latest moved to 2
   }
 });
 
-test("G982: the two suites run side by side, and the required `test` check is green only when both succeeded", () => {
+test("G982, G1001: the suites run side by side, each in two parts, and the required `test` check is green only when every suite job succeeded", () => {
   const runs = (job: string) => (ci.jobs[job].steps as { run?: string }[]).map((s) => s.run ?? "").filter((r) => /\bbun test\b/.test(r));
-  expect(runs("suite").length).toBe(1);
-  expect(runs("suite")[0]).not.toContain("PB_CELLS");
+  // The plain suite is its own job in two parts (G1001); `suite` keeps the scans, the rules and the evals.
+  expect(runs("suite").length).toBe(0);
+  expect(runs("suite-plain").length).toBe(1);
+  expect(runs("suite-plain")[0]).toStartWith("bun test");
+  expect(ci.jobs["suite-plain"].strategy.matrix.part).toEqual([1, 2]);
+  expect(ci.jobs["suite-plain"].needs).toBeUndefined();
   expect(runs("suite-cells").length).toBe(1);
   expect(runs("suite-cells")[0]).toStartWith("PB_CELLS=1 bun test");
   // The cells suite is two jobs, a part of the test files each (test/test-shard.test.ts); `needs`
@@ -76,19 +82,49 @@ test("G982: the two suites run side by side, and the required `test` check is gr
   expect(ci.jobs.suite.needs).toBeUndefined();
   expect(ci.jobs["suite-cells"].needs).toBeUndefined();
   const t = ci.jobs.test;
-  expect(t.needs).toEqual(["suite", "suite-cells"]);
+  expect(t.needs).toEqual(["suite", "suite-plain", "suite-cells"]);
   // Without always(), a failed suite leaves `test` skipped, and GitHub counts a skipped required check as passed.
   expect(t.if).toBe("always()");
   const step = t.steps[0] as { env: Record<string, string>; run: string };
-  expect(step.env).toEqual({ SUITE: "${{ needs.suite.result }}", CELLS: "${{ needs.suite-cells.result }}" });
-  const verdict = (suite: string, cells: string) => Bun.spawnSync(["bash", "-e", "-c", step.run], { env: { ...process.env, SUITE: suite, CELLS: cells } }).exitCode;
-  expect(verdict("success", "success")).toBe(0);
+  expect(step.env).toEqual({ SUITE: "${{ needs.suite.result }}", PLAIN: "${{ needs.suite-plain.result }}", CELLS: "${{ needs.suite-cells.result }}" });
+  const verdict = (suite: string, plain: string, cells: string) => Bun.spawnSync(["bash", "-e", "-c", step.run], { env: { ...process.env, SUITE: suite, PLAIN: plain, CELLS: cells } }).exitCode;
+  expect(verdict("success", "success", "success")).toBe(0);
   for (const bad of ["failure", "cancelled", "skipped", ""]) {
-    expect(verdict(bad, "success")).not.toBe(0);
-    expect(verdict("success", bad)).not.toBe(0);
+    expect(verdict(bad, "success", "success")).not.toBe(0);
+    expect(verdict("success", bad, "success")).not.toBe(0);
+    expect(verdict("success", "success", bad)).not.toBe(0);
   }
-  // The cells suite installs what its tests need, with the lockfile frozen.
-  const cells = (ci.jobs["suite-cells"].steps as { run?: string }[]).map((s) => s.run ?? "").join("\n");
-  expect(cells).toContain("bun install --frozen-lockfile");
-  expect(cells).toContain("playwright install --with-deps chromium");
+  // Each suite job installs what its tests need, with the lockfile frozen.
+  for (const job of ["suite-plain", "suite-cells"]) {
+    const all = (ci.jobs[job].steps as { run?: string }[]).map((s) => s.run ?? "").join("\n");
+    expect(all).toContain("bun install --frozen-lockfile");
+    expect(all).toContain("playwright install --with-deps chromium");
+    expect(all).toContain("apt-get install -y openssh-client age");
+  }
+  // A skipped browser suite looks like a pass: the part of the plain suite that holds the UI
+  // regression counts its screenshots, and the other part passes that step without counting.
+  const plain = ci.jobs["suite-plain"].steps as { name?: string; run?: string; env?: Record<string, string> }[];
+  expect(plain.find((s) => s.run?.startsWith("bun test"))!.env).toEqual({ PB_UI_SHOT_DIR: "ui-shots" });
+  const ran = plain.find((s) => s.name === "the UI regression ran")!.run!;
+  const files = testFiles(ROOT), holds = [1, 2].filter((p) => shard(files, p, 2).includes("./test/ui-regression.test.ts"));
+  expect(holds.length).toBe(1);
+  const count = (part: number, shots: number, standIn?: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "pb-ci-shots-"));
+    mkdirSync(join(dir, "test", "ui"), { recursive: true }); mkdirSync(join(dir, "ui-shots")); mkdirSync(join(dir, "scripts"));
+    for (let i = 0; i < 3; i++) writeFileSync(join(dir, "test", "ui", `p${i}.aria.yml`), "");
+    for (let i = 0; i < shots; i++) writeFileSync(join(dir, "ui-shots", `p${i}.png`), "");
+    // The step asks the shard script which files its part holds: here a stand-in that prints the real part.
+    writeFileSync(join(dir, "scripts", "test-shard.ts"), standIn ?? `console.log(${JSON.stringify(shard(files, part, 2).join(" "))});`);
+    return Bun.spawnSync(["bash", "-e", "-c", ran.replaceAll("${{ matrix.part }}", String(part))], { cwd: dir, env: process.env }).exitCode;
+  };
+  expect(count(holds[0]!, 3)).toBe(0);
+  expect(count(holds[0]!, 2)).not.toBe(0);
+  expect(count(holds[0]!, 0)).not.toBe(0);
+  expect(count(3 - holds[0]!, 0)).toBe(0);
+  // G1003: a part list that can't be read fails the step in either part, instead of both parts
+  // saying the UI regression is in the other one.
+  for (const part of [1, 2]) {
+    expect(count(part, 3, "process.exit(1);")).not.toBe(0);
+    expect(count(part, 3, "")).not.toBe(0);
+  }
 });

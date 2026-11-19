@@ -5,6 +5,27 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G1003: {
+    closed: "claude/verify-followups",
+    title: "The screenshot count could pass in both parts of the plain suite",
+    severity: "low",
+    finding: "Code review of PR 247 (2026-11-19, .github/workflows/ci.yml): the step that counts the UI regression's screenshots asked scripts/test-shard.ts which part holds that test and skipped the count when it was not named. Had the script failed or printed nothing, both parts would have said the test was in the other part, and a browser suite that never ran would have passed.",
+    fix: "The step reads the part's list first and fails when it cannot be read or is empty, then looks for the test in it. test/ci-runner.test.ts runs the step with a list script that fails and one that prints nothing, in each part.",
+  },
+  G1000: {
+    closed: "claude/verify-followups",
+    title: "The home property never made up two next steps for one project",
+    severity: "low",
+    finding: "Read of test/home-gen.ts on main be074404 (2026-11-19): the rule that two different next steps sit side by side and never ask (G965, src/dated.ts twoSteps) had its own example tests, and the home property's made-up weeks held no case of it, so a change that made the home ask the owner to pick between two things to do would pass the property.",
+    fix: "test/home-gen.ts: every made-up week gives one project two different next steps from two people on the same day (drawn after every other case, so the kept seeds are the weeks they were). test/home-check.ts statement 7: the home never asks about it and the project's page holds both. Seen failing on all 6 weeks with twoSteps switched off. A test of the rule as it is; nothing about what counts as an ask changes.",
+  },
+  G1001: {
+    closed: "claude/verify-followups",
+    title: "CI's plain suite ran in one step at half of its limit",
+    severity: "low",
+    finding: "Merge gate output of 2026-11-19: the plain bun test step took 1172 s at the median of main's last five runs, 49% of its 2400 s limit, and runners differ two to three times in speed (G814). The cells suite was split at over 70% (G982) only after it had held every merge; the plain one was next.",
+    fix: ".github/workflows/ci.yml: the plain suite is job suite-plain, two jobs with a part of the test files each (scripts/test-shard.ts, the parts the cells suite uses); job suite keeps the scans, the gate's rules, the typecheck, the evals, the north star, the demo and the restore drill; the required check test waits for suite, suite-plain and suite-cells. The screenshot count runs in the part that holds the UI regression. scripts/gate.ts isSuiteJob reads the new job names, and its shape rule (G982) leaves out runs from before the split. Tests: test/ci-runner.test.ts, test/test-shard.test.ts, test/gate-ci-time.test.ts.",
+  },
   G999: {
     closed: "claude/scoreboard",
     title: "No page said the claims as numbers a stranger could print again, and the demo answers count moved with whether the search model was installed",

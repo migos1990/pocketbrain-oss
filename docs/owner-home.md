@@ -191,7 +191,8 @@ This is the spec's re-prompt for when there is no WebAuthn. It is no device chec
 week held. `test/home-gen.ts` makes a week from a seed: an invented owner, eight people they know,
 and a handful of cases, each about one fact and each with its right answer known before any hub
 code runs. Two people give two values the same day (a question). Two people give the same value,
-or one value in two spellings, or a newer value on a later day (no question). A no-reply sender
+or one value in two spellings, or a newer value on a later day (no question). Two people give
+two different next steps for one project the same day (no question, and both on its page). A no-reply sender
 gives another value than a person did (no question, and its value on no screen). A mail's next
 step carries a voucher code and a careless extractor hands it back (no question, and the code on
 no screen). And the owner answers some questions on day six, by a side, the other side, keep both
@@ -199,7 +200,7 @@ or their own words, with the same sender sometimes saying the same thing again t
 
 `test/home-check.ts` pulls and files the week day by day on a fresh brain with the shipped default
 rules, answers through the settle screen's own functions, reads the same mail once more, and then
-reads the home, its cards and each settle screen as the owner would. Six statements, written from
+reads the home, its cards and each settle screen as the owner would. Seven statements, written from
 the week and the screens and apart from the code that decides what asks:
 
 1. Every question the home asks is about a fact two people gave two values for that week.
@@ -213,6 +214,8 @@ the week and the screens and apart from the code that decides what asks:
    again, and is not asked again when the same sender says the same thing the day after.
 6. Each question is said in plain words: it names its page, and shows no source ref, long id,
    page path, field name, link bracket or a program's empty word.
+7. Two different next steps two people gave for one project the same day are never a question,
+   and the project's page holds both.
 
 It reads the home; it changes nothing about what counts as an ask. Six weeks run on each
 `bun test`; `HOME_SOAK=1 bun test test/home-property.test.ts` runs 300 and prints one line of

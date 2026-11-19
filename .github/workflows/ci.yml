@@ -13,9 +13,11 @@ concurrency:
 # GitHub's runners, unless the repo variable PB_RUNNER names the Mac's runner (["self-hosted","pb-mac"]).
 # Only in the private repo, never for a fork's PR, and never the jobs that publish or hold a deploy
 # key (release.yml, public-sync.yml stay on GitHub's runners). Delete the variable to go back.
-# The required check is still named `test`: it passes only when both suites did. They run side by
+# The required check is still named `test`: it passes only when every suite job did. They run side by
 # side (G982); until then the cells suite started only when the plain one had finished.
 jobs:
+  # The scans, the gate's rules, the typecheck, the evals, the north star, the demo and the restore
+  # drill. `bun test` itself runs in suite-plain and suite-cells below.
   suite:
     runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
     # Step timeouts sit below the job's, so a hang turns a step red instead of the job "cancelled".
@@ -111,29 +113,10 @@ jobs:
           exit "${PIPESTATUS[0]}"
       - run: bun run typecheck
       - run: bun run deadcode   # unused files, dependencies, unlisted or unresolved imports (knip.json)
-      - run: bunx playwright install --with-deps chromium   # before the tests: dashboard browser tests and eval episodes
+      - run: bunx playwright install --with-deps chromium   # for the dashboard eval episodes below
       - name: lane
         if: github.event_name == 'pull_request'
         run: bun scripts/lane.ts "origin/${{ github.base_ref }}" | tee -a "$GITHUB_STEP_SUMMARY"
-      # Includes the UI regression (test/ui-regression.test.ts): every dashboard and /b page against
-      # its saved snapshot in test/ui/, on the fictional sample brain. Screenshots go up as an artifact.
-      - run: bun test --timeout 20000
-        timeout-minutes: 40
-        env:
-          PB_UI_SHOT_DIR: ui-shots
-      # A skipped browser suite looks like a pass: require one screenshot per snapshot.
-      - name: the UI regression ran
-        run: |
-          want=$(ls test/ui/*.aria.yml | wc -l); got=$(ls ui-shots/*.png 2>/dev/null | wc -l)
-          echo "UI regression: $got screenshots for $want snapshots"
-          [ "$got" -ge "$want" ] && [ "$want" -gt 0 ]
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ui-shots
-          path: ui-shots/
-          if-no-files-found: ignore
-          retention-days: 14
       # The eval suite (owned by the eval thread): exits 1 on regressions, ignores known gaps.
       - name: evals
         timeout-minutes: 10
@@ -149,6 +132,53 @@ jobs:
       - name: restore drill on the sample brain
         timeout-minutes: 5
         run: bun src/cli.ts drill --demo
+  # The plain test suite, in two jobs, each a part of the test files (scripts/test-shard.ts, the same
+  # parts as the cells suite below): in one step it took about half of its limit on a usual runner and
+  # a slow runner takes twice as long (G1001).
+  suite-plain:
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: sudo apt-get install -y openssh-client age   # ssh-keygen for signed-commit tests, age for backups
+        if: runner.os == 'Linux'
+      - run: command -v ssh-keygen && command -v age
+        if: runner.os == 'macOS'
+      - run: git config --global user.name ci && git config --global user.email ci@example.com
+      - run: bunx playwright install --with-deps chromium   # dashboard browser tests
+      # Includes the UI regression (test/ui-regression.test.ts), in the part that holds that file: every
+      # dashboard and /b page against its saved snapshot in test/ui/, on the fictional sample brain.
+      # Screenshots go up as an artifact.
+      - run: bun test --timeout 20000 $(bun scripts/test-shard.ts ${{ matrix.part }} 2)
+        timeout-minutes: 40
+        env:
+          PB_UI_SHOT_DIR: ui-shots
+      # A skipped browser suite looks like a pass: the part that ran the UI regression must have one
+      # screenshot per snapshot. The other part has none to count. A part list that can't be read
+      # fails the step: otherwise both parts would say "the other part" and nothing would count (G1003).
+      - name: the UI regression ran
+        run: |
+          files=$(bun scripts/test-shard.ts ${{ matrix.part }} 2)
+          [ -n "$files" ] || { echo "no test files listed for this part"; exit 1; }
+          if ! printf '%s\n' $files | grep -qx './test/ui-regression.test.ts'; then echo "the UI regression is in the other part"; exit 0; fi
+          want=$(ls test/ui/*.aria.yml | wc -l); got=$(ls ui-shots/*.png 2>/dev/null | wc -l)
+          echo "UI regression: $got screenshots for $want snapshots"
+          [ "$got" -ge "$want" ] && [ "$want" -gt 0 ]
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-shots
+          path: ui-shots/
+          if-no-files-found: ignore
+          retention-days: 14
   # The same tests with every read through per-agent cells (CLAUDE.md invariant 10), beside the plain
   # suite instead of after it. Only what the tests need: the scans and the gate's rules run once, above.
   # In two jobs, each a part of the test files (scripts/test-shard.ts: disjoint, together every file;
@@ -175,20 +205,21 @@ jobs:
       - run: PB_CELLS=1 bun test --timeout 20000 $(bun scripts/test-shard.ts ${{ matrix.part }} 2)   # every read through per-agent cells
         timeout-minutes: 40
   # The one required check on main (docs/release.md "Pull requests"). It runs whatever happened to the
-  # suites and is green only when both succeeded: a failed, cancelled or skipped suite turns it red.
+  # suite jobs and is green only when all succeeded: a failed, cancelled or skipped one turns it red.
   test:
-    needs: [suite, suite-cells]
+    needs: [suite, suite-plain, suite-cells]
     if: always()
     runs-on: ${{ vars.PB_RUNNER && github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.PB_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 5
     steps:
-      - name: both suites passed
+      - name: every suite job passed
         env:
           SUITE: ${{ needs.suite.result }}
+          PLAIN: ${{ needs.suite-plain.result }}
           CELLS: ${{ needs.suite-cells.result }}
         run: |
-          echo "suite: $SUITE, suite-cells: $CELLS"
-          [ "$SUITE" = success ] && [ "$CELLS" = success ]
+          echo "suite: $SUITE, suite-plain: $PLAIN, suite-cells: $CELLS"
+          [ "$SUITE" = success ] && [ "$PLAIN" = success ] && [ "$CELLS" = success ]
   # Full-stack regression: a real hub on the sample brain, a fake assistant through each door
   # (pasted bearer, /b browser, OAuth, local), the same golden path on each, then the free
   # switch-day check. Answers are compared with test/e2e/doors.json. docs/release.md.

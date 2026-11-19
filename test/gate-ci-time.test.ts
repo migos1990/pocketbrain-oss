@@ -61,15 +61,17 @@ test("G982: a suite split across jobs counts once per run, as its slowest part, 
 });
 
 test("G982: a matrix part of the cells suite is read under the name GitHub gives it, so the rule keeps watching it", () => {
-  for (const name of ["test", "suite", "suite-cells", "suite-cells (1)", "suite-cells (2)"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: true`);
-  for (const name of ["e2e", "conformance", "cold-install", "suite-cells (x)", "outside-pr"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: false`);
+  for (const name of ["test", "suite", "suite-cells", "suite-cells (1)", "suite-cells (2)", "suite-plain", "suite-plain (1)", "suite-plain (2)"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: true`);
+  for (const name of ["e2e", "conformance", "cold-install", "suite-cells (x)", "suite-plain (x)", "suite-other (1)", "outside-pr"]) expect(`${name}: ${isSuiteJob(name)}`).toBe(`${name}: false`);
 });
 
 test("G982: only main runs in today's shape are measured; until three exist the rule says so and neither blocks nor passes", () => {
   const yml = readFileSync(join(import.meta.dir, "..", ".github", "workflows", "ci.yml"), "utf8");
-  expect(stepParts(yml)).toEqual({ "bun test": 1, "PB_CELLS=1 bun test": 2 });
+  // Today both suites run in two parts (the plain one since G1001).
+  expect(stepParts(yml)).toEqual({ "bun test": 2, "PB_CELLS=1 bun test": 2 });
   expect(stepParts("      - run: PB_CELLS=1 bun test\n        timeout-minutes: 40\n")).toEqual({ "PB_CELLS=1 bun test": 1 });
-  const limits = { "bun test": 2400, "PB_CELLS=1 bun test": 2400 }, parts = stepParts(yml);
+  // The shape between G982 and G1001: the plain suite whole, the cells suite in two parts.
+  const limits = { "bun test": 2400, "PB_CELLS=1 bun test": 2400 }, parts = { "bun test": 1, "PB_CELLS=1 bun test": 2 };
   const at = (s: number) => new Date(Date.UTC(2026, 10, 18, 12, 0, 0) + s * 1000).toISOString();
   const step = (name: string, s: number) => ({ name, started_at: at(0), completed_at: at(s) });
   // A run from before the split: the whole cells suite in one step. It is not today's step.
@@ -79,6 +81,13 @@ test("G982: only main runs in today's shape are measured; until three exist the 
   expect(runStepTimes(after, limits, parts)).toEqual({ seconds: { "bun test": 1222, "PB_CELLS=1 bun test": 547 }, older: [] });
   // A run where one part never finished its step is not a whole measurement either.
   expect(runStepTimes(after.slice(0, 2), limits, parts).seconds).toEqual({ "bun test": 1222 });
+  // G1001: with the plain suite in two parts too, a run that ran it whole is an older shape, and a
+  // run in today's shape counts each suite once, as its slower part.
+  const now = stepParts(yml);
+  expect(runStepTimes(after, limits, now)).toEqual({ seconds: { "PB_CELLS=1 bun test": 547 }, older: ["bun test"] });
+  const split = [step("Run bun test --timeout 20000 $(bun scripts/test-shard.ts 1 2)", 640), step("Run bun test --timeout 20000 $(bun scripts/test-shard.ts 2 2)", 580), ...after.slice(1)];
+  expect(runStepTimes(split, limits, now)).toEqual({ seconds: { "bun test": 640, "PB_CELLS=1 bun test": 547 }, older: [] });
+  expect(stepLimits(yml)).toEqual({ "bun test": 2400, "PB_CELLS=1 bun test": 2400 });
 
   const waiting = ciTimeVerdict([{ step: "PB_CELLS=1 bun test", limit: 2400, seconds: [547], older: 4 }]);
   expect(waiting).toEqual({ lines: [`CI \`PB_CELLS=1 bun test\` on main: not enough runs yet, 1 of ${CI_TIME_MIN_RUNS} since the step changed shape (4 older runs ran it differently and are not counted)`] });

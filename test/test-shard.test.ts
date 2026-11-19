@@ -35,10 +35,10 @@ test("the command prints one part, and nothing on a bad argument (so bun test th
   for (const bad of [[], ["0", "2"], ["3", "2"], ["a", "2"], ["1", "0"]]) { const r = run(...bad); expect(r.exitCode).toBe(1); expect(r.stdout.toString()).toBe(""); }
 });
 
-test("CI's cells suite runs each part once: the matrix names every part of the number the step asks for", () => {
+test.each([["suite-cells", "PB_CELLS=1 bun test"], ["suite-plain", "bun test"]])("CI's %s job runs each part once: the matrix names every part of the number the step asks for", (name, start) => {
   const ci = YAML.parse(readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"));
-  const job = ci.jobs["suite-cells"];
-  const step = (job.steps as { run?: string }[]).map((s) => s.run ?? "").find((r) => r.startsWith("PB_CELLS=1 bun test"))!;
+  const job = ci.jobs[name];
+  const step = (job.steps as { run?: string }[]).map((s) => s.run ?? "").find((r) => r.startsWith(start))!;
   const m = step.match(/\$\(bun scripts\/test-shard\.ts \$\{\{ matrix\.part \}\} (\d+)\)/);
   expect(m).not.toBeNull();
   expect(job.strategy.matrix.part).toEqual(Array.from({ length: Number(m![1]) }, (_, i) => i + 1));

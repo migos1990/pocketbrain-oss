@@ -163,7 +163,7 @@ function ciRuns(): CiRun[] | string {
 export const CI_TIME_SHARE = 0.7;
 export const CI_TIME_MIN_RUNS = 3;
 // seconds: newest first, only runs where the step had today's shape; older: runs left out because
-// the step ran in another shape then (the whole cells suite in one step, before it ran in parts).
+// the step ran in another shape then (a whole suite in one step, before it ran in parts).
 export interface StepTime { step: string; seconds: number[]; limit: number; older?: number }
 export function stepLimits(ciYml: string): Record<string, number> {
   const out: Record<string, number> = {};
@@ -199,8 +199,9 @@ export function ciTimeVerdict(times: StepTime[]): { lines: string[]; block?: str
 }
 
 // The jobs that run a suite, by the name GitHub's jobs API gives them: `test` before the suites ran
-// side by side, `suite`, and each part of the cells suite's matrix ("suite-cells (1)").
-export const isSuiteJob = (name: string) => /^(test|suite|suite-cells(?: \(\d+\))?)$/.test(name);
+// side by side, `suite` (the plain suite, whole, until G1001), and each part of the plain and the
+// cells suite's matrix ("suite-plain (1)", "suite-cells (1)").
+export const isSuiteJob = (name: string) => /^(test|suite|suite-(?:plain|cells)(?: \(\d+\))?)$/.test(name);
 export function slowestPerStep(steps: { name: string; started_at: string; completed_at: string }[], limits: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const s of steps) {
@@ -239,7 +240,7 @@ export function ciStepTimes(): StepTime[] | string {
     for (const id of JSON.parse(ids.stdout.toString()) as number[]) {
       const r = gh(`repos/${repo}/actions/runs/${id}/jobs`, '[.jobs[] | {job: .name, steps: [.steps[] | select(.conclusion == "success" or .conclusion == "failure") | {name, started_at, completed_at}]}]');
       if (r.exitCode !== 0) continue;
-      // A suite that runs in several jobs (suite-cells, a part of the files each) counts once per
+      // A suite that runs in several jobs (suite-plain, suite-cells, a part of the files each) counts once per
       // run, as its slowest part: that is the one a limit would stop.
       const steps = (JSON.parse(r.stdout.toString()) as { job: string; steps: Parameters<typeof slowestPerStep>[0] }[]).filter((j) => isSuiteJob(j.job)).flatMap((j) => j.steps);
       const t = runStepTimes(steps, limits, parts);

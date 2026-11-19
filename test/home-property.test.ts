@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Home as a property (G987): for made-up weeks of mail (test/home-gen.ts: two people who disagree,
 // who agree, a newer value, one value in two spellings, a machine's mail, a voucher code, and
-// three people with three values or two against one, questions the owner answers) the owner's home makes sense, whatever the week held. The six
+// three people with three values or two against one, two next steps for one project, questions the owner answers) the owner's home makes sense, whatever the week held. The seven
 // statements are in test/home-check.ts, written from the week and the screens, apart from the
 // code that decides what asks. It reads the home; it never changes what counts as an ask.
 //   Each run: HOME_CASES weeks (default 6).  Soak: HOME_SOAK=1 (300).  One seed: HOME_SEED=n.
@@ -57,7 +57,7 @@ test("the generator is the same week for the same seed, every kind of case turns
   for (let i = 0; i < 300; i++) expect(JSON.stringify(week(BASE + (i % 40)))).toBe(JSON.stringify(week(BASE + (i % 40))));
   const some = Array.from({ length: 12 }, (_, i) => week(BASE + i));
   const kinds = new Set(some.flatMap((w) => w.cases.map((c) => c.kind)));
-  for (const k of ["clash", "three", "split", "agree", "forward", "reworded", "machine", "code", "answered"]) expect(kinds.has(k as never)).toBe(true);
+  for (const k of ["clash", "three", "split", "agree", "forward", "reworded", "machine", "code", "steps", "answered"]) expect(kinds.has(k as never)).toBe(true);
   expect(new Set(some.flatMap((w) => w.cases.map((c) => c.answer)).filter(Boolean)).size).toBe(4);
   for (const w of some) {
     expect(new Set(w.cases.map((c) => c.key)).size).toBe(w.cases.length);
