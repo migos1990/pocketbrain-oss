@@ -177,6 +177,18 @@ const FORGOTTEN = "You forgot someone by this name, so only you decide it.";
 // Owner-facing only: never shown to the assistant, which got the write path's one fixed reply.
 const REOPENED = "The hub filed it once and nothing was saved, so you decide it.";
 const NOT_IN_VIEW = "The assistant can't see all of that page, so only you decide it.";
+// A write handed to the owner for access alone that is only a guess (the owner's typed yes,
+// 2026-11-16): an active assistant's own plain fact, not a capture, not one that cites the owner's
+// word or reads like health, legal or money, and not from a writer on proposals only. The home
+// shows it as Not confirmed; everything else handed back for access still asks.
+function accessGuess(root: string, rules: Rules, it: Item, pr: Proposal): boolean {
+  const agent = rules.policy.agents[pr.by];
+  if (!agent || isOwnerId(pr.by) || (agent.status && agent.status !== "active") || captured(root, pr.file)) return false;
+  const r = pr.request as { id?: string; title?: string; attribute?: string; value?: unknown; text?: string; kind?: string; retract?: unknown; agent?: unknown };
+  if ((r.kind ?? "fact") !== "fact" || r.retract || it.private || it.money || citesOwner(pr)) return false;
+  if (writesHeld(root, pr.by) || writesHeld(root, String(r.agent ?? pr.by))) return false;
+  return !sensitiveShape(rules, r.id, r.title, r.attribute, r.value, r.text);
+}
 function judge(root: string, it: Item, p: EscalationPolicy, ctx: { notes: Note[] }, now: Date): Verdict {
   const a = p.auto_decide;
   if (NEVER[it.kind]) return { never: NEVER[it.kind] };
@@ -287,8 +299,10 @@ export const SET_ASIDE = "set it aside";
 // byCapture: an assistant's own capture citing a source, about a person, that waits for the owner by
 // the source-save rule (not the capture agent's or the owner's): kept waiting under the scope freeze
 // and counted on its own line, never an ask (coordinator, 2026-11-01; G600).
-export interface Queues { held: Map<string, string>; expiring: Map<string, string>; setAside: Map<string, string>; byCapture: Set<string>; byAmbiguity: Set<string> }
-export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map(), byCapture: new Set(), byAmbiguity: new Set() });
+// byAccess: an assistant's fact on a page it can't fully see, a guess: a Not confirmed line on the
+// home, never an ask (the owner's typed yes, 2026-11-16). It waits as before and never expires.
+export interface Queues { held: Map<string, string>; expiring: Map<string, string>; setAside: Map<string, string>; byCapture: Set<string>; byAmbiguity: Set<string>; byAccess: Set<string> }
+export const newQueues = (): Queues => ({ held: new Map(), expiring: new Map(), setAside: new Map(), byCapture: new Set(), byAmbiguity: new Set(), byAccess: new Set() });
 const HELD_DATED = new WeakSet<Plan>();
 
 // Active, and one the owner lets write: a core tier, inside the wall, or the capture agent. One on
@@ -703,6 +717,7 @@ export function autoSaves(root: string, now = new Date(), state?: ReturnType<typ
       else if ("plan" in v && v.plan.label === SET_ASIDE) queues?.setAside.set(it.ref, v.plan.at);
       else if ("plan" in v && v.plan.choice === "reject") queues?.expiring.set(it.ref, v.plan.at);
       else if ("never" in v && v.never === AMBIGUOUS) queues?.byAmbiguity.add(it.ref);
+      else if ("never" in v && v.never === NOT_IN_VIEW) { const pr = proposalOf(root, it.ref); if (pr && accessGuess(root, build!.rules, it, pr)) queues?.byAccess.add(it.ref); }
       else if ("never" in v && v.never === ABOUT_PERSON) {
         const pr = proposalOf(root, it.ref);
         if (pr && !isOwnerId(pr.by) && pr.by !== captureAgent(build!.rules) && captured(root, pr.file)) queues?.byCapture.add(it.ref);

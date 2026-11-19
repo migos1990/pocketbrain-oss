@@ -89,7 +89,8 @@ test("G598: north star counts a waiting proposal the home shows as a conflict as
 // (an item added, the value the page already holds) is the rule working, not a filing failure. It
 // waits on Settings, never on the home, and the north star counts it on its own line, never as an ask.
 // One counted list (owner, 2026-11-01, through the coordinator after "i trust u"; audit v10): a held item is still an ask, its held line only says why.
-test("G598: north star counts a not_in_your_view handback that contradicts nothing in asks, with held_by_access saying why", async () => {
+// The owner's typed yes (2026-11-16) replaces that: it is a guess, a Not confirmed line, in no count.
+test("G598: a not_in_your_view handback that contradicts nothing is no ask; the north star counts it apart", async () => {
   const { measure, counts } = await import("../scripts/north-star");
   const root = makeBrain();
   writeFileSync(join(root, "rules", "escalation.yaml"), "health: { url: null }\nauto_decide: { file: all }\n");
@@ -98,12 +99,11 @@ test("G598: north star counts a not_in_your_view handback that contradicts nothi
   expect(write(root, { agent: "planner", kind: "fact", id: "people/jane-roy", attribute: "org", value: "Acme", as_of: "2026-10-05", sources: ["agent:planner"] } as never).outcome).toBe("inbox");
   const now = new Date();
   const m = measure(root, new Date(now.getTime() - 86_400_000).toISOString(), now);
-  expect(m.held_by_access).toBe(1);
-  expect(m.asks).toBe(1);
-  expect(m.asks_by_kind.held_by_access).toBe(1);
-  expect(m.not_conflict).toBe(1);
-  expect(m.home_asks).toBe(1); // its card on the home counts what waits on Settings (G626)
-  expect(counts(m).held_by_access).toBe(1);
+  expect(m.held_by_access).toBe(0);
+  expect(m.asks).toBe(0);
+  expect(m.asks_by_kind.held_by_access).toBeUndefined();
+  expect(m.home_asks).toBe(0);
+  expect(counts(m).access_guess).toBe(1);
 }, 60_000);
 
 // Builder's slice audit of G598 (tree 19798906), F1: assistant text in a proposal's reason (here an

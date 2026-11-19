@@ -40,7 +40,7 @@ export interface OwnerAsks {
   settings: number; // asks the home doesn't list itself: they wait on Settings
   queues: Queues;
   homeConflicts: Set<string>;
-  byAccess: Set<string>;
+  byAccess: Set<string>; // an assistant's guess on a page it can't fully see: a Not confirmed line, not an ask
 }
 
 const reasonOf = (root: string, file: string): string => {
@@ -55,10 +55,13 @@ export function ownerAsks(root: string, now = new Date(), later = now): OwnerAsk
   const queues = newQueues();
   const saves = autoSaves(root, now, undefined, queues);
   const homeConflicts = new Set(inboxConflicts(root).map((c) => c.file));
-  const byAccess = new Set(items.filter((i) => i.kind === "proposal" && !homeConflicts.has(i.ref) && !changesHeld(root, i.ref) && heldByAccess(reasonOf(root, i.ref))).map((i) => i.ref));
-  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref))));
+  const forAccess = new Set(items.filter((i) => i.kind === "proposal" && !homeConflicts.has(i.ref) && !changesHeld(root, i.ref) && heldByAccess(reasonOf(root, i.ref))).map((i) => i.ref));
+  // Of those, the ones that are only a guess (filing.ts accessGuess): Not confirmed on the home, in
+  // no count (the owner's typed yes, 2026-11-16). The rest handed back for access still ask.
+  const byAccess = new Set([...forAccess].filter((ref) => queues.byAccess.has(ref)));
+  const waiting = items.filter((i) => DECISIONS.has(i.kind) && !(i.kind === "proposal" && (saves.has(i.ref) || queues.held.has(i.ref) || queues.expiring.has(i.ref) || queues.setAside.has(i.ref) || byAccess.has(i.ref))));
   // A proposal the home lists as a conflict is asked there, as a conflict, whatever rule held it (G622).
-  const heldBy = (ref: string) => homeConflicts.has(ref) ? undefined : byAccess.has(ref) ? "held_by_access" : queues.byCapture.has(ref) ? "held_by_capture" : queues.byAmbiguity.has(ref) ? "held_by_ambiguity" : undefined;
+  const heldBy = (ref: string) => homeConflicts.has(ref) ? undefined : forAccess.has(ref) ? "held_by_access" : queues.byCapture.has(ref) ? "held_by_capture" : queues.byAmbiguity.has(ref) ? "held_by_ambiguity" : undefined;
   const by: Record<string, number> = {};
   for (const i of waiting) { const k = (i.kind === "proposal" && heldBy(i.ref)) || i.kind; by[k] = (by[k] ?? 0) + 1; }
   const other = items.filter((i) => OTHER_ASKS.has(i.kind));

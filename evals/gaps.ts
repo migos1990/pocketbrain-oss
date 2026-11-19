@@ -116,6 +116,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Same ask as G961: the card's \"The Gardener leans this way\" line printed the reason as stored, with a source's ref and id in brackets (src/core.ts ownerConflicts passes suggestion.why to src/dashboard/html-settle.ts row). Machine text on the owner's screen.",
     fix: "src/dashboard/html-settle.ts leanWords: a bracketed ref is dropped and a bare one is said in words (\"an email\", \"your calendar\"); only a known scheme with an id counts, so a time or a label keeps its colon. The stored reason is unchanged. Code review of PR 221: the scheme lookup took inherited keys, so \"constructor:x\" read as a ref; it is an own-key lookup now. test/owner-settle.test.ts.",
   },
+  G974: {
+    closed: "claude/access-not-confirmed",
+    title: "An assistant's harmless fact on a page it can't fully see waited as an ask",
+    severity: "medium",
+    finding: "Owner's hub, 2026-11-16: a write handed to the owner only because its assistant can't see all of the page (write.ts not_in_your_view), contradicting nothing, was counted as an ask under Needs a look in Settings (held_by_access, G598, G618). It is a guess, and the standing rule for a guess is a Not confirmed line, never an ask.",
+    fix: "By the owner's typed yes (2026-11-16): filing.ts accessGuess marks such a proposal when it is an active assistant's own plain fact (not a capture, not citing the owner's word, not money, health or legal shaped, writer not on proposals only); ownerAsks leaves it out of every count and the home lists it under Not confirmed with Keep (keepGuesses, the owner's accept). It never expires and nothing files it: its fate in the inbox is what it was, so its writer learns nothing about the page (invariant 3, G953). The north star prints it apart (access_guess). The write path is unchanged. test/access-not-confirmed.test.ts.",
+  },
   G964: {
     closed: "claude/machine-mail-served",
     title: "The machine-mail cleanup leaves a fact assistants already have, and one that is a side in a question",

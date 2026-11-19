@@ -758,7 +758,8 @@ export const firstName = (rules: Rules) => (rules.policy.owner?.name ?? ownerNam
 
 // What an assistant said about the owner's pages that nobody confirmed (cold install, 2026-11-15: a
 // new owner's first "remember that I prefer short answers" was saved where no screen showed it).
-// Only the open saves the hub leaves to expire (src/filing.ts, its expiring queue): a guess, shown as
+// Only the open saves the hub leaves to expire (src/filing.ts, its expiring queue) and an assistant's
+// fact on a page it can't fully see (its byAccess queue, which waits and never expires): a guess, shown as
 // "Not confirmed" under the standing rule for guesses. Never an ask, never counted, nothing filed or
 // tied by it; it goes when it expires, unless the owner keeps it: Keep, or Keep all on its page
 // (src/keep-guess.ts, G941), with `keep` naming the proposal and the hash of the bytes shown. Nothing
@@ -767,7 +768,7 @@ export interface Unconfirmed { page?: string; title?: string; what: string; from
 export function unconfirmedLines(root: string, rules: Rules, notes: Map<string, Note>, asks: OwnerAsks, cards: Proposal[] = proposals(root)): Unconfirmed[] {
   const all = [...notes.values()], out: Unconfirmed[] = [];
   for (const p of cards) {
-    if (!asks.queues.expiring.has(p.file) || p.capture || p.pulledFrom || isOwnerId(p.by) || /^It carried a value/.test(p.reason)) continue;
+    if ((!asks.queues.expiring.has(p.file) && !asks.byAccess.has(p.file)) || p.capture || p.pulledFrom || isOwnerId(p.by) || /^It carried a value/.test(p.reason)) continue;
     const r = p.request as { id?: unknown; title?: unknown; type?: unknown; attribute?: unknown; value?: unknown; text?: unknown; kind?: unknown; retract?: unknown };
     if ((r.kind ?? "fact") !== "fact" || r.retract || typeof r.attribute !== "string" || r.value === undefined) continue;
     const id = typeof r.id === "string" ? r.id : typeof r.title === "string" && typeof r.type === "string" ? resolveEntity(all, r.type, r.title).id : undefined;
