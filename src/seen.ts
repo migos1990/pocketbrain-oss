@@ -33,7 +33,7 @@ const strangerGuess = (recs: FactRecord[]) => recs.length > 0 && recs.every((r) 
 
 function held(root: string, pick: "waits" | "guess"): Unseen[] {
   const out: Unseen[] = [];
-  for (const n of loadBrain(root)) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+  for (const n of loadBrain(root, { shared: true })) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     const recs = liveUnseen(f).filter((r) => !r.kept_private);
     if (recs.length && strangerGuess(recs) === (pick === "guess")) out.push(unseenOf(n, attr, f, recs));
   }
@@ -153,7 +153,7 @@ export function markSeen(root: string, factKey: string): { outcome: "seen" | "no
 // (/home?all=1) shows them, uncounted, each with Let them have it, so keeping one is never final.
 export function keptFacts(root: string): Unseen[] {
   const out: Unseen[] = [];
-  for (const n of loadBrain(root)) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
+  for (const n of loadBrain(root, { shared: true })) for (const [attr, f] of Object.entries(n.fm.facts ?? {})) {
     const recs = liveUnseen(f);
     if (recs.length && recs.every((r) => r.kept_private)) out.push({ fact_key: `${n.fm.id}#${attr}`, page: n.fm.id, title: String(n.fm.title ?? n.fm.id), attr, value: shownValue(f), sensitivity: recs.map((r) => r.sensitivity).find(Boolean) ?? n.fm.sensitivity, unknownSender: recs.some((r) => (r as { sender?: unknown }).sender === "unknown"), ...(recs.every((r) => lineState(r) === "yours") ? { yours: true } : {}) });
   }

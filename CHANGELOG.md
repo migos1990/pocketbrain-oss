@@ -38,6 +38,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- Your home, your own page and Settings open faster on a big memory. The count of what waits on you read every page ten times over, even with nothing waiting; it now reads them once and counts exactly what it counted (G1004).
 - A scoreboard, docs/scoreboard.md: what pocketBrain claims, as numbers you can print again. Each one comes from a command in the repo, on made-up memories or a public benchmark, with the commit and the day beside it: the 300-memory slice check, the burst check, the demo memory's answers per assistant, and search recall on LongMemEval's held-out questions. `bun scripts/scoreboard.ts run` runs the commands and compares every number with the page. The LongMemEval bench (`bun scripts/longmemeval.ts`, docs/longmemeval.md) is now part of the public repo (G999).
 - For builders: a test can no longer add a fixed pause without saying what it is for (`test/fixed-waits.ts`), and the check that twelve terminals spending one code mint one token now starts them on a signal instead of 2.5 seconds later, so it no longer depends on the machine's speed (G983).
 - A page whose id begins another page's id (a first name beside the full name) now goes with its last fact when nothing else names it; the other page's id no longer counted as naming it (G979).

@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
+import { oneRead } from "./util";
 import { openItems, type Item } from "./textline/items";
 import { autoSaves, newQueues, heldByAccess, type Queues } from "./filing";
 import { heldCount } from "./capture";
@@ -51,6 +52,11 @@ export const changesHeld = (root: string, file: string) => /\bchanges \S+ from\b
 // `now` is when the hub would file (autoSaves); `later` is when the items are read, so a conflict
 // the Gardener holds for the night counts once its fallback releases it (the north star reads 36 h on).
 export function ownerAsks(root: string, now = new Date(), later = now): OwnerAsks {
+  // Nothing below writes, so the pages and the two git lines are read once for all of it (G1004).
+  return oneRead(() => countAsks(root, now, later));
+}
+
+function countAsks(root: string, now: Date, later: Date): OwnerAsks {
   const items = openItems(root, later);
   const queues = newQueues();
   const saves = autoSaves(root, now, undefined, queues);

@@ -697,12 +697,13 @@ function fileVerdict(root: string, it: Item, pr: ReturnType<typeof proposals>[nu
 // `queues`, when given, also gets the proposals held until the owner's hold ends, those an outside
 // assistant left to expire, and those set aside on the next tick: queues with a day, never asks
 // (north-star --brain counts them apart).
-export function autoSaves(root: string, now = new Date(), state?: ReturnType<typeof loadState>, queues?: Queues): Set<string> {
+export function autoSaves(root: string, now = new Date(), state?: Pick<ReturnType<typeof loadState>, "notes" | "proposals" | "rules">, queues?: Queues): Set<string> {
   const out = new Set<string>();
   const p = loadEscalation(root);
   if (p.auto_decide.off || (p.auto_decide.source_saves_per_day <= 0 && p.auto_decide.file !== "all")) return out;
   try { hubGate(root, ["commit"]); } catch { return out; }
-  state ??= loadState(root);
+  // Only the three parts used below: the dashboard's whole state also reads every log (G1004).
+  state ??= { notes: loadBrain(root, { shared: true }), proposals: proposals(root), rules: loadRules(root) };
   const ctx = { notes: state.notes };
   build = { root, props: withTwins(state.proposals, root), rules: state.rules };
   // A save that failed in the last day, under this code, is asked, not hidden: it may never go

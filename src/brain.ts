@@ -5,6 +5,7 @@ import { appendFileSync, readdirSync, readFileSync, writeFileSync, mkdirSync, ex
 import { join, dirname, relative, basename } from "node:path";
 import YAML from "yaml";
 import { ownerToday } from "./clock";
+import { readOnce, readChanged } from "./util";
 
 export type Sensitivity = "public" | "personal" | "private" | "secret";
 export const SENSITIVITY_ORDER: Sensitivity[] = ["public", "personal", "private", "secret"];
@@ -290,7 +291,18 @@ export function deepFreeze<T>(v: T): T {
   return v;
 }
 
+// Every caller gets its own array. Inside `oneRead` (src/util.ts) the files are read once.
 export function loadBrain(root: string, opts: { shared?: boolean } = {}): Note[] {
+  const notes = readOnce(`brain:${root}`, () => readBrain(root));
+  return opts.shared ? [...notes] : notes.map((n) => structuredClone(n));
+}
+
+// How many times every page was read from disk, for the test that a count reads them once.
+let diskReads = 0;
+export const brainReads = () => diskReads;
+
+function readBrain(root: string): Note[] {
+  diskReads++;
   const notes: Note[] = [];
   for (const d of CONTENT_DIRS) {
     for (const file of walk(join(root, d))) {
@@ -302,7 +314,7 @@ export function loadBrain(root: string, opts: { shared?: boolean } = {}): Note[]
         if (parsed.size >= PARSE_CACHE_MAX) parsed.clear();
         parsed.set(file, hit);
       }
-      notes.push(opts.shared ? hit.note : structuredClone(hit.note));
+      notes.push(hit.note);
     }
   }
   return notes.sort((a, b) => a.fm.id.localeCompare(b.fm.id));
@@ -345,6 +357,7 @@ export function saveNote(root: string, note: Note) {
   const tmp = `${file}.${process.pid}.tmp`;
   writeFileSync(tmp, serializeNote(note));
   renameSync(tmp, file);
+  readChanged();
   note.path = note.fm.id + ".md";
 }
 

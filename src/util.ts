@@ -219,3 +219,21 @@ export function dateWordForms(v: string): string[] {
   return [...new Set(out)];
 }
 
+
+// One look at the brain, read once (G1004): inside `oneRead`, a reader that goes through
+// `readOnce` does its work the first time and hands the same answer to every later call with the
+// same key. For a read-only count that asks ten helpers, each of which read every page again
+// (src/waiting.ts). Nothing inside may write: saveNote ends the sharing (`readChanged`), and
+// outside `oneRead` every call reads for itself, as before.
+let reads: Map<string, unknown> | undefined;
+export function oneRead<T>(fn: () => T): T {
+  if (reads) return fn();
+  reads = new Map();
+  try { return fn(); } finally { reads = undefined; }
+}
+export function readOnce<T>(key: string, make: () => T): T {
+  if (!reads) return make();
+  if (!reads.has(key)) reads.set(key, make());
+  return reads.get(key) as T;
+}
+export const readChanged = () => { reads?.clear(); };

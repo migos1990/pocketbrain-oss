@@ -82,6 +82,13 @@ export const GAPS: Record<string, Gap> = {
     finding: "Slice audit of claude/share-picture, 2026-11-18. safeNames (G992) replaces a label that names a person or the owner. A label that holds an org or project page's title is left alone, because an assistant is often named after the product it is (a page about that product would otherwise blank its row). The owner sees the picture before sharing it, and docs/owner-home.md says so.",
     fix: "src/dashboard/share.ts: the page under the picture says the assistants are shown by the names the owner gave them, and Hide their names (/share?names=off) draws every one as Assistant 1, Assistant 2. Only the owner knows which label names something private, so the choice is the owner's tap each time; nothing is stored and no rule guesses. Test: test/share-picture.test.ts (the owner can draw the picture with no assistant's name on it).",
   },
+  G1004: {
+    closed: "claude/owner-book-speed",
+    title: "The count of what waits read every page ten times, so the owner's own page was slow on a big memory with nothing waiting",
+    severity: "low",
+    finding: "The page read after a deploy (G984) timed one page at close to a second, 2026-11-19; it was the owner's own page, and most of it was the count of what waits (ownerAsks), with nothing waiting. A profile on a made-up brain: ten full loads of the pages per count, four of them copies, git run four times on rules/, and the dashboard's whole page state built for three of its parts.",
+    fix: "src/util.ts oneRead and readOnce: inside one count the pages are read from disk once and the two git lines once; a saved page ends the sharing, and outside a count every load reads for itself. src/seen.ts and src/textline/items.ts read the shared, frozen pages; src/filing.ts autoSaves loads only pages, proposals and rules. What the count counts is unchanged. Test: test/one-read.test.ts (one disk read per count, the same numbers, the home's number equal to it). Open: the rules are still parsed several times per count.",
+  },
   G1002: {
     closed: "claude/odd-sentences",
     title: "Most odd sentences on a lived-in memory came from four shapes: a question's page was its packet, a chip repeated the line above it, and dates and web addresses in a page's text were shown as typed",

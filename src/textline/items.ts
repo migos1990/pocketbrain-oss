@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, statfsSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
-import { sha256 } from "../util";
+import { sha256, readOnce } from "../util";
 import { loadBrain, sensitivityRank, type Note, type FactRecord } from "../brain";
 import { loadRules, isOwnerWord } from "../rules";
 import { pendingGardener, gardenerSeen, type GardenerReads } from "../gardener-hold";
@@ -119,7 +119,7 @@ const gardenerUrgent = (rules: ReturnType<typeof loadRules>, d: Pick<DisputeRow,
 
 export function openItems(root: string, now = new Date()): Item[] {
   const since = new Date(now.getTime() - RECENT_DAYS * 86_400_000).toISOString();
-  const notes = loadBrain(root);
+  const notes = loadBrain(root, { shared: true });
   const rules = loadRules(root);
   const out: Item[] = [];
 
@@ -255,11 +255,11 @@ export function openItems(root: string, now = new Date()): Item[] {
     title: u.state === "over" ? "Account notice, action needed: open the dashboard" : "Account notice: open the dashboard when you can" });
 
   // rules/ touched outside Louis: uncommitted edits, or a commit by an agent.
-  const dirty = git(root, ["status", "--porcelain", "--", "rules"]).split("\n").filter(Boolean).map(porcelainPath);
+  const dirty = readOnce(`rules-status:${root}`, () => git(root, ["status", "--porcelain", "--", "rules"])).split("\n").filter(Boolean).map(porcelainPath);
   if (dirty.length) out.push({ key: `rules:dirty:${hash(dirty.join())}`, kind: "rules", ref: dirty.join(","), private: false, money: false, verbs: ["ok", "later"],
     title: `rules/ changed outside git: ${short(dirty.join(", "), 50)}. Was it you?` });
   const agents = new Set(Object.keys(rules.policy.agents));
-  for (const l of git(root, ["log", "-n", "50", `--since=${since}`, "--format=%h %an", "--", "rules"]).split("\n").filter(Boolean)) {
+  for (const l of readOnce(`rules-log:${root}:${since}`, () => git(root, ["log", "-n", "50", `--since=${since}`, "--format=%h %an", "--", "rules"])).split("\n").filter(Boolean)) {
     const [h, an] = l.split(" ");
     if (agents.has(an)) out.push({ key: `rules:${h}`, kind: "rules", ref: h, private: false, money: false, verbs: ["ok", "later"],
       title: `${an} committed to rules/ (${h}); agents never do. Revert it in the dashboard` });
