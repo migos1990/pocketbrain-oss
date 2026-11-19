@@ -24,14 +24,14 @@ function rawBrain(): string {
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1: "Mondays.\nVamprose \\| modified \\| 2026-10-06\n" });
   put("people", [{
     Name: "Ana Lopez", Role: "Coordinator", Org: "Acme (Acme Labs)", "Related project": "Northfield Course X",
-    Source: "Instinct memory note contacts/ana-lopez", "Source type": "a text received from Louis",
+    Source: "Instinct memory note contacts/ana-lopez", "Source type": "one short text received from Louis",
     Verification: "Confirmed by Louis", Confidence: "Stated", Sensitive: "__NO__", "Author agent": "Instinct",
     Fingerprint: "Instinct \\| created \\| 2026-10-04", "date:Date:start": "2026-10-04", "date:Last contact:start": "2026-09-30",
     url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2: "Vamprose sources:\n- Role Coordinator at Acme: an email, Gmail f000000000000001 (2026-09-18).\n" });
   put("money", [{
     Name: "2026-09-29 Rainy day jar", Sensitive: "__YES__", Currency: "EUR", Amount: "740", Type: "Account", "Author agent": "Instinct",
-    Confidence: "Stated", Verification: "Unverified", Source: "owner's chat, late Sept 2026-09-29", "Source type": "a text received from Louis",
+    Confidence: "Stated", Verification: "Unverified", Source: "owner's chat, late Sept 2026-09-29", "Source type": "one short text received from Louis",
     "date:Date:start": "2026-09-29", Fingerprint: "Instinct \\| created \\| 2026-10-04", url: "https://app.notion.com/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3",
   }], { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3: "Account number 12345678 at the branch.\n" });
   mkdirSync(join(root, "rules"), { recursive: true });
@@ -94,4 +94,14 @@ test("Notion auto-links and lost newlines at line start are repaired", () => {
   expect(t).toContain("\n- Calendar ref evt1.bG91aXMub");
   expect(extractRefs(t)).toContain("gcal:evt1.bG91aXMub");
   expect(extractRefs(t).some((r) => r.startsWith("url:"))).toBe(false);
+});
+
+// G971: the Mac's brain-quotes run kept finding the money row here (d8251c37, b4bcadae): the
+// export's column name followed at once by its select value, the way the owner's real rows spell
+// it. The importer only needs the value's last four words, so fixtures and docs put a word of
+// their own in front, and nothing tracked outside src/ may spell the pair as the export does.
+test("no tracked fixture or doc spells the export's source-type pair as a real row does (G971)", () => {
+  const pair = `source type\\W+a ${"text"} received from`;
+  const r = Bun.spawnSync(["git", "grep", "-n", "-i", "-E", pair, "--", "test", "docs", "evals", "examples", "scripts"], { cwd: join(import.meta.dir, ".."), stdout: "pipe" });
+  expect(r.stdout.toString().split("\n").filter(Boolean)).toEqual([]);
 });

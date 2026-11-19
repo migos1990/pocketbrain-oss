@@ -5,6 +5,13 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G983: {
+    closed: "claude/no-fixed-waits",
+    title: "Tests paused a fixed time and hoped the machine got there",
+    severity: "low",
+    finding: "Read of main d8251c3 (2026-11-17): test/cli-token-audit4.test.ts started twelve processes and released them at a clock time 2.5 s ahead, so a machine that took longer to load the CLI ran them one by one and the check proved nothing, or failed. Nine more waits across four test files pause 5 to 300 ms for a background step to start or finish (aftercheck, brain-copy-race, restart-recovery, semantic). Nothing stopped a new one.",
+    fix: "test/fixed-waits.ts lists every timed wait in test/ by file, kind and reason; test/fixed-waits.test.ts counts them and fails on one that isn't listed, and the fixed pauses that hope something finished have a ceiling that only goes down (9 today). The twelve-terminal check starts on a signal: each child writes a ready file and spins until the go file appears. Open: the nine listed pauses still wait on time.",
+  },
   G992: {
     closed: "claude/share-picture",
     title: "The share picture could carry a person's name in an assistant's label",
@@ -99,7 +106,7 @@ export const GAPS: Record<string, Gap> = {
     title: "Brain quotes counted the hub's own paragraph and side-by-side literals as quotes, and real-shaped text stayed in tests and history docs",
     severity: "medium",
     finding: "The Mac's brain-quotes run on c2df8907 (2026-11-16) listed 19 lines. Six UI snapshot lines (test/ui/door-changes.aria.yml) and the fixtures beside them shared runs with the paragraph the hub writes on each page from its facts (a name's fact is a value, (Written by the hub from this page's facts.), and its [^pf-...] references): the code's sentence with two or more words filled in, which the one-filled-word rule could not see. Three code lines (src/import/notion.ts, src/wiki.ts) built a sentence from short literals passed side by side, which have no group of four of their own. The rest were real-shaped text: Notion row counts and quoted entries in two history docs, and test fixtures in the source-type, person, footnote and money shapes the real brain uses.",
-    fix: "scripts/brain-quotes.ts reads a page less the hub's paragraph (the one paragraph right above the hub's mark) and its p-/pf- references, whose facts it reads from the frontmatter already; and strings the code passes side by side (call arguments, list items, a template after them) read as one sentence of the code. The history docs say the same in general words, and the fixtures use invented names, refs and values in another order. deploy go's line is pinned at 0 too, so a clean report is seen to have run. Tests: test/brain-quotes.test.ts (both rules, each seen failing; the owner's own words around them still count), test/deploy-go.test.ts. The Mac's run on d8251c37 still found test/import.test.ts:33, the money row's keys in the export's own order with its source line; claude/brain-quotes-import puts them in another order with other words.",
+    fix: "scripts/brain-quotes.ts reads a page less the hub's paragraph (the one paragraph right above the hub's mark) and its p-/pf- references, whose facts it reads from the frontmatter already; and strings the code passes side by side (call arguments, list items, a template after them) read as one sentence of the code. The history docs say the same in general words, and the fixtures use invented names, refs and values in another order. deploy go's line is pinned at 0 too, so a clean report is seen to have run. Tests: test/brain-quotes.test.ts (both rules, each seen failing; the owner's own words around them still count), test/deploy-go.test.ts. The Mac's run on d8251c37 still found test/import.test.ts:33, the money row's keys in the export's own order with its source line; claude/brain-quotes-import puts them in another order with other words. The run on b4bcadae still found that row (line 34): the export's column name followed at once by its select value, with the date before it, is how the real rows read whatever the order around them; claude/brain-quotes-import-2 puts a word of the fixture's own inside the value (the importer needs only its last four words) and test/import.test.ts refuses the bare pair in any tracked fixture or doc.",
   },
   G968: {
     closed: "claude/copy-brain-race",

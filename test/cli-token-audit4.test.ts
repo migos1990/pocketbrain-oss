@@ -30,15 +30,19 @@ test("G335: a lock just created and not yet filled in is live, never taken over"
 // A stress check, not the proof: without the G335 fix it double-spent in only about 2 of 15 trials,
 // so it can pass on unfixed code. The tests that always fail without the fix are the empty-lock test
 // above and the half-written-lock test in test/cli-token-audit5.test.ts.
-// Each trial waits 2.5 s for its barrier, so the default run does 4 trials (about 12 s) and
-// `PB_STRESS=1 bun test test/cli-token-audit4.test.ts` does the full 15 (about 48 s on CI's runner).
+// The barrier is a signal, not a time (G983): each child says it is ready once the CLI is loaded,
+// then spins until the go file appears; the test writes it when all twelve are ready. A fixed 2.5 s
+// start line let a slow machine's children miss it and start one by one. The default run does 4
+// trials; `PB_STRESS=1 bun test test/cli-token-audit4.test.ts` does 15.
 const TRIALS = process.env.PB_STRESS ? 15 : 4;
 test(`G335: one code, twelve terminals released at the same instant, ${TRIALS} times: one token each time`, async () => {
   const dir = mkdtempSync(join(tmpdir(), "pb-barrier-"));
   const child = join(dir, "spend.ts");
   writeFileSync(child, `const { main } = await import(${JSON.stringify(join(SRC, "cli.ts"))});
-const [root, code, at] = [process.argv[2], process.argv[3], Number(process.argv[4])];
-while (Date.now() < at) {}
+const { existsSync, writeFileSync } = await import("node:fs");
+const [root, code, gate] = [process.argv[2], process.argv[3], process.argv[4]];
+writeFileSync(gate + "/ready-" + process.pid, "");
+while (!existsSync(gate + "/go")) {}
 const out: string[] = []; const log = console.log;
 console.log = (...a: unknown[]) => { out.push(a.join(" ")); }; console.error = console.log;
 main(["token", "--agent", "steward", "--code", code, "--brain", root]);
@@ -49,8 +53,13 @@ console.log = log; log(/pb_steward_/.test(out.join("\\n")) ? "MINTED" : "refused
     resetEnrollLimits();
     const root = makeBrain();
     const code = codeOf(runAction({ root }, "token-code", { agent: "steward" }));
-    const at = Date.now() + 2_500;
-    const procs = Array.from({ length: 12 }, () => Bun.spawn(["bun", child, root, code, String(at)], { cwd: APP, stdout: "pipe", stderr: "pipe", env: { ...process.env, PB_CONFIG_DIR: mkdtempSync(join(tmpdir(), "pb-cfg-")) } }));
+    const gate = mkdtempSync(join(tmpdir(), "pb-gate-"));
+    const procs = Array.from({ length: 12 }, () => Bun.spawn(["bun", child, root, code, gate], { cwd: APP, stdout: "pipe", stderr: "pipe", env: { ...process.env, PB_CONFIG_DIR: mkdtempSync(join(tmpdir(), "pb-cfg-")) } }));
+    for (const until = Date.now() + 120_000; readdirSync(gate).length < 12;) {
+      if (Date.now() > until) throw new Error(`only ${readdirSync(gate).length} of 12 children got ready`);
+      await Bun.sleep(5);
+    }
+    writeFileSync(join(gate, "go"), "");
     const outs = await Promise.all(procs.map(async (p) => { await p.exited; return new Response(p.stdout).text(); }));
     minted.push(outs.filter((o) => o.includes("MINTED")).length);
   }

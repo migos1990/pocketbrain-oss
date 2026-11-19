@@ -34,6 +34,7 @@ Notable changes to pocketBrain. The format follows [Keep a Changelog](https://ke
 
 ### What the hub does
 
+- For builders: a test can no longer add a fixed pause without saying what it is for (`test/fixed-waits.ts`), and the check that twelve terminals spending one code mint one token now starts them on a signal instead of 2.5 seconds later, so it no longer depends on the machine's speed (G983).
 - A page whose id begins another page's id (a first name beside the full name) now goes with its last fact when nothing else names it; the other page's id no longer counted as naming it (G979).
 - For builders: one change no longer runs the whole test suite four times. The pre-push hook skips its long checks when the merge gate already passed them, first time, on that exact tree; and CI runs its two suites side by side, the slower one as two jobs with half of the test files each, with the required `test` check green only when all are; the merge gate's CI-time rule counts only main runs where a step ran the way it does today, and says "not enough runs yet" until there are three (G982).
 - The nightly check of what each assistant is given failed on the night of 2026-11-16 although no assistant was given too little: the check itself expected a page not filed yet to reach an assistant that reads only some of your areas. The check now follows the same rule as the hub, also catches a page of that kind given too freely, and the two memories it failed on are replayed on every change (G981). Your Home line clears after the next nightly check passes on this version.
