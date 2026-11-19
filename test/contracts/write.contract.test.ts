@@ -645,6 +645,38 @@ test("contract write: a namesake's equal value never keeps a lost by-name fact d
   expect(reopenLostAccepts(root)).toEqual(["2026-10-06-planner-c3.yaml"]);
 });
 
+// G1006, G1007: a page the hub set aside on purpose (machine mail, with Undo) is never read at the
+// hub's start as a page that was never made: its accepted by-name capture stays answered, and one an
+// older start handed back for that is answered again; a value that page never held still goes back.
+test("contract write: a capture whose page a set-aside took is never handed back at start (G1006, G1007)", async () => {
+  const { mkdirSync, readdirSync, readFileSync, rmSync } = await import("node:fs");
+  const { reopenLostAccepts, closeSetAsideAgain } = await import("../../src/write");
+  const { setAsideMachineMail } = await import("../../src/receipt-pages");
+  const { recordMachineMail } = await import("../../src/louis");
+  const { git } = await import("../../src/git");
+  const YAML = (await import("yaml")).default;
+  const root = makeBrain({ steps: "one" });
+  const ref = "gmail:f0000000000000e1";
+  mkdirSync(join(root, "inbox", "decided"), { recursive: true }); mkdirSync(join(root, "orgs"), { recursive: true });
+  writeFileSync(join(root, "orgs", "pier-ferry-desk.md"), `---\nid: orgs/pier-ferry-desk\ntype: org\ntitle: Pier Ferry Desk\narea: work\nsensitivity: personal\nstatus: active\ncreated: 2026-10-05\nupdated: 2026-10-05\nby: planner\nfacts:\n  status: { value: "two seats held on the late boat", as_of: 2026-10-05, sources: ["${ref}"], verification: verified-by-source, by: planner, recorded: 2026-10-05 }\n---\n`);
+  const copy = (value: string) => YAML.stringify({ by: "auto-decide", decision: "accept", capture: "inbox/captures/c9.md", request: { agent: "planner", kind: "fact", title: "Pier Ferry Desk", type: "org", attribute: "status", value, as_of: "2026-10-05", sources: [ref] } });
+  writeFileSync(join(root, "inbox", "decided", "2026-10-06-planner-c9.yaml"), copy("two seats held on the late boat"));
+  recordMachineMail(root, [ref]);
+  git(root, ["add", "-A"]); git(root, ["commit", "-q", "-m", "fixture: a saved capture"]);
+  expect(setAsideMachineMail(root, true).removed).toEqual(["orgs/pier-ferry-desk"]);
+  expect(reopenLostAccepts(root)).toEqual([]);
+  // as an older start left it, and beside it a value the page never held
+  const open = (value: string) => YAML.stringify({ ...YAML.parse(copy(value)), by: "planner", decision: undefined, reopened: "2026-10-06" });
+  rmSync(join(root, "inbox", "decided", "2026-10-06-planner-c9.yaml"));
+  writeFileSync(join(root, "inbox", "2026-10-06-planner-c9.yaml"), open("two seats held on the late boat"));
+  writeFileSync(join(root, "inbox", "2026-10-06-planner-c8.yaml"), open("the desk moves to the east pier"));
+  git(root, ["add", "-A"]); git(root, ["commit", "-q", "-m", "fixture: handed back"]);
+  expect(closeSetAsideAgain(root)).toEqual(["2026-10-06-planner-c9.yaml"]);
+  expect(readdirSync(join(root, "inbox")).filter((f) => f.endsWith(".yaml"))).toEqual(["2026-10-06-planner-c8.yaml"]);
+  expect(YAML.parse(readFileSync(join(root, "inbox", "decided", "2026-10-06-planner-c9.yaml"), "utf8"))).toMatchObject({ by: "auto-decide", decision: "accept", reopened: "2026-10-06" });
+  expect(reopenLostAccepts(root)).toEqual([]);
+});
+
 // G602: forget trailers in an assistant's commit message neither hold a name nor free one.
 test("contract write: only the owner's commits say who was forgotten", async () => {
   const { forgottenSlugs } = await import("../../src/write");

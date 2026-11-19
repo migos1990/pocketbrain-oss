@@ -5,6 +5,20 @@
 export interface Gap { title: string; severity: "critical" | "high" | "medium" | "low"; finding: string; fix: string; closed?: string }
 
 export const GAPS: Record<string, Gap> = {
+  G1006: {
+    closed: "claude/reopen-not-set-aside",
+    title: "A restart handed back, as things to look at, captures whose page a set-aside had taken",
+    severity: "high",
+    finding: "The Mac's read-only report after a deploy (2026-11-19): the owner's home went from nothing waiting to 26 things in Settings, all capture proposals, none a contradiction. The night before, the machine-mail set-aside (G668, G964) had taken facts filed from machine mail, and each page left with nothing on it went too. At the next hub start reopenLostAccepts (src/write.ts, G431) found each accepted by-name capture's page gone, took it for a new page that was never made, and put it back in the inbox for the owner. Reproduced on a made-up brain: a by-name capture, saved, its page removed by setAsideMachineMail, then the start step. A fact set aside on a page that stays was not affected (its record is in the page's history). Every restart after a set-aside that removes a page would have done it, for the first-name set-aside (G978) too.",
+    fix: "src/write.ts: when no page fits a decided capture's name, the step looks at the pages the hub set aside on purpose (a retracted diary row the hub accepted, not undone, whose page is gone), each as git holds it just before it was removed; when the name fits one and that page held the value, the capture was saved and taken back with Undo, and stays answered. A name no set-aside page fits, or a value that page never held, goes back as before. test/reopen-set-aside.test.ts (four tests, three seen failing first), a row in test/contracts/write.contract.test.ts.",
+  },
+  G1007: {
+    closed: "claude/reopen-not-set-aside",
+    title: "Captures already handed back for a set-aside page waited on the owner for good",
+    severity: "high",
+    finding: "Same report as G1006: a capture the start step put back is stamped and never filed by the hub again (G742), so the ones handed back wrongly would have waited in Settings until the owner answered each by hand.",
+    fix: "src/write.ts closeSetAsideAgain, run at the hub's start before reopenLostAccepts (src/start.ts): a waiting capture that step stamped, by a name no page fits now, whose value a set-aside page held, is answered again as it was (accepted by the hub, stamp kept so nothing puts it back), in one hub commit with a why. A stamped capture for a page never made, or for a value the set-aside page never held, still waits. Slice audit of the branch (clear, two notes): the page is read from git only when the hub's own commit last removed it, never a forget or hand delete since, and a name the owner forgot is never answered again (both tested); the check compares the value the page held and not which source said it, which the audit judged harmless since that page held the value either way. Undo of the set-aside brings the page and fact back from its commit as before, and the capture stays answered. It restores the owner's rule of 2026-11-16 (facts only from machine mail are set aside with Undo and are not asks); what counts as an ask is unchanged.",
+  },
   G1003: {
     closed: "claude/verify-followups",
     title: "The screenshot count could pass in both parts of the plain suite",

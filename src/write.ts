@@ -22,7 +22,7 @@ import { louisMessages, registerLouisMessages, checkedRefs, ownerMessagesPath, m
 import { tokenRole } from "./tokenrole";
 import { carve, grantFor, mergedTarget, records, valueStrings, shownWords, withheldWord, visibleFacts, factHiddenReason, withholdName, nameNeedles, HELD_REASON, type CarveResult } from "./carve";
 import { needleFor, findCarried, unhide, distinctive, squash, type Needle } from "./match";
-import { git, commitPaths } from "./git";
+import { git, gitRun, commitPaths } from "./git";
 import { appendChained } from "./readlog";
 import { canaryHits } from "./canary";
 import { proposalCap } from "./gardener";
@@ -34,7 +34,7 @@ import { OWNER, OWNER_CONFIRMED, OWNER_REF, isOwnerConfirmed, isOwnerEmail, isOw
 import { keepQuote, sweepQuotes } from "./quotes";
 import { hubReadRefs } from "./pull";
 import { twoDatedThings, twoSteps, byNewest, sameItem, endsOnDate, wholeDay, byDay, itemOf, itemsOf, newItems } from "./dated";
-import { appendDiary, diaryRow, shownValue, type DiaryKind } from "./diary";
+import { appendDiary, diaryRow, readDiary, shownValue, type DiaryKind } from "./diary";
 import { captureSender, unknownSenderWait } from "./sender";
 
 // The most live items a "several" fact (next steps, G965) holds from assistants and sources (G972).
@@ -1598,32 +1598,20 @@ export function forgottenSlugs(root: string): Set<string> {
   }
   return new Set([...forgets].filter(([h]) => !undone.has(h)).map(([, slug]) => slug));
 }
-export function reopenLostAccepts(root: string): string[] {
-  const dir = join(root, "inbox", "decided");
-  if (!existsSync(dir)) return [];
-  const notes = loadBrain(root);
+// What the start-time steps below share: has an accepted capture's value landed on a page?
+function landedFor(root: string, notes: Note[]) {
   const packets = notes.filter((n) => n.fm.type === "dispute");
   const rules = loadRules(root);
-  const out: string[] = [], paths: string[] = [], keys: string[] = [];
-  let forgot: Set<string> | undefined;
   // Proposals already waiting (a write that filed one again under another name): never a twin card.
   const waiting = readdirSync(join(root, "inbox")).filter((x) => x.endsWith(".yaml")).map((x) => { try { return (YAML.parse(readFileSync(join(root, "inbox", x), "utf8")) ?? {}).request as WriteRequest | undefined; } catch { return undefined; } });
-  for (const f of readdirSync(dir).filter((x) => x.endsWith(".yaml")).sort()) {
-    let p: { request?: WriteRequest; decision?: string; by?: string; capture?: unknown; reopened?: unknown };
-    try { p = YAML.parse(readFileSync(join(dir, f), "utf8")) ?? {}; } catch { continue; }
-    const req = p.request;
-    if (p.decision !== "accept" || p.by !== "auto-decide" || typeof p.capture !== "string" || !req?.attribute || req.retract || existsSync(join(root, "inbox", f))) continue;
-    // Put back once already (G742): it went to the owner then, and whoever answered it, it stays answered.
-    if (p.reopened) continue;
-    const named = !req.id && req.title && req.type ? resolveEntity(notes, req.type, String(req.title)) : undefined;
-    const id = req.id ?? named?.id;
-    const note = id ? notes.find((n) => n.fm.id === id) : undefined;
+  const landed = (req: WriteRequest) => {
     // As the write stores it (normalized, a name linked as [[id|label]] or [[label]]): its label.
     // own: a page the name fits only counts when one of its records cites this proposal's own
     // source, never a namesake that happens to hold the same value (G603 slice audit F1).
     const mine = new Set((req.sources ?? []).map((x) => refString(x as SourceRef)));
     const cites = (r: FactRecord | undefined) => !!r && (r.sources ?? []).some((x) => mine.has(refString(x as SourceRef)));
-    const landed = (n: Note, own = false): boolean => {
+    // page: only what the page itself holds or held (a set-aside page, where a waiting twin proves nothing).
+    return (n: Note, own = false, page = false): boolean => {
       const spec = attributeSpec(rules, n.fm.type, req.attribute!);
       // The write's own sameness (G662, G678): a sentence said again in other words is the value it
       // holds, so the write saved nothing new; compared word for word, it was put back at every
@@ -1637,6 +1625,7 @@ export function reopenLostAccepts(root: string): string[] {
       const inPacket = packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => same(c.value)));
       if (own) return held.some((r) => r && cites(r) && same(r.value)) || packets.some((d) => (d.fm as { fact_key?: string }).fact_key === fk && ((d.fm as { candidates?: FactRecord[] }).candidates ?? []).some((c) => cites(c) && same(c.value)));
       if (inPacket || held.some((r) => r && same(r.value))) return true;
+      if (page) return false;
       // A max or min the write ignores by design (an older last contact): not lost.
       const live = cur && !isDisputed(cur) && !isList(cur) ? cur as FactRecord : undefined;
       if (live && (spec.merge === "max" || spec.merge === "min")) {
@@ -1646,6 +1635,55 @@ export function reopenLostAccepts(root: string): string[] {
       // A by-title capture's write handed back under the page's id (not_in_your_view) waits already (G601).
       return waiting.some((w) => w && w.attribute === req.attribute && ((w.id ?? w.title) === (req.id ?? req.title) || w.id === n.fm.id) && same(w.value));
     };
+  };
+  return { landed, waiting };
+}
+
+// Pages the hub set aside on purpose, as each stood just before (G1006): a set-aside (machine mail,
+// a page named only by a first name) takes a page with its last fact, in one hub commit with a
+// diary line and Undo. The diary says which pages; git holds what was on them. One whose Undo the
+// owner tapped, or that is a page again, is not in it.
+function setAsidePages(root: string, notes: Note[]): Note[] {
+  const rows = readDiary(root), undone = new Set(rows.map((r) => r.undoes).filter(Boolean));
+  const have = new Set(notes.map((n) => n.fm.id)), ids = new Set<string>();
+  for (const r of rows) {
+    if (r.kind !== "retracted" || r.accepted_by !== "hub" || !r.why || undone.has(r.undo_token)) continue;
+    const id = r.fact_key.slice(0, r.fact_key.lastIndexOf("#"));
+    if (!have.has(id) && !existsSync(join(root, `${id}.md`))) ids.add(id);
+  }
+  const out: Note[] = [];
+  for (const id of ids) {
+    const path = `${id}.md`;
+    // The commit that last removed it must be the hub's own (a set-aside), never a forget or a hand delete since.
+    const [sha, who] = gitRun(root, ["log", "-1", "--format=%H %an", "--diff-filter=D", "--", path]).out.trim().split(" ");
+    const was = sha && who === "hub" ? gitRun(root, ["show", `${sha}^:${path}`]) : undefined;
+    if (!was?.ok) continue;
+    try { out.push(parseNote(was.out, path)); } catch { /* not a page */ }
+  }
+  return out;
+}
+// Did a page the hub set aside hold this capture's fact? Then it was saved and taken back on
+// purpose, never lost: the name must fit that page and the page must have held the value.
+const setAsideHeld = (aside: Note[], req: WriteRequest, landed: (n: Note, own: boolean, page: boolean) => boolean) =>
+  aside.some((n) => resolveEntity([n], String(req.type), String(req.title)).id === n.fm.id && landed(n, false, true));
+export function reopenLostAccepts(root: string): string[] {
+  const dir = join(root, "inbox", "decided");
+  if (!existsSync(dir)) return [];
+  const notes = loadBrain(root);
+  const ctx = landedFor(root, notes), waiting = ctx.waiting;
+  const out: string[] = [], paths: string[] = [], keys: string[] = [];
+  let forgot: Set<string> | undefined, aside: Note[] | undefined;
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".yaml")).sort()) {
+    let p: { request?: WriteRequest; decision?: string; by?: string; capture?: unknown; reopened?: unknown };
+    try { p = YAML.parse(readFileSync(join(dir, f), "utf8")) ?? {}; } catch { continue; }
+    const req = p.request;
+    if (p.decision !== "accept" || p.by !== "auto-decide" || typeof p.capture !== "string" || !req?.attribute || req.retract || existsSync(join(root, "inbox", f))) continue;
+    // Put back once already (G742): it went to the owner then, and whoever answered it, it stays answered.
+    if (p.reopened) continue;
+    const named = !req.id && req.title && req.type ? resolveEntity(notes, req.type, String(req.title)) : undefined;
+    const id = req.id ?? named?.id;
+    const note = id ? notes.find((n) => n.fm.id === id) : undefined;
+    const landed = ctx.landed(req);
     // A page the name fits holds the fact already: it landed there before the name fit another (G603).
     if (!note && named?.ambiguous && notes.some((n) => named.ambiguous!.includes(n.fm.id) && landed(n, true))) continue;
     // A new page that was never made is lost too (a forgotten person's inbox files went with them);
@@ -1654,6 +1692,8 @@ export function reopenLostAccepts(root: string): string[] {
       if (req.id || !req.title || !req.type || waiting.some((w) => w && !w.id && w.title === req.title && w.attribute === req.attribute)) continue;
       // A page the owner forgot is never made again by a decided copy an older forget left (G601 slice audit F1).
       if (forgottenName(String(req.title), forgot ??= forgottenSlugs(root))) continue;
+      // A page the hub set aside on purpose held it: saved, then taken back with Undo, never lost (G1006).
+      if (setAsideHeld(aside ??= setAsidePages(root, notes), req, landed)) continue;
       writeFileSync(join(root, "inbox", f), YAML.stringify(reopened(p), { lineWidth: 0 }));
       rmSync(join(dir, f));
       out.push(f); paths.push(`inbox/${f}`, `inbox/decided/${f}`); keys.push(`${req.type}:${req.title}#${req.attribute}`);
@@ -1668,6 +1708,39 @@ export function reopenLostAccepts(root: string): string[] {
   if (!out.length) return out;
   const unsaved = commitPaths(root, paths, `hub: ${out.length} accepted capture(s) with nothing saved back in the inbox\n\nWhy: the hub answered these accepted while the write handed them back to the owner, so nothing was saved, held or asked (G431); each waits for the owner now.\nKind: inbox\nFact-Keys: ${[...new Set(keys)].join(", ")}`, "hub");
   return unsaved ? [] : out; // git couldn't: commitPaths put both paths back as HEAD holds them
+}
+
+// The other way round, at the hub's start, before the step above (G1007): a capture that step handed
+// back to the owner only because a set-aside had taken its page (before G1006) is answered again as
+// it was, accepted by the hub, with its stamp kept so nothing puts it back. Only one the step itself
+// stamped, by a name no page fits now, whose value the set-aside page held; anything else waits for
+// the owner as it does.
+export function closeSetAsideAgain(root: string): string[] {
+  const dir = join(root, "inbox");
+  if (!existsSync(dir)) return [];
+  const notes = loadBrain(root), ctx = landedFor(root, notes);
+  let aside: Note[] | undefined, forgot: Set<string> | undefined;
+  const out: string[] = [], paths: string[] = [], keys: string[] = [];
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".yaml")).sort()) {
+    let p: { request?: WriteRequest; capture?: unknown; reopened?: unknown; decision?: unknown };
+    try { p = YAML.parse(readFileSync(join(dir, f), "utf8")) ?? {}; } catch { continue; }
+    const req = p.request;
+    if (!p.reopened || p.decision || typeof p.capture !== "string" || !req?.attribute || req.retract || req.id || !req.title || !req.type || existsSync(join(dir, "decided", f))) continue;
+    const named = resolveEntity(notes, req.type, String(req.title));
+    if (named.id || named.ambiguous?.length) continue;
+    // A name the owner forgot is never answered as accepted here: it waits as it did.
+    if (forgottenName(String(req.title), forgot ??= forgottenSlugs(root))) continue;
+    if (!setAsideHeld(aside ??= setAsidePages(root, notes), req, ctx.landed(req))) continue;
+    mkdirSync(join(dir, "decided"), { recursive: true });
+    writeFileSync(join(dir, "decided", f), YAML.stringify({ ...p, by: "auto-decide", decided: today(), decision: "accept" }, { lineWidth: 0 }));
+    rmSync(join(dir, f));
+    out.push(f); paths.push(`inbox/${f}`, `inbox/decided/${f}`); keys.push(`${req.type}:${req.title}#${req.attribute}`);
+  }
+  if (!out.length) return out;
+  const unsaved = commitPaths(root, paths, `hub: ${out.length} capture(s) answered again, set aside on purpose\n\nWhy: each was accepted and saved, and a set-aside with Undo then took its page; an earlier start read that as nothing saved and handed it back to the owner (G1007). Nothing was lost, so nothing is asked.\nKind: inbox\nFact-Keys: ${[...new Set(keys)].join(", ")}`, "hub");
+  if (unsaved) return [];
+  sweepQuotes(root);
+  return out;
 }
 
 function writeJournal(root: string, req: WriteRequest): WriteResult {

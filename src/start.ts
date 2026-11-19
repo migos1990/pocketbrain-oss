@@ -5,7 +5,7 @@
 // (with the memory exam on Sundays).
 // `serve` keeps working for those who want the pieces separately.
 import { catchUpDiary } from "./diary-catchup";
-import { unfreezeHeld, reopenLostAccepts, rankOldTaps } from "./write";
+import { unfreezeHeld, reopenLostAccepts, closeSetAsideAgain, rankOldTaps } from "./write";
 import { renderTouchedPages, backfillNameKeys } from "./wiki";
 import type { StartKind } from "./measure";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -151,7 +151,8 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
   // Yes taps from before G424 rank as their source, not as the owner's word (G424).
   void serial(async () => { const n = rankOldTaps(root); if (n.length) log(`${stamp()} taps: ${n.length} fact(s) approved before G424 now rank as their source`); }).catch((e) => log(`${stamp()} taps: ${(e as Error).message}`));
   // Captures an older hub answered accepted with nothing saved go back to the inbox (G431).
-  void serial(async () => { const n = reopenLostAccepts(root); if (n.length) log(`${stamp()} inbox: ${n.length} accepted capture(s) with nothing saved back in the inbox`); }).catch((e) => log(`${stamp()} inbox: ${(e as Error).message}`));
+  // First what an earlier start handed back only because a set-aside took its page (G1007), then the lost ones.
+  void serial(async () => { const c = closeSetAsideAgain(root); if (c.length) log(`${stamp()} inbox: ${c.length} capture(s) answered again, set aside on purpose`); const n = reopenLostAccepts(root); if (n.length) log(`${stamp()} inbox: ${n.length} accepted capture(s) with nothing saved back in the inbox`); }).catch((e) => log(`${stamp()} inbox: ${(e as Error).message}`));
   // Handoffs a restart left mid request check get their verdict now (src/handoff.ts).
   void settleLeftovers(root, { lock: serial }).then((n) => { if (n) log(`${stamp()} handoffs: settled ${n} left checking by a restart`); }).catch((e) => log(`${stamp()} handoffs: ${(e as Error).message}`));
   // Daily jobs: checked every minute; a hub that was asleep at 3:00 runs them when it wakes.
