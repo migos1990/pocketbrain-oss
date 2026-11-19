@@ -7,7 +7,8 @@
 //   1. every question the home asks is about a fact two people gave two values for that week;
 //   2. each such fact is asked once, and nothing else waits on the owner;
 //   3. a question shows two or more sides, each with a value, no two the same value in another spelling;
-//   4. no side is a value only a machine's mail gave, and no voucher code is on the home or a settle screen;
+//   4. no side is a value only a machine's mail gave, and no voucher code is on the home or a settle screen
+//      (and the voucher's project has a page with its first step, so the code had somewhere to show);
 //   5. a question the owner answered is gone, stays gone when the hub reads the same mail again,
 //      and is not asked again when the same sender says the same thing the day after;
 //   6. each question is said in plain words: its page's name, no source ref, id, path or field name;
@@ -142,6 +143,11 @@ export async function runWeek(w: Week): Promise<Run> {
       const held = fold(JSON.stringify(notes.find((n) => n.fm.id === c.key.split("#")[0])?.fm.facts?.[c.attribute] ?? ""));
       const n = (c.both ?? []).filter((v) => held.includes(fold(v))).length;
       if (n !== (c.both ?? []).length) find(7, `a project two people gave two next steps for the same day holds ${n} of them`);
+    }
+    // 4: the voucher's project was filed, so "no code on a screen" is said about a page that exists.
+    for (const c of w.cases.filter((x) => x.kind === "code")) {
+      const held = fold(JSON.stringify(notes.find((n) => n.fm.id === c.key.split("#")[0])?.fm.facts?.[c.attribute] ?? ""));
+      if (!held.includes(fold(c.mails[0]!.value))) find(4, "the project of the voucher mail has no page with its first next step, so the week tested nothing about the code");
     }
     // 2: each once, and nothing else waits.
     for (const k of want) { const n = cases.filter((c) => keyOfCase(c) === k).length; if (n !== 1) { const of = cases.filter((c) => keyOfCase(c) === k); find(2, `a fact two people gave two values for is asked ${n} times (${k.split("#")[1]}, case: ${byKey.get(k)?.kind}; ${of.filter((c) => !c.id.startsWith("p-")).length} as a conflict, ${of.filter((c) => c.id.startsWith("p-")).length} as a change that waits; sides ${of.map((c) => c.sides.length).join(" and ")})`); if (process.env.HOME_KEEP) console.log("DETAIL", JSON.stringify(of.map((c) => ({ id: c.id, sides: c.sides.map((x) => [x.value, x.refs, x.as_of]) })))); } }

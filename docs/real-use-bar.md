@@ -41,6 +41,8 @@ Real-use bar: day 4 of 14 with daily use and no hand fix; 4 days since the last 
 
 ## Silent failures the probe catches
 
+What happens when something breaks, case by case, and which cases no test covers yet: [production-readiness.md](production-readiness.md).
+
 The health probe in `start` (`src/probe.ts`, every 2 hours) checks the public door and, with no network, the hub's own jobs. Each check appears once the thing it watches exists (each check in the table below). Only a promoted check notifies you, as an alert from the hub and as the watchdog's Mac notification: one named in `NOTIFY` in `src/probe.ts`. The early warnings (`filed_lines`, `auto_saves`, `source_cap`, `redecided`, the watchdog's `tailnet`) and any new check nobody promoted yet are report-only: recorded in `log/probe.json` and shown on Settings, in doctor, the digest's list and the menu bar, never sent (G747).
 
 Each check appears once the thing it watches exists:

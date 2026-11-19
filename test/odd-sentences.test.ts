@@ -100,4 +100,6 @@ test("the deploy line says which rules and which kinds of page, and takes only n
   const { by_kind: _k, ...old } = a;
   expect(asPageRead(old)?.by_kind).toEqual({});
   expect(pageReadLine(asPageRead(old)!)).not.toContain("by kind");
-});
+  // It reads every page of the demo brain, about five seconds on a slow machine: its own limit, not
+  // bun's five-second default, which the pre-push hook's plain `bun test` runs under (G1020).
+}, 60_000);

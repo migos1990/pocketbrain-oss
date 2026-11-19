@@ -124,7 +124,7 @@ Writes and the first read after one still grow with the brain: each reads every 
 
 ## The night pass
 
-The hub's night (`src/start.ts`) runs upkeep, the source rechecks, the sleep pass, then, whether or not those failed, the check that every note can still be found (job `searchable`) and housekeeping. Last, it starts the slice check (`docs/slice-proof.md`) in a process of its own and doesn't wait for it: about 20 minutes of one core on made-up brains in a temp folder, with the hub's write queue free. The memory-sync pass runs with the Gardener's or `memsync run`. `scripts/perf.ts` times each against the budgets above. Measured 2026-10-16 in the cloud container (the source rechecks read no source on a synthetic brain, so they aren't timed; ranking what to recheck took 0.6 s at 10k and 2.8 s at 50k):
+A night pass cut off by a restart runs again at the hub's next start, once a day at most (`resumeCutJobs`, G1011; `docs/production-readiness.md`). The hub's night (`src/start.ts`) runs upkeep, the source rechecks, the sleep pass, then, whether or not those failed, the check that every note can still be found (job `searchable`) and housekeeping. Last, it starts the slice check (`docs/slice-proof.md`) in a process of its own and doesn't wait for it: about 20 minutes of one core on made-up brains in a temp folder, with the hub's write queue free. The memory-sync pass runs with the Gardener's or `memsync run`. `scripts/perf.ts` times each against the budgets above. Measured 2026-10-16 in the cloud container (the source rechecks read no source on a synthetic brain, so they aren't timed; ranking what to recheck took 0.6 s at 10k and 2.8 s at 50k):
 
 | Night step | 10k notes, 1 year | 50k notes, 3 years |
 |---|---|---|
@@ -191,7 +191,7 @@ At 50k notes and three years, these were the walls:
 
 ## Crash safety
 
-`scripts/crash.ts` runs the hub (`serve`, cells on) on a synthetic brain and kills its whole process group with `kill -9`, git children included, as a launchd restart (`kickstart -k`) or a power cut would. It does this:
+CI runs a short one on every pull request (3 rounds, 300 notes; G1017). `scripts/crash.ts` runs the hub (`serve`, cells on) on a synthetic brain and kills its whole process group with `kill -9`, git children included, as a launchd restart (`kickstart -k`) or a power cut would. It does this:
 
 - several times in the middle of a stream of `remember` calls;
 - in the middle of the nightly sleep pass;

@@ -2,7 +2,7 @@
 // Small helpers every module used to carry its own copy of: hashing, regex escaping, whole-word
 // matching, and the append-only JSON-lines logs under log/.
 import { createHash } from "node:crypto";
-import { appendFileSync, closeSync, existsSync, ftruncateSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, ftruncateSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { requestId } from "./reqid";
 import { redactSecrets, hardSecretIn } from "./checks";
@@ -122,6 +122,16 @@ export function endTornLine(file: string): boolean {
     ftruncateSync(fd, 0);
     return true;
   } finally { closeSync(fd); }
+}
+
+// A small state file replaced whole or not at all: written beside itself, then renamed over the
+// old one. A crash or a full disk mid-write leaves the old file as it was, never half a file that
+// reads as empty (G1015).
+export function writeWhole(file: string, text: string) {
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  try { writeFileSync(tmp, text); renameSync(tmp, file); }
+  catch (e) { try { if (statSync(tmp).isFile()) unlinkSync(tmp); } catch { /* nothing left behind */ } throw e; }
 }
 
 export function appendJsonl(file: string, entry: unknown) {

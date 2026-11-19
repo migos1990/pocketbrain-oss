@@ -38,6 +38,16 @@ export async function checkBrain(root: string, acked: { id: string; attribute: s
   return bad;
 }
 
+// The brain the hub is killed on. The synthetic brain's write log is sized like a real one but its
+// hashes are stand-ins (scripts/perf.ts), which checkBrain's chain check would call a broken log
+// before the first kill: every run failed, and nobody saw it, since nothing ran this check (G1017).
+// The check's own write log starts empty, so every line in it is one the hub wrote.
+export function crashBrain(root: string, notes: number) {
+  const s = synthBrain(root, { notes, days: 200 });
+  writeFileSync(join(root, "log", "writes.jsonl"), "");
+  return s;
+}
+
 async function startHub(root: string, port: number) {
   // In its own process group, so a kill takes its git children too, as a launchd restart
   // (kickstart -k) or a power cut does.
@@ -54,7 +64,7 @@ async function main(argv: string[]): Promise<number> {
   const num = (f: string, d: number) => { const i = argv.indexOf(f); return i >= 0 ? Number(argv[i + 1]) : d; };
   const rounds = num("--rounds", 10);
   const root = mkdtempSync(join(tmpdir(), "pb-crash-"));
-  const s = synthBrain(root, { notes: num("--notes", 1000), days: 200 });
+  const s = crashBrain(root, num("--notes", 1000));
   // Steward owns the personal area: its writes there commit directly (elsewhere they'd be proposals).
   const mine = s.ids.filter((id) => s.area.get(id) === "personal");
   process.env.PB_TODAY = s.today;
@@ -91,8 +101,15 @@ async function main(argv: string[]): Promise<number> {
   {
     const hub = await startHub(root, port);
     const w = { id: mine[1], attribute: "after_crash", value: "after crash value" };
-    const res = await fetch(`http://127.0.0.1:${port}/v1/remember`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ ...w, as_of: s.today, sources: ["gmail:00000000000000ff"] }) });
-    const j = await res.json().catch(() => ({})) as { outcome?: string; message?: string };
+    // A git lock a killed commit left is cleared once it is a minute old (src/git.ts); until then
+    // a write is refused with "try again". So it is tried again, for that minute and a little more.
+    let j: { outcome?: string; message?: string } = {};
+    for (const until = Date.now() + 90_000; ;) {
+      const res = await fetch(`http://127.0.0.1:${port}/v1/remember`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ ...w, as_of: s.today, sources: ["gmail:00000000000000ff"] }) });
+      j = await res.json().catch(() => ({})) as { outcome?: string; message?: string };
+      if (j.outcome === "committed" || !/try again/.test(j.message ?? "") || Date.now() > until) break;
+      await pause(5000);
+    }
     if (j.outcome !== "committed") findings.push(`after the crashes a new write wasn't committed: ${JSON.stringify(j).slice(0, 200)}`);
     else acked.push(w);
     killGroup(hub); await hub.exited;

@@ -197,6 +197,23 @@ The page keeps it (`opening:` in its frontmatter) and the page writer puts it fi
 
 It is off until you run `pocketbrain wiki opening on`: until then `wiki_sync` checks the paragraph and reports what it would write. `pocketbrain wiki opening off` turns it off again; it is its own switch, beside `wiki sync`.
 
+## Pages written from their sources
+
+The hub's own text says a page's facts as sentences. It does not say what the mail or the event behind a fact said. A night step can try that (`src/page-story.ts`, G1021):
+
+1. It picks the pages with the least text first, at most 10 a night. A page counts only when it is no more private than personal and holds a fact with one live value, a mail or event behind it, nothing tighter on the fact than on its page, and no money, health or legal shape. Lists, open questions, guesses, values held from your assistants and facts shared with named readers only are left out.
+2. It reads the items those facts cite again at the source, at most 4 a page, in memory only: secrets blanked, an item that reads as instructions or that a machine sent never sent on, as when mail is first pulled. No text of an item is stored.
+3. A model (step `page.story` in `rules/models.yaml`, metered and capped like every model step) gets the page's title, those facts and those items, and answers with sentences. Each names the item it rests on, the exact words of that item, and the facts it is about.
+4. The hub's code checks every sentence (`storyProblem`). It is refused when the quoted words are not in the item as written; when it cites a fact the page doesn't hold or that doesn't cite that item; when it doesn't say the fact's value, or the quoted words don't; when it holds a name or number that is not in the page's title or the facts it cites, or a longer word that neither those nor the quoted words hold; when it or its quote reads as a money, health or legal matter, a secret or an instruction; or when a value or a page name hidden from someone who reads the page is in it.
+
+What it does with a sentence that passes depends on your switch:
+
+- **Off** (the default): no model is called. The night log says how many pages have sources a story could be written from.
+- **`pocketbrain wiki story report`**: the model and the checks run; `log/page-story.json` keeps the night's counts (pages tried, items read, sentences given, passed, and refused by reason) with no page name, sentence or source word in it. Nothing is written to a page, and no source words are kept. A page tried as it stands is not sent again until its facts change.
+- **Writing** has no switch yet. The code for it exists and is tested (a `## From its sources` section, each sentence ending with a reference to the fact it cites, so an assistant from whom that fact is hidden gets the page without the sentence; the quoted words kept for your own page only, outside git, under that reference, as in docs/sources-pull.md "Facts, not copies"; one commit by the hub a page, which you can revert; a line taken off again by code when its fact changes). It stays unreachable from `rules/` until you decide whether a second model step may write page text (CLAUDE.md invariant 6 allows one today).
+
+A sentence can never change a fact, settle anything, or widen who reads a fact: it reaches a reader only while every fact it cites does.
+
 ## Code
 
 `src/wiki.ts` provides `summaryOf`, `parentOf`, `pageTree`, `ancestors`, `sections`, `footnotes`, `wikiLint` and `renderTouchedPages` (the page writer; both called from `src/upkeep.ts`), `recentUpdates`, and `applyRewrite`, `partAuthors` and `pageFindings` for `gardenerWikiSync` in `src/core.ts`. The dashboard's note page draws them (`src/dashboard/html-brain.ts`). `adoptHandEdits`, `scanHandEdits` and `isPersonAuthor` handle hand edits (called from `src/start.ts` and `src/digest.ts`). The tests are in `test/wiki*.test.ts` and `test/page-writer.test.ts`.

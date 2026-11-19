@@ -121,6 +121,15 @@ export function setWikiOpening(root: string, mode: string): string {
   return editRules(root, "policy.yaml", (doc) => { doc.setIn(["wiki", "opening"], mode === "on"); }, `wiki opening ${mode}`);
 }
 
+// `pocketbrain wiki story off|report`: whether the night pass tries writing a page's sentences from
+// the mail and events its facts cite (src/page-story.ts, G1021). Off: it only counts the pages that
+// could get one, and calls no model. Report: the model runs and every check, counts are logged,
+// nothing is written. There is no "on" yet.
+export function setWikiStory(root: string, mode: string): string {
+  if (mode !== "off" && mode !== "report") throw new OwnerSetError("wiki story off | report");
+  return editRules(root, "policy.yaml", (doc) => { doc.setIn(["wiki", "story"], mode === "off" ? false : mode); }, `wiki story ${mode}`);
+}
+
 // `pocketbrain machine-mail on|off`: whether the nightly pass sets aside the facts assistants
 // filed from machine mail or only counts them (src/receipt-pages.ts, G668). Off until the owner says so.
 export function setMachineMailAside(root: string, mode: string): string {

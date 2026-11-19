@@ -261,6 +261,14 @@ export function openingProblem(text: string, labels: string[], lead: string, als
   return undefined;
 }
 
+// The longer words of `text` (five letters or more) that `ground` doesn't hold, by their first five
+// letters, but for the few joining words above and month and day names: what a model's sentence
+// added to the words it was given (src/page-story.ts).
+export function unsaidWords(text: string, ground: string): string[] {
+  const have = new Set(linkTitles(ground).split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(stem));
+  return [...new Set([...text.matchAll(/\p{L}{5,}/gu)].map((m) => m[0]))].filter((w) => !JOINING.has(fold(w)) && !ALWAYS.has(fold(w)) && !have.has(stem(w)));
+}
+
 // Each part of an opening is said by ONE of the sentences it cites (audit v13, G760). The checks
 // above look at the paragraph's words as one bag, so words from two sentences made a third, false
 // one ("Ana Diaz works as a lecturer", when the lecturer is someone else), and a "not" was too

@@ -54,7 +54,7 @@ import { setAsideMachineMail, classifyOldMail, oldMailLine, machineMailOn } from
 import { setAsideFirstNamePages } from "./first-name-pages";
 import { setAsideKeptSecrets } from "./kept-secrets";
 import { guessedAreas, setAreasUnguess } from "./area-guess";
-import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setFirstNamePages, setSavedCodes, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
+import { gardenerSetup, setNight, setPublicUrl, setFgaModel, setAskToSee, setWikiSync, setWikiOpening, setWikiStory, setNightlyBackfill, setFileAll, setBothDates, setOwnerAliases, setNextStepNewest, suggestOwnerName, ownerSpellings, ownerNameReport, setLinkNames, setFamilyLinks, setPageParents, setTrips, setAftercheckClassify, setDashboardTailnet, setAgentTier, setDescribeOrgs, setFoldTwins, setMachineMailAside, setFirstNamePages, setSavedCodes, setCountSent, DESCRIBE_LINE, OwnerSetError } from "./ownerset";
 import { tailnetSettings, tailnetSelf, phoneLinkUrl } from "./dashboard/tailnet";
 import { tendPlan, writeTendFiles, applyManaged, applyDescribe, manualSteps, type TendPlan } from "./tend";
 import { pilotDoor, installDoor } from "./door";
@@ -341,6 +341,7 @@ const USAGE = `pocketbrain <command>
   fold [--apply] | fold on|off | fold undo <commit>   fold same-name project and org twins: dry run, now, nightly on or off, or put one back (docs/fold-twins.md)
   wiki sync on|off                   whether the Gardener's wiki_sync writes pages or only reports (policy.yaml; docs/wiki.md)
   wiki opening on|off                whether a page takes the Gardener's opening paragraph or it only reports it (policy.yaml; docs/wiki.md)
+  wiki story off|report              whether the night pass tries writing a page's sentences from the mail and events its facts cite and reports what would pass its checks, or only counts; nothing is written either way (policy.yaml; docs/wiki.md)
   backfill on|off                    whether the nightly source backfill attaches the mail it finds or only reports
                                      (policy.yaml; docs/sources-pull.md)
   aftercheck classify on|off [--cap <$>]  the second-opinion classifier after an agent's write, and its own monthly cap (docs/aftercheck.md)
@@ -1594,7 +1595,8 @@ Nothing changed yet. If this is right, run the same command with --yes${shellMin
     if (args[0] === "parents") return ownerSet(() => setPageParents(root, args[1] ?? ""));
     if (args[0] === "trips") return ownerSet(() => setTrips(root, args[1] ?? ""));
     if (args[0] === "opening") return ownerSet(() => setWikiOpening(root, args[1] ?? ""));
-    if (args[0] !== "sync") { console.error("wiki sync on | off, wiki opening on | off, wiki links on | off, wiki family on | off, wiki parents on | off, or wiki trips on | off"); return 2; }
+    if (args[0] === "story") return ownerSet(() => setWikiStory(root, args[1] ?? ""));
+    if (args[0] !== "sync") { console.error("wiki sync on | off, wiki opening on | off, wiki story off | report, wiki links on | off, wiki family on | off, wiki parents on | off, or wiki trips on | off"); return 2; }
     return ownerSet(() => setWikiSync(root, args[1] ?? ""));
   }
   if (cmd === "gardener") {

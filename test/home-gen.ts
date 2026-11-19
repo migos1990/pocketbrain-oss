@@ -30,7 +30,9 @@ export interface Week { seed: number; owner: { name: string; address: string }; 
 
 export const OWNER = { name: "Mara Quill", address: "mara@example.org" };
 export const PEOPLE = ["Ivo Brandt", "Lena Marsh", "Tariq Sole", "Nell Aubrey", "Odin Vance", "Pia Lund", "Rafe Castor", "Suki Thorne"];
-export const PROJECTS = ["Orchard Survey", "Winter Fair", "Ferry Timetable", "Archive Scan"];
+// Titles the hub files as a project of the owner's: none reads as an errand, a trip or a one-off
+// event, which start no page or a page of another kind (src/page-kind.ts; the test holds each to that).
+export const PROJECTS = ["Orchard Count", "Winter Fair", "Quay Timetable", "Archive Scan"];
 // No role or place holds a word a privacy rule reads as health, school, legal or money (the north
 // star's lesson: such a word makes a page private by accident, which is another test's subject).
 const ROLES = ["field lead", "volunteer host", "route planner", "scan operator", "press contact", "stage manager", "site steward", "data keeper", "tour guide", "print buyer", "floor captain", "map editor"];
@@ -38,7 +40,7 @@ const ORGS = ["Tide Works", "Alder Hall", "Quay Trust", "Fern Guild", "Mill Row 
 const STEPS = ["count the east rows", "order the stall tents", "post the spring sailings", "box the old ledgers"];
 // Projects for the two-steps case: titles the hub starts a page for (an errand's or a trip's title starts
 // none), with no word a privacy rule reads as money (a step about money is asked, by design).
-const BUSY = ["Harbour Map", "Seed Library", "Bell Tower Repair", "Reed Marsh Census"];
+export const BUSY = ["Harbour Map", "Seed Library", "Bell Tower Repair", "Reed Marsh Census"];
 // Things to do that are not each other in other words: two of them on one project are two steps.
 const MORE_STEPS = ["hire the tally clerks", "paint the gate signs", "weigh the spare crates", "mend the reading lamps", "chart the tide tables", "label the seed trays"];
 const TYPED = ["harbour liaison", "Birch Yard"];

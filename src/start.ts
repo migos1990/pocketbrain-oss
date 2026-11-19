@@ -8,7 +8,8 @@ import { catchUpDiary } from "./diary-catchup";
 import { unfreezeHeld, reopenLostAccepts, closeSetAsideAgain, rankOldTaps } from "./write";
 import { renderTouchedPages, backfillNameKeys } from "./wiki";
 import type { StartKind } from "./measure";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync } from "node:fs";
+import { writeWhole } from "./util";
 import { join, resolve } from "node:path";
 import { upkeep, PAGE_TEXT_HOURS } from "./upkeep";
 import { sleep, STEP as SLEEP_STEP } from "./sleep";
@@ -26,6 +27,7 @@ import { nightPlan, dueGardenerJobs, cleanup, rotate } from "./gardener";
 import { housekeeping } from "./growth";
 import { probeOnce, unsearchable, recordStart, northStarAfterStart, northStarLine } from "./probe";
 import { pullAll, pullsDue, recheckDue, keepSourceWords } from "./pull";
+import { pageStories, storyLine, storyMode, STORY_STEP } from "./page-story";
 import { nightBackfill, nightBackfillLine } from "./backfill";
 import { classifyOldMail, oldMailLine, machineMailOn } from "./receipt-pages";
 import { trustReport, recordTrust, trustLine } from "./trust";
@@ -56,7 +58,7 @@ export function lastRuns(root: string): Record<string, string> {
 }
 function markRun(root: string, job: string, day: string) {
   mkdirSync(join(root, "log"), { recursive: true });
-  writeFileSync(stateFile(root), JSON.stringify({ ...lastRuns(root), [job]: day }));
+  writeWhole(stateFile(root), JSON.stringify({ ...lastRuns(root), [job]: day, [`${job}_due`]: day }));
 }
 
 // How a daily job ended: <job>_at on success, <job>_error until the next success. The probe's job
@@ -70,7 +72,7 @@ export function recordJob(root: string, job: string, err: Error | undefined, now
   const s: Record<string, string> = { ...lastRuns(root) };
   if (err) s[`${job}_error`] = err.message.slice(0, 200);
   else { s[`${job}_at`] = now.toISOString(); delete s[`${job}_error`]; }
-  writeFileSync(stateFile(root), JSON.stringify(s));
+  writeWhole(stateFile(root), JSON.stringify(s));
 }
 
 // A job that hangs would otherwise show as nothing at all: past its time it is recorded as failed
@@ -117,12 +119,14 @@ export function tendOnce(root: string, log: (s: string) => void, now = new Date(
 // the digest every day, the carve audit (src/audit.ts) and, once backups are set up, the restore
 // test (src/restore-drill.ts) on Sundays after the nightly pass.
 type Job = "night" | "audit" | "drill" | "digest";
+const JOBS: Job[] = ["night", "audit", "drill", "digest"];
+// The owner's day and hour (owner.timezone), not this machine's: a hub in another zone, or a
+// container on UTC, still runs the night at 03:00 the owner's time, once (src/clock.ts).
+function ownerNow(root: string, now: Date): ReturnType<typeof ownerClock> {
+  try { return ownerClock(loadRules(root), now); } catch { return { day: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`, hour: now.getHours(), dow: now.getDay() }; }
+}
 export function dueJobs(root: string, now: Date, s: Schedule = DEFAULT_SCHEDULE): Job[] {
-  // The owner's day and hour (owner.timezone), not this machine's: a hub in another zone, or a
-  // container on UTC, still runs the night at 03:00 the owner's time, once (src/clock.ts).
-  let c: ReturnType<typeof ownerClock>;
-  try { c = ownerClock(loadRules(root), now); } catch { c = { day: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`, hour: now.getHours(), dow: now.getDay() }; }
-  const { day, hour, dow } = c;
+  const { day, hour, dow } = ownerNow(root, now);
   const done = lastRuns(root);
   const out: Job[] = [];
   if (hour >= s.night_hour && done.night !== day) out.push("night");
@@ -132,11 +136,72 @@ export function dueJobs(root: string, now: Date, s: Schedule = DEFAULT_SCHEDULE)
   return out.map((j) => { markRun(root, j, day); return j; });
 }
 
+// A daily job is marked for the day when it comes due (markRun), so a second tick never starts it
+// twice. A hub killed while it ran (a crash, a power cut, the watchdog's restart) would then come
+// back with the job marked done and that day's pass never made (G1011). So three marks are kept:
+// due (dueJobs), begun (the tick starts it) and ended. At the hub's start:
+// - a job of today that began and never ended is put back for the minute tick, once only: cut off
+//   twice in one day it is left until tomorrow and recorded as failed, so a pass that takes the hub
+//   down each time can't loop, and the probe says so;
+// - a job of today that came due and never began (it waited behind the one that was cut off, since
+//   every due job is marked at once) is put back as often as it takes, and is no cut-off run (G1018);
+// - a mark from before this change has neither due nor begun and is left alone.
+function setRuns(root: string, s: Record<string, string>) { writeWhole(stateFile(root), JSON.stringify(s)); }
+export function beginJob(root: string, job: Job) {
+  const s = lastRuns(root);
+  if (s[job]) setRuns(root, { ...s, [`${job}_begun`]: s[job] });
+}
+export function endJob(root: string, job: Job) {
+  const s = lastRuns(root);
+  if (s[job]) setRuns(root, { ...s, [`${job}_ended`]: s[job] });
+}
+export function resumeCutJobs(root: string, now = new Date()): Job[] {
+  const { day } = ownerNow(root, now);
+  const out: Job[] = [];
+  for (const job of JOBS) {
+    const s = lastRuns(root);
+    if (s[job] !== day || s[`${job}_ended`] === day) continue;
+    const { [job]: _marked, ...rest } = s;
+    if (s[`${job}_begun`] !== day) {
+      if (s[`${job}_due`] !== day) continue; // older code's mark
+      setRuns(root, rest);
+      out.push(job);
+      continue;
+    }
+    if (s[`${job}_cut`] === day) {
+      // Ended as far as today goes; recordJob keeps the error until the next run that works.
+      setRuns(root, { ...s, [`${job}_ended`]: day });
+      recordJob(root, job, new Error("stopped twice mid-run today by a restart; not tried again until tomorrow"), now);
+      continue;
+    }
+    const { [`${job}_begun`]: _begun, ...put } = rest;
+    setRuns(root, { ...put, [`${job}_cut`]: day });
+    out.push(job);
+  }
+  return out;
+}
+
 // The night's page text when upkeep didn't run here (a managed Gardener does upkeep; the page
 // writer stays the hub's). Undefined when upkeep ran, which writes it as step 1d.
 export function nightPageText(root: string, upkeepRan: boolean) {
   return upkeepRan ? undefined : renderTouchedPages(root, new Date(Date.now() - PAGE_TEXT_HOURS * 3_600_000).toISOString());
 }
+
+// What every start repairs before it serves, in order. Each one fixes what older code left behind
+// and must find nothing to do on a brain today's code made, and nothing the second time on any
+// brain: a repair that acts again on what the owner or the hub settled since undoes it at every
+// restart (G1006, G1007 were that). test/start-twice.test.ts runs this list, so a repair added here
+// is held to it (G1012).
+export const START_REPAIRS: { name: string; run: (root: string) => number; says: (n: number) => string }[] = [
+  // Facts an older hub froze while a conflict waited for the Gardener get their live value back (G425).
+  { name: "conflicts", run: (root) => unfreezeHeld(root).length, says: (n) => `conflicts: ${n} frozen fact(s) given their live value back` },
+  // Yes taps from before G424 rank as their source, not as the owner's word (G424).
+  { name: "taps", run: (root) => rankOldTaps(root).length, says: (n) => `taps: ${n} fact(s) approved before G424 now rank as their source` },
+  // What an earlier start handed back only because a set-aside took its page is answered again (G1007).
+  { name: "set aside", run: (root) => closeSetAsideAgain(root).length, says: (n) => `inbox: ${n} capture(s) answered again, set aside on purpose` },
+  // Captures an older hub answered accepted with nothing saved go back to the inbox (G431).
+  { name: "inbox", run: (root) => reopenLostAccepts(root).length, says: (n) => `inbox: ${n} accepted capture(s) with nothing saved back in the inbox` },
+];
 
 export function startJobs(root: string, opts: { log?: (s: string) => void; schedule?: Schedule; localUrl?: string; startKind?: StartKind } = {}) {
   const log = opts.log ?? ((s: string) => console.log(s));
@@ -146,18 +211,16 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
   // Notes edited by hand while the hub was down become the owner's commits (docs/wiki.md).
   const handEdits = () => { const h = adoptHandEdits(root); if (h.adopted.length || h.held.length) log(`${stamp()} hand edits: ${h.adopted.length} committed, ${h.held.length} held`); };
   void serial(async () => handEdits()).catch((e) => log(`${stamp()} hand edits: ${(e as Error).message}`));
-  // Facts an older hub froze while a conflict waited for the Gardener get their live value back (G425).
-  void serial(async () => { const n = unfreezeHeld(root); if (n.length) log(`${stamp()} conflicts: ${n.length} frozen fact(s) given their live value back`); }).catch((e) => log(`${stamp()} conflicts: ${(e as Error).message}`));
-  // Yes taps from before G424 rank as their source, not as the owner's word (G424).
-  void serial(async () => { const n = rankOldTaps(root); if (n.length) log(`${stamp()} taps: ${n.length} fact(s) approved before G424 now rank as their source`); }).catch((e) => log(`${stamp()} taps: ${(e as Error).message}`));
-  // Captures an older hub answered accepted with nothing saved go back to the inbox (G431).
-  // First what an earlier start handed back only because a set-aside took its page (G1007), then the lost ones.
-  void serial(async () => { const c = closeSetAsideAgain(root); if (c.length) log(`${stamp()} inbox: ${c.length} capture(s) answered again, set aside on purpose`); const n = reopenLostAccepts(root); if (n.length) log(`${stamp()} inbox: ${n.length} accepted capture(s) with nothing saved back in the inbox`); }).catch((e) => log(`${stamp()} inbox: ${(e as Error).message}`));
+  // The repairs every start runs (START_REPAIRS, above), each in the write queue.
+  for (const r of START_REPAIRS) void serial(async () => { const n = r.run(root); if (n) log(`${stamp()} ${r.says(n)}`); }).catch((e) => log(`${stamp()} ${r.name}: ${(e as Error).message}`));
   // Handoffs a restart left mid request check get their verdict now (src/handoff.ts).
   void settleLeftovers(root, { lock: serial }).then((n) => { if (n) log(`${stamp()} handoffs: settled ${n} left checking by a restart`); }).catch((e) => log(`${stamp()} handoffs: ${(e as Error).message}`));
+  // A daily job the last hub was killed in the middle of is due again, once (G1011).
+  try { const cut = resumeCutJobs(root); if (cut.length) log(`${stamp()} cut off by a restart, running again: ${cut.join(", ")}`); } catch (e) { log(`${stamp()} cut-off jobs: ${(e as Error).message}`); }
   // Daily jobs: checked every minute; a hub that was asleep at 3:00 runs them when it wakes.
   const daily = () => serial(async function dailyJobs() {
     for (const job of dueJobs(root, new Date(), opts.schedule)) {
+      beginJob(root, job);
       const r = await runJob(root, job, async () => {
         if (job === "night") {
           // night: managed leaves upkeep and forgetting to the gardener unless it has been silent
@@ -177,6 +240,11 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
           // so a page shows what its sources said (the hub's job, a managed Gardener or not).
           const words = await keepSourceWords(root);
           if (words) log(`${stamp()} source words: read ${words} cited item(s)`);
+          // Pages written from their sources (src/page-story.ts, G1021): a count only until the owner's
+          // `pocketbrain wiki story report` or `on`; no model is called before that. Its own failure
+          // never fails the night.
+          try { log(`${stamp()} ${storyLine(await pageStories(root, { model: storyMode(loadRules(root)) === "off" ? undefined : modelIfKeyed(root, STORY_STEP) }))}`); }
+          catch (e) { log(`${stamp()} page story failed: ${(e as Error).message}`); }
           const r = await sleep(root, plan.full
             ? { model: modelIfKeyed(root, SLEEP_STEP), judge: modelIfKeyed(root, "upkeep.duplicates") }
             : { model: modelIfKeyed(root, SLEEP_STEP), steps: { forget: false, consolidate: true } });
@@ -217,6 +285,7 @@ export function startJobs(root: string, opts: { log?: (s: string) => void; sched
         // the write queue is free while it reads. It beats `slice_proof` itself when it ends.
         void sliceProofNight(root).then((line) => log(`${stamp()} ${line}`)).catch((e) => log(`${stamp()} slice check: ${(e as Error).message}`));
       }
+      endJob(root, job); // it ran to its end, well or badly: a restart from here on is not a cut-off run
     }
   }, { limitMs: (JOB_MINUTES + 5) * 60_000 });
   setInterval(daily, 60_000);
@@ -327,7 +396,7 @@ function clearJobError(root: string, job: string) {
   const s = lastRuns(root);
   if (!s[`${job}_error`]) return;
   delete s[`${job}_error`];
-  writeFileSync(stateFile(root), JSON.stringify(s));
+  writeWhole(stateFile(root), JSON.stringify(s));
 }
 
 // launchd plists for a Mac hub: one for `start`, one for the Cloudflare tunnel. The tunnel gets

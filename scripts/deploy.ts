@@ -17,6 +17,7 @@
 //   bun scripts/deploy.ts run [--app <dir>] [--health <url>]   one pass (what launchd runs)
 //   bun scripts/deploy.ts status                               the last pass (deploy.json)
 //   bun scripts/deploy.ts hold | unhold                        stop or resume following releases
+//   bun scripts/deploy.ts public-mark on | off                 whether go also marks a clean sha for the public repo (off by default)
 //   bun scripts/deploy.ts plist [--app <dir>] [--minutes <n>]  the launchd job, com.pocketbrain.update
 // State: deploy.json in the config folder (~/.config/pocketbrain, or $PB_CONFIG_DIR); the hub's
 // health probe turns a rollback, a block or a pass that stopped running into one alert.
@@ -34,7 +35,11 @@ export type Status = "deployed" | "current" | "rolled-back" | "down" | "blocked"
 // north_star: that code's real-brain counts (counts only, never a page name); brain_quotes: the
 // tracked files' lines that repeat 8 words of a brain page, by file:line only (G956).
 export interface BrainQuotes { lines: number; hits: string[] }
-export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; brain_quotes?: BrainQuotes; page_read?: PageRead; checked_at: string }
+// public_checked: the last sha this Mac marked for the public repo, with the report's lines then
+// (file:line only): the public workflow publishes only a marked sha (G1009).
+export interface PublicChecked { sha: string; hits: string[] }
+export const checkedTag = (sha: string) => `public-checked/${sha}`;
+export interface DeployState { status: Status; detail: string; mode?: "go" | "release"; version?: string; sha?: string; running?: string; previous?: string; at?: string; unreleased_since?: string | null; north_star?: Omit<NorthStarRecord, "at">; brain_quotes?: BrainQuotes; public_checked?: PublicChecked; page_read?: PageRead; checked_at: string }
 export interface Effects {
   install(dir: string): boolean;
   restart(): boolean;
@@ -51,6 +56,23 @@ export interface GoEffects extends Effects {
   // scripts/page-read.ts of the checkout as it is when called, over the real brain: counts and
   // milliseconds only. Undefined when that checkout has no such script (code from before G984).
   pageRead?(): Promise<PageRead | undefined>;
+  // Push the tag that tells the public workflow this sha was read against the brain (G1009).
+  // False when the tag could not be pushed.
+  markChecked?(sha: string): boolean;
+}
+
+// May this sha go to the public repo? Only when the brain-quotes report ran on it and every line it
+// names was already there at the last marked sha; with no marked sha yet, only a report of none
+// (G1009). The lines are compared with the last MARKED count, never the last deploy's, so a line
+// that kept one commit back keeps the next ones back too until it is gone.
+export function publicVerdictFor(q: BrainQuotes | undefined, last?: PublicChecked): { ok: true } | { ok: false; why: string } {
+  if (!q) return { ok: false, why: "the brain-quotes report didn't run" };
+  const seen = new Set(last?.hits ?? []);
+  const fresh = q.hits.filter((h) => !seen.has(h));
+  const extra = Math.max(fresh.length, q.lines - (last?.hits.length ?? 0), 0);
+  if (!extra) return { ok: true };
+  const shown = fresh.slice(0, 20).join(", ");
+  return { ok: false, why: `${extra} line(s) repeat a brain page's words since the last marked commit${shown ? `: ${shown}${fresh.length > 20 ? `, and ${fresh.length - 20} more` : ""}` : ""}` };
 }
 
 // One line for the deploy log: the count, and which file:line are new since the last count (G956).
@@ -67,6 +89,10 @@ export function brainQuotesLine(q: BrainQuotes, before?: BrainQuotes): string {
 export const configDir = () => dirname(keysDir());
 export const statePath = () => join(configDir(), "deploy.json");
 const holdPath = () => join(configDir(), "deploy.hold");
+// The owner's standing word that a deploy may also mark its sha for the public repo (G1113): a file
+// beside deploy.json, written only by `public-mark on`. Without it a deploy publishes nothing.
+const markPath = () => join(configDir(), "deploy.public-mark");
+export const markingOn = (p = markPath()) => existsSync(p);
 
 export function readState(p = statePath()): DeployState | undefined {
   try { return JSON.parse(readFileSync(p, "utf8")); } catch { return undefined; }
@@ -136,7 +162,8 @@ export async function deployOnce(o: { app: string; remote?: string; branch?: str
 }
 
 // `go <sha|main>`: take exactly one commit of origin/main, verified by the hub's own code sha.
-export async function deployGo(o: { app: string; want: string; remote?: string; fx: GoEffects; state?: string; hold?: string; now?: () => Date }): Promise<DeployState> {
+// mark: also push the public tag for a sha the report cleared; a deploy alone never does (G1113).
+export async function deployGo(o: { app: string; want: string; remote?: string; fx: GoEffects; state?: string; hold?: string; now?: () => Date; mark?: boolean }): Promise<DeployState> {
   const { app, fx } = o;
   const remote = o.remote ?? "origin", file = o.state ?? statePath();
   const now = () => (o.now?.() ?? new Date()).toISOString();
@@ -144,7 +171,7 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
   const short = (x?: string) => x?.slice(0, 7) ?? "nothing";
   const save = (s: Omit<DeployState, "checked_at" | "mode">): DeployState => {
     // The last count stays until a new one replaces it, so "new since the last deploy" holds.
-    const full: DeployState = { mode: "go", ...(last?.brain_quotes ? { brain_quotes: last.brain_quotes } : {}), ...(last?.page_read ? { page_read: last.page_read } : {}), ...s, checked_at: now() };
+    const full: DeployState = { mode: "go", ...(last?.brain_quotes ? { brain_quotes: last.brain_quotes } : {}), ...(last?.public_checked ? { public_checked: last.public_checked } : {}), ...(last?.page_read ? { page_read: last.page_read } : {}), ...s, checked_at: now() };
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(full, null, 2) + "\n");
     fx.log(`${full.checked_at} ${full.status}: ${full.detail}`);
@@ -175,6 +202,14 @@ export async function deployGo(o: { app: string; want: string; remote?: string; 
         const q = await fx.brainQuotes(target);
         if (q) { fx.log(brainQuotesLine(q, last?.brain_quotes)); out.brain_quotes = q; } else fx.log("brain quotes: didn't run: no report");
       } catch (e) { fx.log(`brain quotes: didn't run: ${(e as Error).message}`); }
+    }
+    // Then the mark for the public repo (G1009): only this report, run now on this sha, can give it.
+    if (fx.markChecked) {
+      const v = publicVerdictFor(out.brain_quotes, last?.public_checked);
+      if (!v.ok) fx.log(`public repo: ${short(target)} not marked: ${v.why}`);
+      else if (!o.mark && last?.public_checked?.sha !== target) fx.log(`public repo: ${short(target)} is clear to mark and was not marked: marking is off (go ${short(target)} --mark-public marks this one; bun scripts/deploy.ts public-mark on marks every clean deploy)`);
+      else if (last?.public_checked?.sha === target || fx.markChecked(target)) { out.public_checked = { sha: target, hits: out.brain_quotes!.hits }; fx.log(`public repo: ${short(target)} marked as checked (tag ${checkedTag(target)}); the public workflow publishes it`); }
+      else fx.log(`public repo: ${short(target)} not marked: the tag could not be pushed`);
     }
     // Then the same pages on the code that runs now, against the reading from before (G984):
     // counts and milliseconds only; it never blocks or rolls back.
@@ -253,6 +288,14 @@ export function macEffects(health: string, brain?: string, appDir?: string): GoE
       const j = JSON.parse(r.stdout.toString()) as { lines: number; hits: string[] };
       return { lines: j.lines, hits: j.hits };
     },
+    // The tag sits on a commit of origin/main, which the pre-push hook lets through unchecked like a
+    // release tag (.githooks/pre-push, G541). Never forced: a tag that exists is left as it is.
+    markChecked: (sha) => {
+      const app = appDir ?? join(homedir(), "pocketbrain");
+      const tag = checkedTag(sha);
+      if (!git(app, "rev-parse", "-q", "--verify", `refs/tags/${tag}`).ok && !git(app, "tag", tag, sha).ok) return false;
+      return git(app, "push", "-q", "origin", `refs/tags/${tag}`).ok;
+    },
     // In a child, from the checkout as it is now (the old code before the change, the new after):
     // it reads the brain, writes nothing and prints counts and milliseconds only.
     pageRead: async () => {
@@ -327,16 +370,21 @@ async function main(argv: string[]): Promise<number> {
   if (cmd === "status") { const s = readState(); console.log(s ? JSON.stringify(s, null, 2) : "auto-update never ran"); return 0; }
   if (cmd === "hold") { mkdirSync(configDir(), { recursive: true }); writeFileSync(holdPath(), new Date().toISOString() + "\n"); console.log("on hold: the hub stays on its version"); return 0; }
   if (cmd === "unhold") { rmSync(holdPath(), { force: true }); console.log("following releases again"); return 0; }
+  if (cmd === "public-mark") {
+    if (argv[1] === "on") { mkdirSync(configDir(), { recursive: true }); writeFileSync(markPath(), new Date().toISOString() + "\n"); console.log("public-mark on: go marks each sha its brain-quotes report clears, and the public workflow publishes it"); return 0; }
+    if (argv[1] === "off") { rmSync(markPath(), { force: true }); console.log("public-mark off: a deploy marks nothing; go <sha> --mark-public marks one"); return 0; }
+    console.log(markingOn() ? "public-mark is on" : "public-mark is off"); return 0;
+  }
   if (cmd === "plist") { console.log(updatePlist({ bun: Bun.which("bun") ?? "/opt/homebrew/bin/bun", app, home: homedir(), minutes: Number(opt("--minutes") ?? 10) })); return 0; }
   if (cmd === "go") {
     const want = argv[1];
-    if (!want || want.startsWith("--")) { console.error("usage: bun scripts/deploy.ts go <sha|main> [--app <dir>] [--health <url>] [--brain <dir>]"); return 2; }
+    if (!want || want.startsWith("--")) { console.error("usage: bun scripts/deploy.ts go <sha|main> [--mark-public] [--app <dir>] [--health <url>] [--brain <dir>]"); return 2; }
     const health = opt("--health") ?? "http://127.0.0.1:8787/health";
     if (!loopbackHealth(health)) { console.error(`--health must be the hub on loopback (http://127.0.0.1:<port>/health): only there does /health name the sha it runs; got ${health}`); return 2; }
     const unlock = lock();
     if (!unlock) { console.log("another pass is running"); return 1; }
     try {
-      const s = await deployGo({ app, want, fx: macEffects(health, brainFolder(opt("--brain")), app) });
+      const s = await deployGo({ app, want, fx: macEffects(health, brainFolder(opt("--brain")), app), mark: argv.includes("--mark-public") || markingOn() });
       return ["deployed", "current"].includes(s.status) ? 0 : 1;
     } finally { unlock(); }
   }
@@ -348,7 +396,7 @@ async function main(argv: string[]): Promise<number> {
       return ["deployed", "current", "held"].includes(s.status) ? 0 : 1;
     } finally { unlock(); }
   }
-  console.error("usage: bun scripts/deploy.ts go <sha|main>|run|status|hold|unhold|plist [--app <dir>] [--health <url>] [--brain <dir>] [--minutes <n>]");
+  console.error("usage: bun scripts/deploy.ts go <sha|main> [--mark-public]|run|status|hold|unhold|public-mark on|off|plist [--app <dir>] [--health <url>] [--brain <dir>] [--minutes <n>]");
   return 2;
 }
 

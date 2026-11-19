@@ -133,7 +133,9 @@ export const STALE_OK: Record<string, (form: Record<string, string>, root?: stri
   "sign-in-again": () => true,
   "settle-mail": (form) => form.n === "drop",
   "settle-pick": (form, root) => !hiddenSides(root, form.id),
-  "settle-both": () => true,
+  // Keep both closes the question, so on a conflict whose sides are hidden it needs the same fresh
+  // sign-in as a pick (outside audit 2026-11-19, G1010: an old form closed a private conflict unseen).
+  "settle-both": (form, root) => !hiddenSides(root, form.id),
   "diary-undo": () => true,
   "fix-everywhere": () => true,
   "note-hide": () => true,
@@ -682,7 +684,7 @@ export function dashboardHandler(root: string, opts: DashboardOptions & { port: 
       const fail = (e: unknown) => { if (!(e instanceof CoreError)) console.error(e); return ownerFacingError(e); };
       const gated = url.pathname.startsWith("/action/") ? url.pathname.slice("/action/".length) : /^\/(propose|consent)\//.test(url.pathname) ? url.pathname.split("/")[1]! : "";
       if (gated && needsFresh(gated, form, root) && !freshSignIn(root, sid, now())) {
-        if (gated === "settle-mail" || gated === "settle-pick") return go(`/settle/${encodeURIComponent(form.id ?? "")}`, { err: gated === "settle-pick" ? "Sign in again to settle it: its sides show only right after you sign in." : "Sign in again to let it through: it may hold something private." });
+        if (gated === "settle-mail" || gated === "settle-pick" || gated === "settle-both") return go(`/settle/${encodeURIComponent(form.id ?? "")}`, { err: gated !== "settle-mail" ? "Sign in again to settle it: its sides show only right after you sign in." : "Sign in again to let it through: it may hold something private." });
         return go(gated === "diary-seen" ? "/home" : back, { err: gated === "diary-seen" ? "Sign in again to see it: a held value shows only right after you sign in." : "Sign in again to do that: it needs a sign-in from the last few minutes." });
       }
 

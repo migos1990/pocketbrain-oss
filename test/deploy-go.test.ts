@@ -46,7 +46,7 @@ function rig() {
     log: (l) => calls.push(`log ${l}`),
   });
   const state = join(dir, "deploy.json"), hold = join(dir, "deploy.hold");
-  const go = (want: string, f: GoEffects) => deployGo({ app, want, fx: f, state, hold, now: () => new Date("2026-10-27T12:00:00Z") });
+  const go = (want: string, f: GoEffects, o: { mark?: boolean } = {}) => deployGo({ app, want, fx: f, state, hold, now: () => new Date("2026-10-27T12:00:00Z"), ...o });
   return { dir, origin, app, commit, head, hub, calls, fx, go, state, hold, counts };
 }
 const steps = (calls: string[]) => calls.filter((c) => !c.startsWith("log "));
@@ -224,6 +224,75 @@ test("go prints the brain-quotes line at 0, so a clean report is seen to have ru
   await r.go(r.commit("0.3.0"), f({ lines: 1, hits: ["docs/b.md:9"] }));
   await r.go(r.commit("0.4.0"), f({ lines: 0, hits: [] }));
   expect(logs(r.calls)).toContain("brain quotes: 0 line(s) in tracked files repeat 8 words of a brain page (report only, words never printed); none new since the last deploy");
+});
+
+// G1009 (2026-11-19): every green main went to the public repo before anything that knows the
+// brain's words had looked at it. go now marks the sha it verified, for the public workflow, only
+// when the brain-quotes report ran on it and named no line the last marked sha didn't have.
+test("go marks a sha for the public repo only when the brain-quotes report ran and found nothing new", async () => {
+  const r = rig();
+  const marked: string[] = [];
+  const f = (q: (() => { lines: number; hits: string[] }) | undefined) => ({ ...r.fx(), ...(q ? { brainQuotes: async () => q() } : {}), markChecked: (sha: string) => { marked.push(sha); return true; } });
+  // A clean first count is marked.
+  const a = r.commit("0.2.0");
+  const s1 = await r.go(a, f(() => ({ lines: 0, hits: [] })), { mark: true });
+  expect(marked).toEqual([a]);
+  expect(s1.public_checked).toEqual({ sha: a, hits: [] });
+  expect(logs(r.calls)).toContain(`public repo: ${a.slice(0, 7)} marked as checked`);
+  // A new line: not marked, and the deploy stands.
+  const b = r.commit("0.3.0");
+  const s2 = await r.go(b, f(() => ({ lines: 1, hits: ["docs/b.md:9"] })), { mark: true });
+  expect(s2.status).toBe("deployed");
+  expect(marked).toEqual([a]);
+  expect(logs(r.calls)).toContain(`public repo: ${b.slice(0, 7)} not marked: 1 line(s) repeat a brain page's words since the last marked commit: docs/b.md:9`);
+  // The same line on the next deploy is still new against the last marked sha, not against the last deploy.
+  const c = r.commit("0.4.0");
+  const s3 = await r.go(c, f(() => ({ lines: 1, hits: ["docs/b.md:9"] })), { mark: true });
+  expect(marked).toEqual([a]);
+  expect(s3.public_checked).toEqual({ sha: a, hits: [] });
+  // A report that didn't run marks nothing.
+  const d = r.commit("0.5.0");
+  await r.go(d, { ...f(undefined), brainQuotes: async () => { throw new Error("no brain folder known"); } }, { mark: true });
+  expect(marked).toEqual([a]);
+  expect(logs(r.calls)).toContain(`public repo: ${d.slice(0, 7)} not marked: the brain-quotes report didn't run`);
+  // The line gone: marked again.
+  const e = r.commit("0.6.0");
+  const s5 = await r.go(e, f(() => ({ lines: 0, hits: [] })), { mark: true });
+  expect(marked).toEqual([a, e]);
+  expect(s5.public_checked).toEqual({ sha: e, hits: [] });
+  // A mark that can't be pushed says so and keeps the last one.
+  const g = r.commit("0.7.0");
+  const s6 = await r.go(g, { ...f(() => ({ lines: 0, hits: [] })), markChecked: () => false }, { mark: true });
+  expect(s6.status).toBe("deployed");
+  expect(s6.public_checked).toEqual({ sha: e, hits: [] });
+  expect(logs(r.calls)).toContain(`public repo: ${g.slice(0, 7)} not marked: the tag could not be pushed`);
+});
+
+test("a first count that already has lines is not marked", async () => {
+  const r = rig();
+  const marked: string[] = [];
+  await r.go(r.commit("0.2.0"), { ...r.fx(), brainQuotes: async () => ({ lines: 1, hits: ["docs/b.md:9"] }), markChecked: (sha: string) => { marked.push(sha); return true; } }, { mark: true });
+  expect(marked).toEqual([]);
+});
+
+// G1113 (2026-11-19): with G1009 live, every deploy pushed the public tag when the report was clean
+// and go had no way to leave it out, so a deploy published as a side effect and the Mac held every
+// deploy until the owner spoke. Marking is its own switch, off unless the owner turned it on.
+test("a deploy marks nothing for the public repo unless marking is on", async () => {
+  const r = rig();
+  const marked: string[] = [];
+  const f = () => ({ ...r.fx(), brainQuotes: async () => ({ lines: 0, hits: [] }), markChecked: (sha: string) => { marked.push(sha); return true; } });
+  const a = r.commit("0.2.0");
+  const s1 = await r.go(a, f());
+  expect(s1.status).toBe("deployed");
+  expect(marked).toEqual([]);
+  expect(s1.public_checked).toBeUndefined();
+  expect(logs(r.calls)).toContain(`public repo: ${a.slice(0, 7)} is clear to mark and was not marked: marking is off`);
+  // The same sha, already running, marked by itself once the owner says so: no second deploy.
+  const s2 = await r.go(a, f(), { mark: true });
+  expect(s2.status).toBe("current");
+  expect(marked).toEqual([a]);
+  expect(r.calls.filter((c) => c === "restart").length).toBe(1);
 });
 
 // G984: the owner found odd sentences and a slow page on his phone after a deploy. go now reads his

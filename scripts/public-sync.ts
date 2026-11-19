@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The public repo and pocketbrain.dev in step with what is built (docs/release.md "The public repo and the site"):
-//   - the public repo (pocketbrain-oss, beside this repo under the same owner) holds the export of main's tip: CI's public-sync workflow
-//     exports every main commit that passed CI (scripts/public-export.sh, gitleaks) and pushes it there,
+//   - the public repo (pocketbrain-oss, beside this repo under the same owner) holds the export of the newest main commit the Mac marked as checked (G1009): CI's public-sync workflow
+//     exports each such commit, once CI passed on it (scripts/public-export.sh, gitleaks), and pushes it there,
 //     one commit each, whose message names the private commit it came from;
 //   - the site names one version, in `data-pb-version`, and only a tagged one: the newest tag.
 //   bun scripts/public-sync.ts check [--site <file|url>] [--no-site] [--no-public]   IN SYNC or OUT OF SYNC

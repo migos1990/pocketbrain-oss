@@ -11,7 +11,8 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { week, asked, never, keyOf, type Week } from "./home-gen";
+import { week, asked, never, keyOf, PROJECTS, BUSY, type Week } from "./home-gen";
+import { titlePiece } from "../src/page-kind";
 import { runWeek, fold, shown, notPlain, type Finding } from "./home-check";
 
 const FROZEN: { seed: number; why: string }[] = JSON.parse(readFileSync(join(import.meta.dir, "fixtures", "home-seeds.json"), "utf8"));
@@ -59,6 +60,9 @@ test("the generator is the same week for the same seed, every kind of case turns
   const kinds = new Set(some.flatMap((w) => w.cases.map((c) => c.kind)));
   for (const k of ["clash", "three", "split", "agree", "forward", "reworded", "machine", "code", "steps", "answered"]) expect(kinds.has(k as never)).toBe(true);
   expect(new Set(some.flatMap((w) => w.cases.map((c) => c.answer)).filter(Boolean)).size).toBe(4);
+  // Every made-up project is one the hub files as a project: an errand's, a trip's or an event's
+  // title starts no page of its own, and the week's case would hold with nothing filed.
+  for (const t of [...PROJECTS, ...BUSY]) expect(`${t}: ${titlePiece(t)}`).toBe(`${t}: undefined`);
   for (const w of some) {
     expect(new Set(w.cases.map((c) => c.key)).size).toBe(w.cases.length);
     expect(asked(w).length).toBeGreaterThan(0);

@@ -128,3 +128,12 @@ test("G982, G1001: the suites run side by side, each in two parts, and the requi
     expect(count(part, 3, "")).not.toBe(0);
   }
 });
+
+// G1111: three jobs of one run failed before any test ran, because the runner's package mirror
+// answered 503 to one install. Every step that installs a package tries again before it fails.
+test("G1111: a package install in CI tries three times before it fails the job", () => {
+  const text = readFileSync(join(import.meta.dir, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const installs = text.split("\n").filter((l) => /^\s*- run: .*apt-get install/.test(l));
+  expect(installs.length).toBe(3);
+  for (const l of installs) expect(l).toMatch(/until sudo apt-get install -y openssh-client age; do n=\$\(\(n\+1\)\); \[ "\$n" -ge 3 \] && exit 1; sleep 20; done/);
+});

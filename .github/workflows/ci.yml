@@ -88,7 +88,9 @@ jobs:
           pipx install --quiet semgrep==1.183.0   # pipx: the runner's system Python refuses pip installs
           semgrep scan --config p/typescript --config p/javascript --config p/secrets --severity ERROR \
             --metrics off --baseline-commit "$base" --error src scripts conformance
-      - run: sudo apt-get install -y openssh-client age   # ssh-keygen for signed-commit tests, age for backups
+      # ssh-keygen for signed-commit tests, age for backups. Tried three times, 20 seconds apart: the
+      # runner's package mirror answers 503 now and then, and the job failed before any test ran (G1111).
+      - run: n=0; until sudo apt-get install -y openssh-client age; do n=$((n+1)); [ "$n" -ge 3 ] && exit 1; sleep 20; done
         if: runner.os == 'Linux'
       # The Mac's runner user installed age, ffmpeg and pipx once (ci/mac-runner-plan.md); ssh-keygen is built in.
       - run: command -v ssh-keygen && command -v age && command -v pipx
@@ -132,6 +134,12 @@ jobs:
       - name: restore drill on the sample brain
         timeout-minutes: 5
         run: bun src/cli.ts drill --demo
+      # The hub killed with kill -9 mid-write, mid-sleep and mid-backup on a synthetic brain
+      # (scripts/crash.ts, docs/perf.md "Crash safety"): nothing corrupt, no acknowledged write lost,
+      # and it starts again and takes a write. A short run; the full one is `bun run crash` (G1017).
+      - name: crash check
+        timeout-minutes: 10
+        run: bun scripts/crash.ts --rounds 3 --notes 300
   # The plain test suite, in two jobs, each a part of the test files (scripts/test-shard.ts, the same
   # parts as the cells suite below): in one step it took about half of its limit on a usual runner and
   # a slow runner takes twice as long (G1001).
@@ -148,7 +156,9 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
-      - run: sudo apt-get install -y openssh-client age   # ssh-keygen for signed-commit tests, age for backups
+      # ssh-keygen for signed-commit tests, age for backups. Tried three times, 20 seconds apart: the
+      # runner's package mirror answers 503 now and then, and the job failed before any test ran (G1111).
+      - run: n=0; until sudo apt-get install -y openssh-client age; do n=$((n+1)); [ "$n" -ge 3 ] && exit 1; sleep 20; done
         if: runner.os == 'Linux'
       - run: command -v ssh-keygen && command -v age
         if: runner.os == 'macOS'
@@ -196,7 +206,7 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
-      - run: sudo apt-get install -y openssh-client age
+      - run: n=0; until sudo apt-get install -y openssh-client age; do n=$((n+1)); [ "$n" -ge 3 ] && exit 1; sleep 20; done   # G1111
         if: runner.os == 'Linux'
       - run: command -v ssh-keygen && command -v age
         if: runner.os == 'macOS'

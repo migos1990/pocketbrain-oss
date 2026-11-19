@@ -249,6 +249,7 @@ export const WORD_LISTS: Record<string, { class: WordListClass; why?: string }> 
   "page-kind.ts#MONTHS": { class: "parses-a-value", why: "reads a date, a name's decoration or a value's wording" },
   "page-kind.ts#DONE": { class: "not-reviewed" },
   "page-kind.ts#rankOf": { class: "not-reviewed" },
+  "page-story.ts#REFUSALS": { class: "machine-words", why: "the names the code gives its own reasons for refusing a model's sentence; counted, never matched against text" },
   "probe.ts#NOTIFY": { class: "not-reviewed" },
   "probe.ts#jobChecks": { class: "not-reviewed" },
   "proofread.ts#asPageRead": { class: "machine-words", why: "the field names of the page reading a deploy script printed, each checked to be a number" },

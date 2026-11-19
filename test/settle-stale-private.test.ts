@@ -64,3 +64,27 @@ test("a pick on a conflict the screen shows still works on the 30-day sign-in (G
   await s.req("POST", "/action/settle-pick", { csrf: s.csrf, id, n: "2" });
   expect(room(root)).toBe("C-305");
 }, 60_000);
+
+// Outside audit 2026-11-19 (G1010): Keep both ran on the 30-day sign-in whatever the conflict, so an
+// old or forged form closed a private conflict whose sides the screen would not show.
+test("a stale Keep both on a private conflict is refused; fresh, it closes (G1010)", async () => {
+  const { root, id } = brain("private");
+  const s = await signedIn(root);
+  s.later(11);
+  const stale = await s.req("POST", "/action/settle-both", { csrf: s.csrf, id });
+  expect(stale.status).toBe(303);
+  expect(stale.loc).toContain(`/settle/${id}`);
+  expect(ownerConflict(root, id)).toBeDefined();
+  s.later(0);
+  await s.req("POST", "/action/settle-both", { csrf: s.csrf, id });
+  expect(ownerConflict(root, id)).toBeUndefined();
+  expect(room(root)).toBe("B-201");
+}, 60_000);
+
+test("Keep both on a conflict the screen shows still works on the 30-day sign-in (G1010)", async () => {
+  const { root, id } = brain("personal");
+  const s = await signedIn(root);
+  s.later(11);
+  await s.req("POST", "/action/settle-both", { csrf: s.csrf, id });
+  expect(ownerConflict(root, id)).toBeUndefined();
+}, 60_000);

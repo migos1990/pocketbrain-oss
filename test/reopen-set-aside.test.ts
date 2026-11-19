@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import YAML from "yaml";
 import { makeBrain } from "./fixture";
-import { reopenLostAccepts, closeSetAsideAgain } from "../src/write";
+import { reopenLostAccepts, closeSetAsideAgain, decideProposal } from "../src/write";
 import { setAsideMachineMail } from "../src/receipt-pages";
 import { recordMachineMail } from "../src/louis";
 import { loadBrain } from "../src/brain";
@@ -144,4 +144,26 @@ test("a page someone else removed since, or a name the owner forgot, is never an
   sh(root, "git", "rm", "-q", "orgs/span-toll-road.md"); sh(root, "git", "commit", "-qm", "owner: removed by hand");
   expect(closeSetAsideAgain(root)).toEqual([]);
   expect(inbox(root)).toEqual(["2026-10-25-capture-toll0001.yaml"]);
+});
+
+// G1110: the owner's own accept of such a capture is theirs to keep. It saves the fact on a page
+// again, and no later machine-mail pass takes it: the record carries the owner's approval beside
+// the machine mail, so it is no longer a fact that came only from machine mail.
+test("a capture the owner accepts themselves is saved, and the next set-aside leaves it alone", () => {
+  const root = rig();
+  setAsideMachineMail(root, true);
+  const f = "2026-10-25-capture-toll0001.yaml";
+  const { decided: _d, decision: _x, by: _b, ...open } = YAML.parse(readFileSync(join(root, "inbox", "decided", f), "utf8"));
+  writeFileSync(join(root, "inbox", f), YAML.stringify({ ...open, by: "steward", reopened: "2026-11-19" }));
+  sh(root, "git", "rm", "-q", `inbox/decided/${f}`);
+  sh(root, "git", "add", "-A"); sh(root, "git", "commit", "-qm", "hub: handed back");
+  const r = decideProposal(root, f, "accept");
+  expect(r.outcome).toBe("committed");
+  const held = () => loadBrain(root).filter((n) => /span-toll/.test(n.fm.id)).map((n) => (n.fm.facts?.status as { value?: string } | undefined)?.value);
+  expect(held()).toEqual(["crossing paid on the north span"]);
+  expect(setAsideMachineMail(root, false)).toMatchObject({ facts: 0 });
+  expect(setAsideMachineMail(root, true)).toMatchObject({ facts: 0, removed: [] });
+  expect(held()).toEqual(["crossing paid on the north span"]);
+  expect(reopenLostAccepts(root)).toEqual([]);
+  expect(closeSetAsideAgain(root)).toEqual([]);
 });

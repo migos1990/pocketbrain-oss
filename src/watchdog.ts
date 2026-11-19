@@ -14,7 +14,7 @@
 import { beat } from "./heartbeat";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { alert, appendJsonl, readJsonl } from "./util";
+import { alert, appendJsonl, readJsonl, writeWhole } from "./util";
 import { keysDir } from "./secrets";
 import { jobChecks, notifies } from "./probe";
 import { tailscaleRun, type Run as TailscaleRun } from "./phone";
@@ -31,7 +31,7 @@ export function watchdogState(root: string): State {
   try { const s = JSON.parse(readFileSync(stateFile(root), "utf8")); return { ...s, fails: Number(s.fails) || 0 }; } catch { return { fails: 0 }; }
 }
 const load = watchdogState;
-function save(root: string, s: State) { mkdirSync(join(root, "log"), { recursive: true }); writeFileSync(stateFile(root), JSON.stringify(s) + "\n"); }
+function save(root: string, s: State) { mkdirSync(join(root, "log"), { recursive: true }); writeWhole(stateFile(root), JSON.stringify(s) + "\n"); }
 
 // The hub's job checks, run from outside it. Not "model" (whether the hub process loaded its keys,
 // which this process can't see) nor "watchdog" (this run is the heartbeat it checks).

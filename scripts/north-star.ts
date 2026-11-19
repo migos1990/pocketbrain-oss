@@ -51,6 +51,10 @@
 //                  home; an ask (G603).
 //   bun scripts/north-star.ts                  replay a fixed week on the shipped default rules
 //   bun scripts/north-star.ts --file-all       the same week with auto_decide file: all on, to compare
+//   whole wiki     the pages line again for every content page with a live fact, not only the
+//                  week's touched ones, with how many are stubs under 30 words (wholeWiki, G1022).
+//                  Reported only: no part of pass, and pages_ok's definition is as it was.
+//                  `--brain <path> --wiki` prints those counts alone as one JSON line.
 //   bun scripts/north-star.ts --brain <path>   the same two numbers for a real brain (read-only, counts only;
 //                                              --json prints the counts as one line; the hub records
 //                                              that after every start, so after every deploy: src/probe.ts)
@@ -87,7 +91,7 @@ import { ownerOf, ownerTitle } from "../src/capture";
 import { sensitivityRank } from "../src/brain";
 
 export interface WhyCounts { commits: number; with_why: number; gardener: number; gardener_why: number }
-export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; access_guess?: number; held_by_capture: number; held_by_ambiguity: number; guess_held: number; private_held: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean; detectors?: Detectors }
+export interface NorthStar { asks: number; asks_by_kind: Record<string, number>; asked: string[]; not_conflict: number; assistant_held: number; assistant_expiring: number; held_by_access: number; access_guess?: number; held_by_capture: number; held_by_ambiguity: number; guess_held: number; private_held: number; home_asks: number; home_asked: string[]; planted: number; pages: number; pages_ok: number; prose: number; inbound: number; share: number; pages_beyond_hub: number; pages_quoted: number; pass: boolean; notes: string[]; why?: WhyCounts; owner_corrected?: boolean; detectors?: Detectors; wiki?: WholeWiki }
 export const BAR = { share: 0.8 };
 
 // ---------- the two numbers, from any brain ----------
@@ -192,6 +196,26 @@ export function detectors(root: string, notes: Note[], day: string): Detectors {
   return { people: people.length, last_met, guest_meetings: guests.length, guest_meetings_untied: guests.filter((e) => !e.who!.some((h) => held.has(h))).length, owner_listable: listable.length, owner_listed: listable.filter((p) => named.has(p.fm.id)).length, read: readProofread(root) };
 }
 
+// The whole wiki, beside the week's number (owner's audit, 2026-11-19, G1022): every content page
+// with a live fact held to the same three tests as a touched page, whenever it was last touched.
+// Reported only: it is no part of pass, of --json's pinned keys or of what pages_ok counts, and
+// changes none of their definitions. Also how many of those pages are stubs (under 30 words of
+// text), and how many content pages it leaves out because every fact on them has ended.
+export interface WholeWiki { pages: number; pages_ok: number; share: number; prose: number; inbound: number; beyond_hub: number; quoted: number; stubs: number; left_out: number }
+export const STUB_WORDS = 30;
+const bodyWords = (n: Note) => footnotes(n.body ?? "").text.replace(/^#.*$/gm, "").replace(/\[\^[^\]]+\]/g, "").split(/\s+/).filter(Boolean).length;
+export function wholeWiki(root: string, now: Date, notes: Note[] = loadBrain(root)): WholeWiki {
+  const content = notes.filter(isContent);
+  const pages = content.filter((n) => !emptied(n));
+  const inbound = inboundLinks(notes);
+  const linkedProse = pages.filter((n) => citedProse(n) && (inbound.get(n.fm.id) ?? 0) > 0);
+  const state = linkedProse.length ? loadState(root, now) : undefined;
+  const quoted = linkedProse.filter((n) => quotesSource(state!, n));
+  const ok = linkedProse.filter((n) => proseBeyondHub(n) || quoted.includes(n));
+  return { pages: pages.length, pages_ok: ok.length, share: pages.length ? Math.round((ok.length / pages.length) * 100) / 100 : 0, prose: pages.filter(citedProse).length, inbound: pages.filter((n) => (inbound.get(n.fm.id) ?? 0) > 0).length, beyond_hub: ok.filter(proseBeyondHub).length, quoted: quoted.length, stubs: pages.filter((n) => bodyWords(n) < STUB_WORDS).length, left_out: content.length - pages.length };
+}
+export const wholeWikiLine = (w: WholeWiki) => `  whole wiki: ${w.pages} pages; with cited prose, an inbound link and more than the hub's own text: ${w.pages_ok} (${Math.round(w.share * 100)}%); cited prose ${w.prose}, inbound link ${w.inbound}; ${w.beyond_hub} with prose beyond the hub's text, ${w.quoted} showing a source's own words; ${w.stubs} under ${STUB_WORDS} words; ${w.left_out} more left out, every fact on them ended (reported, not in pass)`;
+
 export function measure(root: string, since: string, now: Date, planted = 0, until?: string): NorthStar {
   const notes = loadBrain(root);
   const touched = touchedSince(root, since, until);
@@ -227,7 +251,7 @@ export function measure(root: string, since: string, now: Date, planted = 0, unt
   const home_asks = waitingCount(root, later, own);
   const rules = loadRules(root);
   const why = whyCounts(root, since, (a) => isGardener(rules, a));
-  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, access_guess: own.byAccess.size, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, guess_held: own.guesses, private_held: own.serving, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why, detectors: detectors(root, notes, now.toISOString().slice(0, 10)) };
+  return { asks, asks_by_kind: by, asked, not_conflict: asks - changes, assistant_held, assistant_expiring, held_by_access: by.held_by_access ?? 0, access_guess: own.byAccess.size, held_by_capture: by.held_by_capture ?? 0, held_by_ambiguity: by.held_by_ambiguity ?? 0, guess_held: own.guesses, private_held: own.serving, home_asks, home_asked, planted, pages: pages.length, pages_ok: ok, prose, inbound: linked, share, pages_beyond_hub: okPages.filter(proseBeyondHub).length, pages_quoted: okPages.filter((n) => quotesSource(state!, n)).length, pass: asks === planted && share >= BAR.share, notes: [], why, detectors: detectors(root, notes, now.toISOString().slice(0, 10)), wiki: wholeWiki(root, now, notes) };
 }
 
 // ---------- the fixed week ----------
@@ -389,6 +413,7 @@ export function report(m: NorthStar, label: string): string {
     `  held as a guess: ${m.guess_held} private value(s) from a sender no page holds; held from every assistant, on the home's full list (not asks)`,
     `  pages touched: ${m.pages}; with cited prose, an inbound link and more than the hub's own text: ${m.pages_ok} (${pct(m.share)}, want >= ${pct(BAR.share)}); cited prose ${m.prose}, inbound link ${m.inbound}`,
     `  of those ${m.pages_ok}: ${m.pages_beyond_hub} with prose beyond the hub's own written-from-facts text, ${m.pages_quoted} showing the owner a source's own words`,
+    ...(m.wiki ? [wholeWikiLine(m.wiki)] : []),
     ...(m.why ? [`  commits: ${m.why.commits}, ${m.why.with_why} saying why; the Gardener's: ${m.why.gardener}, ${m.why.gardener_why} saying why (reported, not in pass)`] : []),
     ...(m.detectors ? [`  Last met shown on ${m.detectors.last_met} of ${m.detectors.people} people pages; ${m.detectors.guest_meetings_untied} of ${m.detectors.guest_meetings} past meetings with guests tie no page (reported, not in pass)`,
       `  the owner's page names ${m.detectors.owner_listed} of ${m.detectors.owner_listable} live projects and decisions (reported, not in pass)`,
@@ -410,6 +435,8 @@ if (import.meta.main) {
     const notConflict = m.not_conflict;
     const pass = m.share >= BAR.share && notConflict === 0;
     // --json: counts only, no page names (the hub records it after each start: src/probe.ts).
+    // --wiki: the whole-wiki counts alone, as one JSON line (counts only, no page names).
+    if (Bun.argv.includes("--wiki")) { console.log(JSON.stringify(m.wiki)); process.exit(0); }
     if (Bun.argv.includes("--json")) { console.log(JSON.stringify(counts({ ...m, pass }))); process.exit(pass ? 0 : 1); }
     console.log(report({ ...m, pass, notes: [...m.notes, `${notConflict} ask(s) not about a contradiction`] }, "real brain, pages touched in the day up to the last nightly run; asks are today's cards"));
     process.exit(pass ? 0 : 1);
