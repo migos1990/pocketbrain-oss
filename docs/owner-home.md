@@ -184,3 +184,48 @@ A private page open after a fresh sign-in says so in one quiet line: "Only you s
 No address holds a value or a file path. After a button (Show, Undo, Save) the dashboard goes back with only a short id in `?ok=` or `?err=`; the words wait on the hub for that sign-in (`keepFlash` in `src/dashboard/server.ts`), so a held value shown by Show never lands in the browser's history. An error from inside the code says only that something broke inside the dashboard (`ownerFacingError`); a refusal keeps its own words, with any path replaced by "a file".
 
 This is the spec's re-prompt for when there is no WebAuthn. It is no device check: anyone holding the phone with a fresh link gets in.
+
+## Home as a property
+
+`test/home-property.test.ts` checks, on made-up weeks only, that the home makes sense whatever a
+week held. `test/home-gen.ts` makes a week from a seed: an invented owner, eight people they know,
+and a handful of cases, each about one fact and each with its right answer known before any hub
+code runs. Two people give two values the same day (a question). Two people give the same value,
+or one value in two spellings, or a newer value on a later day (no question). A no-reply sender
+gives another value than a person did (no question, and its value on no screen). A mail's next
+step carries a voucher code and a careless extractor hands it back (no question, and the code on
+no screen). And the owner answers some questions on day six, by a side, the other side, keep both
+or their own words, with the same sender sometimes saying the same thing again the day after.
+
+`test/home-check.ts` pulls and files the week day by day on a fresh brain with the shipped default
+rules, answers through the settle screen's own functions, reads the same mail once more, and then
+reads the home, its cards and each settle screen as the owner would. Six statements, written from
+the week and the screens and apart from the code that decides what asks:
+
+1. Every question the home asks is about a fact two people gave two values for that week.
+2. Each such fact is asked once, and nothing else waits on the owner: the home's count, its cards
+   and the open questions are the same number.
+3. A question shows two or more sides, each with a value, no two the same value in another
+   spelling, and its settle screen shows each of them.
+4. No side is a value only a machine's mail gave, and no voucher code is on the home or on a
+   settle screen.
+5. A question the owner answered is gone at once, stays gone when the hub reads the same mail
+   again, and is not asked again when the same sender says the same thing the day after.
+6. Each question is said in plain words: it names its page, and shows no source ref, long id,
+   page path, field name, link bracket or a program's empty word.
+
+It reads the home; it changes nothing about what counts as an ask. Six weeks run on each
+`bun test`; `HOME_SOAK=1 bun test test/home-property.test.ts` runs 300 and prints one line of
+counts, and `HOME_SEED=n` replays one week. A week that fails goes in
+`test/fixtures/home-seeds.json` with its reason and is replayed on every run.
+
+A fault that is known and still open is a row in the test's `KNOWN` list with its gap id. It does
+not fail a run, and one test fails the day the fault stops happening, so the row and the gap close
+together. No row today: the first one (G988, a no-reply sender's value as one side of a question on a
+source set to read machine mail too) went when its fix landed.
+
+A week is the same mail every time, so a finding should repeat. A week with a new finding is run
+a second time; a finding that does not repeat is printed with its seed as seen once, counted in
+the soak's line, and does not fail the run. `HOME_KEEP=1` keeps a week's brain and prints the
+detail. One finding is open without a week to replay (G989): an early run asked one fact twice,
+before the generator gave the same week on every run; 900 weeks since show none.

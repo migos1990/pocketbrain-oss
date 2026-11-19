@@ -35,13 +35,13 @@ export interface Finding { agent: string; role: string; door: Door; tool: string
 export interface Missing { agent: string; role: string; door: Door; id: string; attr: string }
 export interface Checked { findings: Finding[]; missing: Missing[]; owed: number; answers: number; pages: number; facts: number; readers: number }
 
-type Ask = { read: "orientation" | "whats_new" | "context_pack" | "memory_check" } | { read: "read"; id: string } | { read: "context_pack"; topic: string }
+export type Ask = { read: "orientation" | "whats_new" | "context_pack" | "memory_check" } | { read: "read"; id: string } | { read: "context_pack"; topic: string }
   | { read: "search"; query: string } | { read: "why"; key: string } | { read: "who_is"; address: string };
-const argOf = (a: Ask): string | undefined => "id" in a ? a.id : "topic" in a ? a.topic : "query" in a ? a.query : "key" in a ? a.key : "address" in a ? a.address : undefined;
+export const argOf = (a: Ask): string | undefined => "id" in a ? a.id : "topic" in a ? a.topic : "query" in a ? a.query : "key" in a ? a.key : "address" in a ? a.address : undefined;
 const SINCE = "1990-01-01";
 
 // Every read the property makes on a brain: the same list for every agent and door.
-function asksFor(root: string): { asks: Ask[]; pages: number; facts: number } {
+export function asksFor(root: string): { asks: Ask[]; pages: number; facts: number } {
   const notes = loadBrain(root);
   const asks: Ask[] = [{ read: "orientation" }, { read: "whats_new" }, { read: "context_pack" }, { read: "memory_check" }];
   for (const n of notes) asks.push({ read: "read", id: n.fm.id });
@@ -83,9 +83,9 @@ const ANSWERED = new Set([200, 400, 404]);
 const ALWAYS = new Set<Ask["read"]>(["orientation", "whats_new", "memory_check"]);
 const answered = (a: Ask, status: number) => status === 200 || (ANSWERED.has(status) && !(ALWAYS.has(a.read) || (a.read === "context_pack" && !("topic" in a))));
 
-interface Session { get(a: Ask): Promise<string | undefined> }
+export interface Session { get(a: Ask): Promise<string | undefined> }
 
-async function open(root: string, door: Door, token: string, who: string): Promise<Session> {
+export async function open(root: string, door: Door, token: string, who: string): Promise<Session> {
   const fail = (a: Ask, status: number): never => { throw new Error(`carve check: the ${door} door answered ${status} to ${a.read} for ${who}; a door that doesn't answer proves nothing`); };
   if (door === "mcp") return {
     get: async (a) => {
@@ -131,6 +131,38 @@ async function open(root: string, door: Door, token: string, who: string): Promi
 // "served" by exactly the test that would call it "leaked" for a reader it is kept from.
 export const servedIn = (page: string | undefined, value: string) => !!page && leakFinder([{ value, from: "" }])(page).length > 0;
 
+// What one reader must never be handed and what it is owed, from the oracle alone: `scan` reads
+// one answer to one ask (less what the ask itself named) and returns what leaked in it. Shared by
+// the property's check below and the burst check (test/burst-check.ts).
+export interface Leak { tool: string; kind: Finding["kind"]; what: string; from: string }
+export async function oracleOf(root: string, agent: string, role: string): Promise<{ scan: (text: string, ask: Ask) => Leak[]; owed: Awaited<ReturnType<typeof owedFor>>; values: { value: string; from: string }[] }> {
+  const opts = role === "reader" ? { role: "reader" as const } : {};
+  const values = await forbiddenFor(root, agent, opts);
+  const { carved, shownDates } = await carvedFor(root, agent, opts);
+  const names = carved.flatMap((c) => c.names.map((n) => ({ value: n, from: c.id })));
+  const inValues = leakFinder(values), inNames = leakFinder(names);
+  const ids = carved.filter((c) => c.whole).map((c) => ({ id: c.id, re: new RegExp(`(^|[^\\w/-])${c.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\w-])`) }));
+  const owed = await owedFor(root, agent, opts);
+  const scan = (text: string, ask: Ask): Leak[] => {
+    const out: Leak[] = [];
+    const arg = argOf(ask);
+    // Only the argument as a whole: "notes/x" asked for is not taken out of "notes/x-dup".
+    if (arg && arg.length > 2) text = text.replace(new RegExp(`(?<![\\p{L}\\p{N}-])${arg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}-])`, "gu"), " ");
+    const tool = `${ask.read}${arg ? ` ${JSON.stringify(arg)}` : ask.read === "whats_new" ? ` since ${SINCE}` : ""}`;
+    const add = (kind: Finding["kind"], what: string, from: string) => out.push({ tool, kind, what, from });
+    for (const l of inValues(text)) add("value", l.value, l.from);
+    for (const l of inNames(text)) add("name", l.value, l.from);
+    for (const { id, re } of ids) if (text.includes(id) && re.test(text)) add("id", id, id);
+    for (const c of carved) {
+      // Only the generator's dates (each used once, 1991-2019) identify a note; a stamp the code
+      // writes (a merge's today) is shared by many notes and says nothing.
+      for (const d of c.dates) if (/^(199|200|201)\d-/.test(d) && !shownDates.has(d) && text.includes(d)) add("date", d, c.id);
+    }
+    return out;
+  };
+  return { scan, owed, values };
+}
+
 // One brain through the doors: what leaked (nothing, when the carve holds) and what was checked.
 export async function check(g: Generated, doors: readonly Door[] = DOORS): Promise<Checked> {
   const findings: Finding[] = [];
@@ -140,13 +172,7 @@ export async function check(g: Generated, doors: readonly Door[] = DOORS): Promi
   for (const a of g.agents) for (const role of a.roles) {
     readers++;
     const token = issueToken(g.root, a.name, role === "reader" ? "reader" : undefined);
-    const opts = role === "reader" ? { role: "reader" as const } : {};
-    const values = await forbiddenFor(g.root, a.name, opts);
-    const { carved, shownDates } = await carvedFor(g.root, a.name, opts);
-    const names = carved.flatMap((c) => c.names.map((n) => ({ value: n, from: c.id })));
-    const inValues = leakFinder(values), inNames = leakFinder(names);
-    const ids = carved.filter((c) => c.whole).map((c) => ({ id: c.id, re: new RegExp(`(^|[^\\w/-])${c.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\w-])`) }));
-    const owed = await owedFor(g.root, a.name, opts);
+    const { scan, owed } = await oracleOf(g.root, a.name, role);
     owedCount += owed.length;
     const pagesRead = new Map<string, string>();
     for (const door of doors) {
@@ -160,19 +186,7 @@ export async function check(g: Generated, doors: readonly Door[] = DOORS): Promi
         if (text === undefined) continue;
         answers++;
         if (ask.read === "read") pagesRead.set(ask.id, text);
-        const arg = argOf(ask);
-        // Only the argument as a whole: "notes/x" asked for is not taken out of "notes/x-dup".
-        if (arg && arg.length > 2) text = text.replace(new RegExp(`(?<![\\p{L}\\p{N}-])${arg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}-])`, "gu"), " ");
-        const tool = `${ask.read}${arg ? ` ${JSON.stringify(arg)}` : ask.read === "whats_new" ? ` since ${SINCE}` : ""}`;
-        const add = (kind: Finding["kind"], what: string, from: string) => findings.push({ agent: a.name, role, door, tool, kind, what, from });
-        for (const l of inValues(text)) add("value", l.value, l.from);
-        for (const l of inNames(text)) add("name", l.value, l.from);
-        for (const { id, re } of ids) if (text.includes(id) && re.test(text)) add("id", id, id);
-        for (const c of carved) {
-          // Only the generator's dates (each used once, 1991-2019) identify a note; a stamp the code
-          // writes (a merge's today) is shared by many notes and says nothing.
-          for (const d of c.dates) if (/^(199|200|201)\d-/.test(d) && !shownDates.has(d) && text.includes(d)) add("date", d, c.id);
-        }
+        for (const l of scan(text, ask)) findings.push({ agent: a.name, role, door, ...l });
       }
       // The other direction (G815): each fact this reader is owed is in the read of its page.
       for (const o of owed) if (!servedIn(pagesRead.get(o.id), o.value)) missing.push({ agent: a.name, role, door, id: o.id, attr: o.attr });

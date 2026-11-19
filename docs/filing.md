@@ -95,3 +95,32 @@ auto_decide:
 ```
 
 `auto_decide` must be a map. Anything else (`auto_decide: off`, `false`, a list) means off.
+
+## Filing as a property
+
+`test/filing-property.test.ts` files made-up weeks of messy mail and checks four statements that
+must hold whatever came in. `test/filing-gen.ts` makes a week from a seed: an invented owner, a
+person's note, a shop's promo code, a receipt from a no-reply sender, the owner's own signed mail
+(their name plain, with a title, with a shop in brackets, or surname first), a forwarded chain with
+a voucher in it, and one mail twice. Each mail comes with what a careless extractor would hand back
+for it, including what it never should: the code as a next step, the owner as a new person. The
+fake model returns exactly that, so the statements test the code after the model, not the model.
+
+1. The owner is never filed as a contact: at most one person page carries the owner's name, their
+   own, titled as `owner.name` gives it.
+2. No code a shop mailed is in any file of the brain or in its git history, and none is sent to
+   the model.
+3. Pulling and filing the same mail again changes nothing outside the hub's own `log/`.
+4. Every fact the week added has a source.
+
+The statements are written in the test from what the files hold, apart from the filing code. Every
+other week reads shop and machine mail too (`skip_bulk: false`), the harder case.
+
+```
+bun test test/filing-property.test.ts                  # 6 weeks, a few seconds, part of every run
+FILING_SOAK=1 bun test test/filing-property.test.ts    # 300 weeks, about two and a half minutes
+FILING_SEED=41003 bun test test/filing-property.test.ts  # one week again
+```
+
+A seed that fails goes into `test/fixtures/filing-seeds.json` with its reason and is replayed on
+every run from then on. The soak is run by hand; no night job runs it yet.

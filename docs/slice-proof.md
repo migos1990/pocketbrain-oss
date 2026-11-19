@@ -8,7 +8,7 @@ The line the app and the site show comes from here:
 
 with the day it was last run.
 
-Code: `test/carve-check.ts` (the check), `test/carve-gen.ts` (the made-up memories), `evals/lib/oracle.ts` (what counts as a leak), `test/carve-owed.ts` (what each assistant is owed), `scripts/slice-proof.ts` (the run), `src/slice-proof.ts` (the nightly job and the line). Tests: `test/carve-property.test.ts`, `test/slice-proof.test.ts`.
+Code: `test/carve-check.ts` (the check), `test/carve-gen.ts` (the made-up memories), `evals/lib/oracle.ts` (what counts as a leak), `test/carve-owed.ts` (what each assistant is owed), `scripts/slice-proof.ts` (the run), `src/slice-proof.ts` (the nightly job and the line). Tests: `test/carve-property.test.ts`, `test/slice-proof.test.ts`, and `test/burst-property.test.ts` for calls sent many at a time ("A burst of calls" below).
 
 ## What one run does
 
@@ -50,6 +50,19 @@ A night that finds a leak says so: the line reads "300 memories, 3 doors, 1 leak
 Show the last finished run as it is. A night with a leak is shown as a leak, never replaced by an older clean night.
 
 See as shows it (`tested` in `src/dashboard/see.ts`, `test/see-proof.test.ts`): on `/see/<agent>` and under each page there, with the day, the sentence that the memories are made up, and nothing before the first finished run.
+
+## A burst of calls
+
+An assistant that writes a script, instead of asking one thing at a time, sends the hub many calls at once, mixed with another assistant's calls and with writes landing between its reads. `test/burst-property.test.ts` (the check is `test/burst-check.ts`) sends every read above, for every assistant and token, in a seeded order and 64 at a time, on the same made-up memories, and says what a burst may not change:
+
+- **The same answer.** A read gets, in the burst, the answer the same call gets when asked alone, byte for byte, and never the answer another token gets.
+- **0 leaks, 0 missing.** No answer in the burst carries what the oracle keeps from its reader, with or without writes landing between the reads, and every fact a reader is owed is in the burst's read of its page.
+- **Every write is checked.** A write the checks refuse alone (a password-shaped value, the reserved `standing` attribute, a path under `rules/`) is refused on every call in the burst in the same words; the refused value is in no file and no commit, and `rules/` is as it was.
+- **A hidden page stays missing.** A write to a page out of the writer's view answers like a write to a page that does not exist.
+- **Each write keeps its writer.** Every assistant writes a marker of its own while the others do the same; each marker in the brain afterwards is recorded as its own writer's, in the page and in the commit.
+- **The budget holds.** On the default request budget (`docs/hub.md`), 180 calls at once from one token get 120 answers and 60 refusals that carry nothing, and another token's calls in the same burst are all answered.
+
+Two memories on every test run, each through one door in turn; `BURST_DOORS=all` for every door, `BURST_SOAK=1` for 60 memories through every door, `BURST_SEED=n` to replay one. A seed that fails is added to `test/fixtures/burst-seeds.json` and replayed on every run. It is a test only: nothing on the hub runs it on a schedule. The calls are made inside one process, the way the hub serves them; it does not open sockets, so it says nothing about a proxy or a tunnel in front of the hub.
 
 ## What this does not prove
 
